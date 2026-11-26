@@ -315,5 +315,24 @@ for (const mode of ['dark', 'light']) {
       () => marketDeclaration(orderStyle(prefix + surface), 'background'), 3);
   }
 }
+// Order page/card surfaces and inherited primary text use the registered light
+// theme values. Explicitly audit the actual page and ordinary action text.
+for (const mode of ['dark', 'light']) {
+  const prefix = mode === 'light' ? orderLight : '';
+  for (const surface of ['.order-list-page', '.order-card']) {
+    pair('Market order list ' + mode + ' primary text / ' + surface,
+      () => orderTokenColor(prefix + '.order-list-page', 'color'),
+      () => mode === 'light'
+        ? orderTokenColor(prefix + surface, 'background')
+        : marketDeclaration(orderStyle(prefix + surface), 'background'));
+  }
+}
+pair('Market order list light normal filter',
+  () => orderTokenColor(orderLight + '.filter-btn', 'color'),
+  () => orderTokenColor(orderLight + '.order-list-page', 'background'));
+pair('Market order list light cancel action',
+  () => orderTokenColor(orderLight + '.btn-cancel,\n' + orderLight + '.btn-refund', 'color'),
+  () => orderTokenColor(orderLight + '.order-card', 'background'));
+
 console.log(JSON.stringify({ scope: 'static source pairs only (explicit alpha backgrounds included)', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

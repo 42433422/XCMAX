@@ -173,7 +173,7 @@ onBeforeUnmount(() => { ++readSequence })
   padding: 80px 20px 40px;
   min-height: 100vh;
   background: #0a0a0a;
-  color: #fff;
+  color: var(--xc-token-colors-neutral-light-n00);
 }
 .order-list-page__head {
   display: flex;
@@ -339,8 +339,8 @@ html[data-workbench-theme='light'] .retry-btn:focus-visible {
 }
 
 html[data-workbench-theme='light'] .order-list-page {
-  background: #f5f5f7;
-  color: #1d1d1f;
+  background: var(--xc-token-market-light-color-bg-body);
+  color: var(--xc-token-market-light-wb-text-primary);
 }
 html[data-workbench-theme='light'] .order-list-toolbar__hint {
   color: var(--xc-token-market-light-wb-text-muted);
@@ -353,7 +353,7 @@ html[data-workbench-theme='light'] .loading {
 }
 html[data-workbench-theme='light'] .filter-btn {
   border-color: rgba(0, 0, 0, 0.1);
-  color: #1d1d1f;
+  color: var(--xc-token-market-light-wb-text-primary);
 }
 html[data-workbench-theme='light'] .filter-btn.active {
   border-color: var(--xc-token-market-global-light-primary-hover);
@@ -361,8 +361,8 @@ html[data-workbench-theme='light'] .filter-btn.active {
   color: var(--xc-token-market-global-light-primary-hover);
 }
 html[data-workbench-theme='light'] .order-card {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.06);
+  background: var(--xc-token-market-light-color-bg-page);
+  border-color: var(--xc-token-market-light-wb-card-border);
 }
 html[data-workbench-theme='light'] .order-card:hover {
   border-color: rgba(0, 0, 0, 0.15);
@@ -389,8 +389,8 @@ html[data-workbench-theme='light'] .order-time {
 }
 html[data-workbench-theme='light'] .btn-cancel,
 html[data-workbench-theme='light'] .btn-refund {
-  border-color: rgba(0, 0, 0, 0.12);
-  color: #1d1d1f;
+  border-color: var(--xc-token-market-light-wb-card-hover-border);
+  color: var(--xc-token-market-light-wb-text-primary);
 }
 html[data-workbench-theme='light'] .btn-refund {
   border-color: var(--xc-token-market-light-wb-accent-primary);
