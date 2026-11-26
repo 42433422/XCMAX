@@ -37,6 +37,14 @@ from modstore_server.llm_gateway_contract import (
     gateway_body,
 )
 from modstore_server.llm_key_resolver import read_chat_route_token
+from modstore_server.llm_model_concurrency import (
+    concurrency_key,
+)
+from modstore_server.llm_model_concurrency import controller as concurrency
+from modstore_server.llm_model_concurrency import (
+    is_throttled,
+    retry_after_seconds,
+)
 from modstore_server.llm_model_gates import assert_llm_chat_allowed
 from modstore_server.llm_responses_transport import ResponsesTransport, validate_responses_route
 from modstore_server.models import User
@@ -45,6 +53,7 @@ from modstore_server.platform_model_transport import redact_key
 
 MAX_REQUEST_BYTES = 4_194_304
 _MAX_RECEIPT_BYTES = 16_777_216
+_CONCURRENCY_WAIT_S = 8.0
 _TERMINALS = {"response.completed", "response.incomplete", "response.failed"}
 _ERRORS: tuple[type[Exception], ...] = (HTTPException, APIError, *RECOVERABLE_ERRORS)
 
@@ -225,11 +234,36 @@ async def run_billed_responses(
         )
     wallet.validate_pat(authorization_header(request))
     timeout = _chat_total_deadline_s()
-    outcome, row = ledger.begin(db, uid, key, digest, timeout)
-    if outcome == "replay":
-        return _replay(row)
-    if outcome != "run":
-        raise _error("CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome)
+    model_key = concurrency_key(provider, model)
+    lease = await concurrency.acquire(db, model_key, wait_s=_CONCURRENCY_WAIT_S, timeout_s=timeout)
+    if lease is None:
+        # Saturated admission is a local decision: no journal row, no hold, no dispatch.
+        raise HTTPException(
+            429,
+            {"code": "MODEL_CONCURRENCY_SATURATED", "message": "模型并发已满，请稍后重试。"},
+            headers={"Retry-After": "1"},
+        )
+    slot_held = True
+
+    def release_slot() -> None:
+        nonlocal slot_held
+        if slot_held:
+            slot_held = False
+            concurrency.release(db, lease)
+
+    dispatch = False
+    try:
+        outcome, row = ledger.begin(db, uid, key, digest, timeout)
+        if outcome == "replay":
+            return _replay(row)
+        if outcome != "run":
+            raise _error(
+                "CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome
+            )
+        dispatch = True
+    finally:
+        if not dispatch:
+            release_slot()
     request_id = ledger.attempt_request_id(uid, key, row.attempts)
     hold = WalletHold(f"byok-{request_id}", Decimal("0"), False)
     transport = None
@@ -293,7 +327,9 @@ async def run_billed_responses(
         ledger.prepare_settlement(db, row, receipt)
         if not byok:
             await wallet.settle(auth, hold, charge, request_id)
-        return complete_receipt(db, row, receipt)
+        completed = complete_receipt(db, row, receipt)
+        concurrency.report_success(db, model_key)
+        return completed
 
     try:
         # A crash after either wallet or model I/O must not get a new execution
@@ -381,8 +417,10 @@ async def run_billed_responses(
                     await close()
                     await settle(terminal["response"], headers, events)
                     yield _sse(terminal)
-                except _ERRORS:
+                except _ERRORS as exc:
                     db.rollback()
+                    if is_throttled(exc):
+                        concurrency.report_throttled(db, model_key, retry_after_seconds(exc))
                     yield _sse(
                         {
                             "type": "error",
@@ -393,6 +431,7 @@ async def run_billed_responses(
                     )
                 finally:
                     await close()
+                    release_slot()
 
             handed_off = True
             return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
@@ -409,9 +448,12 @@ async def run_billed_responses(
             raise
         db.rollback()
         raise unresolved() from None
-    except _ERRORS:
+    except _ERRORS as exc:
         db.rollback()
+        if is_throttled(exc):
+            concurrency.report_throttled(db, model_key, retry_after_seconds(exc))
         raise unresolved() from None
     finally:
         if not handed_off:
             await close()
+            release_slot()

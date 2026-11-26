@@ -523,7 +523,9 @@ def test_crash_after_trial_grant_keeps_original_deadline(purchase, monkeypatch):
         write(path, payload)
 
     monkeypatch.setattr(order_store, "_atomic_write", fail_final_write)
-    assert notify(client, order_id, "99.00").status_code == 500
+    interrupted = notify(client, order_id, "99.00")
+    assert interrupted.status_code == 503
+    assert interrupted.text == "fail"
     with sessions() as db:
         expires = db.get(Tenant, 1).trial_expires_at
     pending = order_store.get_order(order_id)
