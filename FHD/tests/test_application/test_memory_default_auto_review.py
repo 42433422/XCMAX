@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -201,16 +202,18 @@ def test_flattened_release_provisioner_with_explicit_output(tmp_path, monkeypatc
 
     # Reproduce the exact shallow Docker path without writing into /build.
     # The original script raised IndexError at import, before CLI parsing.
-    namespace = {"__file__": script, "__name__": "release_provisioner_regression"}
-    exec(compile(source.read_bytes(), script, "exec"), namespace)
-    entry = namespace["main"]
+    spec = importlib.util.spec_from_file_location("release_provisioner_regression", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    module.__file__ = script
+    spec.loader.exec_module(module)
     seen = []
 
     def provision(root):
         seen.append(root)
         return {"model": "test-only"}
 
-    monkeypatch.setitem(entry.__globals__, "provision", provision)
+    monkeypatch.setattr(module, "provision", provision)
     monkeypatch.setattr(sys, "argv", [script, "--output", str(output)])
-    assert entry() == 0
+    assert module.main() == 0
     assert seen == [output.resolve()]
