@@ -20,6 +20,7 @@ import { usePrintService } from './usePrintService'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
 import { useChatExcelContext } from './useChatExcelContext'
 import { useChatRequest } from './useChatRequest'
+import { useDesktopNavigationContext } from './useDesktopNavigationContext'
 import { useChatSessionActivity } from './useChatSessionActivity'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
@@ -226,6 +227,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     sessionId,
     lastRequestContextSummary,
     captureArtifacts: excelCtx.captureChatArtifacts,
+    readDesktopNavigation: useDesktopNavigationContext(),
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
   })
@@ -895,6 +897,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const scope = captureLocalScope()
     await syncFromServer({ ...options, onConversation: observeConversation })
     if (!scope.isCurrent() || options.isCurrent?.() === false) return
+    refreshLocalHistorySessions?.()
     applyPersistedTaskPanelStateForSession(scope.sessionId)
     // Tasks have their own stale/error recovery and are not required to read the current conversation.
     // During the startup splash this list (limit 200) occupies the only worker and

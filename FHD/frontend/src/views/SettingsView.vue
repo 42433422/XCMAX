@@ -73,13 +73,13 @@
 
           <div class="settings-list">
             <section v-show="!compactSettings || activeGroup === 'settings-group-account'" id="settings-group-account" class="settings-group" aria-labelledby="settings-group-account-title">
-              <h2 id="settings-group-account-title" class="settings-group__title">账号</h2>
-            <details v-if="isLoggedIn" id="settings-profile-home" class="settings-card" data-tutorial-id="settings-profile-home">
+              <h2 id="settings-group-account-title" class="settings-group__title">{{ SETTINGS_NAV_GROUPS.account.label }}</h2>
+            <details v-if="isLoggedIn" :id="`settings-${SETTINGS_ENTRIES.profile.id}`" class="settings-card" :data-tutorial-id="`settings-${SETTINGS_ENTRIES.profile.id}`">
               <summary class="settings-row">
                 <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
                   <img class="settings-row__icon-art" :src="settingsProfileArtSrc" alt="" />
                 </span>
-                <span class="settings-row__label">{{ $t('settings.profileHome') }}</span>
+                <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.profile.labelKey) }}</span>
                 <span class="settings-row__meta">{{ profileHomeSummary }}</span>
                 <span class="settings-row__arrow" aria-hidden="true"></span>
               </summary>
@@ -131,65 +131,56 @@
             </details>
 
             <router-link v-if="canManageTenantRoles" class="settings-card settings-row settings-rbac-link"
-              :to="{ name: 'tenant-roles' }">
+              :to="{ name: SETTINGS_ENTRIES.roles.id }">
               <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
                 <img class="settings-row__icon-art" :src="settingsRolesArtSrc" alt="" />
               </span>
-              <span class="settings-row__label">角色与权限</span>
+              <span class="settings-row__label">{{ SETTINGS_ENTRIES.roles.label }}</span>
               <span class="settings-row__meta">管理本企业的角色、权限和用户分配</span>
               <span class="settings-row__arrow" aria-hidden="true"></span>
             </router-link>
             </section>
 
             <section v-show="!compactSettings || activeGroup === 'settings-group-intelligence'" id="settings-group-intelligence" class="settings-group" aria-labelledby="settings-group-intelligence-title">
-              <h2 id="settings-group-intelligence-title" class="settings-group__title">智能与数据</h2>
-            <details id="settings-model-payment" class="settings-card" data-tutorial-id="settings-model-payment">
+              <h2 id="settings-group-intelligence-title" class="settings-group__title">{{ SETTINGS_NAV_GROUPS.intelligence.label }}</h2>
+            <details :id="`settings-${MODEL_SERVICE_SECTION}`" class="settings-card" :data-tutorial-id="`settings-${MODEL_SERVICE_SECTION}`">
               <summary class="settings-row">
                 <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
                   <img class="settings-row__icon-art" :src="settingsModelServiceArtSrc" alt="" />
                 </span>
-                <span class="settings-row__label">{{ $t('settings.modelService') }}</span>
+                <span class="settings-row__label">{{ $t(MODEL_SERVICE_NAVIGATION.labelKey) }}</span>
                 <span class="settings-row__meta">{{ $t('settings.modelServiceMeta') }}</span>
                 <span class="settings-row__arrow" aria-hidden="true"></span>
               </summary>
               <div class="settings-card__body settings-card__body--flush">
-                <p class="settings-model-service-empty"><router-link to="/saas-pricing">软件买断与业务定制</router-link> · AI 调用单独按量计费</p>
+                <div v-if="isLoggedIn && !accountProfile.isImpersonating" class="settings-model-service-empty">
+                  <SettingsEnterpriseModelCard v-if="enterpriseModelOwner" :owner="enterpriseModelOwner"
+                    :active-model="accountRuntime.status?.route?.model" :deployment-managed="accountRuntime.status?.managed_by === 'deployment'"
+                    :checking="accountRuntime.checking || accountRuntime.status?.qualification === 'in_progress'" />
+                  <section class="settings-model-runtime" :aria-busy="accountRuntime.busy">
+                    <div>
+                      <h3 class="settings-model-service-empty__title">运行验收</h3>
+                      <p v-if="accountRuntime.status?.managed_by === 'deployment'" class="muted">由部署方管理</p>
+                      <p v-if="accountRuntime.message" class="muted" :role="accountRuntime.failed ? 'alert' : 'status'">{{ accountRuntime.message }}</p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" data-testid="runtime-check"
+                      :disabled="accountRuntime.loading || accountRuntime.checking" :title="runtimeRefreshOnly ? undefined : '验收可能产生模型用量'"
+                      @click="runtimeRefreshOnly ? accountRuntime.refresh() : accountRuntime.retry()">{{ runtimeButtonLabel }}</button>
+                  </section>
+                </div>
                 <SettingsPlatformModelCard :can-manage="accountProfile.isAdminAccount && !accountProfile.isImpersonating" />
-                <div v-if="isLoggedIn && !accountProfile.isImpersonating" class="settings-model-service-empty" :aria-busy="accountRuntime.busy">
-                  <p class="settings-model-service-empty__title">当前账号运行验收</p>
-                  <p v-if="accountRuntime.status?.managed_by === 'deployment'" class="muted">当前运行配置由部署方管理，此处会检查已有验收结果。配置或安装版本变化后，请由部署方重新完成验收。</p>
-                  <p v-else class="muted">登录和恢复窗口只读取验收状态。首次主动执行任务前，或点击“运行验收”时按需验收，过程可能产生模型用量。相同配置与安装版本的有效结果会复用；失败或中断后可在这里重新验收。</p>
-                  <button type="button" class="btn btn-sm btn-secondary" data-testid="runtime-check" :disabled="accountRuntime.loading || accountRuntime.checking" @click="accountRuntime.status?.qualification === 'in_progress' || accountRuntime.status?.managed_by === 'deployment' ? accountRuntime.refresh() : accountRuntime.retry()">{{ accountRuntime.checking ? '验收中…' : accountRuntime.loading ? '读取中…' : accountRuntime.status?.qualification === 'in_progress' || accountRuntime.status?.managed_by === 'deployment' ? '刷新状态' : '运行验收' }}</button>
-                  <p v-if="accountRuntime.message" :role="accountRuntime.failed ? 'alert' : 'status'">{{ accountRuntime.message }}</p>
-                </div>
-                <HostModBridgeView
-                  v-if="showModelPaymentBridge"
-                  embedded
-                  mod-id="xcagi-model-payment-bridge"
-                  view="ModelPaymentView"
-                  :title="$t('settings.modelService')"
-                />
-                <div v-else class="settings-model-service-empty">
-                  <p class="settings-model-service-empty__title">
-                    {{ $t('settings.modelServiceMissingTitle') }}
-                  </p>
-                  <p class="muted settings-model-service-empty__lead">
-                    {{ $t('settings.modelServiceMissingLead') }}
-                  </p>
-                  <ul class="settings-model-service-empty__list muted">
-                    <li>{{ $t('settings.modelServiceMissingWhy') }}</li>
-                    <li>{{ $t('settings.modelServiceMissingHow') }}</li>
-                    <li>{{ $t('settings.modelServiceMissingNote') }}</li>
-                  </ul>
-                  <div class="settings-model-service-empty__actions">
-                    <router-link class="btn btn-sm btn-primary" :to="{ name: 'mod-store' }">
-                      {{ $t('settings.modelServiceOpenModStore') }}
-                    </router-link>
-                    <button type="button" class="btn btn-sm btn-secondary" @click="openSettingsExtensions">
-                      {{ $t('settings.modelServiceOpenExtensions') }}
-                    </button>
+                <details class="settings-model-billing">
+                  <summary>{{ $t(MODEL_SERVICE_BILLING.labelKey) }}</summary>
+                  <HostModBridgeView v-if="showModelPaymentBridge" embedded :mod-id="MODEL_PAYMENT_BRIDGE_ID"
+                    view="ModelPaymentView" :title="$t(MODEL_SERVICE_BILLING.labelKey)" />
+                  <div v-else class="settings-model-service-empty">
+                    <p class="muted">{{ $t('settings.modelServiceMissing') }}</p>
+                    <div class="settings-model-service-empty__actions">
+                      <router-link class="btn btn-sm btn-primary" :to="{ name: 'mod-store' }">{{ $t('settings.modelServiceOpenModStore') }}</router-link>
+                      <button type="button" class="btn btn-sm btn-secondary" @click="openSettingsExtensions">{{ $t('settings.modelServiceOpenExtensions') }}</button>
+                    </div>
                   </div>
-                </div>
+                </details>
               </div>
             </details>
 
@@ -213,7 +204,7 @@
             </section>
 
             <section v-show="!compactSettings || activeGroup === 'settings-group-system'" id="settings-group-system" class="settings-group" aria-labelledby="settings-group-system-title">
-              <h2 id="settings-group-system-title" class="settings-group__title">系统与外观</h2>
+              <h2 id="settings-group-system-title" class="settings-group__title">{{ SETTINGS_NAV_GROUPS.system.label }}</h2>
             <SettingsBasicCard
               :basic-settings-summary="basicSettingsSummary" :sidebar-theme-options="sidebarThemeOptions"
               :on-sidebar-theme-change="onSidebarThemeChange" :show-company-brand-editor="showCompanyBrandEditor"
@@ -244,7 +235,7 @@
             </section>
 
             <section v-show="!compactSettings || activeGroup === 'settings-group-about'" id="settings-group-about" class="settings-group" aria-labelledby="settings-group-about-title">
-              <h2 id="settings-group-about-title" class="settings-group__title">关于</h2>
+              <h2 id="settings-group-about-title" class="settings-group__title">{{ SETTINGS_NAV_GROUPS.about.label }}</h2>
             <SettingsVersionsCard
               :loading-versions="loadingVersions" :versions-error="versionsError" :versions="versions"
               :sample-count="sampleCount" :sample-count-warning="sampleCountWarning"
@@ -287,6 +278,7 @@ import SettingsBasicCard from './settings-view/SettingsBasicCard.vue'
 import SettingsVersionsCard from './settings-view/SettingsVersionsCard.vue'
 import SettingsAboutCard from './settings-view/SettingsAboutCard.vue'
 import SettingsPlatformModelCard from './settings-view/SettingsPlatformModelCard.vue'
+import SettingsEnterpriseModelCard from './settings-view/SettingsEnterpriseModelCard.vue'
 import settingsProfileArtSrc from '@/assets/icons/settings/r1c1.png'
 import settingsRolesArtSrc from '@/assets/icons/settings/r1c2.png'
 import defaultUserAvatarSrc from '@/assets/avatars/user-default.png'
@@ -295,10 +287,17 @@ import navIntelligenceArtSrc from '@/assets/icons/settings/r1c4.png'
 import navSystemArtSrc from '@/assets/icons/settings/r2c2.png'
 import navAboutArtSrc from '@/assets/icons/settings/r5c1.png'
 import settingsModelServiceArtSrc from '@/assets/icons/settings/r1c3.png'
+import { MODEL_PAYMENT_BRIDGE_ID, MODEL_SERVICE_BILLING, MODEL_SERVICE_NAVIGATION, MODEL_SERVICE_SECTION } from '@/constants/modelServiceNavigation'
+import { canManageTenantRoleSettings, SETTINGS_ENTRIES, SETTINGS_NAV_GROUPS } from './settings-view/settingsNavigation'
 
 const route = useRoute()
 const accountProfile = useAccountProfileStore()
 const accountRuntime = useAccountRuntimeStore()
+const enterpriseModelOwner = computed(() => accountProfile.tenantId && !accountProfile.isAdminAccount &&
+  (accountProfile.accountKind === 'enterprise' || accountProfile.userRole?.startsWith('tenant:'))
+  ? `tenant:${accountProfile.tenantId}` : '')
+const runtimeRefreshOnly = computed(() => accountRuntime.status?.managed_by === 'deployment' || accountRuntime.status?.qualification === 'in_progress')
+const runtimeButtonLabel = computed(() => accountRuntime.checking ? '验收中…' : accountRuntime.loading ? '读取中…' : runtimeRefreshOnly.value ? '刷新状态' : '运行验收')
 
 const {
   localUser,
@@ -339,10 +338,7 @@ const {
   onLogout,
 } = useSettingsAccount()
 const adminSessionOnly = computed(() => !isLoggedIn.value && accountProfile.isAdminAccount) // 管理员会话已过守卫，市场会话未绑定时只改展示
-const canManageTenantRoles = computed(
-  () => accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null &&
-    accountProfile.marketIsEnterprise && accountProfile.permissions.includes('tenant.manage_roles'),
-)
+const canManageTenantRoles = computed(() => canManageTenantRoleSettings(accountProfile))
 
 const {
   clientModsUiOff,
@@ -501,12 +497,14 @@ function prepareSettingsPage() {
   })
 }
 
-const SETTINGS_GROUPS = [
-  { id: 'settings-group-account', label: '账号', icon: 'fa-user-o', iconSrc: navAccountArtSrc },
-  { id: 'settings-group-intelligence', label: '智能与数据', icon: 'fa-cubes', iconSrc: navIntelligenceArtSrc },
-  { id: 'settings-group-system', label: '系统与外观', icon: 'fa-sliders', iconSrc: navSystemArtSrc },
-  { id: 'settings-group-about', label: '关于', icon: 'fa-info-circle', iconSrc: navAboutArtSrc },
-]
+const settingsGroupArt: Record<string, string> = {
+  [SETTINGS_NAV_GROUPS.account.id]: navAccountArtSrc,
+  [SETTINGS_NAV_GROUPS.intelligence.id]: navIntelligenceArtSrc,
+  [SETTINGS_NAV_GROUPS.system.id]: navSystemArtSrc,
+  [SETTINGS_NAV_GROUPS.about.id]: navAboutArtSrc,
+}
+const SETTINGS_GROUPS = Object.values(SETTINGS_NAV_GROUPS)
+  .map(({ id, label, icon }) => ({ id, label, icon, iconSrc: settingsGroupArt[id] }))
 const activeGroup = ref(compactSettings ? 'settings-group-system' : SETTINGS_GROUPS[0].id)
 let scrollSpyFrame = 0
 

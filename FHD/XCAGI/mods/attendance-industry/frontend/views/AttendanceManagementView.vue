@@ -1,10 +1,7 @@
 <template>
   <div ref="managementRoot" class="attendance-management" :class="{ 'roster-drag-active': draggingId }">
     <header class="management-header">
-      <div>
-        <h2>{{ pageTitle }}</h2>
-        <p class="subtitle">{{ pageDescription }}</p>
-      </div>
+      <h2>{{ pageTitle }}</h2>
       <div class="header-actions">
         <button v-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
           {{ section === 'personnel' ? '新增人员' : '新增部门' }}
@@ -109,6 +106,7 @@
         <input
           v-model.trim="search"
           :placeholder="searchPlaceholder"
+          :aria-label="searchPlaceholder"
           autocomplete="off"
           @keyup.enter="applyFilters"
         />
@@ -141,7 +139,7 @@
             <span class="card-kicker">{{ group.shift_type || '固定班制' }}</span>
             <h3>{{ group.name }}</h3>
           </div>
-          <span class="count-pill">{{ group.headcount || '按导入数据统计' }}</span>
+          <span v-if="group.headcount" class="count-pill">{{ group.headcount }}</span>
         </div>
         <ul>
           <li v-for="line in group.lines || []" :key="line">{{ line }}</li>
@@ -149,7 +147,6 @@
       </article>
       <article v-if="!scheduleGroups.length" class="state-card">尚未配置排班资源。</article>
       <article v-if="ruleLines.length" class="schedule-card schedule-card-wide">
-        <span class="card-kicker">转换规则</span>
         <h3>考勤计算说明</h3>
         <ul>
           <li v-for="line in ruleLines" :key="line">{{ line }}</li>
@@ -162,7 +159,7 @@
         <table v-if="section === 'personnel'">
           <thead>
             <tr>
-              <th>导出顺序</th>
+              <th title="修改序号后自动保存导出顺序">导出顺序</th>
               <th>姓名</th>
               <th>工号</th>
               <th>部门</th>
@@ -255,7 +252,6 @@
 
       <div v-if="!rows.length" class="empty-state">
         <strong>{{ emptyTitle }}</strong>
-        <span>{{ emptyDescription }}</span>
         <button v-if="hasFilters" type="button" class="btn" @click="clearFilters">清除筛选</button>
         <button v-else-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
           {{ section === 'personnel' ? '新增第一位人员' : '新增第一个部门' }}
@@ -263,7 +259,7 @@
         <router-link v-else-if="conversionEnabled" class="btn btn-primary" :to="{ name: 'attendance-industry-home' }"
           >上传考勤表</router-link
         >
-        <router-link v-else class="btn btn-primary" :to="{ name: 'business-docking' }">导入考勤资料</router-link>
+        <router-link v-else class="btn btn-primary" :to="{ name: 'business-docking' }">导入考勤表</router-link>
       </div>
 
       <footer v-if="total > pageSize" class="pagination">
@@ -365,15 +361,6 @@
         records: '考勤记录',
       })[props.section]
   );
-  const pageDescription = computed(
-    () =>
-      ({
-        personnel: '修改导出序号即可移动人员并自动保存；转换预览和导出沿用此顺序，新人员排在末尾。',
-        departments: '维护组织部门、上级部门和对应考勤组。',
-        schedules: '查看人员名单中的考勤组与人数；客户模板规则在定制转换功能内维护。',
-        records: '按人员、部门和月份查询导入后的逐日考勤明细。',
-      })[props.section]
-  );
   const searchPlaceholder = computed(
     () =>
       ({
@@ -386,12 +373,6 @@
   const hasFilters = computed(() => Boolean(search.value.trim() || month.value));
   const emptyTitle = computed(() => hasFilters.value ? '没有符合筛选条件的记录' :
     props.section === 'personnel' ? '暂无人员' : props.section === 'departments' ? '暂无部门' : '暂无考勤记录'
-  );
-  const emptyDescription = computed(() => hasFilters.value
-    ? '请调整姓名、部门或月份，或清除筛选查看全部记录。'
-    : props.section === 'records'
-      ? '请准备含人员、日期与打卡明细的考勤表，通过数据对接中心核对模板并确认导入。'
-      : `当前${pageTitle.value}还没有数据。`
   );
   function clearFilters() {
     search.value = '';

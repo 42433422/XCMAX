@@ -9,12 +9,20 @@ from typing import Any
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
+from app.domain.conversation.message_visibility import (
+    EMPLOYEE_MEMORY_PREFIX,
+    employee_memory_rows,
+    ordered_public_sessions,
+    public_messages,
+)
 from app.domain.shared_services.conversation_service import (
     ConversationRevisionError as ConversationRevisionError,
 )
 from app.domain.shared_services.conversation_service import (
     begin_conversation_write,
     lock_conversation_session,
+    public_session_metadata,
+    queued_chat_binding,
 )
 
 
@@ -42,17 +50,16 @@ def _plain_text(value: Any) -> str:
     return "".join(parser.parts).strip()
 
 
-def _session_row(session: AIConversationSession) -> dict[str, Any]:
+def _session_row(db, session: AIConversationSession) -> dict[str, Any]:
+    title, summary, count, updated = public_session_metadata(db, session)
     return {
         "session_id": session.session_id,
         "revision": int(session.revision or 0),
-        "title": session.title,
-        "summary": session.summary or "",
-        "message_count": int(session.message_count or 0),
+        "title": title,
+        "summary": summary or "",
+        "message_count": int(count or 0),
         "created_at": session.created_at.isoformat() if session.created_at else None,
-        "last_message_at": (
-            session.last_message_at.isoformat() if session.last_message_at else None
-        ),
+        "last_message_at": updated.isoformat() if updated else None,
     }
 
 
@@ -73,6 +80,7 @@ def _message_suffix(db: Any, session_id: str, user_id: int, message_id: int):
         AIConversation.session_id == session_id,
         AIConversation.user_id == str(user_id),
         AIConversation.id >= message_id,
+        public_messages(db),
     )
 
 
@@ -171,6 +179,25 @@ def _stored_turn_view(context: dict[str, Any], turn_id: str) -> dict[str, Any] |
             "unknown": view["message"],
         }.get(state, "原任务尚未完成，请继续查看回执。"),
     }
+
+
+def _queued_history_rows(page, context, *, include_legacy=False):
+    from app.application.ai_chat.dialogue_memory import conversation_key
+
+    scope = conversation_key(context)
+    for row in page["messages"]:
+        if row["role"] != "assistant":
+            continue
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        marked = queued_chat_binding(metadata)
+        binding = marked or queued_chat_binding(metadata, include_legacy=include_legacy)
+        if binding is not None and binding[2] == scope:
+            yield row, binding[0], binding[1], metadata["summary"].get("status"), marked is not None
 
 
 class TaskConversationStore:
@@ -278,6 +305,7 @@ class TaskConversationStore:
                     AIConversationSession.session_id == session_id,
                     AIConversationSession.user_id == user_id,
                     AIConversationSession.deleted_at.is_(None),
+                    ~AIConversationSession.session_id.startswith(EMPLOYEE_MEMORY_PREFIX),
                 )
                 .first()
             )
@@ -292,6 +320,7 @@ class TaskConversationStore:
             query = db.query(AIConversation).filter(
                 AIConversation.session_id == session_id,
                 AIConversation.user_id == str(user_id),
+                public_messages(db),
             )
             newest = (
                 query.with_entities(AIConversation.id).order_by(AIConversation.id.desc()).first()
@@ -328,7 +357,7 @@ class TaskConversationStore:
             if not ascending:
                 rows.reverse()
             return {
-                "session": _session_row(session),
+                "session": _session_row(db, session),
                 "messages": [_message_row(row) for row in rows],
                 "has_more": more,
                 "next_before_id": int(rows[0].id) if more and rows and not ascending else None,
@@ -368,28 +397,55 @@ class TaskConversationStore:
     def get_history(
         self, *, session_id: str, user_id: int, mod_id: str = "", **pagination
     ) -> dict[str, Any]:
-        page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
-        session = page.pop("session")
+        from app.application.ai_chat.conversation_history import (
+            reconcile_queued_chat_reply,
+            restore_runtime_history_files,
+        )
         from app.infrastructure.tenant_scope import current_tenant_id
 
+        page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
+        session = page["session"]
         revision = session.get("revision") if isinstance(session, dict) else None
         tenant = str(current_tenant_id() or "")
         turn_id = str(pagination.get("turn_id") or "")
-        selected_turn = (
-            _stored_turn_view(
-                {
-                    "local_user_id": user_id,
-                    "tenant_id": tenant,
-                    "mod_id": mod_id,
-                    "session_id": session_id,
-                    "conversation_id": session_id,
-                    **({"_conversation_revision": revision} if type(revision) is int else {}),
-                },
-                turn_id,
-            )
-            if turn_id
-            else None
-        )
+        context = {
+            "local_user_id": user_id,
+            "tenant_id": tenant,
+            "mod_id": mod_id,
+            "session_id": session_id,
+            "conversation_id": session_id,
+            "_conversation_revision": revision,
+        }
+        repaired = False
+        for _, queued_turn, run_id, status, marked in _queued_history_rows(
+            page, context, include_legacy=True
+        ):
+            if status in {"queued", "unknown"} and reconcile_queued_chat_reply(
+                context, queued_turn, run_id, publish=marked and status == "queued"
+            ):
+                repaired = True
+        if repaired:
+            page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
+        session = page.pop("session")
+        context["_conversation_revision"] = revision = (session or {}).get("revision")
+        restore_runtime_history_files(page, context)
+        selected_turn = None
+        if turn_id:
+            for row, queued_turn, run_id, status, _ in _queued_history_rows(page, context):
+                if queued_turn == turn_id and status != "queued":
+                    selected_turn = {
+                        "turn_id": turn_id,
+                        "run_id": run_id,
+                        "status": status,
+                        "receipt_kind": "run",
+                        "durable": True,
+                        "message_id": row["id"],
+                        "message": row["content"],
+                        "requires_reconciliation": status == "unknown",
+                    }
+                    break
+            else:
+                selected_turn = _stored_turn_view(context, turn_id)
         if selected_turn is None and type(revision) is int:
             from app.application.elt.batch_continuation import active_batch_turn
 
@@ -430,40 +486,13 @@ class TaskConversationStore:
     def list_sessions(self, *, user_id: int, limit: int, offset: int = 0) -> list[dict[str, Any]]:
         with get_db() as db:
             sessions = (
-                db.query(AIConversationSession)
-                .filter(
-                    AIConversationSession.user_id == user_id,
-                    AIConversationSession.deleted_at.is_(None),
-                )
-                .order_by(
-                    AIConversationSession.last_message_at.desc(),
-                    AIConversationSession.id.desc(),
-                )
+                ordered_public_sessions(db)
+                .filter(AIConversationSession.user_id == user_id)
                 .offset(offset)
                 .limit(limit)
                 .all()
             )
-            rows: list[dict[str, Any]] = []
-            changed = False
-            for session in sessions:
-                if not (session.title or "").strip():
-                    first_user = (
-                        db.query(AIConversation)
-                        .filter(
-                            AIConversation.session_id == session.session_id,
-                            AIConversation.role == "user",
-                        )
-                        .order_by(AIConversation.id.asc())
-                        .first()
-                    )
-                    plain = _plain_text(first_user.content if first_user else "").replace("\n", " ")
-                    if plain:
-                        session.title = f"{plain[:48]}…" if len(plain) > 48 else plain
-                        changed = True
-                rows.append(_session_row(session))
-            if changed:
-                db.commit()
-            return rows
+            return [_session_row(db, session) for session in sessions]
 
     def prepare_revision(
         self, *, session_id: str, user_id: int, expected_revision: int | None = None
@@ -497,6 +526,7 @@ class TaskConversationStore:
                     AIConversationSession.session_id == session_id,
                     AIConversationSession.user_id == user_id,
                     AIConversationSession.deleted_at.is_(None),
+                    ~AIConversationSession.session_id.startswith(EMPLOYEE_MEMORY_PREFIX),
                 )
                 .first()
             )
@@ -508,6 +538,7 @@ class TaskConversationStore:
                     .filter(
                         AIConversation.session_id == session_id,
                         AIConversation.user_id == str(user_id),
+                        public_messages(db),
                     )
                     .order_by(AIConversation.id.desc())
                     .limit(400)
@@ -521,8 +552,23 @@ class TaskConversationStore:
                 "messages": [_message_row(message) for message in reversed(messages)],
             }
 
+    def has_legacy_employee_memory(self, *, session_id: str, user_id: int) -> bool:
+        with get_db() as db:
+            return (
+                db.query(AIConversation.id)
+                .filter(
+                    AIConversation.session_id == session_id,
+                    AIConversation.user_id == str(user_id),
+                    employee_memory_rows(db),
+                )
+                .first()
+                is not None
+            )
+
     def delete_session(self, *, session_id: str, user_id: int) -> bool:
         """Retain an owner-scoped tombstone, including IDs whose first turn is pending."""
+        if session_id.startswith(EMPLOYEE_MEMORY_PREFIX):
+            return False
         with get_db() as db:
             begin_conversation_write(db)
             previous = (
@@ -597,15 +643,13 @@ class TaskConversationStore:
                     raise ConversationRevisionError("会话已有新消息，撤回范围已变更")
             deleted = suffix.delete(synchronize_session=False)
             session.revision += 1
-            session.message_count = (
-                db.query(AIConversation).filter(AIConversation.session_id == session_id).count()
+            remaining = db.query(AIConversation).filter(
+                AIConversation.session_id == session_id,
+                AIConversation.user_id == str(user_id),
+                public_messages(db),
             )
-            last = (
-                db.query(AIConversation)
-                .filter(AIConversation.session_id == session_id)
-                .order_by(AIConversation.id.desc())
-                .first()
-            )
+            session.message_count = remaining.count()
+            last = remaining.order_by(AIConversation.id.desc()).first()
             session.last_message_at = last.created_at if last else None
             plain = _plain_text(last.content if last else "").replace("\n", " ")
             session.summary = f"{plain[:120]}…" if len(plain) > 120 else plain
@@ -620,6 +664,7 @@ class TaskConversationStore:
                 .filter(
                     AIConversationSession.user_id == user_id,
                     AIConversationSession.deleted_at.is_(None),
+                    ~AIConversationSession.session_id.startswith(EMPLOYEE_MEMORY_PREFIX),
                 )
                 .with_for_update()
                 .all()

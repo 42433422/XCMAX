@@ -432,11 +432,32 @@ def verification_can_finalize(run: AgentRun) -> bool:
     """Finalization may revisit the graph only when every action is already done."""
     from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
 
+    context = run.metadata.get("runtime_context") or {}
+    report = verification_report(run)
+    if (
+        context.get("source") == "xiaox_runtime"
+        and context.get("parent_run_id")
+        and len(run.steps) == len(run.tool_calls) == 1
+        and report.get("status") == "verified"
+        and report.get("accepted") is True
+        and run.artifacts
+        and all(
+            artifact.artifact_type == "file"
+            and artifact.metadata.get("run_id") == run.run_id
+            and str(artifact.metadata.get("owner_user_id")) == run.user_id
+            and str(artifact.metadata.get("tenant_id")) == tenant_id_of_run(run)
+            and artifact.metadata.get("call_id") == run.tool_calls[0].call_id
+            for artifact in run.artifacts
+        )
+    ):
+        # The original child file is already downloadable. A graph retry also
+        # runs its completion hooks and is outside a file observation.
+        return False
     return bool(
         run.status != "unknown"
         and run.steps
         and run.metadata.get("verification_queue_state") != "unknown"
-        and verification_report(run).get("accepted") is True
+        and report.get("accepted") is True
         and all(step.status in {"completed", "skipped"} for step in run.steps)
         and all(
             not execution_result_error(verified_step_output(run, step))

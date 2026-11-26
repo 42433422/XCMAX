@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from copy import copy
 from pathlib import Path
 
 import pytest
@@ -227,6 +228,27 @@ def test_writer_applies_header_style_and_data_borders(native_workbook):
     assert qc.run_qc(template, plan, template_path=template)["verdict"] == "FAIL"
 
 
+def test_range_number_format_preserves_values_and_types(native_workbook):
+    run, template, _, _ = native_workbook
+    with_template = load_workbook(template)
+    sheet = with_template.active
+    sheet["A2"] = "0007"
+    with_template.save(template)
+    with_template.close()
+    phase = {"phase": "cell_styles", "sheet": sheet.title, "range": "A2:E2", "number_format": "0000"}
+    out, _ = run([phase])
+    original, result = load_workbook(template), load_workbook(out)
+    try:
+        for before, after in zip(original.active["A2:E2"][0], result.active["A2:E2"][0]):
+            assert (after.value, after.data_type) == (before.value, before.data_type)
+            assert after.number_format == "0000"
+    finally:
+        original.close()
+        result.close()
+    with pytest.raises(ValueError, match="strict_protected"):
+        run([phase], [f"{sheet.title}!C2"])
+
+
 def test_writer_inserts_title_row_without_losing_existing_data_or_formulas(native_workbook):
     run, template, qc, _ = native_workbook
     sheet = "销售明细"
@@ -269,6 +291,80 @@ def test_writer_inserts_title_row_without_losing_existing_data_or_formulas(nativ
     assert qc.run_qc(out, plan, template_path=template)["verdict"] == "FAIL"
 
 
+def test_writer_relocates_native_table_and_workbook_references(native_workbook):
+    from openpyxl.workbook.defined_name import DefinedName
+    from openpyxl.worksheet.filters import AutoFilter
+    from openpyxl.worksheet.table import Table, TableColumn, TableFormula
+
+    run, template, qc, _ = native_workbook
+    data_name, summary_name = "销售明细", "产品汇总"
+    with template.open("rb") as stream:
+        source = load_workbook(stream)
+    data, summary = source[data_name], source[summary_name]
+    data["A1"] = "Q1"
+    table = Table(
+        displayName="SampleItems",
+        ref="A1:D3",
+        autoFilter=AutoFilter(ref="A1:D3"),
+        tableColumns=[
+            TableColumn(id=index, name=cell.value)
+            for index, cell in enumerate(data[1], start=1)
+        ],
+    )
+    table.autoFilter.add_sort_condition("B2:B3")
+    table.tableColumns[3].calculatedColumnFormula = TableFormula(attr_text="$B2*$C2")
+    data.add_table(table)
+    data.auto_filter.ref = "F1:G3"
+    data["D2"] = f"=SUM($B2,'{summary_name}'!$D$2,SampleItems[Q1])"
+    data["F1"] = "=SUM(C3:C3)"
+    data["A5"] = "Original block"
+    data.merge_cells("A5:A6")
+    data.row_dimensions[2].height = 24
+    summary["D2"] = f"='{data_name}'!$B$2"
+    summary["D3"] = "=SUM(B$2:B3)"
+    source.defined_names.add(DefinedName("SampleCells", attr_text=f"'{data_name}'!$B$2:$B$3"))
+    source.save(template)
+    source.close()
+
+    out, plan = run([
+        {
+            "phase": "formula_writes",
+            "writes": [{"sheet": summary_name, "ref": "D4", "formula": f"='{data_name}'!$B$3"}],
+        },
+        {"phase": "insert_rows", "sheet": data_name, "row": 1, "count": 1},
+        {"phase": "insert_rows", "sheet": data_name, "row": 4, "count": 1},
+    ], [f"{summary_name}!D2:D3"])
+    with out.open("rb") as stream:
+        saved = load_workbook(stream)
+    try:
+        data, summary = saved[data_name], saved[summary_name]
+        table = data.tables["SampleItems"]
+        assert (table.ref, table.autoFilter.ref) == ("A2:D5", "A2:D5")
+        assert table.autoFilter.sortState.ref == "A2:D5"
+        assert table.autoFilter.sortState.sortCondition[0].ref == "B3:B5"
+        assert table.tableColumns[3].calculatedColumnFormula.attr_text == "$B3*$C3"
+        assert data.auto_filter.ref == "F2:G5"
+        assert data["D3"].value == f"=SUM($B3,'{summary_name}'!$D$2,SampleItems[Q1])"
+        assert data["F2"].value == "=SUM(C5:C5)"
+        assert summary["D2"].value == f"='{data_name}'!$B$3"
+        assert summary["D3"].value == "=SUM(B$2:B3)"
+        assert summary["D4"].value == f"='{data_name}'!$B$5"
+        assert saved.defined_names["SampleCells"].attr_text == f"'{data_name}'!$B$3:$B$5"
+        assert str(next(iter(data.merged_cells.ranges))) == "A7:A8"
+        assert data["A7"].value == "Original block"
+        assert data.row_dimensions[3].height == 24
+        sections = qc.run_qc(out, plan, template_path=template)["sections"]
+        assert sections["conformance"]["status"] == sections["protection"]["status"] == "pass"
+        summary["D2"] = f"='{data_name}'!$B$2"
+        table.autoFilter.ref = "A1:D3"
+        saved.save(out)
+    finally:
+        saved.close()
+    sections = qc.run_qc(out, plan, template_path=template)["sections"]
+    assert sections["conformance"]["status"] == sections["protection"]["status"] == "fail"
+    assert any("原生表格" in issue["detail"] for issue in sections["conformance"]["issues"])
+
+
 def test_native_qc_rejects_tampered_header_style(native_workbook):
     run, template, qc, _ = native_workbook
     out, plan = run([_sales_header_style_phase(), _sales_border_phase()])
@@ -288,12 +384,39 @@ def test_native_qc_rejects_tampered_header_style(native_workbook):
     assert report["sections"]["conformance"]["status"] == "fail"
 
 
-def test_writer_creates_native_table_with_calculation_and_total(native_workbook):
+def test_writer_sets_column_width_without_changing_group_neighbors(native_workbook):
+    run, template, qc, _ = native_workbook
+    book = load_workbook(template)
+    columns = book["销售明细"].column_dimensions
+    columns["B"].width = 16
+    columns.group("B", "D", outline_level=1, hidden=True)
+    book.save(template)
+    book.close()
+
+    out, plan = run([{
+        "phase": "set_column_width", "sheet": "销售明细", "column": "C", "width": 20,
+    }])
+    book = load_workbook(out)
+    columns = book["销售明细"].column_dimensions
+    assert [(columns[col].width, columns[col].outlineLevel, columns[col].hidden) for col in "BCD"] == [
+        (16, 1, True), (20, 1, True), (16, 1, True),
+    ]
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    columns["C"].width = 19
+    book.save(out)
+    book.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "FAIL"
+
+
+@pytest.mark.parametrize("banded", [False, True])
+def test_writer_creates_native_table_with_calculation_and_total(native_workbook, banded):
     from xml.etree import ElementTree as ET
     from zipfile import ZipFile
 
     run, template, qc, _ = native_workbook
     phase = _sales_table_phase()
+    if banded:
+        phase["banded_rows"] = True
     out, plan = run([phase], ["销售明细!E:E"])
     with ZipFile(out) as archive:
         root = ET.fromstring(archive.read("xl/tables/table1.xml"))
@@ -302,6 +425,11 @@ def test_writer_creates_native_table_with_calculation_and_total(native_workbook)
     assert root.attrib["ref"] == "A1:D4"
     assert root.attrib["totalsRowCount"] == "1"
     assert root.find("x:autoFilter", ns).attrib["ref"] == "A1:D3"
+    style = root.find("x:tableStyleInfo", ns)
+    if banded:
+        assert style.attrib == {"name": "TableStyleMedium2", "showRowStripes": "1"}
+    else:
+        assert style is None
     amount = root.find("x:tableColumns/x:tableColumn[@name='金额']", ns)
     assert amount.attrib["totalsRowFunction"] == "sum"
     assert (
@@ -315,12 +443,210 @@ def test_writer_creates_native_table_with_calculation_and_total(native_workbook)
         wb.close()
     assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
     assert qc.run_qc(template, plan, template_path=template)["verdict"] == "FAIL"
+    if banded:
+        book = load_workbook(out)
+        book["销售明细"].tables["tblSales"].tableStyleInfo.showRowStripes = False
+        book.save(out)
+        book.close()
+        assert qc.run_qc(out, plan, template_path=template)["verdict"] == "FAIL"
 
 
 def test_writer_rejects_table_overlap_with_protected_range(native_workbook):
     run, _, _, writer = native_workbook
     with pytest.raises(writer.PlanError, match="保护区"):
         run([_sales_table_phase()], ["销售明细!D4"])
+
+
+@pytest.mark.parametrize("name", ["部品_台帳2", r"\Änderung.1"])
+def test_native_table_name_round_trips_unicode(native_workbook, name):
+    run, template, qc, _ = native_workbook
+    out, plan = run([{**_sales_table_phase(), "name": name}])
+    book = load_workbook(out)
+    try:
+        sheet = book["销售明细"]
+        assert sheet.tables[name].displayName == name
+        assert sheet["D4"].value == f"=SUBTOTAL(109,{name}[金额])"
+    finally:
+        book.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+
+
+def test_unicode_table_name_remains_unique_across_workbook_names(native_workbook):
+    from openpyxl.workbook.defined_name import DefinedName
+
+    run, template, _, writer = native_workbook
+    book = load_workbook(template)
+    try:
+        book.defined_names.add(DefinedName("Änderung_2", attr_text="'销售明细'!$A$1"))
+        book.save(template)
+    finally:
+        book.close()
+    with pytest.raises(writer.PlanError, match="表格名称已存在"):
+        run([{**_sales_table_phase(), "name": "ÄNDERUNG_2"}])
+
+
+@pytest.mark.parametrize("calculated", [False, True])
+def test_native_table_without_total_preserves_the_next_row(native_workbook, calculated):
+    run, template, qc, _ = native_workbook
+    phase = _sales_table_phase()
+    heading, formula = phase.pop("sum_column"), phase.pop("calculated_formula")
+    if calculated:
+        phase.update(calculated_column=heading, calculated_formula=formula)
+    book = load_workbook(template)
+    book[phase["sheet"]]["D4"] = "keep original footer"
+    book.save(template)
+    book.close()
+
+    out, plan = run([phase], [f"{phase['sheet']}!D4"])
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    book = load_workbook(out)
+    sheet = book[phase["sheet"]]
+    table = sheet.tables[phase["name"]]
+    assert table.ref == table.autoFilter.ref == "A1:D3"
+    assert table.totalsRowCount in (None, 0) and table.totalsRowShown is False
+    assert sheet["D4"].value == "keep original footer"
+    assert sheet["D2"].value == (formula if calculated else "=ROUND(B2*C2,2)")
+    assert all(column.totalsRowFunction is None for column in table.tableColumns)
+    table.totalsRowShown = True
+    book.save(out)
+    book.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "FAIL"
+
+
+@pytest.mark.parametrize("calculated", [False, True])
+def test_native_table_can_sum_existing_data_without_assigning_its_calculation(native_workbook, calculated):
+    run, template, qc, _ = native_workbook
+    phase = _sales_table_phase()
+    phase.pop("calculated_formula")
+    if calculated:
+        phase.update(calculated_column="单价", calculated_formula="=5*2")
+    out, plan = run([phase])
+    book = load_workbook(out)
+    sheet = book[phase["sheet"]]
+    table = sheet.tables[phase["name"]]
+    assert table.ref == "A1:D4" and table.autoFilter.ref == "A1:D3"
+    assert table.tableColumns[3].calculatedColumnFormula is None
+    assert table.tableColumns[3].totalsRowFunction == "sum"
+    assert sheet["D2"].value == "=ROUND(B2*C2,2)"
+    assert sheet["D4"].value == "=SUBTOTAL(109,tblSales[金额])"
+    assert sheet["C2"].value == ("=5*2" if calculated else 20)
+    book.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    "fields", [{"calculated_column": "金额"}, {"calculated_formula": "=1"}]
+)
+def test_native_table_schema_requires_complete_calculation_pairs(native_workbook, fields):
+    from jsonschema import ValidationError
+
+    phase = _sales_table_phase()
+    phase.pop("sum_column")
+    phase.pop("calculated_formula")
+    phase.update(fields)
+    run, _, _, _ = native_workbook
+    with pytest.raises(ValidationError):
+        run([phase])
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        *(("name", name, "非法 Excel 表格名称") for name in ("a01", "XFD1048576", "R1C1", "RC", "r", "1合計", "税 目", r"Bad\Name")),
+        ("range", "A1:XFE2", "有限范围"),
+    ],
+)
+def test_plain_table_keeps_native_name_and_range_guards(native_workbook, field, value, error):
+    run, _, _, writer = native_workbook
+    phase = _sales_table_phase()
+    phase.pop("sum_column")
+    phase.pop("calculated_formula")
+    with pytest.raises(writer.PlanError, match=error):
+        run([{**phase, field: value}])
+
+
+@pytest.mark.parametrize("table_last", [True, False])
+def test_native_qc_checks_last_formula_when_table_and_explicit_writes_overlap(native_workbook, table_last):
+    run, template, qc, _ = native_workbook
+    table = _sales_table_phase()
+    formula = "=B2*C2"
+    write = {
+        "phase": "formula_writes",
+        "writes": [{"sheet": table["sheet"], "ref": "D2", "formula": formula}],
+    }
+    out, plan = run([write, table] if table_last else [table, write])
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    with out.open("rb") as handle:
+        book = load_workbook(handle)
+        sheet = book[table["sheet"]]
+        assert sheet["D2"].value == (table["calculated_formula"] if table_last else formula)
+        sheet["D2"] = formula if table_last else table["calculated_formula"]
+    book.save(out)
+    book.close()
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] == "FAIL"
+    assert [(issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]] == [(2, 4)]
+
+
+def test_qc_checks_visible_styles_on_merged_and_unmerged_cells(native_workbook):
+    run, template, qc, _ = native_workbook
+    sheet = "产品汇总"
+    out, plan = run([
+        {"phase": "merge_cells", "sheet": sheet, "range": "A5:C5"},
+        {"phase": "cell_styles", "sheet": sheet, "range": "A5:D5",
+         "bold": True, "horizontal": "center", "font_size": 16},
+    ])
+    section = qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]
+    assert section["status"] == "pass" and section["stats"]["style_cells_checked"] == 2
+    book = load_workbook(out)
+    book[sheet]["A5"].font = copy(book[sheet]["D6"].font)
+    book[sheet]["D5"].alignment = copy(book[sheet]["D6"].alignment)
+    book.save(out)
+    book.close()
+    failed = qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]
+    assert failed["status"] == "fail"
+    assert {issue["col"] for issue in failed["issues"]} == {1, 4}
+
+
+def test_native_qc_tracks_a_clear_and_prior_formula_through_row_insertion(native_workbook):
+    run, template, qc, _ = native_workbook
+    sheet = "销售明细"
+    out, plan = run([
+        {"phase": "cell_writes", "writes": [{"sheet": sheet, "ref": "A2", "value": "临时值"}]},
+        {"phase": "clear_ranges", "ranges": [f"{sheet}!A2"]},
+        {"phase": "formula_writes", "writes": [{"sheet": sheet, "ref": "D2", "formula": "=B2*C2"}]},
+        {"phase": "insert_rows", "sheet": sheet, "row": 2, "count": 1},
+    ])
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    book = load_workbook(out)
+    assert book[sheet]["A3"].value is None
+    assert book[sheet]["D3"].value == "=B3*C3"
+    book[sheet]["A3"] = "非法残值"
+    book.save(out)
+    book.close()
+    assert qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]["status"] == "fail"
+
+
+@pytest.mark.parametrize("range_last", [True, False])
+def test_native_qc_checks_last_range_or_formula_number_format(native_workbook, range_last):
+    run, template, qc, _ = native_workbook
+    sheet = "销售明细"
+    write = {
+        "phase": "formula_writes",
+        "writes": [{"sheet": sheet, "ref": "D2", "formula": "=B2*C2", "number_format": "0.000"}],
+    }
+    style = {"phase": "cell_styles", "sheet": sheet, "range": "D2:D3", "number_format": "#,##0.00"}
+    out, plan = run([write, style] if range_last else [style, write])
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    book = load_workbook(out)
+    cell = book[sheet]["D2"]
+    assert cell.number_format == ("#,##0.00" if range_last else "0.000")
+    cell.number_format = "0.000" if range_last else "#,##0.00"
+    book.save(out)
+    book.close()
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] != "PASS"
+    assert [(issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]] == [(2, 4)]
 
 
 def test_writer_creates_native_dual_axis_chart(native_workbook):

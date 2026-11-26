@@ -94,12 +94,14 @@ export type MarketLlmProvider = {
   label?: string
   models?: string[]
   models_detailed?: Array<Record<string, unknown>>
+  runtime_models?: string[]
   error?: string | null
   fetch_source?: string | null
 }
 
 export type MarketLlmCatalogData = {
   providers: MarketLlmProvider[]
+  degraded?: boolean
   preferences?: Record<string, unknown>
   cache_ttl_seconds?: number
   market_base_url?: string
@@ -229,11 +231,12 @@ export async function fetchMarketAccountOverview(authorization: string, refresh 
   return j.data
 }
 
-export async function fetchMarketLlmCatalog(authorization = '', refresh = false): Promise<MarketLlmCatalogData> {
+export async function fetchMarketLlmCatalog(authorization = '', refresh = false, signal?: AbortSignal): Promise<MarketLlmCatalogData> {
   const p = new URLSearchParams()
   if (refresh) p.set('refresh', 'true')
   const res = await apiFetch(`/api/market/llm-catalog${p.toString() ? `?${p}` : ''}`, {
     headers: { ...marketBearerHeaders(authorization) },
+    signal,
   })
   const j = (await res.json()) as {
     success?: boolean

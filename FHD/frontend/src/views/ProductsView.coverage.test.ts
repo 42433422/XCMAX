@@ -257,7 +257,7 @@ describe('ProductsView.coverage', () => {
   it('debounces ordinary product keyword search instead of issuing a request per character', async () => {
     const wrapper = await mountProducts()
     mockFetchProducts.mockClear()
-    const input = wrapper.find('.search-box input[type="text"]')
+    const input = wrapper.find('.search-box input[type="search"]')
     await input.setValue('A')
     await input.setValue('AB')
     await input.setValue('ABC')
@@ -952,7 +952,7 @@ describe('ProductsView.coverage', () => {
 
     it('搜索框输入时触发 loadProducts', async () => {
       const wrapper = await mountProducts()
-      const input = wrapper.find('input[type="text"]')
+      const input = wrapper.find('.search-box input[type="search"]')
       expect(input.exists()).toBe(true)
       await input.setValue('A001')
       await flushPromises()

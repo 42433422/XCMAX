@@ -208,10 +208,13 @@ def test_ambiguous_header_requires_confirmation_before_reading_or_querying(
         assert schema_read.call_args.kwargs == {"sheet_name": None, "header_row_1based": header}
 
 
-@pytest.mark.parametrize("decision", ["failure", "unknown"])
+@pytest.mark.parametrize(
+    ("decision", "error"),
+    [("failure", "header_detection_failed"), ("unknown", "header_confirmation_required")],
+)
 @pytest.mark.parametrize("scoped", [True, False])
 def test_real_sdk_header_failure_does_not_become_no_model_fallback(
-    tmp_path, monkeypatch, unconfigured_header_registry, decision, scoped
+    tmp_path, monkeypatch, unconfigured_header_registry, decision, error, scoped
 ):
     import httpx
     from openai import AuthenticationError
@@ -251,7 +254,7 @@ def test_real_sdk_header_failure_does_not_become_no_model_fallback(
         result = handle_excel_analysis(
             {"file_path": str(path), "action": "structure"}, workspace_root=str(tmp_path)
         )
-    assert result["success"] is False and result["error"] == "read_excel_failed"
+    assert result["success"] is False and result["error"] == error
     assert "columns" not in result
     assert create.call_count == (2 if decision == "failure" else 1)
 
@@ -316,6 +319,40 @@ def test_natural_language_query_retries_with_error_feedback() -> None:
     assert result["success"] is True
     assert result["row_count"] == 2
     assert len(calls) == 2 and calls[1]
+
+
+@pytest.mark.parametrize("operation", ["filter", "aggregate", "sort"])
+@pytest.mark.parametrize("repair_succeeds", [False, True])
+def test_mixed_cell_types_use_the_existing_query_plan_repair(operation, repair_succeeds):
+    initial = {
+        "filter": {"query_expression": "c0 > 0"},
+        "aggregate": {"metrics": [{"column": "value", "op": "sum"}]},
+        "sort": {"sort_by": ["value"]},
+    }[operation]
+    frame = pd.DataFrame({"value": ["heading", 8, 4, None]})
+    frame.attrs["source_header"] = 0
+    attempts = []
+
+    def translate(_question, _frame, *, error_feedback=None):
+        attempts.append(error_feedback)
+        if error_feedback and repair_succeeds:
+            return json.dumps({
+                **initial, "conversions": [{"column": "value", "kind": "number"}],
+            })
+        return json.dumps(initial)
+
+    result = natural_language_query(frame, "Operate on the numbers", translate, _execute)
+    assert len(attempts) == 2 and "conversion" in attempts[1]
+    assert result["success"] is repair_succeeds
+    assert result.get("error") == (None if repair_succeeds else "invalid_pandas_query")
+    if repair_succeeds:
+        assert result["records"] == {
+            "filter": [{"value": 8}, {"value": 4}],
+            "aggregate": [{"value_sum": 12}],
+            "sort": [{"value": 4}, {"value": 8}, {"value": None}, {"value": None}],
+        }[operation]
+    assert frame["value"].tolist() == ["heading", 8, 4, None]
+    assert json.dumps(result, allow_nan=False)
 
 
 def _execute(code: str, df: pd.DataFrame) -> pd.DataFrame:
@@ -479,8 +516,11 @@ def registered_workbook(tmp_path, registered_excel):
     return registered_excel(path)
 
 
-@pytest.mark.parametrize("decision", ["failure", "unknown"])
-def test_configured_model_failure_does_not_succeed_with_first_row(registered_workbook, decision):
+@pytest.mark.parametrize(
+    ("decision", "error"),
+    [("failure", "header_detection_failed"), ("unknown", "header_confirmation_required")],
+)
+def test_configured_model_failure_does_not_succeed_with_first_row(registered_workbook, decision, error):
     from app.infrastructure.llm.structured_output import StructuredOutputError
 
     with (
@@ -501,8 +541,99 @@ def test_configured_model_failure_does_not_succeed_with_first_row(registered_wor
     ):
         result = registered_workbook()
     assert result["success"] is False
-    assert result["error"] == "read_excel_failed"
+    assert result["error"] == error and result["required_field"] == "header_row"
     assert "columns" not in result
+    if decision == "unknown":
+        assert result["physical_preview"][0]["row"] == 1
+        assert set(result["physical_preview"][0]["cells"]) == {"A"}
+
+
+@pytest.mark.parametrize("title", [False, True])
+def test_registered_headerless_workbook_preserves_physical_rows_and_columns(
+    tmp_path, registered_excel, title
+):
+    from openpyxl import Workbook
+
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    path = tmp_path / "headerless.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    if title:
+        sheet.append(["Sample activity"])
+        sheet.merge_cells("A1:D1")
+    sheet.append(["First", None, "region", 4])
+    sheet.append([])
+    sheet.append(["Second", None, "region", 7])
+    workbook.save(path)
+    original = path.read_bytes()
+    execute = registered_excel(path)
+    common = {"sheet_name": sheet.title, "header_row": 0}
+    with patch(
+        "app.infrastructure.excel.header_detection.get_active_provider",
+        side_effect=AssertionError("an explicit headerless request does not infer a header"),
+    ):
+        structure = execute(common)
+        read = execute({"action": "read", **common})
+        result = execute(
+            {"action": "aggregate", **common, "metrics": [{"column": "D", "op": "sum"}]}
+        )
+
+    for action in ("structure", "read", "query", "aggregate"):
+        assert get_tool_action_spec("excel_analysis", action).input_schema["properties"][
+            "header_row"
+        ]["minimum"] == 0
+    assert structure["header_row"] == read["header_row"] == result["header_row"] == 0
+    assert structure["columns"] == read["columns"] == ["A", "B", "C", "D"]
+    assert [row["A"] for row in read["records"]] == (
+        (["Sample activity"] if title else []) + ["First", None, "Second"]
+    )
+    assert read["source_rows"]["row_ranges"] == result["source_rows"]["row_ranges"] == [
+        [1, 4 if title else 3]
+    ]
+    assert result["records"] == [{"D_sum": 11.0}]
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("numbers", "middle", "error"),
+    [
+        ((4, 7), "memo", None),
+        ((4, 7), "#VALUE!", "sum_cell_error"),
+        ((4, 7), "=2+3", "sum_formula_value_unavailable"),
+        (("4", "7"), "memo", "sum_range_has_no_numeric_cells"),
+    ],
+)
+def test_registered_physical_sum_reports_text_cells_and_rejects_unreadable_values(
+    tmp_path, registered_excel, numbers, middle, error
+):
+    from openpyxl import Workbook
+
+    path = tmp_path / "rating.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["activity", None, 1000])
+    for row, value in enumerate((numbers[0], middle, numbers[1]), 2):
+        sheet.cell(row, 3, value)
+    sheet.cell(5, 3, 2000)
+    workbook.save(path)
+    execute = registered_excel(path)
+    result = execute(
+        {
+            "action": "aggregate",
+            "header_row": 0,
+            "metrics": [{"column": "C", "op": "sum", "cell_range": "C2:C4"}],
+        }
+    )
+    if error:
+        assert result["success"] is False and result["error"] == error
+        if error != "sum_range_has_no_numeric_cells":
+            assert result["cell"] == "C3"
+        return
+    assert result["success"] is True and result["records"] == [{"C_sum": 11.0}]
+    assert result["source_rows"]["row_ranges"] == [[2, 4]]
+    assert result["ignored_non_numeric_rows"]["row_ranges"] == [[3, 3]]
+    assert result["numeric_cell_count"] == 2
 
 
 def test_schema_tool_preserves_snapshot_contract_with_model_header(registered_workbook):

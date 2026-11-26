@@ -9,8 +9,7 @@ vi.mock('@/api/agentRuns', () => ({
   default: agentRunsApiMock,
 }))
 
-import { buildAgentRunTaskUpdate, chatPayloadFromRun, extractAgentRunId, useAgentRunEventSync, waitForAgentRunTerminal } from './useAgentRunEvents'
-import type { AgentRun } from '@/api/agentRuns'
+import { buildAgentRunTaskUpdate, extractAgentRunId, useAgentRunEventSync, waitForAgentRunTerminal } from './useAgentRunEvents'
 import { isFirstAiTaskPending, queueFirstAiTaskPrompt, readProductFlowCompleted } from '@/constants/productFlow'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
@@ -73,22 +72,7 @@ describe('useAgentRunEvents', () => {
       await vi.advanceTimersByTimeAsync(2000)
       await expect(pending).resolves.toBeNull()
       await expect(waitForAgentRunTerminal(' ')).resolves.toBeNull()
-      expect(chatPayloadFromRun(null)).toBeNull()
-      expect(chatPayloadFromRun({ run_id: 'original', status: 'completed' } as AgentRun)).toBeNull()
     } finally { vi.useRealTimers() }
-  })
-
-  it('projects only persisted Xiaox results, retaining errors, review state and receipts', () => {
-    const businessReceipt = { id: 'receipt-1' }
-    const run = { run_id: 'original', status: 'failed', final_output: { xiaox_result: {
-      ok: false, error: '等待核对原始凭证', exit_status: 'unknown', reconciliation_required: true,
-      business_receipts: [businessReceipt], active_seconds: 2,
-    } } } as AgentRun
-    expect(chatPayloadFromRun(run)).toMatchObject({
-      success: false, runtime: 'xiaox', run_id: 'original', response: '等待核对原始凭证',
-      execution_state: 'unknown', requires_reconciliation: true,
-      data: { business_receipts: [businessReceipt], active_seconds: 2, error_code: 'unknown' },
-    })
   })
 
   it.each(['events', 'run', 'error', 'generation'])('does not apply a late %s result to the next owner or generation', async stage => {

@@ -5,6 +5,8 @@ describe('chat attachment picker', () => {
   it.each([
     ['26年销售明细.xlsx'],
     ['26年销售明细.xlsx', '汇总.xlsm'],
+    ['客户对账单.DOCX'],
+    ['汇总.xlsx', '客户对账单.docx'],
   ])('stages %j as composer attachments', async (...names) => {
     const attachments = {
       stageArtifactFiles: vi.fn(async () => names.length),

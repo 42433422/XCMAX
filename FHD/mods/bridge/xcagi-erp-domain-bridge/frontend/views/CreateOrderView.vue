@@ -20,7 +20,7 @@
               <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
             <div v-if="templates.length === 0" class="muted" style="font-size: 12px; margin-top: 6px;">
-              暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单 Excel（表头需含必备词条），保存后回到本页刷新模板列表。
+              暂无发货单模板，请在「模板编辑」添加后刷新。
             </div>
           </div>
           <div class="form-col" style="flex: 0;">
@@ -30,7 +30,7 @@
         </div>
       </div>
 
-      <div class="card header-section">
+      <div class="card">
         <h3>基础信息</h3>
         <div class="form-row">
           <div class="form-col">
@@ -64,14 +64,14 @@
 
       <div class="card">
         <h3>产品信息</h3>
-        <div style="margin-bottom: 15px;">
+        <div class="order-actions">
           <button class="btn btn-success" @click="addProductRow"><i class="fa fa-plus" aria-hidden="true"></i> 添加产品</button>
           <button class="btn" @click="showProductSelector = true"><i class="fa fa-search" aria-hidden="true"></i> 选择产品名称</button>
           <RouterLink :to="resolveErpPagePath('/products')" class="btn btn-secondary" style="text-decoration: none;"><i class="fa fa-cubes" aria-hidden="true"></i> 管理产品库</RouterLink>
         </div>
 
         <div v-if="products.length === 0" class="empty-products">
-          暂无产品，请点击"添加产品"或"选择产品名称"添加产品
+          暂无产品
         </div>
 
         <div v-for="(product, index) in products" :key="product.id" class="product-row">
@@ -117,28 +117,27 @@
       </div>
 
       <div class="card">
-        <h3>操作</h3>
-        <div style="text-align: center;">
-          <button class="btn btn-success" :disabled="generatingShipment" :aria-busy="generatingShipment" @click="generateShipment" style="padding: 15px 40px; font-size: 18px;">
+        <div class="order-actions">
+          <button class="btn btn-success" :disabled="generatingShipment" :aria-busy="generatingShipment" @click="generateShipment">
             <i class="fa fa-rocket" aria-hidden="true"></i> {{ generatingShipment ? '正在生成...' : '生成发货单' }}
           </button>
-          <button class="btn btn-secondary" :disabled="generatingShipment" @click="resetForm" style="padding: 15px 40px; font-size: 18px;">
+          <button class="btn btn-secondary" :disabled="generatingShipment" @click="resetForm">
             <i class="fa fa-refresh" aria-hidden="true"></i> 重置
           </button>
-          <button class="btn" @click="goTemplatePreview" style="padding: 15px 40px; font-size: 18px;">
+          <button class="btn" @click="goTemplatePreview">
             <i class="fa fa-edit" aria-hidden="true"></i> 模板编辑
           </button>
         </div>
       </div>
 
-      <div v-if="result" class="card" style="margin-top: 20px;">
+      <div v-if="result" class="card">
         <h3><i class="fa fa-check-circle-o" aria-hidden="true"></i> 生成结果</h3>
-        <div style="text-align: center; padding: 20px;">
-          <p style="margin-bottom: 15px;">文件名: {{ result.doc_name }}</p>
-          <button @click="downloadShipment" class="btn btn-success" style="padding: 15px 30px; font-size: 16px;">
+        <p class="order-file-name">{{ result.doc_name }}</p>
+        <div class="order-actions">
+          <button @click="downloadShipment" class="btn btn-success">
             <i class="fa fa-download" aria-hidden="true"></i> 下载发货单
           </button>
-          <button class="btn" :disabled="generatingShipment" @click="resetForm" style="padding: 15px 30px; font-size: 16px;">
+          <button class="btn" :disabled="generatingShipment" @click="resetForm">
             <i class="fa fa-plus-square-o" aria-hidden="true"></i> 新建发货单
           </button>
         </div>

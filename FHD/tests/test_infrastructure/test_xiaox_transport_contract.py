@@ -46,6 +46,7 @@ def test_environment_and_configuration_do_not_inherit_host_authority(config, mon
     import tomllib
 
     settings = tomllib.loads((transport.runtime_dir / "config.toml").read_text())
+    assert settings["tool_output_token_limit"] == 4096
     assert settings["project_doc_max_bytes"] == 0
     assert settings["features"]["shell_tool"] is False
     assert settings["features"]["plugins"] is False
@@ -182,6 +183,8 @@ for line in sys.stdin:
         send({"id":msg["id"],"result":{"thread":thread(),"model":p["model"],
           "modelProvider":p["modelProvider"],"cwd":os.getcwd(),"approvalPolicy":"never",
           "approvalsReviewer":"user","sandbox":{"type":"readOnly"},"instructionSources":[]}})
+    elif method == "thread/inject_items":
+        send({"id":msg["id"],"result":{}})
     elif method == "turn/start":
         inputs = msg["params"]["input"]
         mode = inputs[0]["text"] if inputs else "tool-output"
@@ -222,7 +225,14 @@ def test_pinned_sdk_stream_resume_and_denied_approval(config, fake_runtime, monk
 
     async def scenario():
         async with XiaoxTransport(config) as runtime:
-            thread_id = await runtime.start_thread(developer_instructions="Only authorized tools")
+            thread_id = await runtime.start_thread(
+                developer_instructions="Only authorized tools",
+                history=[
+                    {"role": "user", "content": "prior user preference"},
+                    {"role": "assistant", "content": "previous published reply"},
+                    {"role": "tool", "content": "prior tool authority is not carried"},
+                ],
+            )
             events = [event async for event in runtime.stream_turn("approval")]
             assert events[-1]["payload"]["turn"]["status"] == "completed"
             assert not (runtime.runtime_dir / "launch.json").exists()
@@ -246,6 +256,16 @@ def test_pinned_sdk_stream_resume_and_denied_approval(config, fake_runtime, monk
         "decision": "decline"
     }
     assert len([m for m in messages if m.get("method") == "thread/start"]) == 1
+    methods = [row.get("method") for row in messages]
+    (inject,) = (row for row in messages if row.get("method") == "thread/inject_items")
+    assert methods.index("thread/start") < methods.index("thread/inject_items") < methods.index("turn/start")
+    assert inject["params"] == {
+        "threadId": "thread-1",
+        "items": [
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "prior user preference"}]},
+            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "previous published reply"}]},
+        ],
+    }
     assert all(
         m["params"]["capabilities"]["experimentalApi"] is False
         for m in messages
@@ -278,7 +298,7 @@ def test_goal_feedback_is_sdk_tool_output_not_user_input(config, fake_runtime):
     assert retry["toolOutput"]["retain"] is False
 
 
-def test_goal_feedback_carries_host_output_schema(config, fake_runtime):
+def test_first_turn_and_feedback_carry_host_output_schema(config, fake_runtime):
     binary, log = fake_runtime
     schema = {
         "type": "object",
@@ -289,7 +309,7 @@ def test_goal_feedback_carries_host_output_schema(config, fake_runtime):
     async def scenario():
         async with XiaoxTransport(replace(config, codex_bin=str(binary))) as runtime:
             await runtime.start_thread()
-            _ = [event async for event in runtime.stream_turn("Write the workbook")]
+            _ = [event async for event in runtime.stream_turn("Plan the inventory", output_schema=schema)]
             _ = [
                 event
                 async for event in runtime.stream_turn(
@@ -304,7 +324,8 @@ def test_goal_feedback_carries_host_output_schema(config, fake_runtime):
         if (m := json.loads(line)).get("method") == "turn/start"
     ]
     first, retry = turns
-    assert "outputSchema" not in first
+    assert first["input"][0]["text"] == "Plan the inventory"
+    assert first["outputSchema"] == schema
     assert retry["outputSchema"] == schema
     assert retry["toolOutput"]["name"] == "verify_runtime_goal"
 

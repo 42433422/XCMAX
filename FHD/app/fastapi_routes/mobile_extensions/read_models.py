@@ -78,6 +78,7 @@ class MobileReadModels:
                 return []
             try:
                 from app.db.models.ai import AIConversation, AIConversationSession
+                from app.domain.conversation.message_visibility import public_messages
 
                 with ports.database() as db:
                     rows = (
@@ -86,7 +87,12 @@ class MobileReadModels:
                             AIConversationSession,
                             AIConversation.session_id == AIConversationSession.session_id,
                         )
-                        .filter(AIConversationSession.user_id == uid)
+                        .filter(
+                            AIConversationSession.user_id == uid,
+                            AIConversationSession.deleted_at.is_(None),
+                            AIConversation.user_id == str(uid),
+                            public_messages(db),
+                        )
                         .order_by(AIConversation.id.desc())
                         .limit(limit)
                         .all()

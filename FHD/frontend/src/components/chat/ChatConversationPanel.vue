@@ -1,7 +1,7 @@
 <template>
   <div class="conv-panel">
     <div class="conv-panel-toolbar">
-      <button type="button" class="btn btn-primary btn-sm" @click="$emit('new')">
+      <button id="newConversationBtn" type="button" class="btn btn-primary btn-sm" @click="$emit('new')">
         <i class="fa fa-plus" aria-hidden="true"></i> {{ $t('chat.newConversation') }}
       </button>
       <button
@@ -20,10 +20,7 @@
         <span class="conv-error-text">{{ error }}</span>
         <button type="button" class="btn btn-secondary btn-sm" @click="$emit('refresh')">{{ $t('chat.retry') }}</button>
       </div>
-      <div v-if="!loading && !error && sessions.length === 0" class="conv-empty">
-        {{ $t('chat.historyEmpty') }}
-        <div class="conv-empty-tip">{{ $t('chat.historyEmptyTip') }}</div>
-      </div>
+      <div v-if="!loading && !error && sessions.length === 0" class="conv-empty">{{ $t('chat.historyEmpty') }}</div>
       <template v-if="sessions.length">
         <div v-for="group in groupedSessions" :key="group.key" class="conv-group">
           <div class="conv-group-label">{{ group.label }}</div>
@@ -71,7 +68,6 @@
           </ul>
         </div>
         <button v-if="hasMore" type="button" class="btn btn-secondary btn-sm" :disabled="loadingMore" @click="$emit('load-more')">{{ loadingMore ? '正在加载…' : '加载更早的会话' }}</button>
-        <p v-else-if="!error" class="conv-empty-tip">已显示全部可用会话</p>
       </template>
     </div>
 
@@ -207,19 +203,10 @@ function confirmDelete(session: HistorySessionItem) {
 }
 
 .conv-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
   padding: 24px 8px;
   color: var(--app-text-muted, #6b7280);
   text-align: center;
   font-size: 13px;
-}
-
-.conv-empty-tip {
-  font-size: 12px;
-  color: var(--app-text-caption, #9ca3af);
 }
 
 .conv-error {
@@ -244,11 +231,9 @@ function confirmDelete(session: HistorySessionItem) {
 
 .conv-group-label {
   padding: 4px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--app-text-caption, #9ca3af);
+  color: var(--app-text-muted, #6b7280);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .conv-list {

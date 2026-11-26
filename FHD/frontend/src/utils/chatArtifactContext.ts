@@ -1,15 +1,12 @@
-/**
- * 本轮对话的附件工件上下文：选文件后把文件上传到 ``/api/attachments`` 收集工件 id，
- * 发送消息时随 ``context.artifact_ids`` 交给后端取数，发送成功后清空。
- * 上传失败全部静默，不影响现有解析 / 摘要流程。
- */
 import { apiFetch } from '@/utils/apiBase'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
 const ATTACHMENTS_PATH = '/api/attachments/'
+type ChatArtifactReference = { id?: string; uploadId?: string }
+export type UploadedChatArtifact = ChatArtifactReference & { id: string; name: string }
 
 export function createChatArtifactContext() {
-  const pending = new Set<string>()
+  const pending = new Map<string, ChatArtifactReference>()
   let consumed = false
   let revision = 0
 
@@ -18,47 +15,38 @@ export function createChatArtifactContext() {
     pending.clear()
     consumed = false
   }
-  function addChatArtifactIds(ids: Array<string | null | undefined>) {
+  function addChatArtifacts(artifacts: ChatArtifactReference[]) {
     if (consumed) clearChatArtifactIds()
     revision += 1
-    for (const id of ids) {
-      const value = String(id || '').trim()
-      if (value) pending.add(value)
+    for (const { id, uploadId } of artifacts) {
+      const artifactId = id?.trim()
+      const key = artifactId || uploadId
+      if (key) pending.set(key, { id: artifactId, uploadId: uploadId || pending.get(key)?.uploadId })
     }
   }
-  const listChatArtifactIds = () => [...pending]
-  function takeChatArtifactIds(options: { retry?: boolean } = {}) {
-    if (consumed && !options.retry) clearChatArtifactIds()
-    return listChatArtifactIds()
-  }
-  function markChatArtifactsConsumed() { consumed = pending.size > 0 }
+  const listChatArtifactIds = () => [...pending.values()].flatMap(({ id }) => id ? [id] : [])
   function removeChatArtifactId(id: string | null | undefined) {
     if (pending.delete(String(id || '').trim())) revision += 1
   }
   function captureChatArtifacts() {
-    const ids = takeChatArtifactIds()
-    markChatArtifactsConsumed()
+    // Only the original turn snapshot may reuse a submitted attachment.
+    if (consumed) clearChatArtifactIds()
+    consumed = pending.size > 0
     const submittedRevision = revision
-    return { ids, complete: () => { if (submittedRevision === revision) clearChatArtifactIds() } }
+    const uploadIds = [...new Set([...pending.values()].flatMap(({ uploadId }) => uploadId ? [uploadId] : []))]
+    return { ids: listChatArtifactIds(), uploadIds, complete: () => { if (submittedRevision === revision) clearChatArtifactIds() } }
   }
-  return {
-    addChatArtifactIds, listChatArtifactIds, takeChatArtifactIds, markChatArtifactsConsumed,
-    removeChatArtifactId, clearChatArtifactIds, captureChatArtifacts,
-  }
+  return { addChatArtifacts, listChatArtifactIds, removeChatArtifactId, clearChatArtifactIds, captureChatArtifacts }
 }
 
 export const {
-  addChatArtifactIds, listChatArtifactIds, takeChatArtifactIds, markChatArtifactsConsumed,
-  removeChatArtifactId, clearChatArtifactIds, captureChatArtifacts,
+  addChatArtifacts, listChatArtifactIds, removeChatArtifactId, clearChatArtifactIds, captureChatArtifacts,
 } = createChatArtifactContext()
 
-export type UploadedChatArtifact = { id: string; name: string }
-
-/** 并行上传（单批 multipart ``files``），返回成功的工件 id 与展示名；任何失败都静默。 */
 export async function uploadChatArtifactsDetailed(
   files: File[],
   isCurrent: () => boolean = () => true,
-  addArtifacts = addChatArtifactIds,
+  addArtifacts = addChatArtifacts,
 ): Promise<UploadedChatArtifact[]> {
   if (!files.length) return []
   try {
@@ -68,17 +56,18 @@ export async function uploadChatArtifactsDetailed(
     if (!response.ok) return []
     const body = asRecord(await response.json().catch(() => ({})))
     const rows = asArray<Record<string, unknown>>(body.results ?? body.items)
-      .filter((row) => asString(row.status) === 'ok')
       .map((row, index) => {
         const artifact = asRecord(row.artifact)
+        const uploadId = asString(artifact.elt_upload_id).trim()
         return {
-          id: asString(artifact.id).trim(),
-          name: asString(artifact.name).trim() || files[index]?.name || '附件',
+          id: row.status === 'ok' ? asString(artifact.id).trim() : '',
+          name: asString(row.name).trim() || asString(artifact.name).trim() || files[index]?.name || '附件',
+          ...(uploadId ? { uploadId } : {}),
         }
       })
       .filter((row) => row.id)
     if (!isCurrent()) return []
-    if (rows.length) addArtifacts(rows.map((row) => row.id))
+    if (rows.length) addArtifacts(rows)
     return rows
   } catch {
     return []

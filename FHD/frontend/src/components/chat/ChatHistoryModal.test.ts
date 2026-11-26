@@ -39,7 +39,8 @@ describe('ChatHistoryModal', () => {
     await more.trigger('click')
     expect(wrapper.emitted('load-more')).toHaveLength(1)
     await wrapper.setProps({ historyHasMore: false, historyLoadingMore: false, historyError: '' })
-    expect(wrapper.text()).toContain('已显示全部可用会话')
+    expect(wrapper.findAll('.history-session-item')).toHaveLength(1)
+    expect(wrapper.findAll('button').some(button => button.text() === '加载更早的会话')).toBe(false)
     wrapper.unmount()
   })
 

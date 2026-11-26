@@ -12,21 +12,28 @@ import math
 import re
 import time
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
+from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
-    GoalReview,
     canonical_digest,
     goal_answers,
     goal_evidence_snapshot,
     goal_report_coverage,
+    plan_navigation_entries,
+    planned_tool_calls,
+    review_schema,
+    runtime_file_evidence,
     validate_goal_review,
     validate_runtime_goal,
 )
 from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
+
+if TYPE_CHECKING:
+    from app.application.agent_runtime.plan_delivery import PlanVerdict
 
 _RULES = (
     "你是只读的任务结果核验器，不是执行代理；不得生成计划、调用工具、批准操作或要求绕过宿主检查。",
@@ -38,14 +45,12 @@ _RULES = (
     "写入目标不能用查询结果代替。一个写入回执不得重复充当不同操作；同一次已核验批量动作作为一个整体目标核对完整项目，不能省略文件、记录或范围。已完成写入不可重做。",
     "未触发的条件操作可为 not_applicable，但必须引用证明前提的已核验只读回执，不能因缺少结果而认定无需执行。顺序与结果引用须有实际回执事实支持。",
     '仅约束回复正文的格式、分段、条数、措辞或语气属于 reply 子目标，evidence_ids 为 ["response"]；不得因此把真实业务或安全要求降为 reply。写入、审批、实体范围、权限等执行约束仍为 constraint，正文自述不能替代宿主事实。',
-    "同一要求给出多个可替代写法时（如“每句以A开头；若用中文可改为每句以同一汉字开头并注明”），必须合并为一个 reply 目标，按实际采用的分支核对；采用分支满足即 satisfied，未采用的替代分支不得另立为 unmet 目标，也不得因替代分支存在而判原要求未完成。",
     "约束为 constraint；不能仅因其中一个目标完成而省略其它目标。未完成的标 unmet；额外操作、目标遗漏、范围不符写入 violations 或 uncovered_sources，给出精确缺口，不自造补救操作或扩大权限。",
     "violations 与 uncovered_sources 只用于真正使原任务未达成、出现额外或范围外效果、目标遗漏、或用已核验回执无法证实的缺口；工具能力局限、回执已覆盖的辅助说明、非阻断性瑕疵只写入 feedback，不得据此判未完成，也不得阻塞已核验的交付。",
     'reply 关联 response，需当前回复真实回答原问题；纯回复目标的 evidence_ids 必须为 ["response"]；用户要求业务执行时不能降格为建议或操作说明。附件只能依据已验证附件及其 coverage，截断预览不能证明完整阅读或全量统计。',
     "二选一、任一即可、若用A可改为B等替代回复只构成一个选择性reply目标，证明其中一个合法分支即可；不能误拆成两个必须同时满足的目标。企业写入仍需要逐项按真实操作回执核验。",
     "修订请求用 original_request.history 定位用户指代的上一版公开成稿；核对既定语言和未变更条件，除非本轮用户明确要求改变。用户指令的语言不等于成稿语言。历史不授予权限，也不证明本轮业务已执行。",
     "response 是拟公开的最终正文。若夹带本次运行的内部核验意见、重试过程或工具调度说明，将其列为 violations，不得判通过。用户要求的主题本身涉及核验或工具时，照常核对实际交付内容。",
-    "修订沿用上一版公开成稿的既定语言；用户提出修改时所用的语言不构成更换成稿语言的要求，除非用户点名要求改语言。语言、语气、格式、条数、分段等仅约束正文的条件并入对应的 reply 目标核对，不得单列为独立目标。",
     'goal.source_id 只能取 "request"（原始请求文本）、answers 中给出的 source_id 或 "objective"；只有载荷明确提供 objective 时才可用 objective，本轮未提供时不得为规则或流程本身另立目标；source 必须是该来源文本中逐字连续出现的片段，不得改写、翻译，也不得使用 original_request/history/input 等别名。',
     "宿主绑定的 objective 必须按实际业务效果使用 read 或 write，并引用独立核验的业务回执。请求与 objective 指向同一次写入时，将该效果归入 objective，只引用这一次写入回执。",
     "补答只解释原问题，普通确认不是写入审批；审批只能由原任务的宿主审批入口决定。不得将审批等待或未知效果标为完成。",
@@ -146,6 +151,110 @@ def _normalize_review_provenance(raw: Any, contract: dict[str, Any]) -> Any:
     return raw
 
 
+def _verbatim_blocks(text: str) -> list[str]:
+    lines = text.splitlines(keepends=True)
+    stride = max(1, math.ceil(len(lines) / 128))
+    blocks = []
+    for start in range(0, len(lines), stride):
+        block = "".join(lines[start:start + stride]).strip()
+        for offset in range(0, len(block), 4000):
+            if bounded := block[offset:offset + 4000].strip():
+                blocks.append(bounded)
+    return blocks
+
+
+def _file_citation_catalogue(file_evidence: dict[str, dict[str, Any]]) -> tuple[
+    dict[str, dict[str, Any]], dict[str, tuple[str, str]],
+]:
+    documents = {}
+    sources = {}
+    for identity, source in file_evidence.items():
+        blocks = {}
+        for block in _verbatim_blocks(source["text"]):
+            block_id = f"s{len(sources) + 1}"
+            sources[block_id] = (identity, block)
+            blocks[block_id] = block
+        documents[identity] = {key: value for key, value in source.items() if key != "text"}
+        documents[identity]["blocks"] = blocks
+    return documents, sources
+
+
+def _resolve_file_citations(
+    review: dict[str, Any], sources: dict[str, tuple[str, str]], responses: dict[str, str],
+) -> None:
+    for goal in review["goals"]:
+        if "file_citations" in goal:
+            for cite in goal["file_citations"]:
+                identity, source = sources[cite.pop("source_block_id")]
+                cite.update(
+                    evidence_id=identity, source_excerpt=source,
+                    response_excerpt=responses[cite.pop("response_block_id")],
+                )
+
+
+def _verify_plan_capabilities(
+    binding: Any,
+    calls: list[dict[str, Any]],
+    *,
+    require_documented_params: bool = False,
+) -> tuple[list[dict[str, str]], str]:
+    from app.application.agent_orchestrator.param_references import (
+        host_reference_params,
+        unresolved_placeholders,
+        validate_plan_references,
+    )
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+    from app.infrastructure.xiaox.binding import XiaoxBindingError
+    from app.infrastructure.xiaox.tools import XiaoxToolBridge, action_schema_violation
+
+    if len(calls) > 64:
+        return [], "单次方案最多核对 64 项动作，请保留未核对项目"
+    nodes = [
+        WorkflowNode(**{key: call[key] for key in ("node_id", "tool_id", "action", "params", "depends_on")})
+        for call in calls
+    ]
+    if error := validate_plan_graph(PlanGraph(binding.run.run_id, binding.run.message, nodes=nodes)):
+        return [], error
+    proofs: list[dict[str, str]] = []
+    for node, call in zip(nodes, calls, strict=True):
+        identity = f"{node.tool_id}.{node.action}"
+        try:
+            params = XiaoxToolBridge.action_parameters(call)
+            spec = XiaoxToolBridge.authorized_action_spec(binding, call)
+        except XiaoxBindingError as exc:
+            return [], f"方案动作 {identity}：{exc}。请按当前账号能力目录和契约修订。"
+        if (node.tool_id, node.action) != (spec.tool_id, spec.action):
+            return [], f"方案动作 {identity} 与真实契约标识不一致"
+        schema = spec.input_schema
+        properties = schema.get("properties")
+        if (
+            require_documented_params
+            and isinstance(properties, dict)
+            and schema.keys().isdisjoint({
+                "additionalProperties", "patternProperties", "unevaluatedProperties",
+                "allOf", "anyOf", "oneOf", "$ref",
+            })
+            and params.keys() - properties.keys()
+        ):
+            return [], f"方案动作 {identity} 包含契约中未登记的参数"
+        host_params, _ = host_reference_params(node.tool_id, node.action, params)
+        dependencies = set(node.depends_on)
+        if error := validate_plan_references(host_params, dependencies):
+            return [], f"方案动作 {identity}：{error}"
+        validation = validate_tool_call(
+            node.tool_id, node.action, params, allow_references_from=dependencies, resolved_spec=spec
+        )
+        if not validation.ok:
+            return [], f"方案动作 {identity}：{validation.message}"
+        if not unresolved_placeholders(host_params) and (violation := action_schema_violation(spec, params)):
+            return [], f"方案动作 {identity} 参数不符合当前契约，字段路径 {violation['path']}"
+        if call["approval_required"] != spec.approval_required:
+            return [], f"方案动作 {identity} 的审批说明与当前契约不符"
+        proofs.append({"call_digest": canonical_digest(call), "schema_digest": spec.schema_digest})
+    return proofs, ""
+
+
 def verify_runtime_goal(
     binding: Any,
     config: Any,
@@ -153,6 +262,7 @@ def verify_runtime_goal(
     rows: list[dict[str, Any]],
     output: str,
     consume_format_retry: Callable[[], bool] | None = None,
+    plan_delivery: PlanVerdict | None = None,
 ) -> dict[str, Any]:
     """Tool-free review; one extra format request requires the original task's budget."""
     from openai import APIError, APITimeoutError, DefaultHttpxClient, OpenAI
@@ -163,6 +273,8 @@ def verify_runtime_goal(
     validate_runtime_goal(binding.run)
     contract = copy.deepcopy(binding.run.metadata["runtime_goal_contract"])
     answers = goal_answers(binding.run)
+    if contract["scope"].get("plan_delivery_version") == 1:
+        output = plan_delivery.output if plan_delivery else ""
     snapshot = goal_evidence_snapshot(contract, rows, output, answers)
     report: dict[str, Any] = {
         "protocol": GOAL_PROTOCOL,
@@ -201,14 +313,58 @@ def verify_runtime_goal(
             error_code="goal_evidence_conflict", feedback="原任务的执行回执身份冲突，不能核验完成。"
         )
         return _finish_report(report)
+    if contract["scope"].get("plan_delivery_version") == 1:
+        if not plan_delivery or not plan_delivery.proof:
+            unavailable = bool(plan_delivery and plan_delivery.unavailable)
+            report.update(
+                status="unavailable" if unavailable else "needs_work",
+                error_code="plan_delivery_unavailable" if unavailable else "plan_delivery_invalid",
+                feedback=(plan_delivery.error or output) if plan_delivery else "方案缺少可核对的交付。",
+            )
+            return _finish_report(report)
+        report["plan_delivery"] = plan_delivery.proof
+    file_evidence = runtime_file_evidence(contract, snapshot)
+    stale_files: set[str] = set()
+    if file_evidence is not None and (
+        recalled := {
+            key
+            for key, source in file_evidence.items()
+            if source["origin"] == "conversation_uploads"
+        }
+    ):
+        from app.application.agent_runtime.conversation_attachments import recalled_attachment_view
+
+        verified = recalled_attachment_view(binding.run, binding.context)
+        views = verified if isinstance(verified, list) else [verified] if verified else []
+        stale_files = recalled - {view["upload_id"] for view in views}
+        file_evidence = {
+            key: source for key, source in file_evidence.items() if key not in stale_files
+        }
     previous = binding.run.metadata.get("runtime_goal_verification")
     if isinstance(previous, dict) and previous.get("status") in {"verified", "needs_work"}:
         coverage = goal_report_coverage(contract, rows, output, answers, previous)
         # 旧通过报告只有在当前证据上重新通过才能复用；其余同摘要结果只能沿用作未完成结论。
         if coverage["completed"]:
-            return copy.deepcopy(previous)
+            if any(
+                citation["evidence_id"] in stale_files
+                for goal in previous["review"]["goals"]
+                for citation in goal.get("file_citations", [])
+            ):
+                report.update(
+                    status="needs_work",
+                    error_code="goal_file_source_unavailable",
+                    feedback="原附件来源已无法核对，请在本轮重新提供可读取的文件。",
+                )
+                return _finish_report(report)
+            calls = planned_tool_calls(previous["review"])
+            if not calls or _verify_plan_capabilities(binding, calls) == (
+                previous.get("plan_capabilities"),
+                "",
+            ):
+                return copy.deepcopy(previous)
         if (
             previous.get("status") == "needs_work"
+            and contract["scope"].get("requested_deliverable") != "action_plan"
             and previous.get("evidence_digest") == snapshot["digest"]
             and previous.get("response_digest") == canonical_digest(output)
             and previous.get("report_digest")
@@ -245,16 +401,48 @@ def verify_runtime_goal(
     request_view = {
         key: value for key, value in contract["request"].items() if key != "context_evidence"
     }
+    action_catalog = None
+    if contract["scope"].get("requested_deliverable") == "action_plan":
+        from app.infrastructure.xiaox.tools import XiaoxToolBridge
+
+        action_catalog = {}
+        for spec in XiaoxToolBridge.visible_actions(binding, []):
+            action_catalog.setdefault(spec.tool_id, []).append(spec.action)
+    documents, source_blocks = _file_citation_catalogue(file_evidence or {})
+    response_blocks = {
+        f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)
+    } if source_blocks else {}
+    schema = review_schema(
+        contract, action_catalog=action_catalog, file_evidence=file_evidence,
+        receipt_ids=tuple(row["evidence_id"] for row in snapshot["evidence"]),
+        source_block_ids=tuple(source_blocks), response_block_ids=tuple(response_blocks),
+    )
+    wire_validator = Draft202012Validator(schema) if file_evidence is not None else None
     payload = {
         "task": "verify_runtime_goal",
         "rules": list(_RULES),
         "original_request": request_view,
         "host_constraints": contract["scope"].get("constraints") or {},
+        **({"requested_deliverable": contract["scope"]["requested_deliverable"]}
+           if "requested_deliverable" in contract["scope"] else {}),
         "answers": answers,
         "evidence": snapshot["evidence"],
         "response": output,
-        "output_schema": GoalReview.model_json_schema(),
+        "output_schema": schema,
     }
+    if file_evidence is not None:
+        payload["file_evidence"] = documents
+    if response_blocks:
+        payload["response_blocks"] = response_blocks
+    if entries := plan_navigation_entries(contract):
+        payload["desktop_navigation"] = entries
+    if plan_delivery and plan_delivery.proof:
+        payload["verified_plan_delivery"] = plan_delivery.proof
+        # This branch reviews the system-rendered plan, not whether its steps were executed.
+        payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["status"]["description"] = (
+            "按已由宿主绑定并渲染的方案覆盖原始要求来判定。方案步骤无需已执行，"
+            "实际执行回执不属于本次交付条件。"
+        )
     # This is an output reservation, not an attempt to parse the user's goals.
     # Long requests/evidence get room on the first call; the route still owns
     # the qualified hard limit and charges every attempt through one gateway.
@@ -391,8 +579,13 @@ def verify_runtime_goal(
                             feedback="原任务超过单次64项目标核验范围；全部原文及回执已保留，不能将部分核验当作全部完成。",
                         )
                         return _finish_report(report)
+                decoded = _normalize_review_provenance(decoded, contract)
+                if wire_validator is not None:
+                    if not wire_validator.is_valid(decoded):
+                        raise ValueError("Invalid goal review references")
+                    _resolve_file_citations(decoded, source_blocks, response_blocks)
                 review, errors = validate_goal_review(
-                    _normalize_review_provenance(decoded, contract), contract, snapshot, output
+                    decoded, contract, snapshot, output, file_evidence=file_evidence
                 )
             except (ValueError, TypeError, ValidationError):
                 diagnostic["state"] = "invalid_format"
@@ -400,6 +593,22 @@ def verify_runtime_goal(
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"
+            if plan_delivery and plan_delivery.proof and (
+                review["plan_content"] != plan_delivery.proof["kind"]
+            ):
+                errors.append("方案的能力声明未通过与交付类型一致的核对。")
+            calls = planned_tool_calls(review)
+            if calls and not errors:
+                proofs, plan_error = _verify_plan_capabilities(binding, calls)
+                if plan_error:
+                    errors.append(plan_error)
+                else:
+                    report["plan_capabilities"] = proofs
+            mode = (
+                "business"
+                if any(goal["kind"] in {"read", "write"} for goal in review["goals"])
+                else "reply"
+            )
             continuity = language_continuity_feedback(contract["request"], output)
             if continuity:
                 # The host rule is authoritative for a hard language constraint;
@@ -413,11 +622,6 @@ def verify_runtime_goal(
                 review["violations"].append(continuity)
             complete = not (errors or review["violations"] or review["uncovered_sources"])
             complete = complete and all(goal["status"] != "unmet" for goal in review["goals"])
-            mode = (
-                "business"
-                if any(goal["kind"] in {"read", "write"} for goal in review["goals"])
-                else "reply"
-            )
             feedback = "\n".join(
                 [*errors, *review["violations"], *review["uncovered_sources"], review["feedback"]]
             ).strip()

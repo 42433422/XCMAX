@@ -201,6 +201,7 @@ COURSES: tuple[dict[str, Any], ...] = (
                 location_label="左侧菜单“审批工作台”",
                 completion_cue="审批详情中能看到客户B、A 产品、10 个和单价 100。",
                 guide_actions=(
+                    _guide("选择“待我审批”。", "[data-tutorial-id='approval-queue-pending']"),
                     _guide(
                         "在“待我审批”中打开刚才的销售申请。",
                         "[data-tutorial-id='approval-pending-list']",
@@ -345,6 +346,7 @@ COURSES: tuple[dict[str, Any], ...] = (
                 location_label="左侧菜单“审批工作台”",
                 completion_cue="审批详情显示“已通过”，并能看到审批记录。",
                 guide_actions=(
+                    _guide("选择“我发起的”。", "[data-tutorial-id='approval-queue-initiated']"),
                     _guide(
                         "打开“我发起的”中的已通过销售申请。",
                         "[data-tutorial-id='approval-initiated-list']",

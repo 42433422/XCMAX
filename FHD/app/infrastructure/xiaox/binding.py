@@ -425,6 +425,7 @@ class XiaoxBindingStore:
         read_only: bool,
         generation: int,
         cost_units: int = 0,
+        isolated_artifact: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         from app.application.agent_orchestrator.budget import budget_exceeded_payload
 
@@ -470,6 +471,28 @@ class XiaoxBindingStore:
             if matches:
                 calls[call_id] = copy.deepcopy(matches[0])
                 return
+            level = (run.metadata.get("runtime_context") or {}).get("execution_autonomy_level")
+            # Isolated file outputs retain write receipts and reservations, but
+            # they do not spend the enterprise's business mutation allowance.
+            business_write = not read_only and not isolated_artifact
+            if business_write and level == 1:
+                raise XiaoxBindingError(
+                    "autonomy_level_denied", "本企业当前为 L1，仅可对话和只读查询"
+                )
+            if (
+                business_write
+                and level == 2
+                and (
+                    tool_id in {"xcmax_workflow", "employee"}
+                    or any(
+                        not (item.get("read_only") or item.get("isolated_artifact"))
+                        for item in calls.values()
+                    )
+                )
+            ):
+                raise XiaoxBindingError(
+                    "autonomy_level_denied", "L2 每项任务仅允许一次明确的业务操作"
+                )
             # Existing calls above only read their durable receipt. New work must
             # wait until the model that proposed it has a settled usage receipt.
             model_calls = (metadata.get("model_requests") or {}).values()
@@ -517,6 +540,7 @@ class XiaoxBindingStore:
                 "state": "claimed",
                 "receipt": {},
                 "read_only": read_only,
+                **({"isolated_artifact": True} if isolated_artifact else {}),
                 "created_at": utc_now_iso(),
                 "generation": generation,
                 "reservation_units": reservation,

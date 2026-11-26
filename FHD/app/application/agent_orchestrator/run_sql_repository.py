@@ -597,28 +597,22 @@ class SQLAlchemyAgentRunRepository:
         return copy.deepcopy(run), True
 
     def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        """CAS the complete snapshot, retaining the row lock through task persistence."""
-
-        if not valid_stream_interruption_update(run, previous):
-            return False
-        return self._save_if_unchanged(run, previous)
-
-    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        """Compare-and-save one durable lifecycle transition against its prior snapshot."""
-        return self._save_if_unchanged(run, previous)
-
-    def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        return valid_control_update(run, previous) and self._save_if_unchanged(run, previous)
-
-    def save_stream_tool_audit_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        return valid_stream_tool_audit_update(run, previous) and self._save_if_unchanged(
+        return valid_stream_interruption_update(run, previous) and self.save_if_unchanged(
             run, previous
         )
 
-    def _save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        self._ensure_schema()
-        with self._session_scope() as db:
+    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        """CAS the complete snapshot, retaining the row lock through task persistence."""
+        with self.transaction() as db:
             return self.save_if_unchanged_in_session(db, run, previous)
+
+    def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        return valid_control_update(run, previous) and self.save_if_unchanged(run, previous)
+
+    def save_stream_tool_audit_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        return valid_stream_tool_audit_update(run, previous) and self.save_if_unchanged(
+            run, previous
+        )
 
     def save_if_unchanged_in_session(self, db: Session, run: AgentRun, previous: AgentRun) -> bool:
         from app.db.models.agent import AgentRunRecord
@@ -641,31 +635,6 @@ class SQLAlchemyAgentRunRepository:
             return False
         self.save_in_session(db, run, allow_planning_replacement=True)
         return True
-
-    def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
-        from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
-        from app.db.models.agent import AgentTaskExecutionRecord
-
-        self._ensure_schema()
-        with self._session_scope() as db:
-            # A conditional write holds the queue-row lock through run persistence.
-            # Checking the lease in a separate SELECT would allow takeover between
-            # the check and save. Execution count also fences reused owner IDs.
-            owned = (
-                db.query(AgentTaskExecutionRecord)
-                .filter(
-                    AgentTaskExecutionRecord.run_id == run.run_id,
-                    AgentTaskExecutionRecord.state.in_(("running", "claimed")),
-                    AgentTaskExecutionRecord.lease_owner == owner_id,
-                    AgentTaskExecutionRecord.execution_count == execution_count,
-                    AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),
-                )
-                .update({AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False)
-            )
-            if owned != 1:
-                raise WorkerLeaseLost("worker lease expired or replaced")
-            self.save_in_session(db, run)
-        return copy.deepcopy(run)
 
     def save_in_session(
         self,

@@ -24,7 +24,7 @@ const OBSERVED_STATUSES: Record<string, TaskItem['status']> = {
 }
 const OBSERVED_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'rejected'])
 /** Observation stops here; none of these may be turned into a resubmission. */
-const FOLLOW_TERMINAL = new Set([...OBSERVED_TERMINAL, 'blocked', 'waiting_user', 'paused'])
+const FOLLOW_TERMINAL = new Set([...OBSERVED_TERMINAL, 'blocked', 'waiting_user', 'paused', 'unknown'])
 const FOLLOW_INTERVAL_MS = 2000
 
 /** 视为「只读查询」的工具 action（答案优先，不创建任务面板行）。 */
@@ -69,7 +69,7 @@ function isTrivialReadOnlyQueryRun(events: AgentRunEvent[]): boolean {
 }
 
 /**
- * Follow a durable run from its persisted event cursor until a terminal state.
+ * Observe the durable run status independently of its diagnostic event feed.
  * Reads only; a dropped observer never creates or resumes the run.
  */
 export async function waitForAgentRunTerminal(
@@ -80,7 +80,7 @@ export async function waitForAgentRunTerminal(
   const normalized = String(runId || '').trim()
   if (!normalized) return null
   const started = Date.now()
-  let afterEventId = ''
+  let afterEventId = ""
   while (isCurrent() && Date.now() - started < timeoutMs) {
     try {
       const response = await agentRunsApi.listEvents(
@@ -95,45 +95,11 @@ export async function waitForAgentRunTerminal(
       if (!isCurrent()) return null
       if (run?.run_id === normalized && FOLLOW_TERMINAL.has(String(run.status))) return run
     } catch {
-      // Transient read failure: keep the cursor and retry without resubmitting.
+      // Retry a transient status read while the original view still owns it.
     }
     await new Promise((resolve) => setTimeout(resolve, FOLLOW_INTERVAL_MS))
   }
   return null
-}
-
-/** Project the parent runtime result into the chat payload shape, without model wording. */
-export function chatPayloadFromRun(run: AgentRun | null | undefined): Record<string, unknown> | null {
-  if (!run) return null
-  const result = asRecord(asRecord(run.final_output).xiaox_result)
-  const text = asString(result.output || result.error).trim()
-  if (!text) return null
-  const state = asString(result.execution_state || result.exit_status || run.status).trim()
-  return {
-    success: result.ok === true,
-    response: text,
-    message: text,
-    runtime: 'xiaox',
-    run_id: run.run_id,
-    agent_run_id: run.run_id,
-    execution_state: state,
-    business_completed: result.business_completed === true,
-    verified_operations: result.verified_operations === true,
-    requires_reconciliation: result.reconciliation_required === true,
-    needs_user_input: result.needs_user_input === true,
-    data: {
-      runtime: 'xiaox',
-      run_id: run.run_id,
-      execution_state: state,
-      business_completed: result.business_completed === true,
-      requires_reconciliation: result.reconciliation_required === true,
-      business_receipts: result.business_receipts || [],
-      tool_calls: result.tool_calls || [],
-      artifacts: result.artifacts || [],
-      error_code: result.error_code || result.exit_status || '',
-      active_seconds: result.active_seconds,
-    },
-  }
 }
 
 export function extractAgentRunId(payload: unknown): string {

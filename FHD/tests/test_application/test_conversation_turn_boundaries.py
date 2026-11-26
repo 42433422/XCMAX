@@ -19,7 +19,7 @@ from app.domain.shared_services.conversation_service import ConversationRevision
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
 from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
@@ -60,7 +60,7 @@ def runtime(dynamic_chat_runtime, monkeypatch, tmp_path):
     )
     for name in ("neuro_notify_chat_received", "neuro_notify_chat_completed"):
         monkeypatch.setattr(f"app.neuro_bus.application_neuro_bridge.{name}", lambda *a: None)
-    trace = lambda payload, **kw: {"run_id": "boundary-run", **payload}
+    trace = lambda payload, **kw: {**payload, "run_id": "boundary-run"}
     monkeypatch.setattr(
         "app.application.agent_orchestrator.chat_trace.attach_chat_trace_run", trace
     )
@@ -89,6 +89,16 @@ def _script_reply(runtime, message, reply):
     runtime.compiled.review = lambda prompt: fixture_goal_review(
         prompt, kind="reply", source=message
     )
+
+
+async def _dispatch(runtime, body, streaming):
+    if not streaming:
+        return await compat.execute_compat_chat(runtime.actor.request, body)
+    chunks = [chunk async for chunk in compat.compat_chat_stream_async(runtime.actor.request, body)]
+    events = (
+        json.loads(line[6:]) for line in b"".join(chunks).splitlines() if line.startswith(b"data: ")
+    )
+    return next(event["result"] for event in events if event.get("type") == "done")
 
 
 def _body(**overrides):
@@ -189,6 +199,82 @@ def test_missing_epoch_cannot_default_to_unfenced_sql(runtime):
     assert _rows(runtime) == []
 
 
+@pytest.mark.parametrize("settled_by", ["worker", "ack", "history", "withdrawn"])
+def test_queued_turn_preserves_one_durable_assistant_id(runtime, monkeypatch, settled_by):
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.application.ai_chat.chat_evidence import _prepare_history
+    from app.application.ai_chat.conversation_history import reconcile_queued_chat_reply
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    body = compat._prepare_compat_chat_body(runtime.actor.request, _body())
+    context = body.context
+    turn = context["turn_id"]
+    owner = str(runtime.actor.user_id)
+    run = AgentRun(user_id=owner, message=body.message, run_id="queued-run")
+    receipt = {"state": "queued", "turn_id": turn}
+    run.metadata.update(
+        runtime_context=context,
+        runtime_type="xiaox",
+        runtime_requests={canonical_digest({"turn_id": turn, "owner": owner}): receipt},
+    )
+    run.final_output["xiaox_result"] = {"ok": True, "output": "其他轮次的结果"}
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: SimpleNamespace(get=lambda _: run),
+    )
+    queued = runtime_chat_payload(
+        {"run_id": run.run_id, "execution_state": "queued", "output": "队列确认"}
+    )
+    finished = {
+        "state": "returned",
+        "result": {
+            "run_id": run.run_id,
+            "execution_state": "completed",
+            "ok": True,
+            "output": "本轮结果",
+        },
+    }
+    if settled_by == "ack":
+        receipt.update(finished)
+    ack = persist_chat_turn(owner, body.message, context, queued)
+    if settled_by != "ack":
+        evidence = _prepare_history(store, context, "boundary-session", runtime.actor.user_id)
+        assert evidence["_chat_history_ids"] == ack["message_ids"][:1]
+        receipt.update(finished)
+    if settled_by == "withdrawn":
+        assert (
+            store.delete_messages_from(
+                session_id="boundary-session",
+                user_id=runtime.actor.user_id,
+                message_id=ack["message_ids"][0],
+            )
+            == 2
+        )
+        assert not reconcile_queued_chat_reply(context, turn, run.run_id)
+        assert _rows(runtime) == []
+        return
+    if settled_by == "worker":
+        assert not reconcile_queued_chat_reply({**context, "tenant_id": 999}, turn, run.run_id)
+        assert not reconcile_queued_chat_reply(
+            {**context, "_conversation_revision": 1}, turn, run.run_id
+        )
+        assert reconcile_queued_chat_reply(context, turn, run.run_id)
+    with tenant_scope(runtime.actor.tenant_id):
+        history = store.get_history(
+            session_id="boundary-session", user_id=runtime.actor.user_id, turn_id=turn
+        )
+    assert _rows(runtime) == [("user", body.message), ("assistant", "本轮结果")]
+    assert history["message_count"] == 2
+    assert history["turn_receipt"]["message_id"] == ack["message_ids"][1]
+    assert [row["id"] for row in history["messages"]] == ack["message_ids"]
+    assert (
+        persist_chat_turn(owner, body.message, context, queued)["message_ids"] == ack["message_ids"]
+    )
+    assert _rows(runtime) == [("user", body.message), ("assistant", "本轮结果")]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["offline", "online"])
 @pytest.mark.parametrize("streaming", [False, True])
@@ -201,58 +287,44 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
     def execute(message, context):
         contexts.append(dict(context))
         assert context["_conversation_revision"] == 0
-        if withdraw:
-            if mode == "online":
-                assert (
-                    store.delete_messages_from(
-                        session_id="boundary-session",
-                        user_id=1,
-                        message_id=payload["history_persistence"]["message_ids"][0],
-                    )
-                    >= 1
-                )
-            else:
-                _withdraw_anchor()
+        assert message == body.message
+        if mode == "offline" and withdraw:
+            _withdraw_anchor()
         return {"success": True, "response": "reply", "run_id": "boundary-run"}
 
     monkeypatch.setattr(
         compat, "_business_action", lambda message, **kw: execute(message, kw["runtime_context"])
     )
-    persist = Mock(wraps=runtime.service._persist_chat_turn)
+    actual_persist = runtime.service._persist_chat_turn
+
+    def persist_turn(*args):
+        if mode == "online" and withdraw:
+            _withdraw_anchor()
+        return actual_persist(*args)
+
+    persist = Mock(wraps=persist_turn)
     runtime.service._persist_chat_turn = persist
     body = _body(mode=mode)
     if mode == "offline":
-        body = body.model_copy(update={"message": "查询今天的考勤"})
+        body.message = "  查询今天的考勤\n"
     _script_reply(runtime, body.message, "reply")
     runtime.compiled.on_turn = lambda binding: execute(binding.run.message, binding.context)
-    if streaming:
-        chunks = [
-            chunk async for chunk in compat.compat_chat_stream_async(runtime.actor.request, body)
-        ]
-        events = [
-            json.loads(line[6:])
-            for line in b"".join(chunks).splitlines()
-            if line.startswith(b"data: ")
-        ]
-        payload = next(item["result"] for item in events if item.get("type") == "done")
-    else:
-        payload = await compat.execute_compat_chat(runtime.actor.request, body)
+    payload = await _dispatch(runtime, body, streaming)
     if mode == "online":
-        assert payload["execution_state"] == "queued", payload
-        assert payload["history_persistence"]["status"] == "saved"
-        terminal = await asyncio.to_thread(finish_queued_chat, runtime.compiled, payload)
+        assert payload["execution_state"] == "queued"
+        assert runtime.compiled.transports == []
+        parent = await asyncio.to_thread(runtime.compiled.drain, payload["run_id"])
+        assert parent.metadata["runtime_context"]["_conversation_revision"] == 0
         if withdraw:
-            assert terminal["response"] != "reply", terminal
+            assert parent.final_output["xiaox_result"]["error_code"] == "conversation_changed"
         else:
-            assert terminal["response"] == "reply", terminal
-    else:
-        assert payload["history_persistence"]["status"] == ("invalidated" if withdraw else "saved")
-    assert len(contexts) == 1 and persist.call_count == 1
-    assert len(runtime.compiled.transports) == (1 if mode == "online" else 0)
+            assert parent.status == "completed", parent.error
+    assert len(contexts) == (0 if mode == "online" and withdraw else 1)
+    assert persist.call_count == 1
+    assert len(runtime.compiled.transports) == int(mode == "online" and not withdraw)
     assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
-    assert _rows(runtime) == (
-        [] if withdraw else [("user", body.message), ("assistant", payload["response"])]
-    )
+    assert payload["history_persistence"]["status"] == ("invalidated" if withdraw else "saved")
+    assert _rows(runtime) == ([] if withdraw else [("user", body.message), ("assistant", "reply")])
     with runtime.actor.factory() as db:
         assert db.query(AIConversationSession).one().revision == int(withdraw)
 
@@ -338,32 +410,27 @@ async def test_attachment_context_keeps_full_evidence_and_original_turn_identity
     runtime.compiled.on_turn = lambda binding: execute(
         message=binding.run.message, context=binding.context
     )
-    if streaming:
-        chunks = [
-            chunk
-            async for chunk in compat.compat_chat_stream_async(runtime.actor.request, original)
-        ]
-        events = [
-            json.loads(line[6:])
-            for line in b"".join(chunks).splitlines()
-            if line.startswith(b"data: ")
-        ]
-        payload = next(item["result"] for item in events if item.get("type") == "done")
-    else:
-        payload = await compat.execute_compat_chat(runtime.actor.request, original)
+    payload = await _dispatch(runtime, original, streaming)
     assert payload["history_persistence"]["status"] == "saved"
-    assert payload["execution_state"] == "queued", payload
-    terminal = await asyncio.to_thread(finish_queued_chat, runtime.compiled, payload)
+    assert payload["execution_state"] == "queued" and not observed
+    parent = await asyncio.to_thread(runtime.compiled.drain, payload["run_id"])
+    assert parent.status == "completed", parent.error
     assert len(observed) == 1 and collect.await_args.kwargs["user_id"] == "1"
     assert len(runtime.compiled.model_requests) == 1
     assert all(
         "FINAL-EVIDENCE-MARKER" in json.dumps(prompt) for prompt in runtime.compiled.model_requests
     )
     assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
-    assert terminal["response"] == "attachment reply", terminal
-    assert _rows(runtime) == [("user", original.message), ("assistant", payload["response"])]
-    replay = memory.prepare_chat_turn(original.message, observed[0])
-    assert replay["data"]["replay"] and replay["run_id"] == payload["run_id"]
+    assert _rows(runtime) == [("user", original.message), ("assistant", "attachment reply")]
+    context = observed[0]
+    assert context["turn_id"] == "boundary-turn"
+    replay = memory.prepare_chat_turn(original.message, context)
+    assert replay["data"]["replay"] and replay["run_id"] == parent.run_id
+    assert replay["execution_state"] == "queued"
+    memory._path(memory.conversation_key(context)).unlink()
+    replay = memory.prepare_chat_turn(original.message, context)
+    assert replay["data"]["replay"] and replay["response"] == "attachment reply"
+    assert len(runtime.compiled.transports) == 1
 
 
 @pytest.mark.asyncio

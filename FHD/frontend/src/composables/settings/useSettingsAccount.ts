@@ -8,6 +8,7 @@ import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { errorMessage } from './utils'
 import { readValid, invalidateEnterpriseSessionCache, captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
+import { isSettingsLocalAdmin } from '@/views/settings-view/settingsNavigation'
 
 export function useSettingsAccount() {
   const { t } = useI18n()
@@ -90,10 +91,7 @@ export function useSettingsAccount() {
 
   const isLoggedIn = computed(() => Boolean(localUser.value) || sessionValid.value)
 
-  const isLocalAdmin = computed(() => {
-    const role = String(localUser.value?.role || '').toLowerCase()
-    return role === 'admin' || role === 'superadmin'
-  })
+  const isLocalAdmin = computed(() => isSettingsLocalAdmin(localUser.value?.role))
 
   const auditLogsLoading = ref(false)
   const auditLogs = ref<AuditLogEntry[]>([])

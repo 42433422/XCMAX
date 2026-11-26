@@ -16,6 +16,7 @@ export const modRouteGlob = {
   ...import.meta.glob('../../../mods/bridge/xcagi-neuro-bus-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/bridge/xcagi-office-employee-pack-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/bridge/xcagi-customer-service-bridge/frontend/routes.js'),
+  ...import.meta.glob('../../../mods/tools/kellai/frontend/routes.js'),
   ...import.meta.glob('../../../mods/employees/xcagi-core-workflow-employees/frontend/routes.js'),
   ...import.meta.glob('../../../mods/employees/lan-gate-ai-employee/frontend/routes.js'),
 } as Record<string, RouteModuleLoader>

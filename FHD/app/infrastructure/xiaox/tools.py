@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import time
-from collections.abc import Callable
-from contextlib import nullcontext
-from typing import Any
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager, nullcontext
+from typing import TYPE_CHECKING, Any
 
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import utc_now_iso
@@ -22,15 +23,48 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_call,
 )
 from app.application.agent_orchestrator.unified_task import create_unified_task
+from app.domain.workbook_write_contract import (
+    WORKBOOK_READER,
+    WORKBOOK_WRITE_REVIEW,
+    WORKBOOK_WRITER,
+)
 from app.infrastructure.xiaox.binding import (
     XiaoxBinding,
     XiaoxBindingError,
     XiaoxBindingStore,
+    canonical_digest,
 )
 from app.infrastructure.xiaox.receipts import read_call_receipt
 from app.infrastructure.xiaox.tool_names import XIAOX_TOOL_NAMES
 
+if TYPE_CHECKING:
+    from jsonschema import ValidationError
+    from mcp.types import Tool
+
 _CONTROL_TOOLS = frozenset({"conversation", "clarify"})
+_NAVIGATION_ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}")
+_NAVIGATION_LABEL = re.compile(r"[\w ·&/()（）【】、，+\-]{1,80}")
+
+
+def desktop_navigation_items(value: object) -> list[dict[str, Any]]:
+    """Bound display metadata from this renderer turn before saving the run."""
+    items: dict[str, dict[str, Any]] = {}
+    for row in value[:128] if isinstance(value, list) else ():
+        if not isinstance(row, dict) or row.keys() != {"id", "label", "kind", "breadcrumb"}:
+            continue
+        key, label, kind, parents = (row[k] for k in ("id", "label", "kind", "breadcrumb"))
+        if not isinstance(key, str) or not _NAVIGATION_ID.fullmatch(key) or key in items:
+            continue
+        if kind not in ("page", "user_action") or not isinstance(parents, list) or len(parents) > 6:
+            continue
+        if all(
+            isinstance(s, str) and s.strip() and _NAVIGATION_LABEL.fullmatch(s) and "//" not in s
+            for s in [label, *parents]
+        ):
+            items[key] = {"id": key, "kind": kind, "label": label, "breadcrumb": parents.copy()}
+    return list(items.values())
+
+
 # These contracts use run_id to select an existing business object. The host's
 # current execution identity remains exclusively in the bound runtime context.
 _BUSINESS_RUN_TARGETS = frozenset(
@@ -71,6 +105,101 @@ _AUTHORITY_KEYS = frozenset(
         "run_id",
     }
 )
+
+
+def schema_violation(error: ValidationError) -> dict[str, str | int | float | list[str]]:
+    """Show the matching variant's bad field without exposing its instance or message."""
+    while error.validator == "oneOf" and error.context and isinstance(error.instance, dict):
+        matching = []
+        for index, branch in enumerate(error.validator_value):
+            if not isinstance(branch, dict):
+                continue
+            checks = {
+                name: field["const"]
+                for name, field in (branch.get("properties") or {}).items()
+                if isinstance(field, dict) and "const" in field
+            }
+            if checks and all(
+                name in error.instance and error.instance[name] == value
+                for name, value in checks.items()
+            ):
+                matching.append(index)
+        if len(matching) != 1:
+            break
+        child = next(
+            (
+                item
+                for item in error.context
+                if item.schema_path and item.schema_path[0] == matching[0]
+            ),
+            None,
+        )
+        if child is None:
+            break
+        error = child
+    schema_path = list(error.absolute_schema_path)
+    fields = {
+        name
+        for keyword, name in zip(schema_path, schema_path[1:], strict=False)
+        if keyword == "properties"
+    }
+    path = "$" + "".join(
+        f"[{part}]"
+        if isinstance(part, int)
+        else f".{part}"
+        if part in fields and part.isidentifier()
+        else ".*"
+        for part in list(error.absolute_path)[:12]
+    )
+    violation: dict[str, str | int | float | list[str]] = {
+        "path": path[:180],
+        "validator": str(error.validator or "schema")[:32],
+    }
+    if error.validator == "type":
+        from jsonschema import Draft202012Validator
+
+        expected = error.validator_value
+        violation["expected"] = expected if isinstance(expected, list) else str(expected)
+        violation["received"] = next(
+            (
+                name
+                for name in ("null", "boolean", "string", "array", "object", "integer", "number")
+                if Draft202012Validator.TYPE_CHECKER.is_type(error.instance, name)
+            ),
+            "unknown",
+        )
+    if (
+        error.validator == "pattern" and len(error.validator_value) <= 256
+    ) or error.validator in {"maximum", "minimum", "maxLength", "minLength", "maxItems", "minItems"}:
+        violation["expected"] = error.validator_value
+    if error.validator == "additionalProperties" and not error.schema.get("patternProperties"):
+        properties = error.schema.get("properties", {})
+        if isinstance(properties, dict) and len(properties) <= 24:
+            violation["allowed"] = list(properties)
+    if error.validator == "required" and isinstance(error.instance, dict):
+        missing = [
+            name
+            for name in error.validator_value
+            if name not in error.instance and len(name) <= 48 and name.isidentifier()
+        ][:4]
+        if missing:
+            violation["missing"] = missing
+    return violation
+
+
+def action_schema_violation(
+    spec: ToolActionSpecV2, params: dict[str, Any]
+) -> dict[str, str | int | float | list[str]]:
+    from jsonschema import Draft202012Validator, SchemaError
+    from referencing import Registry
+    from referencing.exceptions import Unresolvable
+
+    try:
+        validator = Draft202012Validator(spec.input_schema, registry=Registry())
+        error = next(validator.iter_errors(params), None)
+    except (SchemaError, Unresolvable):
+        return {"path": "$", "validator": "schema"}
+    return schema_violation(error) if error is not None else {}
 
 
 class XiaoxToolBridge:
@@ -123,6 +252,18 @@ class XiaoxToolBridge:
     def _allowed(spec: ToolActionSpecV2, binding: XiaoxBinding, params=None) -> bool:
         if spec.tool_id in _CONTROL_TOOLS:
             return False
+        if (spec.tool_id, spec.action) == ("conversation_history", "read_attachment"):
+            from app.application.agent_runtime.conversation_attachments import (
+                recalled_conversation_uploads,
+            )
+
+            goal = binding.run.metadata.get("runtime_goal_contract") or {}
+            request = goal.get("request") or {}
+            if not any(
+                item.get("source") == "owned_elt_upload"
+                for item in request.get("attachments", [])
+            ) and not recalled_conversation_uploads(request):
+                return False
         if spec.tool_id == "aiopen":
             from app.application.aiopen.agent_bridge import supports_aiopen_step
 
@@ -133,45 +274,88 @@ class XiaoxToolBridge:
             return False
         return actor_tool_denial(spec.tool_id, spec.action, binding.context, params or {}) is None
 
-    def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(arguments, dict):
-            raise XiaoxBindingError("invalid_arguments", "工具参数必须是对象")
+    @contextmanager
+    def _scope(self, token: str) -> Iterator[XiaoxBinding]:
         with self.store.scope(token, "mcp") as binding:
             if self.run_id is not None and binding.run_id != self.run_id:
                 raise XiaoxBindingError("scope_conflict", "运行凭据不属于此工具入口")
-            if name == "capability_search":
-                from app.application.capability_catalog import authorized_tool_specs
+            yield binding
 
-                query = str(arguments.get("query") or "").strip().casefold()[:200]
+    @classmethod
+    def visible_actions(
+        cls, binding: XiaoxBinding, words: list[str]
+    ) -> Iterator[ToolActionSpecV2]:
+        from app.application.capability_catalog import authorized_tool_specs
+
+        allowed_actions = binding.metadata.get("allowed_actions")
+        candidates = None
+        if allowed_actions is not None:
+            from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+            allowed = set(allowed_actions)
+            candidates = {
+                key: spec for key, spec in build_tool_specs_v2().items()
+                if f"{key[0]}.{key[1]}" in allowed
+            }
+            if not candidates:
+                return
+        specs = authorized_tool_specs(binding.context, include_aiopen=True, specs=candidates)
+        for _, spec in sorted(specs.items()):
+            if words:
+                text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
+                if not all(word in text for word in words):
+                    continue
+            if cls._allowed(spec, binding):
+                yield spec
+
+    def list_tool_definitions(self, token: str) -> list[Tool]:
+        with self._scope(token) as binding:
+            return mcp_tool_definitions(
+                (spec.tool_id, spec.action) for spec in self.visible_actions(binding, [])
+            )
+
+    def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(arguments, dict):
+            raise XiaoxBindingError("invalid_arguments", "工具参数必须是对象")
+        with self._scope(token) as binding:
+            if name == "capability_search":
+                words = str(arguments.get("query") or "").strip().casefold()[:200].split()
                 limit = arguments.get("limit", 12)
                 offset = arguments.get("offset", 0)
                 if type(limit) is not int or not 1 <= limit <= 30:
                     raise XiaoxBindingError("invalid_arguments", "能力检索数量必须为 1 至 30")
                 if type(offset) is not int or offset < 0:
                     raise XiaoxBindingError("invalid_arguments", "能力检索起点必须为非负整数")
-                matches = []
-                for _, spec in sorted(
-                    authorized_tool_specs(binding.context, include_aiopen=True).items()
-                ):
-                    text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
-                    if all(word in text for word in query.split()) and self._allowed(spec, binding):
-                        matches.append(
-                            {
-                                "tool_id": spec.tool_id,
-                                "action": spec.action,
-                                "description": spec.description,
-                                "read_only": spec.read_only,
-                            }
-                        )
+                matches = [
+                    {
+                        "tool_id": spec.tool_id,
+                        "action": spec.action,
+                        "description": spec.description,
+                        "read_only": spec.read_only,
+                    }
+                    for spec in self.visible_actions(binding, words)
+                ]
                 end = offset + limit
+                # These are display-only rows from this run's renderer. Describe and
+                # _execute resolve exclusive authority from the server tool catalog.
+                navigation = [
+                    row
+                    for row in desktop_navigation_items(binding.context.get("desktop_navigation"))
+                    if all(
+                        word in " ".join([row["id"], *row["breadcrumb"], row["label"]]).casefold()
+                        for word in words
+                    )
+                ]
                 return {
                     "success": True,
                     "capabilities": matches[offset:end],
                     "total": len(matches),
                     "next_offset": end if end < len(matches) else None,
+                    "desktop_navigation": navigation[offset:end],
+                    "navigation_next_offset": end if end < len(navigation) else None,
                 }
             if name == "capability_describe":
-                spec = self._spec(binding, arguments)
+                spec = self.authorized_action_spec(binding, arguments)
                 return {
                     "success": True,
                     "capability": {
@@ -187,7 +371,7 @@ class XiaoxToolBridge:
                         "idempotent": spec.idempotent,
                         "required_params": spec.required_params,
                         "timeout_seconds": spec.timeout_seconds,
-                        "approval_required": not (spec.read_only and spec.risk == "low"),
+                        "approval_required": spec.approval_required,
                     },
                 }
             if name == "request_input":
@@ -229,7 +413,9 @@ class XiaoxToolBridge:
                     return self._execute(binding, arguments)
             raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
 
-    def _spec(self, binding: XiaoxBinding, args: dict[str, Any]) -> ToolActionSpecV2:
+    @staticmethod
+    def authorized_action_spec(binding: XiaoxBinding, args: dict[str, Any]) -> ToolActionSpecV2:
+        """Resolve the same live actor contract for discovery, plan review and execution."""
         from app.application.capability_catalog import authorized_tool_specs
 
         spec = get_tool_action_spec(str(args.get("tool_id") or ""), str(args.get("action") or ""))
@@ -238,7 +424,7 @@ class XiaoxToolBridge:
             spec = authorized_tool_specs(
                 binding.context, include_aiopen=True, specs={action_key: spec}
             ).get(action_key)
-        if spec is None or not self._allowed(spec, binding, args.get("params")):
+        if spec is None or not XiaoxToolBridge._allowed(spec, binding, args.get("params")):
             raise XiaoxBindingError("permission_denied", "当前账号或员工未获授权使用该能力")
         return spec
 
@@ -250,14 +436,16 @@ class XiaoxToolBridge:
         if call is None:
             raise XiaoxBindingError("call_missing", "本次运行没有该工具调用")
         if (call.get("tool_id"), call.get("action")) != ("xcmax_workflow", "execute"):
-            self._spec(binding, call)
+            self.authorized_action_spec(binding, call)
         receipt = read_call_receipt(self.store, binding, call)
         saved = self.store.record_call(
             binding.run_id, call_id, child_run_id=receipt.get("run_id", ""), receipt=receipt
         )
         return dict(saved.metadata["calls"][call_id]["receipt"])
 
-    def _execute(self, binding: XiaoxBinding, args: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def action_parameters(args: dict[str, Any]) -> dict[str, Any]:
+        """Reject caller-supplied authority on both proposed and executable actions."""
         params = args.get("params")
         if not isinstance(params, dict):
             raise XiaoxBindingError("invalid_arguments", "业务参数必须是对象")
@@ -273,7 +461,11 @@ class XiaoxToolBridge:
             for key in params
         ):
             raise XiaoxBindingError("identity_override", "模型不得提交身份、授权或执行控制字段")
-        spec = self._spec(binding, args)
+        return params
+
+    def _execute(self, binding: XiaoxBinding, args: dict[str, Any]) -> dict[str, Any]:
+        params = self.action_parameters(args)
+        spec = self.authorized_action_spec(binding, args)
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
         from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY, deny_reason
 
@@ -296,23 +488,20 @@ class XiaoxToolBridge:
             }
         self._check_schema(spec, args)
         validation = validate_tool_call(spec.tool_id, spec.action, params)
-        from jsonschema import Draft202012Validator, SchemaError
-        from referencing import Registry
-        from referencing.exceptions import Unresolvable
-
-        try:
-            schema_valid = Draft202012Validator(spec.input_schema, registry=Registry()).is_valid(
-                params
-            )
-        except (SchemaError, Unresolvable):
-            schema_valid = False
-        if not validation.ok or not schema_valid:
+        violation = action_schema_violation(spec, params)
+        if not validation.ok or violation:
+            error_code = validation.error_code or "schema_validation_failed"
             return {
                 "success": False,
                 "verified": False,
                 "status": "not_started",
-                "error_code": validation.error_code or "schema_validation_failed",
-                "message": validation.message or "参数不符合当前精确契约，请读取 schema 后补充。",
+                "error_code": error_code,
+                "message": (
+                    "参数未通过校验，请按当前 input_schema 修正。"
+                    if error_code == "schema_validation_failed"
+                    else validation.message
+                ),
+                **({"schema_violation": violation} if violation else {}),
             }
         if spec.tool_id == "aiopen" and not spec.is_read_only_call(params):
             from app.application.aiopen.agent_bridge import inline_verification
@@ -327,9 +516,68 @@ class XiaoxToolBridge:
                 }
         self._check_gate(binding, spec, params)
         call_id = args.get("call_id")
-        if not isinstance(call_id, str) or not call_id.strip():
+        if not isinstance(call_id, str) or not call_id.strip() or len(call_id) > 160:
             raise XiaoxBindingError("invalid_call", "工具调用标识无效")
         safe_read = spec.is_read_only_call(params) and spec.risk == "low"
+        review, approval_preview = {}, ""
+        isolated_artifact = False
+        if (spec.tool_id, spec.action) == ("employee", "execute"):
+            from app.application.agent_orchestrator.verification_workbook import (
+                review_workbook_write,
+                scoped_workbook_employee,
+            )
+
+            workbook_employee = scoped_workbook_employee(params)
+            if workbook_employee == WORKBOOK_READER:
+                from app.application.employee_runtime.loader import load_employee_pack_from_disk
+                from app.application.employee_runtime.office_workers import is_trusted_workbook_pack
+
+                try:
+                    isolated_artifact = is_trusted_workbook_pack(
+                        workbook_employee, load_employee_pack_from_disk(workbook_employee)
+                    )
+                    # The signed reader only inspects the caller-owned upload; it
+                    # creates no business write and needs no write approval card.
+                    safe_read = isolated_artifact
+                except (OSError, ValueError):
+                    pass
+            fingerprint = canonical_digest(
+                {"tool_id": spec.tool_id, "action": spec.action, "params": params}
+            )
+            if workbook_employee == WORKBOOK_WRITER and not any(
+                call.get("fingerprint") == fingerprint
+                for call in binding.metadata.get("calls", {}).values()
+            ):
+                context = self._child_context(binding, {"child_task_id": ""})
+                try:
+                    reviewed, changes = review_workbook_write(params, context)
+                except (OSError, ValueError):
+                    return {
+                        "success": False, "verified": False, "status": "not_started",
+                        "error_code": "workbook_plan_review_failed",
+                        "message": "无法在原工作簿中核验这份计划。请检查附件和相应工作表范围。",
+                    }
+                review[WORKBOOK_WRITE_REVIEW] = reviewed
+                isolated_artifact = True
+                if changes and str(context.get("chat_approval_mode") or "").strip() == "auto":
+                    return {
+                        "success": False, "verified": False, "status": "not_started",
+                        "error_code": "workbook_manual_approval_required",
+                        "message": "计划会修改原始数据。请保留这些原值，或由用户切换到手动审批后核对变更。",
+                        "required_approval": "manual",
+                        "change_count": len(changes),
+                        "changes": [
+                            {key: change[key] for key in ("sheet", "ref", "source_ref", "kind")}
+                            for change in changes[:20]
+                        ],
+                    }
+                if changes:
+                    approval_preview = "确认工作簿数据修改\n" + "\n".join(
+                        f"{change['sheet']} · {change['ref']}  "
+                        f"{json.dumps(change['before'][1], ensure_ascii=False, default=str)} → "
+                        f"{json.dumps(change['after'][1], ensure_ascii=False, default=str)}"
+                        for change in changes
+                    )
         call, created = self.store.claim_call(
             binding.run_id,
             call_id,
@@ -339,10 +587,12 @@ class XiaoxToolBridge:
             read_only=safe_read,
             generation=binding.metadata["generation"],
             cost_units=spec.cost_units,
+            isolated_artifact=isolated_artifact,
         )
         if not created:
             return self._evidence(self.store.get(binding.run_id), call_id)
         context = self._child_context(binding, call)
+        context.update(review)
         context["task_title"] = f"{spec.tool_id}.{spec.action}"
         context["tool_schema_digest"] = spec.schema_digest
         # This child proves exactly one registered action. The original user
@@ -387,13 +637,14 @@ class XiaoxToolBridge:
                 action=spec.action,
                 params=copy.deepcopy(params),
                 runtime_context=context,
+                approval_preview=approval_preview,
             ).run
         # The child id is durable before dispatch. A lost response can only read
         # this task; it cannot mint a new approved operation and execute twice.
         self.store.record_call(binding.run_id, call_id, child_run_id=child.run_id)
         try:
             self.store.check_current(binding.run_id, generation=binding.metadata["generation"])
-            self._check_schema(self._spec(binding, args), args)
+            self._check_schema(self.authorized_action_spec(binding, args), args)
             self._check_gate(binding, spec, params)
         except XiaoxBindingError:
             self.orchestrator.cancel_run(child.run_id, requested_by=binding.run.user_id)
@@ -416,6 +667,7 @@ class XiaoxToolBridge:
         from app.application.agent_orchestrator.budget import AI_COST_BUDGET_KEYS
 
         context = binding.context
+        context.pop("desktop_navigation", None)
         for key in (
             *AI_COST_BUDGET_KEYS,
             "run_id",
@@ -427,6 +679,8 @@ class XiaoxToolBridge:
             "plan_id",
             "node_outputs",
             "_tool_approval_grants",
+            "_tool_approval_scope",
+            WORKBOOK_WRITE_REVIEW,
             "tool_schema_digest",
         ):
             context.pop(key, None)
@@ -453,15 +707,25 @@ class XiaoxToolBridge:
         return context
 
 
-def mcp_tool_definitions():
+def mcp_tool_definitions(
+    visible_actions: Iterable[tuple[str, str]] | None = None,
+) -> list[Tool]:
     """Use MCP SDK types; schema is glue around the existing capability catalog."""
     from mcp.types import Tool
 
     fields = {"tool_id": {"type": "string"}, "action": {"type": "string"}}
+    visible = list(visible_actions) if visible_actions is not None else None
+    if visible:
+        # Keep the schema linear in catalog size. The bridge enforces valid pairs
+        # and current permission on every call.
+        fields = {
+            "tool_id": {"type": "string", "enum": sorted({tool_id for tool_id, _ in visible})},
+            "action": {"type": "string", "enum": sorted({action for _, action in visible})},
+        }
     definitions = [
         (
             "capability_search",
-            "检索当前账号获授权的企业能力。",
+            "检索当前账号获授权的企业工具，以及本轮桌面提供的可见页面和手动操作入口。query 留空可分页浏览。",
             {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 30},
@@ -516,5 +780,6 @@ def mcp_tool_definitions():
             },
         )
         for name in XIAOX_TOOL_NAMES
+        if visible != [] or name not in {"capability_describe", "execute_action"}
         for description, props, required in [definitions_by_name[name]]
     ]

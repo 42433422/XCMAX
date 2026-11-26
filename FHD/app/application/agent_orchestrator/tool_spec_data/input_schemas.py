@@ -9,6 +9,7 @@ from app.application.excel_export_limits import (
 )
 from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
 from app.domain.enterprise_cognition.contracts import ENTERPRISE_INPUT_SCHEMAS
+from app.domain.excel import EXCEL_HEADER_ROW
 from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
 
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
@@ -617,112 +618,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "unit_name": {"type": "string"},
             "purchase_unit": {"type": "string"},
-            "products": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "required": ["unit_price"],
-                    "allOf": [
-                        {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
-                        {
-                            "anyOf": [
-                                {"required": ["quantity_kg"]},
-                                {
-                                    "required": ["quantity", "unit"],
-                                    "properties": {
-                                        "unit": {
-                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
-                                            "type": "string",
-                                        }
-                                    },
-                                },
-                                {
-                                    "required": ["quantity", "quantity_unit"],
-                                    "properties": {
-                                        "quantity_unit": {
-                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
-                                            "type": "string",
-                                        }
-                                    },
-                                },
-                                {
-                                    "allOf": [
-                                        {
-                                            "anyOf": [
-                                                {"required": ["quantity_tins"]},
-                                                {"required": ["quantity", "unit"]},
-                                                {"required": ["quantity", "quantity_unit"]},
-                                            ]
-                                        },
-                                        {
-                                            "anyOf": [
-                                                {"required": ["tin_spec"]},
-                                                {"required": ["spec_per_tin"]},
-                                                {"required": ["spec"]},
-                                                {"required": ["weight_per_unit"]},
-                                            ]
-                                        },
-                                    ]
-                                },
-                            ]
-                        },
-                    ],
-                },
-            },
-            "items": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "required": ["unit_price"],
-                    "allOf": [
-                        {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
-                        {
-                            "anyOf": [
-                                {"required": ["quantity_kg"]},
-                                {
-                                    "required": ["quantity", "unit"],
-                                    "properties": {
-                                        "unit": {
-                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
-                                            "type": "string",
-                                        }
-                                    },
-                                },
-                                {
-                                    "required": ["quantity", "quantity_unit"],
-                                    "properties": {
-                                        "quantity_unit": {
-                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
-                                            "type": "string",
-                                        }
-                                    },
-                                },
-                                {
-                                    "allOf": [
-                                        {
-                                            "anyOf": [
-                                                {"required": ["quantity_tins"]},
-                                                {"required": ["quantity", "unit"]},
-                                                {"required": ["quantity", "quantity_unit"]},
-                                            ]
-                                        },
-                                        {
-                                            "anyOf": [
-                                                {"required": ["tin_spec"]},
-                                                {"required": ["spec_per_tin"]},
-                                                {"required": ["spec"]},
-                                                {"required": ["weight_per_unit"]},
-                                            ]
-                                        },
-                                    ]
-                                },
-                            ]
-                        },
-                    ],
-                },
-            },
+            "products": deepcopy(_SHIPMENT_PRODUCTS_SCHEMA),
+            "items": deepcopy(_SHIPMENT_PRODUCTS_SCHEMA),
             "contact_person": {"type": "string"},
             "contact_phone": {"type": "string"},
         },
@@ -841,17 +738,9 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         {
             "file_path": {"type": "string"},
             "sheet_name": {"type": "string"},
-            "header_row": {"type": "integer"},
+            "header_row": EXCEL_HEADER_ROW,
             "offset": {"type": "integer"},
             "max_rows": {"type": "integer"},
-        },
-    ),
-    ("excel_analysis", "structure"): _object_schema(
-        ["file_path"],
-        {
-            "file_path": {"type": "string"},
-            "sheet_name": {"type": "string"},
-            "header_row": {"type": "integer"},
         },
     ),
     ("excel_analysis", "query"): {
@@ -874,7 +763,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                     "description": "按真实列样本生成有界只读JSON查询计划；与query_expression互斥，不接受Python代码",
                 },
                 "sheet_name": {"type": "string"},
-                "header_row": {"type": "integer"},
+                "header_row": EXCEL_HEADER_ROW,
                 "offset": {"type": "integer"},
                 "max_rows": {"type": "integer"},
             },

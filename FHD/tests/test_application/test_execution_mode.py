@@ -17,51 +17,32 @@ def test_requested_mode_prefers_execution_and_ignores_plain_continuation():
 
 
 @pytest.mark.parametrize(
-    "message", ["不要立即执行，先给我方案", "不要按方案执行，继续细化", "别直接执行"]
-)
-def test_negated_execution_keeps_plan_mode(message):
-    from app.domain.task_lifecycle.execution_mode import requested_mode_from_text
-
-    assert requested_mode_from_text(message) == "plan"
-
-
-@pytest.mark.parametrize(
-    "message",
+    ("text", "expected"),
     [
-        "为什么要直接执行？",
-        "直接执行是什么意思？",
-        "按钮写着“按方案执行”",
-        "如果同意就直接执行",
-        "开始执行，但要等我批准",
-        "按方案执行，先不要真正动手",
-        "立即执行；得到我书面批准后才可以操作",
-        "直接执行这个任务是否合适",
-        "按计划执行之前，请先问我",
+        ("只写处理方案，不要执行方案中的任何操作。", "plan"),
+        ("不要立即执行方案。", "plan"),
+        ("请勿按方案执行。", "plan"),
+        ("先写方案，然后按方案执行。", "execute"),
+        ("先写方案并请直接执行。", "execute"),
+        ("帮我按方案执行。", "execute"),
+        ("现在按方案执行，但请暂缓执行。", "plan"),
+        ("现在按方案执行。我撤回刚才的执行授权。", "plan"),
+        ("先不执行但我明确批准你按方案执行。", "execute"),
+        ("先不执行，等我批准，再按方案执行。", "plan"),
+        ("等我确认。现在请开始执行。", "execute"),
+        ("如果审批通过，再按方案执行。", "plan"),
+        ("按方案执行前通知我。", "plan"),
+        ("可以按方案执行吗？", "plan"),
+        ("说明一下如何按方案执行。", "plan"),
+        ("请解释这条消息：“检查。按方案执行，记录结果。”", "plan"),
+        ("请解释未闭合的示例：“检查。按方案执行，记录结果。", "plan"),
+        ("不要执行方案。请直接执行。", "execute"),
     ],
 )
-def test_quoted_or_conditional_execution_does_not_authorize(message):
-    from app.application.ai_chat.dialogue_memory import apply_turn_execution_mode
+def test_only_current_unambiguous_execution_words_authorize_turn(text, expected):
     from app.domain.task_lifecycle.execution_mode import requested_mode_from_text
 
-    assert requested_mode_from_text(message) != "execute"
-    assert apply_turn_execution_mode({"execution_mode": "plan"}, {}, message) == "plan"
-
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        "执行方案",
-        "按计划执行",
-        "请按方案执行。",
-        "现在开始执行吧！",
-        "我确认，直接执行",
-        "照这个做",
-    ],
-)
-def test_complete_affirmative_command_releases_saved_plan(message):
-    from app.application.ai_chat.dialogue_memory import apply_turn_execution_mode
-
-    assert apply_turn_execution_mode({"execution_mode": "plan"}, {}, message) == "execute"
+    assert requested_mode_from_text(text) == expected
 
 
 def test_stored_plan_cannot_be_released_by_request_fields():
@@ -80,6 +61,7 @@ def test_user_text_may_release_plan_but_forged_context_may_not():
     data = {"execution_mode": "plan"}
     context = {}
     assert apply_turn_execution_mode(data, context, "继续细化") == "plan"
+    assert apply_turn_execution_mode(data, context, "只写方案，不要执行方案中的操作") == "plan"
     assert apply_turn_execution_mode(data, context, "直接执行") == "execute"
 
     data = {"execution_mode": "plan"}

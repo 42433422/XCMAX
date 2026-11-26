@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import hmac
 import json
@@ -160,6 +161,8 @@ def attach_execution_mode(context: MutableMapping[str, Any]) -> str:
 
 def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """同一轮重复提交不再执行。进行中的轮次不会被另一条消息覆盖。"""
+    from app.domain.task_lifecycle.execution_mode import CONVERSATION_KEY
+
     key = conversation_key(context)
     if not key:
         return None
@@ -171,7 +174,7 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         turn_id = str(context.get("turn_id") or "")
         data = _read(key, context)
         try:
-            mode = apply_turn_execution_mode(data, context, text)
+            mode = apply_turn_execution_mode(dict(data), context, text)
         except ConversationRevisionError:
             return {
                 **_payload(
@@ -208,6 +211,7 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
                 return _payload(
                     str(assistant.get("content") or ""), str(assistant.get("status") or "failed")
                 )
+        data[CONVERSATION_KEY] = mode
         _append_user(data, text, turn_id, context)
         if turn_id:
             data.setdefault("receipts", {})[turn_id] = {
@@ -224,6 +228,14 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         try:
             _write(key, data)
             persisted = True
+        except OSError as exc:
+            if exc.errno != errno.ENOSPC:
+                raise
+            return {
+                **_payload("系统盘空间不足，无法登记本轮对话。释放空间后请重试。", "failed"),
+                "error_code": "chat_storage_full",
+                "execution_started": False,
+            }
         finally:
             if not persisted:
                 _release_turn(key, turn_id)
@@ -895,11 +907,33 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     if context and _REVISION_KEY in context and context[_REVISION_KEY] != revision:
         raise ConversationRevisionError("conversation changed after this turn started")
     stored_mode = data.get("execution_mode")
-    if data.get("scope") != scope or data.get("revision") != revision:
+    same_revision = data.get("scope") == scope and data.get("revision") == revision
+    stale_visibility = (
+        same_revision
+        and data.get("public_message_projection") != 1
+        and bool(data.get("turns") or data.get("summary"))
+        and task_conversation_store.has_legacy_employee_memory(**scope)
+    )
+    if not same_revision or stale_visibility:
         snapshot = task_conversation_store.memory_snapshot(**scope, include_messages=True)
         if snapshot is None or snapshot["revision"] != revision:
             raise ConversationRevisionError("conversation changed while restoring history")
-        data = _restore_snapshot(snapshot, key=key)
+        restored = _restore_snapshot(snapshot, key=key)
+        if stale_visibility:
+            # Employee summaries had no chat turn ID. Preserve admissions and receipts
+            # that are still pending in the same revision while replacing the old text projection.
+            projected = {(row["role"], row["turn_id"]) for row in restored["turns"]}
+            restored["turns"].extend(
+                row
+                for row in data.get("turns") or []
+                if isinstance(row, dict)
+                and isinstance(row.get("turn_id"), str)
+                and row["turn_id"]
+                and (row.get("role"), row["turn_id"]) not in projected
+            )
+            if isinstance(data.get("receipts"), dict):
+                restored["receipts"].update(data["receipts"])
+        data = restored
     turns = data.get("turns") or []
     receipts = data.get("receipts") or {}
     return {
@@ -911,6 +945,7 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
         "summary": data.get("summary") if isinstance(data.get("summary"), dict) else None,
         "scope": scope,
         "revision": revision,
+        "public_message_projection": 1,
         # Server-owned plan/execute mode must survive the projection rebuild below.
         "execution_mode": stored_mode if stored_mode is not None else data.get("execution_mode"),
     }
@@ -1037,10 +1072,17 @@ def _write(key: str, data: dict[str, Any]) -> None:
         lock_conversation_session(db, **scope, expected_revision=data["revision"])
         path = _path(key)
         temporary = path.with_suffix(".json.tmp")
-        temporary.write_bytes(
-            b"fernet:" + _cipher().encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8"))
-        )
-        temporary.replace(path)
+        try:
+            temporary.write_bytes(
+                b"fernet:" + _cipher().encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            )
+            temporary.replace(path)
+        except OSError:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("Failed to remove incomplete dialogue snapshot")
+            raise
         db.commit()
 
 

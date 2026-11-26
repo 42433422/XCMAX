@@ -8,6 +8,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'
 import { shouldDeferMarkdownWhileStreaming } from '@/utils/chatMarkdownStreaming'
+import { useChatCodeCopy } from '@/composables/useChatCodeCopy'
 
 const props = defineProps<{
   content: string
@@ -18,7 +19,7 @@ const props = defineProps<{
 const hostRef = ref<HTMLDivElement | null>(null)
 const deferMarkdown = computed(() => shouldDeferMarkdownWhileStreaming(props.content || '', Boolean(props.streaming)))
 let disposed = false
-const feedbackTimers = new Set<number>()
+const onBodyClick = useChatCodeCopy()
 
 const rendered = computed(() => {
   const text = props.content || ''
@@ -126,34 +127,6 @@ async function flushMermaid() {
   }
 }
 
-async function onBodyClick(event: MouseEvent) {
-  const host = hostRef.value
-  const target = event.target
-  if (disposed || !host || !(target instanceof Element)) return
-  const button = target.closest<HTMLButtonElement>('.md-code__copy, [data-copy-source]')
-  if (!button || !host.contains(button)) return
-  const source = button.hasAttribute('data-copy-source')
-  const value = source
-    ? button.closest<HTMLElement>('.md-mermaid')?.dataset.source || ''
-    : button.parentElement?.parentElement?.querySelector('.md-code__body')?.textContent || ''
-  const initial = button.textContent
-  try {
-    await navigator.clipboard.writeText(value)
-    if (disposed || !host.contains(button)) return
-    button.textContent = '已复制'
-  } catch {
-    if (disposed || !host.contains(button)) return
-    button.textContent = '复制失败'
-  }
-  const timer = window.setTimeout(() => {
-    feedbackTimers.delete(timer)
-    if (!disposed && hostRef.value?.contains(button)) {
-      button.textContent = initial || (source ? '复制源码' : '复制')
-    }
-  }, 1400)
-  feedbackTimers.add(timer)
-}
-
 async function flushAll() {
   await nextTick()
   if (!disposed) await flushMermaid()
@@ -168,8 +141,6 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(_postFlushRafId)
     _postFlushRafId = null
   }
-  for (const timer of feedbackTimers) clearTimeout(timer)
-  feedbackTimers.clear()
 })
 
 // 流式输出中只更新 rendered HTML（computed 自动处理），

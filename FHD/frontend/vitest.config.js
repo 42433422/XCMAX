@@ -64,6 +64,7 @@ export default defineConfig({
     dedupe: ['vue', 'vue-router', 'pinia', 'element-plus'],
   },
   test: {
+    server: { deps: { inline: ['vue-element-plus-x'] } },
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
     environment: 'jsdom',

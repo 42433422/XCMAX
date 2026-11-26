@@ -139,10 +139,7 @@
 }
 
 .view-switch {
-  padding: 3px;
-  border: 1px solid #d6dfda;
-  border-radius: 8px;
-  background: #eef2f0;
+  gap: 2px;
 }
 
 .view-switch button,
@@ -168,8 +165,8 @@
 }
 
 .view-switch button.active {
-  color: #17211d;
-  background: #ffffff;
+  color: #1d6259;
+  background: #e6f2ee;
   box-shadow: 0 1px 3px rgba(23, 33, 29, 0.12);
 }
 
@@ -316,10 +313,8 @@
   left: 14px;
   display: flex;
   gap: 1px;
-  overflow: hidden;
-  border: 1px solid rgba(202, 214, 208, 0.9);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.9);
+  background: color-mix(in srgb, var(--xc-color-surface) 92%, transparent);
   box-shadow: 0 8px 24px rgba(35, 52, 44, 0.07);
 }
 
@@ -765,17 +760,17 @@
 .chunk-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   margin: 12px 0 16px;
   padding: 0;
   list-style: none;
 }
 
 .chunk-list li {
-  padding: 10px 12px;
-  border: 1px solid #e3e9e6;
-  border-radius: 10px;
-  background: #fbfcfb;
+  padding: 10px 0;
+}
+
+.chunk-list li + li {
+  border-block-start: 1px solid var(--xc-color-border);
 }
 
 .chunk-list header {
@@ -885,10 +880,14 @@
   width: min(720px, calc(100% - 36px));
   min-height: 52px;
   margin: 0 auto 14px;
-  border: 1px solid rgba(185, 199, 192, 0.96);
+  border: 1px solid var(--xc-color-border-strong);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--xc-color-surface);
   box-shadow: 0 12px 34px rgba(23, 33, 29, 0.14);
+}
+
+.ask-dock:focus-within {
+  border-color: var(--xc-color-primary);
 }
 
 .ask-dock__icon {
@@ -1248,6 +1247,9 @@
     left: 50%;
     grid-row: auto;
     grid-column: auto;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--xc-color-surface);
     transform: translateX(-50%);
     box-shadow: 0 5px 18px rgba(23, 33, 29, 0.1);
   }

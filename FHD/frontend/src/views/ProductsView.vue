@@ -3,7 +3,7 @@
     <div class="page-content">
       <div class="page-header">
         <h2>{{ pageNavTitle }}</h2>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="product-actions">
           <button class="btn btn-secondary" @click="triggerImportExcel" :title="`上传 Excel 批量导入${entityName}`">
             <i class="fa fa-upload" aria-hidden="true"></i> 导入Excel
           </button>
@@ -14,31 +14,31 @@
             style="display:none"
             @change="handleImport"
           >
-          <button class="btn btn-primary" @click="exportPriceList" style="margin-right:6px;" title="导出当前单位价目表（Word .docx，使用下方所选 Word 模板）">
+          <button class="btn btn-secondary" @click="exportPriceList" title="导出 Word 价目表">
             <i class="fa fa-file-text-o" aria-hidden="true"></i> 导出价格表
           </button>
-          <button class="btn btn-secondary" @click="exportPriceListExcel" title="导出为 Excel（与旧版一致）">导出Excel</button>
-          <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="batchDelete" style="margin-right:10px;">批量删除 ({{ selectedIds.length }})</button>
+          <button class="btn btn-secondary" @click="exportPriceListExcel">导出Excel</button>
+          <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="batchDelete">批量删除 ({{ selectedIds.length }})</button>
           <button class="btn btn-primary" data-tutorial-id="product-create" @click="showAddModal">+ 添加{{ entityName }}</button>
         </div>
       </div>
-      <div class="search-box" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
-        <label style="white-space:nowrap;">{{ entityName }}单位：</label>
-        <select v-model="selectedUnit" style="min-width:180px;" @change="changeProductUnit">
+      <div class="search-box product-filters">
+        <label for="product-filter-unit">{{ entityName }}单位</label>
+        <select id="product-filter-unit" v-model="selectedUnit" @change="changeProductUnit">
           <option value="">请选择{{ entityName }}单位</option>
           <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
         </select>
-        <select v-model="selectedWordTemplateSlug" style="min-width:240px;" title="Word 价目表模板（在「模板预览」管理 .docx）">
-          <option value="">默认 Word 模板（price_list_default）</option>
+        <select v-model="selectedWordTemplateSlug" aria-label="Word 价目表模板">
+          <option value="">默认 Word 模板</option>
           <option v-for="tpl in wordTemplateOptions" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
         </select>
-        <input v-model="searchQuery" type="text" :placeholder="`搜索${entityName}型号或名称...`" @input="scheduleProductSearch">
+        <input v-model="searchQuery" type="search" :aria-label="`搜索${entityName}`" :placeholder="`搜索${entityName}型号或名称`" @input="scheduleProductSearch">
       </div>
       <div v-if="productReadError || (!fresh && products.length) || productListNotice" role="status" class="product-read-status">
         <span>{{ productReadError ? '产品读取失败：' + productReadError : (!fresh ? '产品数据需要更新，请刷新后再编辑。' : productListNotice) }}</span>
         <button type="button" class="btn btn-secondary" :disabled="loading" @click="refreshProducts">重新读取</button>
       </div>
-      <div class="card">
+      <div class="card product-table">
         <DataTable
           :columns="columns"
           :data="products"

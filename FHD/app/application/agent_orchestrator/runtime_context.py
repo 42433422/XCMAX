@@ -3,6 +3,7 @@
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun
+from app.domain.workbook_write_contract import WORKBOOK_WRITE_REVIEW
 
 
 class RuntimeContextOwnershipError(ValueError):
@@ -36,6 +37,7 @@ def merge_runtime_context(run: AgentRun, updates: dict[str, Any] | None) -> dict
         "_actor_authorization",
         "_credential_authorization",
         "_tool_approval_scope",
+        WORKBOOK_WRITE_REVIEW,
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "mutation_policy",

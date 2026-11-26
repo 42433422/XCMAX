@@ -478,10 +478,10 @@ def execute_employee_task_local(
     from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
     from app.application.tools.workflow_spreadsheet_scope import (
         office_reader_input,
-        publish_written_workbook,
+        publish_workbook_output,
         workbook_writer_input,
     )
-    from app.domain.workbook_write_contract import WORKBOOK_WRITER
+    from app.domain.workbook_write_contract import WORKBOOK_READER, WORKBOOK_WRITER
 
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
@@ -523,8 +523,13 @@ def execute_employee_task_local(
                 "input_schema": WORKBOOK_WRITE_INPUT,
             }
         reader, input_data = None, None
+    scoped_workbook = (
+        context.get("source") == "xiaox_runtime"
+        and employee_id in (WORKBOOK_READER, WORKBOOK_WRITER)
+        and not context_only
+    )
     scope = (
-        office_reader_input(reader, input_data or {}, context)
+        office_reader_input(reader, input_data or {}, context, ephemeral=scoped_workbook)
         if reader
         else workbook_writer_input(input_data or {}, context)
         if writer
@@ -532,6 +537,7 @@ def execute_employee_task_local(
     )
     try:
         with scope as payload:
+            output_name = payload.pop("output_name", None) if writer and payload else None
             result = EmployeeAgent(employee_id).run(
                 task,
                 payload,
@@ -541,9 +547,16 @@ def execute_employee_task_local(
                 else workspace_root,
                 session_id=session_id,
                 runtime_context=runtime_context,
+                scoped_workbook=scoped_workbook,
             )
-            if writer and payload and result.get("success") is True:
-                return publish_written_workbook(result, context, payload["workspace_root"])
+            if (writer or scoped_workbook) and payload and result.get("success") is True:
+                return publish_workbook_output(
+                    reader or WORKBOOK_WRITER,
+                    result,
+                    context,
+                    payload["workspace_root"],
+                    output_name=output_name,
+                )
             return result
     except PermissionError as exc:
         return {"success": False, "error_code": "employee_file_access_denied", "error": str(exc)}

@@ -60,3 +60,7 @@ declare module 'xlsx' {
     json_to_sheet: (data: Record<string, unknown>[]) => unknown
   }
 }
+
+declare module 'vue-element-plus-x/es/Sender/index.js' {
+  export { Sender as default } from 'vue-element-plus-x'
+}

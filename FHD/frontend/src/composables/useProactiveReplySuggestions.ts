@@ -1,7 +1,5 @@
-import { computed, ref, shallowRef, toRaw, watch, type Ref } from 'vue'
+import { computed, shallowRef, toRaw, watch, type Ref } from 'vue'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
-
-export const PROACTIVE_SUGGESTIONS_STORAGE_KEY = 'xcagi_proactive_suggestions'
 
 export type ProactiveSuggestion = {
   id: string
@@ -17,22 +15,6 @@ type ChatLikeMessage = {
   text?: string
   workflowAction?: string
   agentRunTrace?: { status?: string }
-}
-
-function readEnabled(): boolean {
-  try {
-    return localStorage.getItem(PROACTIVE_SUGGESTIONS_STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function writeEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(PROACTIVE_SUGGESTIONS_STORAGE_KEY, enabled ? '1' : '0')
-  } catch {
-    /* ignore quota */
-  }
 }
 
 function messageText(m: ChatLikeMessage): string {
@@ -120,7 +102,7 @@ export function proactiveReplyMessageId(message: ChatLikeMessage): string {
 export interface UseProactiveReplySuggestionsDeps {
   messages: Ref<ChatLikeMessage[]>
   messageInput: Ref<string>
-  enabled?: Ref<boolean>
+  enterpriseLevel: Readonly<Ref<number | null>>
   isLoading?: Ref<boolean>
   isStreamingReply?: Ref<boolean>
   scopeKey?: Ref<string>
@@ -128,7 +110,7 @@ export interface UseProactiveReplySuggestionsDeps {
 
 /** Local reply-bound choices; selecting one only fills the composer. */
 export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsDeps) {
-  const enabled = deps.enabled || ref(readEnabled())
+  const enabled = computed(() => (deps.enterpriseLevel.value ?? 0) >= 2)
   const scopeKey = () => deps.scopeKey?.value || ''
   const blockedMessages = shallowRef<ChatLikeMessage[]>()
   const cache = new WeakMap<ChatLikeMessage, { source: string[]; items: ProactiveReplySuggestion[] }>()
@@ -154,7 +136,7 @@ export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsD
       if (!isAssistant(message) || message.streamingShell
         || (busy && index > latestUserIndex) || isFailedChatReply(message)) return
       const text = messageText(message)
-      if (!text) return
+      if (!text || text.startsWith('[附件]')) return
       const contextUser = index - userIndex < 8 ? lastUser : undefined
       const messageId = proactiveReplyMessageId(message)
       const source = [scope, messageId, text, contextUser ? messageText(contextUser) : '']
@@ -169,11 +151,6 @@ export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsD
     return result
   })
 
-  function persistEnabled(next: boolean) {
-    enabled.value = next
-    writeEnabled(next)
-  }
-
   function pickSuggestion(item: ProactiveReplySuggestion) {
     if (!enabled.value || item.scopeKey !== scopeKey()
       || !proactiveSuggestionsByMessage.value.get(item.messageId)?.includes(item)) return
@@ -185,13 +162,8 @@ export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsD
   }
 
   return {
-    proactiveEnabled: enabled,
     proactiveSuggestions: computed(() => [...proactiveSuggestionsByMessage.value.values()].flat()),
     proactiveSuggestionsByMessage,
-    persistProactiveEnabled: persistEnabled,
     pickProactiveSuggestion: pickSuggestion,
-    PROACTIVE_SUGGESTIONS_STORAGE_KEY,
   }
 }
-
-export { readEnabled as isProactiveSuggestionsEnabled }

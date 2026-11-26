@@ -3,17 +3,16 @@
     <div class="page-content">
       <div class="page-header customers-page-header">
         <div class="customers-header-main">
-          <h2>{{ pageNavTitle }}</h2>
-          <p class="muted customers-header-desc">
-            购买单位与「{{ productsNavLabel }}」「{{ shipmentNavLabel }}」同源；可选单位筛选{{ entityName }}列表。
-          </p>
+          <div class="customers-heading">
+            <h2>{{ pageNavTitle }}</h2>
+            <p class="stat-cards customers-count">{{ entityName }}总数 <strong>{{ totalCustomers }}</strong></p>
+          </div>
           <div class="customers-unit-filter">
             <label class="customers-unit-label" for="customers-purchase-unit">购买单位</label>
             <select
               id="customers-purchase-unit"
               v-model="selectedPurchaseUnit"
               class="customers-unit-select"
-              title="与产品页、出货记录页单位下拉一致"
             >
               <option value="">全部购买单位</option>
               <option
@@ -63,17 +62,11 @@
           <button v-if="selectedIds.length > 0" class="btn btn-danger" :disabled="saving || loading || !!loadError" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</button>
         </div>
       </div>
-      <div class="stat-cards">
-        <div class="stat-card">
-          <div class="number">{{ totalCustomers }}</div>
-          <div class="label">{{ entityName }}总数</div>
-        </div>
-      </div>
       <p v-if="loadError" class="customers-load-error" role="alert">
         {{ loadError }}
         <button type="button" class="btn btn-secondary" @click="retryLoadCustomers">重试</button>
       </p>
-      <div class="card">
+      <div class="card erp-list">
         <DataTable
           :columns="columns"
           :data="customers"
@@ -213,7 +206,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { useCustomers } from './customers/useCustomers'
 
 const {
-  pageNavTitle, entityName, productsNavLabel, shipmentNavLabel,
+  pageNavTitle, entityName,
   customers, focusId, purchaseUnitOptions, selectedPurchaseUnit, loading, saving, loadError, retryLoadCustomers, selectedIds,
   totalCustomers, hasMore, importFileInput,
   showEditModal, showDeleteConfirm, showBatchDeleteConfirm, showAddModal,
@@ -227,3 +220,4 @@ const {
 </script>
 
 <style scoped src="./customers/customers.css"></style>
+<style scoped src="./erp-list-surfaces.css"></style>

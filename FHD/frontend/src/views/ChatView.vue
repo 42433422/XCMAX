@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-view page-view active" id="view-chat">
+  <div class="chat-view page-view active" id="view-chat" :style="chatPaneStyle">
     <TaskWorkspaceContextBar
       v-if="workspaceMode"
       v-bind="workspaceHeader"
@@ -12,6 +12,7 @@
         v-if="!isTaskPaneResizable"
         type="button"
         class="quick-btn chat-panel-toggle"
+        data-tutorial-id="chat-side-panel-toggle"
         aria-haspopup="dialog"
         aria-controls="chat-side-panel"
         :aria-expanded="mobileChatPanelOpen"
@@ -21,7 +22,7 @@
     <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
       {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
     </div>
-    <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
+    <div class="chat-container" data-tour="chat-thread">
       <ChatMessageList
         @retry-model="retryFailedModel"
         @recall-edit="recallMessage"
@@ -125,7 +126,7 @@
       />
     </div>
     <div
-      class="input-area"
+      class="input-area chat-input-area"
       data-tour="chat-input-area"
       :class="{ 'input-area--dragover': composerDragOver }"
       @dragenter.prevent="onComposerDragEnter"
@@ -134,18 +135,6 @@
       @drop.prevent="onComposerDrop"
     >
       <div v-if="composerDragOver" class="composer-drop-overlay" role="status">松开以上传附件</div>
-      <ChatInputToolbar
-        :attachment-uploading="attachmentUploading"
-        :multimodal-pending-count="multimodalPendingCount"
-        :proactive-suggestions-enabled="proactiveEnabled"
-        :tts-enabled="ttsEnabled"
-        :office-docking-processing="officeDockingProcessing"
-        @new-conversation="newConversation"
-        @trigger-office-docking="triggerOfficeDocking"
-        @attachment-file-change="onAttachmentFileChange"
-        @proactive-suggestions-change="onProactiveSuggestionsChange"
-        @toggle-tts="setTtsEnabled"
-      />
       <ChatModelRecovery :scope-key="messageSessionKey" />
       <div
         v-if="artifactStaging.length || multimodalStaging.length || unsupportedStaging.length"
@@ -194,7 +183,7 @@
           :key="`unsupported-${name}`"
           class="composer-attachment composer-attachment--skipped"
           role="listitem"
-          :title="`${name} 暂不支持导入（仅支持 .xlsx / .xlsm）`"
+          :title="`${name} 未添加为对话附件`"
         >
           <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
           <span class="composer-attachment__name">{{ name }}</span>
@@ -235,57 +224,88 @@
           </button>
         </div>
       </div>
-      <div class="input-wrapper">
-        <textarea
-          id="messageInput"
-          rows="2"
-          :placeholder="inputPlaceholder"
-          v-model="messageInput"
-          aria-describedby="chat-composer-status"
-          @compositionstart="composerIme.compositionStart"
-          @compositionend="composerIme.compositionEnd"
-          @keydown="handleKeyDown"
-        ></textarea>
-        <div class="composer-voice-stack">
-          <button
-            type="button"
-            class="btn voice-call-entry-btn"
-            title="语音通话"
-            aria-label="语音通话"
-            @click="startVoiceCallFromHost"
-          >
-            <i class="fa fa-phone" aria-hidden="true"></i>
-          </button>
-          <button
-            type="button"
-            class="btn voice-input-btn"
-            :class="voiceButtonClass"
-            :disabled="voiceButtonDisabled"
-            :title="voiceButtonTitle"
-            data-tutorial-id="chat-voice-push-to-talk"
-            @mousedown.prevent="startVoiceRecording"
-            @mouseup.prevent="stopVoiceRecording(false)"
-            @mouseleave="stopVoiceRecording(true)"
-            @touchstart.prevent="startVoiceRecording"
-            @touchend.prevent="stopVoiceRecording(false)"
-            @touchcancel.prevent="stopVoiceRecording(true)"
-          >
-            <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
-            <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
-          </button>
-        </div>
-        <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
-        <button
-          class="btn btn-primary send-message-btn"
-          id="sendMessageBtn"
-          :disabled="!canSendMessage"
-          :aria-disabled="!canSendMessage"
-          :title="sendButtonTitle"
-          @click="sendMessage"
-        >
-          {{ isLoading ? '发送纠正' : '发送' }}
-        </button>
+      <div class="chat-speech-controls">
+        <ChatSpeechToggle :enabled="ttsEnabled" @update:enabled="setTtsEnabled" />
       </div>
+      <Sender
+        ref="chatSender"
+        v-model="messageInput"
+        class="input-wrapper chat-composer"
+        variant="updown"
+        :auto-size="{ minRows: 1, maxRows: 6 }"
+        :placeholder="inputPlaceholder"
+        @compositionstart.capture="composerIme.compositionStart"
+        @compositionend.capture="composerIme.compositionEnd"
+        @keydown.capture="protectComposerEnter"
+        @submit="sendMessage"
+      >
+        <template #prefix>
+          <ChatInputToolbar
+            :attachment-uploading="attachmentUploading"
+            :multimodal-pending-count="multimodalPendingCount"
+            :office-docking-processing="officeDockingProcessing"
+            @trigger-office-docking="triggerOfficeDocking"
+            @attachment-file-change="onAttachmentFileChange"
+          />
+        </template>
+        <template #action-list>
+          <div class="composer-primary-actions" @mousedown.stop>
+            <EnterpriseIntelligencePicker ref="intelligencePicker" />
+            <button
+              type="button"
+              class="composer-control composer-icon-button voice-call-entry-btn"
+              title="语音通话"
+              aria-label="语音通话"
+              @click="startVoiceCallFromHost"
+            >
+              <Phone aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="composer-control composer-icon-button voice-input-btn"
+              :class="voiceButtonClass"
+              :disabled="voiceButtonDisabled"
+              :title="voiceButtonTitle"
+              :aria-label="voiceButtonText"
+              data-tutorial-id="chat-voice-push-to-talk"
+              @mousedown.prevent="startVoiceRecording"
+              @mouseup.prevent="stopVoiceRecording(false)"
+              @mouseleave="stopVoiceRecording(true)"
+              @touchstart.prevent="startVoiceRecording"
+              @touchend.prevent="stopVoiceRecording(false)"
+              @touchcancel.prevent="stopVoiceRecording(true)"
+            >
+              <ElIcon :class="{ 'is-loading': voiceButtonIcon === 'fa-spinner fa-pulse' }" aria-hidden="true">
+                <component :is="composerVoiceIcons[voiceButtonIcon]" />
+              </ElIcon>
+              <span v-if="voiceButtonIcon !== 'fa-microphone'" class="voice-input-btn-label">{{ voiceButtonText }}</span>
+            </button>
+            <button
+              v-if="isLoading"
+              type="button"
+              class="composer-control composer-icon-button stop-message-btn"
+              data-testid="stop-reply"
+              aria-label="停止回复"
+              title="停止回复"
+              @click="stopReply()"
+            >
+              <CloseBold aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="composer-control composer-icon-button send-message-btn"
+              id="sendMessageBtn"
+              :disabled="!canSendMessage"
+              :aria-disabled="!canSendMessage"
+              :title="sendButtonTitle"
+              :aria-label="isLoading ? '发送纠正' : '发送'"
+              @click="sendMessage"
+            >
+              <Top aria-hidden="true" />
+            </button>
+          </div>
+        </template>
+      </Sender>
       <div
         v-if="composerStatusText"
         id="chat-composer-status"
@@ -334,6 +354,8 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
+import { ElIcon } from 'element-plus'
+import { CircleClose, CloseBold, Loading, Microphone, Phone, Top, Warning } from '@element-plus/icons-vue'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { showAppToast } from '@/composables/useAppToast'
@@ -345,12 +367,15 @@ import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
+import ChatSpeechToggle from '@/components/chat/ChatSpeechToggle.vue'
+import EnterpriseIntelligencePicker from '@/components/chat/EnterpriseIntelligencePicker.vue'
+import Sender from 'vue-element-plus-x/es/Sender/index.js'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
-import { intakeAcceptAttribute } from '@/utils/documentIntake'
+import { intakeAcceptAttribute, isChatWordAttachment } from '@/utils/documentIntake'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
@@ -613,6 +638,13 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 })
 
 const messageInput = ref('')
+const chatSender = ref<{ inputInstance?: HTMLTextAreaElement } | null>(null)
+watch(() => chatSender.value?.inputInstance, (input) => {
+  if (!input) return
+  input.id = 'messageInput'
+  input.setAttribute('aria-label', '消息')
+  input.setAttribute('aria-describedby', 'chat-composer-status')
+}, { flush: 'post' })
 // Compose text is scoped to the same account, Mod, and original conversation.
 // Never persist file bytes, upload handles, or approval grants with a draft.
 const composerDraftKey = computed(() => isDurableChatScope(chatScope.value)
@@ -735,7 +767,7 @@ async function filesFromDataTransfer(dt: DataTransfer | null): Promise<File[]> {
 }
 
 function isComposerAcceptedFile(file: File): boolean {
-  return COMPOSER_ACCEPT_RE.test(file.name) || COMPOSER_ACCEPT_MIME.test(file.type || '')
+  return isChatWordAttachment(file.name) || COMPOSER_ACCEPT_RE.test(file.name) || COMPOSER_ACCEPT_MIME.test(file.type || '')
 }
 
 function onComposerDragEnter(e: DragEvent) {
@@ -763,7 +795,7 @@ async function onComposerDrop(e: DragEvent) {
   if (!files.length) return
   const accepted = files.filter(isComposerAcceptedFile)
   if (!accepted.length) {
-    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片、PDF 或包含它们的文件夹', 'ai')
+    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、Word（.docx）、图片、PDF 或包含它们的文件夹', 'ai')
     return
   }
   // The picker snapshots these files and applies the existing session/identity guard.
@@ -926,9 +958,15 @@ const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
   if (isRecalling.value) return '正在撤回操作…'
   if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
-  if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
+
+const composerVoiceIcons = {
+  'fa-microphone': Microphone,
+  'fa-stop-circle': CircleClose,
+  'fa-spinner fa-pulse': Loading,
+  'fa-exclamation-circle': Warning,
+}
 
 const composerIme = createChatComposerImeGuard()
 const sendMessage = async () => {
@@ -993,12 +1031,11 @@ const sendQuick = (text: string) => {
   })
 }
 
-const handleKeyDown = (e: KeyboardEvent) => {
-  // Safari and some desktop IMEs send a normal-looking Enter just after compositionend.
-  if (composerIme.shouldSuppressEnter(e)) return
-  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    e.preventDefault()
-    void sendMessage()
+function protectComposerEnter(event: KeyboardEvent) {
+  if (event.target !== chatSender.value?.inputInstance || event.key !== 'Enter') return
+  // Sender processes Enter itself. Keep native newline and protect interrupted IME composition.
+  if (composerIme.shouldSuppressEnter(event) || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+    event.stopPropagation()
   }
 }
 
@@ -1020,22 +1057,18 @@ const { onAutoRefreshToolbarChange: _legacyWechatToolbarChange } = useChatViewHo
 })
 void _legacyWechatToolbarChange
 
+const intelligencePicker = ref<{ level: number | null } | null>(null)
 const {
-  proactiveEnabled,
   proactiveSuggestionsByMessage,
-  persistProactiveEnabled,
   pickProactiveSuggestion,
 } = useProactiveReplySuggestions({
+  enterpriseLevel: computed(() => intelligencePicker.value?.level ?? null),
   messages,
   messageInput,
   isLoading,
   scopeKey: messageSessionKey,
   isStreamingReply,
 })
-
-function onProactiveSuggestionsChange(enabled: boolean) {
-  persistProactiveEnabled(enabled)
-}
 
 function openShipmentRecordsFromAuditTask() {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'shipment-records' } }))
@@ -1061,6 +1094,36 @@ function emitSwitchView(view: string) {
 
 .input-area {
   position: relative;
+}
+
+.chat-composer :deep(.el-sender) {
+  border-radius: 14px;
+  background: var(--xc-color-surface);
+  &, &:focus-within { box-shadow: var(--xc-shadow-sm); }
+  &::after { content: none; }
+}
+
+.chat-composer :deep(.el-sender .el-sender-content) { padding: 10px 12px 8px; gap: 7px; }
+.chat-composer :deep(.el-sender-updown-wrap) {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.composer-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-composer :deep(.el-sender .el-sender-content .el-sender-input .el-textarea__inner) {
+  padding: 7px 3px;
+  font-size: 16px;
+  line-height: 1.55;
+  outline: none;
+  caret-color: var(--xc-color-primary);
 }
 
 .composer-attachments {

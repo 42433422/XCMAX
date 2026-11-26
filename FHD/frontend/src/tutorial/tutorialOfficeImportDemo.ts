@@ -84,6 +84,5 @@ export async function cleanupQuickStartImportDemo(): Promise<void> {
     await api.post('/api/platform-shell/office-sample-cleanup', { file_paths: paths }).catch(() => {})
   }
   clearTutorialOfficeUploadPaths()
-  const btn = document.getElementById('newConversationBtn')
-  btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
 }

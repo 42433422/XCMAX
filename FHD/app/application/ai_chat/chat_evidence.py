@@ -39,14 +39,39 @@ _CUSTOMER_LOOKUP = re.compile(
 HISTORY_WINDOW_MESSAGES = 16
 
 
-def _history_row_content(item: dict[str, Any]) -> str:
+def _history_row_content(item: dict[str, Any], scope: str) -> str | None:
     """把澄清候选带回历史正文，追问才能用序号指代上一轮目标。"""
     content = str(item.get("content") or "")
     try:
         metadata = json.loads(str(item.get("metadata") or "{}"))
     except (TypeError, ValueError):
         return content
-    candidates = metadata.get("clarification_candidates") if isinstance(metadata, dict) else None
+    if not isinstance(metadata, dict):
+        return content
+    harness = metadata.get("business_harness")
+    summary = metadata.get("summary")
+    if (
+        item.get("role") == "assistant"
+        and isinstance(harness, dict)
+        and isinstance(summary, dict)
+        and harness.get("recall_bound") is True
+        and scope
+        and harness.get("conversation_key") == scope
+        and harness.get("turn_id")
+        and harness.get("turn_id") == summary.get("turn_id")
+        and harness.get("run_id")
+        and harness.get("run_id") == summary.get("run_id")
+        and (
+            summary.get("status") == "queued"
+            or (
+                summary.get("action") == "runtime_reply"
+                and summary.get("success") is False
+                and summary.get("status") in {"blocked", "failed", "unknown"}
+            )
+        )
+    ):
+        return None  # Host status stays on the original turn and in its receipt.
+    candidates = metadata.get("clarification_candidates")
     if not isinstance(candidates, list) or not candidates:
         return content
     lines: list[str] = []
@@ -85,9 +110,10 @@ def _history_window(messages: list[dict[str, str]]) -> list[dict[str, str]]:
 
 def _prepare_history(store, context, session, owner) -> dict[str, Any]:
     """Read the uncompressed suffix at a stable SQL cursor and lifecycle revision."""
-    from app.application.ai_chat.dialogue_memory import conversation_summary
+    from app.application.ai_chat.dialogue_memory import conversation_key, conversation_summary
     from app.application.task_conversation_store import ConversationRevisionError
 
+    scope = conversation_key(context)
     summary = conversation_summary(context)
     if not summary or summary.get("source") != "sql":
         summary = None
@@ -119,12 +145,13 @@ def _prepare_history(store, context, session, owner) -> dict[str, Any]:
             if not isinstance(item, dict) or item.get("role") not in {"user", "assistant", "ai"}:
                 continue
             reference = item.get("id")
-            content = _history_row_content(item)
+            content = _history_row_content(item, scope)
+            if content is None:
+                continue
             rows.append(
                 {
                     "role": "assistant" if item["role"] == "ai" else item["role"],
-                    "content": (f"[原文消息 #{reference}]\n" if isinstance(reference, int) else "")
-                    + content,
+                    "content": content,
                 }
             )
             ids.append(reference)

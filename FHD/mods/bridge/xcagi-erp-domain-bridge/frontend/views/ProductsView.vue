@@ -22,7 +22,7 @@
           <button class="btn btn-primary" @click="showAddModal">+ 添加产品</button>
         </div>
       </div>
-      <div class="search-box" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+      <div class="search-box erp-filters" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
         <label style="white-space:nowrap;">产品单位：</label>
         <select v-model="selectedUnit" style="min-width:180px;" @change="changeProductUnit">
           <option value="">请选择产品单位</option>
@@ -50,7 +50,7 @@
         <span>{{ productReadError ? '产品读取失败：' + productReadError : (!fresh ? '产品数据需要更新，请刷新后再编辑。' : productListNotice) }}</span>
         <button type="button" class="btn btn-secondary" :disabled="loading" @click="refreshProducts">重新读取</button>
       </div>
-      <div class="card">
+      <div class="card erp-list">
         <DataTable
           :columns="columns"
           :data="products"
@@ -543,3 +543,4 @@ onMounted(loadWordTemplateOptions);
   white-space: nowrap;
 }
 </style>
+<style scoped src="./erp-list-surfaces.css"></style>

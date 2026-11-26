@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -750,9 +751,41 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
             },
         )
         assert malformed.status_code == 200
-        assert malformed.json()["result"]["isError"] is True
-        assert malformed.json()["result"]["structuredContent"]["error_code"] == "invalid_arguments"
+        tool_error = malformed.json()["result"]
+        assert tool_error["isError"] is True
+        assert tool_error["structuredContent"] == {
+            "success": False,
+            "verified": False,
+            "status": "not_started",
+            "error_code": "invalid_arguments",
+            "message": "工具参数不满足已发布的能力契约",
+            "schema_violation": {"path": "$", "validator": "required", "missing": ["schema_digest"]},
+        }
+        assert json.loads(tool_error["content"][0]["text"]) == tool_error["structuredContent"]
+        assert "fixture" not in malformed.text and "tampered" not in malformed.text
         assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
+        action = {"tool_id": "customers", "action": "create"}
+        spec = setup.bridge.invoke(setup.grant.mcp_token, "capability_describe", action)["capability"]
+        repaired = client.post(
+            MCP_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "execute_action",
+                    "arguments": {
+                        **action,
+                        "call_id": "tampered",
+                        "params": {"unit_name": "fixture"},
+                        "schema_digest": spec["schema_digest"],
+                    },
+                },
+            },
+        ).json()["result"]["structuredContent"]
+        assert repaired["pending_approval"] is True and repaired["verified"] is False
+        assert len(setup.store.get(setup.run.run_id).metadata["calls"]) == 1
         result = client.post(
             MCP_PATH,
             headers=headers,
@@ -765,6 +798,61 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
         )
         assert result.status_code == 200, result.text
         assert result.json()["result"]["structuredContent"]["needs_user_input"] is True
+
+
+@pytest.mark.parametrize("allowed_actions", [["customers.query"], []])
+def test_mcp_advertises_only_live_run_actions_and_uniform_discovery(bridge_setup, allowed_actions):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from jsonschema import Draft202012Validator
+
+    from app.infrastructure.xiaox.mcp_server import MCP_PATH, router
+
+    setup = bridge_setup
+    run = AgentRun(user_id=setup.run.user_id, message="列出可用能力", status="running")
+    run.metadata["runtime_context"] = setup.actor.context
+    _bind_goal(run)
+    setup.store.repository.save(run)
+    grant = setup.store.create(run.run_id, allowed_actions=allowed_actions)
+    app = FastAPI()
+    app.include_router(router)
+    app.state.xiaox_binding_store = setup.store
+    app.state.xiaox_tool_bridge = XiaoxToolBridge(setup.store, run_id=run.run_id)
+    app.state.xiaox_run_id = run.run_id
+    headers = {
+        "Authorization": f"Bearer {grant.mcp_token}",
+        "Accept": "application/json, text/event-stream",
+    }
+    with TestClient(app) as client:
+        def rpc(method, params=None):
+            body = {"jsonrpc": "2.0", "id": 1, "method": method}
+            if params is not None:
+                body["params"] = params
+            response = client.post(MCP_PATH, headers=headers, json=body)
+            assert response.status_code == 200, response.text
+            return response.json()["result"]
+
+        def call(name, **arguments):
+            return rpc("tools/call", {"name": name, "arguments": arguments})["structuredContent"]
+
+        visible = {tool["name"]: tool["inputSchema"] for tool in rpc("tools/list")["tools"]}
+        for schema in visible.values():
+            Draft202012Validator.check_schema(schema)
+        found = call("capability_search", limit=1)
+        assert [f"{row['tool_id']}.{row['action']}" for row in found["capabilities"]] == allowed_actions
+        assert found["next_offset"] is None
+        if allowed_actions:
+            for name in ("capability_describe", "execute_action"):
+                assert visible[name]["properties"]["tool_id"]["enum"] == ["customers"]
+                assert visible[name]["properties"]["action"]["enum"] == ["query"]
+            assert call("capability_describe", tool_id="customers", action="query")["success"]
+        else:
+            assert {"capability_describe", "execute_action"}.isdisjoint(visible)
+        denied = call("capability_describe", tool_id="customers", action="create")
+        unknown = call("capability_describe", tool_id="fixture_missing", action="missing")
+        assert denied == unknown
+        assert denied["next_call"] == {"name": "capability_search", "arguments": {}}
+    assert setup.store.get(run.run_id).metadata["calls"] == {}
 
 
 def test_private_mcp_initialize_and_list_cannot_borrow_another_run_token(bridge_setup):

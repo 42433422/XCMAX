@@ -27,6 +27,18 @@
   gap: 10px;
 }
 
+.shipment-records-summary {
+  margin: 0 0 8px;
+  color: var(--xc-color-text-secondary);
+  font-size: var(--app-font-size-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.table-responsive-shipment-records {
+  border: 0;
+  box-shadow: var(--xc-shadow-sm);
+}
+
 .sr-select {
   min-width: 140px;
   padding: 8px 12px;

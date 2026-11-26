@@ -1,189 +1,98 @@
-/* 拆分自 ApprovalWorkspaceView.vue（原 <style scoped> 块逐字迁移，行为不变）；
-   入口与各子组件均以 <style scoped src="./approval-workspace.css"> 引用。 */
 .approval-workspace-view {
-  padding: 24px 28px 32px;
-  background: #f5f7fa;
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
+  padding: clamp(12px, 2vw, 24px) clamp(12px, 2.5vw, 28px) 32px;
+  background: var(--xc-color-page-bg);
 }
 
-.view-header {
+.approval-queue {
+  max-width: 1200px;
+  margin-inline: auto;
+  border-radius: var(--xc-radius-lg);
+  background: var(--xc-color-surface);
+  box-shadow: var(--xc-shadow-md);
+}
+
+.approval-queue-toolbar,
+.approval-queue-tabs,
+.approval-queue-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.approval-queue-toolbar {
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  column-gap: 12px;
+  padding-inline: 16px;
+  border-block-end: 1px solid var(--xc-color-border);
 }
 
-.view-header h2 {
-  font-size: 22px;
-  color: #1f2937;
-  margin: 0 0 6px 0;
+.approval-queue-tabs {
+  gap: 4px 12px;
 }
 
-.view-header .subtitle {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0;
-}
-
-.btn-toolbar {
+.approval-queue-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  background: #fff;
-  color: #4b5563;
-  font-size: 13px;
+  min-height: 48px;
+  padding: 0 8px;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: transparent;
+  color: var(--xc-color-text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-toolbar:hover:not(:disabled) {
-  border-color: #2563eb;
-  color: #2563eb;
-}
-
-.btn-toolbar:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-/* 统计卡片 */
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  background: white;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 16px 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  box-shadow: 0 1px 2px rgba(31, 41, 55, 0.04);
-}
-
-.stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.stat-card.pending .stat-icon {
-  background: #fef3c7;
-  color: #d97706;
-}
-
-.stat-card.initiated .stat-icon {
-  background: #dbeafe;
-  color: #2563eb;
-}
-
-.stat-card.approved .stat-icon {
-  background: #d1fae5;
-  color: #059669;
-}
-
-.stat-card.rejected .stat-icon {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.stat-info {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.1;
-  color: #1f2937;
-}
-
-.stat-label {
+  font: inherit;
   font-size: 13px;
-  color: #6b7280;
-  margin-top: 2px;
+  font-weight: 550;
+  white-space: nowrap;
 }
 
-/* 双栏工作区 */
-.workspace-columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  align-items: start;
+.approval-queue-tab:hover,
+.approval-queue-tab[data-state='active'] {
+  color: var(--xc-color-primary);
 }
 
-.workspace-columns.is-single {
-  grid-template-columns: minmax(0, 1fr);
+.approval-queue-tab[data-state='active'] {
+  border-block-end-color: currentColor;
+  font-weight: 650;
 }
 
-/* 区块 */
-.section {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background: white;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(31, 41, 55, 0.04);
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 18px;
-  margin-bottom: 0;
-  border-bottom: 1px solid #f0f2f5;
-}
-
-.section-header h3 {
-  display: inline-flex;
-  align-items: center;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0;
-}
-
-.section-count {
-  margin-left: 8px;
-  padding: 0 7px;
-  border-radius: 10px;
-  background: #eff6ff;
-  color: #2563eb;
+.approval-queue-count {
+  min-inline-size: 16px;
+  text-align: center;
   font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
+  font-variant-numeric: tabular-nums;
 }
 
-.section-actions {
+.approval-queue-actions {
+  gap: 2px;
+  padding-block: 6px;
+}
+
+.approval-queue-panel {
+  padding-inline: 16px;
+}
+
+.approval-list-pages {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
+  padding-block: 8px;
+  border-block-start: 1px solid var(--xc-color-border);
+  color: var(--xc-color-text-secondary);
+  font-size: 13px;
 }
-.approval-list-pages {
-  flex-wrap: wrap;
-  padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  margin-bottom: 16px;
+
+.approval-queue-tab:focus-visible,
+.approval-queue-panel:focus-visible,
+.request-title:focus-visible {
+  outline: 2px solid var(--xc-color-primary);
+  outline-offset: -2px;
 }
 
 .btn-link {
@@ -198,6 +107,10 @@
   padding: 4px 8px;
   border-radius: 4px;
   transition: background 0.15s;
+}
+
+.btn-link.queue-refresh {
+  color: var(--xc-color-text-secondary);
 }
 
 .btn-link:hover:not(:disabled) {
@@ -221,54 +134,6 @@
   color: #9ca3af;
 }
 
-.count-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  margin-left: 2px;
-  background: #fee2e2;
-  color: #dc2626;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.btn-link.btn-cleanup:disabled .count-badge {
-  background: #f3f4f6;
-  color: #9ca3af;
-}
-
-/* 请求列表 */
-.request-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 4px 10px 8px;
-}
-
-.workspace-columns:not(.is-single) .request-list {
-  max-height: 480px;
-  overflow-y: auto;
-}
-
-/* 双栏下宽度有限，当前节点与标题重复，交给完整列表展示 */
-.workspace-columns:not(.is-single) .request-current-node {
-  display: none;
-}
-
-.request-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.request-list::-webkit-scrollbar-thumb {
-  background: #dcdfe6;
-  border-radius: 3px;
-}
-
 .request-item {
   display: flex;
   justify-content: space-between;
@@ -276,8 +141,7 @@
   gap: 12px;
   padding: 14px 8px;
   border: none;
-  border-bottom: 1px solid #f2f4f7;
-  border-radius: 0;
+  border-bottom: 1px solid var(--app-border-subtle, #e5e7eb);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -287,8 +151,7 @@
 }
 
 .request-item:hover {
-  background: #f8fafc;
-  border-color: #f2f4f7;
+  background: color-mix(in srgb, var(--primary-color, #2563eb) 5%, transparent);
 }
 
 .request-left {
@@ -318,6 +181,13 @@
 }
 
 .request-title {
+  display: block;
+  max-inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
   font-size: 15px;
   font-weight: 500;
   color: #1f2937;
@@ -470,16 +340,22 @@
   color: #dc2626;
 }
 
-/* 空状态 */
+.queue-status,
 .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 132px;
+  margin: 0;
+  padding: 20px 8px;
+  color: var(--xc-color-text-secondary);
   text-align: center;
-  padding: 28px 20px;
-  color: #9ca3af;
 }
 
 .empty-state i {
-  font-size: 32px;
-  margin-bottom: 8px;
+  font-size: 18px;
+  color: var(--xc-color-muted);
 }
 
 /* 弹窗（结构由宿主 Modal.vue 提供，此处仅保留详情内容样式） */
@@ -800,17 +676,17 @@
   color: white;
 }
 
-@media (max-width: 1100px) {
-  .stats-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 720px) {
+  .approval-queue-toolbar,
+  .approval-queue-panel {
+    padding-inline: 10px;
   }
 
-  .workspace-columns {
-    grid-template-columns: minmax(0, 1fr);
+  .approval-queue-tabs {
+    column-gap: 2px;
   }
 
-  .workspace-columns:not(.is-single) .request-list {
-    max-height: none;
-    overflow-y: visible;
+  .request-current-node {
+    display: none;
   }
 }

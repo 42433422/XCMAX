@@ -110,11 +110,10 @@ describe('quickStartPageHighlights', () => {
     }
   })
 
-  it('workflow-employee-space highlights have head and desks entries', () => {
+  it('workflow-employee-space highlights the office', () => {
     const highlights = QUICK_START_PAGE_HIGHLIGHTS['workflow-employee-space']
-    expect(highlights).toHaveLength(2)
-    expect(highlights[0].idSuffix).toBe('head')
-    expect(highlights[1].idSuffix).toBe('desks')
+    expect(highlights).toHaveLength(1)
+    expect(highlights[0].idSuffix).toBe('desks')
   })
 
   it('settings highlights include model-payment and recharge entries', () => {
@@ -951,15 +950,12 @@ describe('tutorialOfficeImportDemo', () => {
   })
 
   describe('cleanupQuickStartImportDemo', () => {
-    it('clears stored paths and clicks new conversation button when present', async () => {
+    it('clears stored paths and requests a new conversation without a button', async () => {
       sessionStorage.clear()
       sessionStorage.setItem('xcagi_tutorial_office_upload_paths', JSON.stringify(['/a.xlsx']))
 
-      const btn = document.createElement('button')
-      btn.id = 'newConversationBtn'
-      const clickSpy = vi.fn()
-      btn.addEventListener('click', clickSpy)
-      document.body.appendChild(btn)
+      const newConversation = vi.fn()
+      window.addEventListener('xcagi:workspace-new-conversation', newConversation, { once: true })
 
       const fetchSpy = vi.fn().mockResolvedValue({ ok: true } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
@@ -970,7 +966,7 @@ describe('tutorialOfficeImportDemo', () => {
       })
 
       await cleanupQuickStartImportDemo()
-      expect(clickSpy).toHaveBeenCalled()
+      expect(newConversation).toHaveBeenCalledOnce()
       expect(sessionStorage.getItem('xcagi_tutorial_office_upload_paths')).toBeNull()
     })
 

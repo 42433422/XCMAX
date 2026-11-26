@@ -7,10 +7,13 @@ import logging
 import os
 import re
 import uuid
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from app.infrastructure.modstore_transport import safe_route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+if TYPE_CHECKING:
+    from app.application.agent_orchestrator.run_models import AgentRun
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,15 @@ class ConversationStore(Protocol):
         expected_revision: int | None = None,
     ) -> list[int]: ...
 
+    def settle_queued_reply(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        expected_revision: int,
+        assistant: dict[str, Any],
+    ) -> int | None: ...
+
 
 def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
     """开发机故障注入。未设置 XCAGI_HISTORY_FAULT_FILE 时原样返回。"""
@@ -96,6 +108,180 @@ def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _stopped_workbook_files(repository, run: AgentRun, request_key: str, turn_id: str) -> list[dict[str, Any]]:
+    """Observe the already verified child of the interrupted original queue turn."""
+    from app.application.agent_orchestrator.artifact_files import read_verified_run_file
+    from app.application.agent_orchestrator.verification_recovery import (
+        VerificationRecoveryError,
+        _stopped_queue_proof,
+    )
+    from app.application.agent_orchestrator.verification_workbook import is_workbook_write
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.domain.task_lifecycle.agent_runtime_results import verified_receipt_artifacts
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+    from app.infrastructure.xiaox.receipts import read_call_receipt
+
+    if run.status not in {"blocked", "failed"}:
+        return []
+    pending = run.metadata.get("_xiaox_queued_request") or {}
+    requests = run.metadata.get("runtime_requests") or {}
+    request = requests.get(request_key) or {}
+    worker_turn = "queue_" + canonical_digest([run.run_id, request_key])
+    worker = requests.get(canonical_digest({"turn_id": worker_turn, "owner": run.user_id})) or {}
+    generation = pending.get("generation")
+    if (
+        type(generation) is not int
+        or pending.get("state") != "queued"
+        or pending.get("request_key") != request_key
+        or pending.get("worker_turn_id") != worker_turn
+        or request.get("turn_id") != turn_id
+        or request.get("state") != "queued"
+        or worker.get("turn_id") != worker_turn
+        or worker.get("state") not in {"admitted", "interrupted", "returned"}
+    ):
+        return []
+
+    try:
+        _, execution = _stopped_queue_proof(repository, run)
+        if execution.state != "unknown":
+            return []
+        store = XiaoxBindingStore(repository)
+        binding = store.get(run.run_id)
+        ledger = binding.metadata
+        if (
+            binding.run.updated_at != run.updated_at
+            or ledger.get("generation") != generation + 1
+            or ledger.get("coordinator_active") is not False
+            or ledger.get("revoked") is not True
+            or str(_bound_actor(binding.context).id) != run.user_id
+        ):
+            return []
+        files = {}
+        for call in (ledger.get("calls") or {}).values():
+            if (
+                call.get("state") != "completed"
+                or call.get("generation") != ledger["generation"]
+                or call.get("isolated_artifact") is not True
+                or (call.get("tool_id"), call.get("action")) != ("employee", "execute")
+                or not is_workbook_write(call.get("params") or {})
+            ):
+                continue
+            receipt = read_call_receipt(store, binding, call)
+            if (receipt.get("verification") or {}).get("status") != "verified":
+                continue
+            for file in verified_receipt_artifacts([{**call, "receipt": receipt}]):
+                artifact = next(item for item in receipt["artifacts"] if item["artifact_id"] == file["artifact_id"])
+                read_verified_run_file(file["run_id"], artifact)
+                files[file["uri"]] = file
+        return list(files.values())
+    except (VerificationRecoveryError, XiaoxBindingError, OSError, ValueError):
+        return []
+
+
+def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any]) -> None:
+    """Project scoped inputs, completed replies and stopped-turn files into the history response."""
+    from app.application.ai_chat.dialogue_memory import conversation_key
+    from app.application.agent_orchestrator.run_models import RunContextScope
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.agent_runtime.chat import runtime_chat_files
+    from app.application.agent_runtime.chat_file_sources import released_chat_file_sources
+    from app.application.agent_runtime.conversation_attachments import original_conversation_uploads
+    from app.domain.shared_services.conversation_service import queued_chat_binding
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+    revision = context.get("_conversation_revision")
+    if type(revision) is not int or not context["tenant_id"]:
+        return
+    owner = str(context["local_user_id"])
+    scope = RunContextScope(str(context["tenant_id"]), context["mod_id"], context["session_id"], revision)
+    repository = get_agent_run_repository()
+    runs = {}
+    for row in page["messages"]:
+        if row["role"] not in {"user", "assistant"}:
+            continue
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        binding, summary, ui = (metadata.get(key) or {} for key in ("business_harness", "summary", "ui"))
+        if not all(isinstance(value, dict) for value in (binding, summary, ui)):
+            continue
+        # A persisted or client-supplied projection is never historical evidence.
+        if "fileSources" in ui:
+            del ui["fileSources"]
+            row["metadata"] = json.dumps({**metadata, "ui": ui}, ensure_ascii=False)
+        run_id, turn_id = binding.get("run_id"), binding.get("turn_id")
+        if (
+            binding.get("recall_bound") is not True
+            or binding.get("conversation_id") != context["session_id"]
+            or not isinstance(run_id, str) or not isinstance(turn_id, str)
+            or summary.get("run_id") != run_id or summary.get("turn_id") != turn_id
+        ):
+            continue
+        if row["role"] == "assistant" and (
+            (summary.get("status") == "queued" and ui.get("outputArtifacts"))
+            or summary.get("action") != "runtime_reply"
+            or summary.get("status") not in {"completed", "queued"}
+        ):
+            continue
+        if run_id not in runs:
+            runs[run_id] = repository.get(run_id)
+        run = runs[run_id]
+        if (
+            run is None or run.user_id != owner
+            or run.metadata.get("runtime_type") != "xiaox" or not scope.matches(run)
+        ):
+            continue
+        if row["role"] == "user":
+            if (run.metadata.get("runtime_context") or {}).get("turn_id") == turn_id:
+                uploads = original_conversation_uploads(run)
+                if uploads:
+                    files = [{"name": item.name, "reference": item.reference} for item in uploads]
+                    row["metadata"] = json.dumps(
+                        {**metadata, "ui": {**ui, "inputAttachments": files}}, ensure_ascii=False,
+                    )
+            continue
+        key = canonical_digest({"turn_id": turn_id, "owner": owner})
+        if summary.get("status") == "queued":
+            if (
+                queued_chat_binding(metadata) == (turn_id, run_id, conversation_key(context))
+                and (files := _stopped_workbook_files(repository, run, key, turn_id))
+            ):
+                row["content"] = "本轮已结束，原任务结果仍待核对。"
+                row["metadata"] = json.dumps({
+                    **metadata,
+                    "summary": {**summary, "status": "unknown", "success": False},
+                    "ui": {
+                        **ui,
+                        "workflowAction": "unknown",
+                        "execution": {"effect": "unknown", "outcome": "unknown"},
+                        "runtimeContinuation": {"runId": None, "status": "unknown", "sessionId": scope.session_id},
+                        "outputArtifacts": files,
+                    },
+                }, ensure_ascii=False)
+            continue
+        if run.status != "completed":
+            continue
+        request = (run.metadata.get("runtime_requests") or {}).get(key) or {}
+        result = request.get("result")
+        if (
+            request.get("state") == "returned" and request.get("turn_id") == turn_id
+            and isinstance(result, dict) and result.get("run_id") == run_id
+        ):
+            projected = {}
+            if not ui.get("outputArtifacts") and (files := runtime_chat_files(result)):
+                projected["outputArtifacts"] = files
+            if row.get("content") == result.get("output") and (
+                sources := released_chat_file_sources(run, result)
+            ):
+                projected["fileSources"] = sources
+            if projected:
+                row["metadata"] = json.dumps({**metadata, "ui": {**ui, **projected}}, ensure_ascii=False)
+
+
 def persist_chat_turn(
     user_id: str,
     message: str,
@@ -103,6 +289,7 @@ def persist_chat_turn(
     response_data: dict[str, Any],
     *,
     store: ConversationStore | None = None,
+    _settle_queued: bool = False,
 ) -> dict[str, Any]:
     """
     在请求携带 session_id / conversation_id 时，将会话与工具结果摘要写入 ai_conversations，
@@ -217,8 +404,15 @@ def persist_chat_turn(
         "nodeResults": inner_payload.get("node_results"),
         "approvalCard": inner_payload.get("approval_card"),
         "attachments": inner_payload.get("attachments"),
+        "outputArtifacts": inner.get("output_artifacts")
+        if response_data.get("runtime") == "xiaox" and status == "completed" and summary["success"]
+        else None,
         "businessResult": extract_payload_business_result(response_data),
     }
+    if status == "unknown":
+        ui_payload["execution"] = {"effect": "unknown", "outcome": "unknown"}
+    elif response_data.get("execution_started") is False:
+        ui_payload["execution"] = {"committed": False, "effect": "none", "outcome": "not_executed"}
     continuation = response_data.get("runtime_context_update")
     if response_data.get("runtime") == "xiaox" and isinstance(continuation, dict):
         ui_payload["runtimeContinuation"] = {
@@ -240,6 +434,9 @@ def persist_chat_turn(
     from app.application.ai_chat.dialogue_memory import conversation_key
 
     harness_metadata["conversation_key"] = conversation_key(context)
+    queued = response_data.get("runtime") == "xiaox" and status == "queued"
+    if queued or _settle_queued:
+        harness_metadata["queued_reply"] = True
     turn_id = str(context.get("turn_id") or "").strip()
     user_fingerprint = uuid.uuid5(
         uuid.NAMESPACE_URL,
@@ -290,6 +487,21 @@ def persist_chat_turn(
         from app.services import get_conversation_service
 
         store = get_conversation_service()
+    assistant = {
+        "role": "assistant",
+        "content": reply,
+        "intent": intent or "assistant_reply",
+        "metadata": meta_assistant,
+        "idempotency_key": assistant_idempotency_key,
+    }
+    if _settle_queued:
+        message_id = store.settle_queued_reply(
+            session_id=session_id,
+            user_id=history_user_id,
+            expected_revision=context["_conversation_revision"],
+            assistant=assistant,
+        )
+        return {"message_ids": [message_id] if message_id is not None else []}
     message_ids = store.save_turn(
         session_id=session_id,
         user_id=history_user_id,
@@ -302,15 +514,11 @@ def persist_chat_turn(
                 "metadata": meta_user,
                 "idempotency_key": user_idempotency_key,
             },
-            {
-                "role": "assistant",
-                "content": reply,
-                "intent": intent or "assistant_reply",
-                "metadata": meta_assistant,
-                "idempotency_key": assistant_idempotency_key,
-            },
+            assistant,
         ],
     )
+    if queued and summary.get("run_id") and turn_id:
+        reconcile_queued_chat_reply(context, turn_id, str(summary["run_id"]))
     from app.application.ai_chat.active_conversation import remember_active_conversation
 
     try:
@@ -326,6 +534,76 @@ def persist_chat_turn(
         "revision": context.get("_conversation_revision", 0),
         "turn_id": turn_id,
     }
+
+
+def reconcile_queued_chat_reply(
+    context: dict[str, Any],
+    turn_id: str,
+    run_id: str,
+    *,
+    run: AgentRun | None = None,
+    publish: bool = True,
+) -> bool:
+    """Project the committed outcome of the original queue turn into its chat message."""
+    from app.application.agent_orchestrator.run_models import RunContextScope
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.application.agent_runtime.gateway import public_runtime_result
+    from app.application.task_conversation_store import durable_user_id
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    owner = durable_user_id(context.get("local_user_id") or context.get("actor_id"))
+    tenant_id = context.get("tenant_id")
+    tenant = durable_user_id(tenant_id)
+    mod = str(context.get("mod_id") or "")
+    session = str(context.get("conversation_id") or context.get("session_id") or "")
+    revision = context.get("_conversation_revision")
+    if not owner or (tenant_id and tenant is None) or not session or type(revision) is not int:
+        return False
+    try:
+        run = run if run is not None else get_agent_run_repository().get(run_id)
+        if (
+            run is None
+            or run.run_id != run_id
+            or run.user_id != str(owner)
+            or run.metadata.get("runtime_type") != "xiaox"
+        ):
+            return False
+        saved_tenant = (run.metadata.get("runtime_context") or {}).get("tenant_id")
+        if tenant is None and saved_tenant not in (None, ""):
+            return False
+        if not RunContextScope(str(tenant or saved_tenant), mod, session, revision).matches(run):
+            return False
+        key = canonical_digest({"turn_id": turn_id, "owner": run.user_id})
+        receipt = (run.metadata.get("runtime_requests") or {}).get(key) or {}
+        if receipt.get("turn_id") != turn_id:
+            return False
+        if receipt.get("state") == "returned":
+            result = receipt.get("result")
+        else:
+            from app.infrastructure.xiaox.queued_runtime import recover_interrupted_queue_request
+
+            result = recover_interrupted_queue_request(get_agent_run_repository(), run, key)
+        if not publish or not isinstance(result, dict) or result.get("run_id") != run_id:
+            return False
+        payload = runtime_chat_payload(public_runtime_result(result), conversation_id=session)
+        token = set_request_active_mod_id(mod)
+        try:
+            with tenant_scope(tenant):
+                ack = persist_chat_turn(
+                    str(owner), "", {**context, "turn_id": turn_id}, payload, _settle_queued=True
+                )
+                return bool(ack["message_ids"])
+        finally:
+            reset_request_active_mod_id(token)
+    except ConversationRevisionError:
+        return False
+    except RECOVERABLE_ERRORS:
+        logger.warning("queued chat reply could not update its original receipt", exc_info=True)
+        return False
 
 
 def retry_stored_chat_turn(

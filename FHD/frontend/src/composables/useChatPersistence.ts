@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
+import { localChatCacheRows, LOCAL_CHAT_CACHE_VERSION } from './useChatMessagePersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import {
   CHAT_MESSAGES_STORAGE_PREFIX,
@@ -9,7 +10,9 @@ import {
   buildChatScopedKey,
   extractSessionIdForActiveMod,
   isChatOwnerUnresolved,
+  resolveChatStorageScope,
 } from '@/utils/chatStorageKeys'
+import { isDurableChatScope } from '@/utils/chatSessionRestore'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
 import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
@@ -299,7 +302,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       if (!raw) return []
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) return []
-      return parsed
+      return localChatCacheRows(parsed, resolveChatStorageScope(), sid)
         .map((msg: unknown) => {
           const m = msg as Record<string, unknown>
           return {
@@ -322,6 +325,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       const raw = localStorage.getItem(buildChatSessionMetaKey(sid, getActiveModId()))
       if (!raw) return null
       const parsed = JSON.parse(raw)
+      if (isDurableChatScope(resolveChatStorageScope()) && parsed?.local_cache_version !== LOCAL_CHAT_CACHE_VERSION) return null
       return parsed && typeof parsed === 'object' ? parsed : null
     } catch {
       return null
@@ -353,8 +357,8 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       if (!plain) return false
       return !isWelcomeMessage(msg)
     })
-    if (!meaningful.length) return null
     const meta = readLocalSessionMeta(sid)
+    if (!meaningful.length && !(meta?.cache_truncated === true && Number(meta.message_count) > 0)) return null
     const title = deriveLocalSessionTitle(cachedMessages, String(meta?.title || ''))
     const count = Number(meta?.message_count ?? meaningful.length)
     const updatedAt = String(meta?.updated_at || '').trim() || new Date().toISOString()
@@ -362,6 +366,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       session_id: sid,
       title,
       message_count: Number.isFinite(count) && count > 0 ? count : meaningful.length,
+      server_message_count: meta?.server_message_count,
       last_message_at: updatedAt,
       is_local_only: true,
     }
@@ -405,7 +410,9 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       byId.set(sid, {
         ...(prev || {}),
         ...session,
-        message_count: Math.max(Number(prev?.message_count || 0), Number(session.message_count || 0)),
+        message_count: prev?.server_message_count === session.message_count
+          ? prev?.message_count : isDurableChatScope(resolveChatStorageScope()) ? session.message_count
+            : Math.max(Number(prev?.message_count || 0), Number(session.message_count || 0)),
         is_local_only: false,
       })
     })

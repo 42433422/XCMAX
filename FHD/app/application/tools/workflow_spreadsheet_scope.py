@@ -7,7 +7,7 @@ import hashlib
 import os
 import re
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
@@ -26,7 +26,11 @@ from app.application.agent_orchestrator.artifact_files import (
 )
 from app.application.elt.service import get_elt_service
 from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
-from app.application.shipment_excel_elt_security import open_elt_input_file, resolve_elt_path
+from app.application.shipment_excel_elt_security import (
+    _validated_path_component,
+    open_elt_input_file,
+    resolve_elt_path,
+)
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.domain.context.session_excel_context import excel_analysis_from_runtime
@@ -251,9 +255,13 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
 
 @contextmanager
 def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[Path]:
+    from app.application.agent_runtime.conversation_attachments import resolve_conversation_upload
+
     actor = _bound_actor(context)
-    prior = _run_file(file_path, context)
-    if prior is None:
+    file_path = str(file_path or "").strip()
+    reference = resolve_conversation_upload(file_path, context)
+    prior = _run_file(file_path, context) if reference is None else None
+    if prior is None and reference is None:
         from app.infrastructure.xiaox.receipts import read_action_artifact
 
         prior = read_action_artifact(file_path, context)
@@ -261,9 +269,17 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
         content, suffix = prior
     else:
         with get_db() as db:
-            selected = _resolve_owned_upload(db, str(file_path or "").strip(), context, actor.id)
+            selected = _resolve_owned_upload(
+                db, reference.upload_id if reference else file_path, context, actor.id
+            )
             if selected is None:
                 raise PermissionError("文件不属于当前账号或当前任务，请明确选择 upload_id")
+            if reference and (
+                (selected.id, selected.sha256) != (reference.upload_id, reference.sha256)
+                or selected.expires_at is None
+                or selected.expires_at.replace(tzinfo=None) <= utc_now_naive()
+            ):
+                raise PermissionError("原附件已过期或内容已变化，请重新上传原件")
             upload = get_elt_service()._owned_upload(db, selected.id, actor.id)
             suffix = Path(upload.file_name).suffix.lower()
             with open_elt_input_file(upload.storage_path, owner_user_id=actor.id) as source:
@@ -281,18 +297,20 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
 
 @contextmanager
 def office_reader_input(
-    employee_id: str, payload: dict[str, Any], context: dict[str, Any]
+    employee_id: str, payload: dict[str, Any], context: dict[str, Any], *, ephemeral: bool = False
 ) -> Iterator[dict[str, Any]]:
     aliases = ("upload_id", "file_path", "path", "excel_path")
     source = next((str(payload[key]).strip() for key in aliases if payload.get(key)), "")
     with workflow_file_snapshot(source, context) as snapshot:
         if EMPLOYEE_BY_SUFFIX.get(snapshot.suffix) != employee_id:
             raise PermissionError("文件类型与读取员工不匹配")
-        workspace = mkdtemp(prefix="employee-read-", dir=_staging_root())
+        factory = TemporaryDirectory if ephemeral else mkdtemp
+        directory = factory(prefix="employee-read-", dir=_staging_root())
         options: dict[str, Any] = {
             key: payload[key] for key in ("action", "max_row_cap", "max_col_cap") if key in payload
         }
-        yield {**options, "file_path": str(snapshot), "workspace_root": workspace}
+        with nullcontext(directory) if isinstance(directory, str) else directory as workspace:
+            yield {**options, "file_path": str(snapshot), "workspace_root": workspace}
 
 
 @contextmanager
@@ -300,7 +318,8 @@ def workbook_writer_input(payload: dict[str, Any], context: dict[str, Any]) -> I
     """A signed worker only sees an owned template and a private output directory."""
     from jsonschema import Draft202012Validator
 
-    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT, WORKBOOK_WRITE_REVIEW
 
     original = {
         key: value
@@ -310,31 +329,61 @@ def workbook_writer_input(payload: dict[str, Any], context: dict[str, Any]) -> I
     if not Draft202012Validator(WORKBOOK_WRITE_INPUT).is_valid(original):
         raise PermissionError("模板写入需要明确 template_path 与 plan；不接受工作区或输出路径覆盖")
     with workflow_file_snapshot(original["template_path"], context) as template:
-        if template.suffix.lower() not in {".xlsx", ".xlsm"}:
+        if context.get("source") == "xiaox_runtime":
+            review = context.get(WORKBOOK_WRITE_REVIEW)
+            if not isinstance(review, dict) or (
+                hashlib.sha256(template.read_bytes()).hexdigest() != review.get("template_sha256")
+                or canonical_digest(original["plan"]) != review.get("plan_sha256")
+            ):
+                raise PermissionError("原工作簿或执行计划与写入预检不一致")
+            approval = context.get("_tool_approval_scope") or {}
+            if review.get("requires_manual_approval") and (
+                approval.get("tool_id"), approval.get("action")
+            ) != ("employee", "execute"):
+                raise PermissionError("原始数据改动缺少当前操作的人工审批")
+        suffix = template.suffix.lower()
+        if suffix not in {".xlsx", ".xlsm"}:
             raise PermissionError("模板必须是当前账号的 xlsx/xlsm 工作簿")
+        if name := original.get("output_name"):
+            try:
+                original["output_name"] = _validated_path_component(name)
+                if len(name.encode()) > 255 or Path(name).suffix.lower() != suffix:
+                    raise ValueError("invalid workbook download name or suffix")
+            except ValueError as exc:
+                raise PermissionError("下载文件名无效，须使用与模板同类的扩展名") from exc
         with TemporaryDirectory(prefix="workbook-write-", dir=_staging_root()) as directory:
             yield {
                 **copy.deepcopy(original),
                 "template_path": str(template),
                 "workspace_root": directory,
-                "output_relpath": "filled" + template.suffix.lower(),
+                "output_relpath": "filled" + suffix,
                 "strict_protected": True,
             }
 
 
-def publish_written_workbook(result: dict, context: dict, workspace: str) -> dict:
+def publish_workbook_output(
+    employee_id: str, result: dict, context: dict, workspace: str, *, output_name: str | None = None
+) -> dict:
     """Publish the real worker output before the private workspace is removed."""
-    from app.domain.workbook_write_contract import WORKBOOK_WRITER
+    from app.domain.workbook_write_contract import WORKBOOK_READER
     from app.mod_sdk.employee_tool_registry import office_output_paths
 
-    paths = office_output_paths(WORKBOOK_WRITER, result)
+    paths = office_output_paths(employee_id, result)
     if len(paths) != 1:
-        raise PermissionError("模板写入没有唯一实际工作簿产物")
+        raise PermissionError("工作簿员工没有唯一实际产物")
     path = resolve_elt_path(paths[0], workspace_root=workspace)
-    if path.suffix.lower() not in {".xlsx", ".xlsm"}:
-        raise PermissionError("模板写入产物类型无效")
+    suffix = path.suffix.lower()
+    reader = employee_id == WORKBOOK_READER
+    if (
+        not path.is_relative_to(Path(workspace).resolve())
+        or suffix not in ({".json"} if reader else {".xlsx", ".xlsm"})
+        or (output_name and Path(output_name).suffix.lower() != suffix)
+    ):
+        raise PermissionError("工作簿员工产物路径或类型无效")
     with open_elt_input_file(path, workspace_root=workspace) as source:
-        receipt = store_scoped_run_file(source.read(), name=path.name, context=context)
+        receipt = store_scoped_run_file(
+            source.read(), name=output_name or path.name, context=context
+        )
     # Do not expose the private staging paths or claim formula recalculation.
     return {
         **{
@@ -354,7 +403,9 @@ def publish_written_workbook(result: dict, context: dict, workspace: str) -> dic
                     "output": {
                         "ok": True,
                         "items": [{"output_path": receipt["uri"]}],
-                        "summary": "工作簿已写出，等待独立 QC；公式按文本保存，未进行数值重算。",
+                        "summary": "已提取工作簿内容。"
+                        if reader
+                        else "工作簿已写出，等待独立 QC；公式按文本保存，未进行数值重算。",
                     },
                 }
             ],

@@ -4,9 +4,31 @@ import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { restoreRuntimeContinuation } from '@/utils/chatRuntimeContinuation'
+import { isDurableChatScope } from '@/utils/chatSessionRestore'
+import { asRecord, asString } from '@/utils/typeGuards'
 
 export const CHAT_HISTORY_PAGE_SIZE = 80
 const CONFIRMED_CACHE_CHARS = 256 * 1024 // Serialized UTF-16 code units, excluding unconfirmed rows.
+export const LOCAL_CHAT_CACHE_VERSION = 2
+
+/** A stored server receipt is a copy of history, not an unsynchronized local message. */
+export function isServerHistoryCopy(value: unknown): boolean {
+  const row = asRecord(value), persistence = asRecord(row.persistence)
+  return persistence.status === 'saved' || asString(persistence.id).startsWith('server:')
+    || typeof row.serverMessageId === 'number' && Number.isSafeInteger(row.serverMessageId) && row.serverMessageId > 0
+}
+
+export function localChatCacheRows<T>(rows: T[], scope: string, sessionId: string): T[] {
+  if (!isDurableChatScope(scope)) return rows
+  // The latest same-session runtime wait is a continuation hint, separate from ordinary history.
+  const latestReply = [...rows].reverse().find(value => {
+    const row = asRecord(value)
+    return row.role === 'ai' && row.streamingShell !== true
+  })
+  const continuation = restoreRuntimeContinuation(asRecord(latestReply).runtimeContinuation)
+  const activeReply = continuation?.sessionId === sessionId && continuation.runId ? latestReply : undefined
+  return rows.filter(row => row === activeReply || !isServerHistoryCopy(row))
+}
 
 /** Keep one server page locally; pending/legacy/live rows remain complete regardless of budget. */
 export function boundedChatMessageCache(messages: UiChatMessage[]): UiChatMessage[] {
@@ -133,11 +155,12 @@ export function useChatMessagePersistence(deps: {
     if (!visible.trim()) return
     const sid = targetSessionId || deps.sessionId.value
     const list = deps.read(sid)
-    const matching = list.filter(item => item.role === role && deps.plainText(item.content) === deps.plainText(deps.html(visible))).reverse()
+    const matching = list.filter(item => item.role === role && (!extras?.turnId || item.turnId === extras.turnId)
+      && deps.plainText(item.content) === deps.plainText(deps.html(visible))).reverse()
     let message = matching.find(item => !item.persistence?.request && item.persistence?.status !== 'saved')
       || matching.find(item => item.persistence?.status === 'failed' || item.persistence?.status === 'saving')
     if (!message) {
-      message = { role, content: deps.html(visible), time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+      message = { role, content: deps.html(visible), turnId: extras?.turnId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
       list.push(message)
     }
     const continuation = role === 'ai' ? restoreRuntimeContinuation(extras?.runtimeContinuation) : undefined

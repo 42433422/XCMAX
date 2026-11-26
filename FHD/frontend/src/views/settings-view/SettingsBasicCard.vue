@@ -1,10 +1,10 @@
 <template>
-  <details class="settings-card" data-tutorial-id="settings-basic">
+  <details class="settings-card" :data-tutorial-id="`settings-${BASIC_SETTINGS_ENTRY.id}`">
     <summary class="settings-row">
       <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
         <img class="settings-row__icon-art" :src="basicArtSrc" alt="" />
       </span>
-      <span class="settings-row__label">{{ $t('settings.basicSettings') }}</span>
+      <span class="settings-row__label">{{ $t(BASIC_SETTINGS_ENTRY.labelKey) }}</span>
       <span class="settings-row__meta">{{ basicSettingsSummary }}</span>
       <span class="settings-row__arrow" aria-hidden="true"></span>
     </summary>
@@ -176,12 +176,12 @@
         </p>
       </div>
 
-      <details class="settings-card settings-card--nested" data-tutorial-id="settings-mobile-pairing" open>
+      <details class="settings-card settings-card--nested" :data-tutorial-id="`settings-${SETTINGS_ENTRIES.mobile.id}`" open>
         <summary class="settings-row settings-row--nested">
           <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
             <img class="settings-row__icon-art" :src="mobilePairingArtSrc" alt="" />
           </span>
-          <span class="settings-row__label">{{ $t('settings.mobilePairing') }}</span>
+          <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.mobile.labelKey) }}</span>
           <span class="settings-row__meta">{{ $t('settings.mobilePairingMeta') }}</span>
           <span class="settings-row__arrow" aria-hidden="true"></span>
         </summary>
@@ -190,12 +190,12 @@
         </div>
       </details>
 
-      <details v-if="!clientModsUiOff" class="settings-card settings-card--nested" data-tutorial-id="settings-extensions">
+      <details v-if="!clientModsUiOff" class="settings-card settings-card--nested" :data-tutorial-id="`settings-${SETTINGS_ENTRIES.extensions.id}`">
         <summary class="settings-row settings-row--nested">
           <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
             <img class="settings-row__icon-art" :src="extensionsArtSrc" alt="" />
           </span>
-          <span class="settings-row__label">{{ $t('settings.extensions') }}</span>
+          <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.extensions.labelKey) }}</span>
           <span class="settings-row__meta">{{ modSettingsFoldMeta }}</span>
           <span class="settings-row__arrow" aria-hidden="true"></span>
         </summary>
@@ -311,6 +311,7 @@
 </template>
 
 <script setup lang="ts">
+import { BASIC_SETTINGS_ENTRY, SETTINGS_ENTRIES } from './settingsNavigation'
 import type { DeploymentModeId } from '@/constants/deploymentModes.generated'
 import type { ModInfo } from '@/types/modInfo'
 import { isProtectedClientModId } from '@/constants/protectedMods'

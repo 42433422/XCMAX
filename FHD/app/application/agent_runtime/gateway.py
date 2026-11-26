@@ -184,6 +184,10 @@ def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "runtime_type",
     ):
         context.pop(key, None)
+    if "desktop_navigation" in context:
+        from app.infrastructure.xiaox.tools import desktop_navigation_items
+
+        context["desktop_navigation"] = desktop_navigation_items(context["desktop_navigation"])
     return context, owner
 
 
@@ -295,7 +299,15 @@ def _insert_parent(
     return repository.get(run.run_id) or run, True
 
 
-def _duplicate_result(run: AgentRun, request: dict[str, Any]) -> dict[str, Any]:
+def _duplicate_result(
+    run: AgentRun, request: dict[str, Any], repository: SQLAlchemyAgentRunRepository
+) -> dict[str, Any]:
+    if request.get("state") == "queued":
+        from app.infrastructure.xiaox.queued_runtime import recover_interrupted_queue_request
+
+        key = canonical_digest({"turn_id": request.get("turn_id"), "owner": run.user_id})
+        if result := recover_interrupted_queue_request(repository, run, key):
+            return {**public_runtime_result(result), "deduplicated": True}
     if isinstance(request.get("result"), dict):
         return {**public_runtime_result(request["result"]), "deduplicated": True}
     result = _failure(
@@ -413,6 +425,7 @@ async def run_runtime_task_async(
             CONTEXT_KEY,
             METADATA_KEY,
             normalize_mode,
+            requests_plan_document,
         )
 
         mode = normalize_mode(context.get(CONTEXT_KEY))
@@ -551,7 +564,7 @@ async def run_runtime_task_async(
             if request is not None:
                 if request.get("digest") != digest:
                     raise XiaoxBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
-                return _duplicate_result(parent, request)
+                return _duplicate_result(parent, request, repository)
             if not is_resume:
                 raise XiaoxBindingError("request_conflict", "原运行任务缺少已绑定的请求标识")
             if parent.status != "blocked":
@@ -613,6 +626,11 @@ async def run_runtime_task_async(
                 runtime_gate_required=gate is not None,
                 runtime_instruction_digest=instruction_digest,
                 runtime_completion_mode=completion_mode,
+                **(
+                    {"runtime_requested_deliverable": "action_plan", "plan_delivery_version": 1}
+                    if mode == "plan" and requests_plan_document(task)
+                    else {}
+                ),
                 **{METADATA_KEY: mode},
                 runtime_allowed_actions=actions,
                 _xiaox_system_prompt=system_prompt,
@@ -670,7 +688,7 @@ async def run_runtime_task_async(
         if request is not None and request.get("digest") != digest:
             raise XiaoxBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
         if request is not None and not admitted:
-            return _duplicate_result(parent, request)
+            return _duplicate_result(parent, request, repository)
         if start_paused:
             return dict(public_runtime_result(parent.final_output["xiaox_result"]))
         if start_queued and not is_resume:
@@ -730,7 +748,7 @@ async def run_runtime_task_async(
             claimed = store.update(resolved_id, claim)
             if not admitted:
                 return _duplicate_result(
-                    claimed.run, claimed.run.metadata["runtime_requests"][request_key]
+                    claimed.run, claimed.run.metadata["runtime_requests"][request_key], repository
                 )
         from fastapi import FastAPI
 

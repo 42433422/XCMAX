@@ -1,10 +1,12 @@
 import type { Ref } from 'vue'
-import { chatPayloadFromRun, extractAgentRunId, waitForAgentRunTerminal, type useAgentRunEventSync } from '../useAgentRunEvents'
+import { extractAgentRunId, waitForAgentRunTerminal, type useAgentRunEventSync } from '../useAgentRunEvents'
 import type { useChatExcelContext } from '../useChatExcelContext'
-import type { useChatMessages } from '../useChatMessages'
+import { chatMessageExtrasFromServerRow, type useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
 import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
+import { readRuntimeOutputDownloads } from '@/utils/agentArtifactDownloads'
+import { readRuntimeFileSources } from '@/utils/chatFileSources'
 import { stepsFromAiParts, isDocumentTemplateChange } from '@/utils/agentStepChain'
 import type { ChatConversationStatus, useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
@@ -126,6 +128,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const businessResult = readPlannerBusinessResult(payload)
     const runtimeContinuation = runtimeContinuationFromPayload(payload)
     const approvalCard = runtimeContinuation ? parseApprovalCardFromPayload(payload) : null
+    const files = readRuntimeOutputDownloads(payload)
+    const sources = readRuntimeFileSources(payload)
     const receipt = asRecord(payload.history_persistence)
     const receiptIds = asArray(receipt.message_ids)
     const extras: UiChatMessageExtras = {
@@ -136,6 +140,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       ...(businessResult ? { businessResult } : {}),
       ...(runtimeContinuation ? { runtimeContinuation } : {}),
       ...(approvalCard ? { approvalCard } : {}),
+      ...(files.length ? { outputArtifacts: files } : {}),
+      ...(sources.length ? { fileSources: sources } : {}),
     }
     if (receipt.status === 'saved' && receiptIds.length) {
       const turnId = String(receipt.turn_id || payload.turn_id || '')
@@ -246,49 +252,58 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const primaryText = remoteMessages[0] || ''
     /**
      * Follow one durable queued run and publish its terminal reply once.
-     * Reads persisted events only: a dropped or refreshed observer never
+     * Reads the durable task and conversation: a dropped observer never
      * re-submits the turn or creates a second run.
      */
     const followQueuedRun = async (
       runId: string,
       target?: UiChatMessage,
     ): Promise<void> => {
-      if (!runId) return
+      const { turnId, sessionId } = requestScope
+      if (!runId || !turnId || !sessionId) return
       const run = await waitForAgentRunTerminal(runId, () => round.isActive())
-      if (!round.isActive()) return
-      await syncAgentRunFromPayload(
-        { run_id: runId, agent_run_id: runId },
-        primaryText,
-        () => round.isActive(),
-      ).catch(() => undefined)
       if (!round.isActive() || !run) return
-      const payload = chatPayloadFromRun(run)
-      if (!payload) return
-      const typed = asPlannerPayload(payload)
-      const text = String(typed.response || typed.message || '').trim()
+      const receiptRead = chatApi.getConversation(sessionId, { turn_id: turnId }).catch(() => undefined)
+      const traceSync = syncAgentRunFromPayload({ run_id: runId }, primaryText, round.isActive).catch(() => undefined)
+      const history = asRecord(await receiptRead)
+      if (!round.isActive() || history.success !== true) return
+      const receipt = asRecord(history.turn_receipt || history.active_turn)
+      if (receipt.turn_id !== turnId || receipt.run_id !== runId) return
+      const row = typeof receipt.message_id === 'number'
+        ? asArray(history.messages).map(asRecord).find(message => message.id === receipt.message_id && message.role === 'assistant')
+        : undefined
+      const needsReview = !row && receipt.durable === true && receipt.receipt_kind === 'run'
+        && receipt.status === 'unknown' && receipt.requires_reconciliation === true
+      const text = asString(needsReview ? receipt.message : row?.content)
       if (!text) return
-      const extras = responseExtras(typed, typed.success === false)
+      const status = asString(receipt.status)
+      const extras: UiChatMessageExtras = {
+        ...(row ? chatMessageExtrasFromServerRow({ ...row, durable: history.durable === true }) : {}),
+        turnId,
+        workflowAction: status,
+      }
       let index = target ? messages.value.indexOf(target) : -1
       if (index < 0) {
-        for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-          if (messages.value[i]?.role === 'ai' && messages.value[i]?.turnId === requestScope.turnId) {
-            index = i
-            break
-          }
-        }
+        index = messages.value.findIndex(message => message.role === 'ai' && message.turnId === turnId)
       }
       // A replayed stream may hand back the same terminal state; publish once.
-      if (index >= 0 && messages.value[index]?.workflowAction === 'completed') return
+      if (index >= 0 && (messages.value[index]?.workflowAction === 'completed'
+        || needsReview && messages.value[index]?.workflowAction !== 'queued')) return
       if (index >= 0) {
         applyPlainTextToMessageIndex(index, text, extras)
-        delete messages.value[index]?.streamingShell
-      } else {
+        if (!extras.runtimeContinuation) delete messages.value[index].runtimeContinuation
+        delete messages.value[index].toolProgressLabel
+      } else if (row) {
         await addRoundMessage(text, extras)
+      } else {
+        return
       }
-      attachAgentRunTraceToLastAiMessage(runId)
-      attachBusinessResultToLastAiMessage(typed)
-      attachApprovalCardToLastAiMessage(typed)
-      await saveMessage('ai', text, requestScope.sessionId, extras)
+      round.setStatus(conversationStatus(asPlannerPayload({
+        runtime: 'xiaox', success: status === 'completed', execution_state: status,
+        requires_reconciliation: receipt.requires_reconciliation,
+      })))
+      await traceSync
+      if (round.isActive()) attachAgentRunTraceToLastAiMessage(runId)
     }
     const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, requestScope.sessionId))
     const aiModBrief = !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''

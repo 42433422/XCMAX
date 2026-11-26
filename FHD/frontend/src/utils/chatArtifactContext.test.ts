@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  addChatArtifactIds,
+  addChatArtifacts,
+  captureChatArtifacts,
   clearChatArtifactIds,
   listChatArtifactIds,
-  markChatArtifactsConsumed,
   removeChatArtifactId,
-  takeChatArtifactIds,
   uploadChatArtifacts,
   uploadChatArtifactsDetailed,
 } from './chatArtifactContext'
@@ -25,7 +24,7 @@ describe('chatArtifactContext', () => {
   })
 
   it('收集去重后的工件 id，发送成功后清空', () => {
-    addChatArtifactIds([' a1 ', 'a1', '', 'a2'])
+    addChatArtifacts([' a1 ', 'a1', '', 'a2'].map(id => ({ id })))
     expect(listChatArtifactIds()).toEqual(['a1', 'a2'])
     clearChatArtifactIds()
     expect(listChatArtifactIds()).toEqual([])
@@ -56,51 +55,39 @@ describe('chatArtifactContext', () => {
     await expect(uploadChatArtifacts([])).resolves.toEqual([])
   })
 
-  it('详细上传返回芯片展示名，缺名时回退到文件名', async () => {
+  it('保留服务器返回的上传标识和对应的芯片展示名', async () => {
     apiFetch.mockResolvedValueOnce(jsonResponse({
-      results: [{ status: 'ok', artifact: { id: 'art-1', name: '销售明细.xlsx' } }],
+      results: [
+        { status: 'skipped', name: '~$a.xlsx' },
+        { status: 'ok', artifact: { id: 'art-1', elt_upload_id: 'upload-1' } },
+      ],
     }))
 
     const rows = await uploadChatArtifactsDetailed([
-      new File(['x'], 'a.xlsx'),
-      new File(['y'], 'b.xlsx'),
+      new File(['x'], '~$a.xlsx'), new File(['y'], '销售明细.xlsx'),
     ])
 
-    expect(rows).toEqual([{ id: 'art-1', name: '销售明细.xlsx' }])
-    expect(listChatArtifactIds()).toEqual(['art-1'])
+    expect(rows).toEqual([{ id: 'art-1', name: '销售明细.xlsx', uploadId: 'upload-1' }])
+    expect(captureChatArtifacts()).toMatchObject({ ids: ['art-1'], uploadIds: ['upload-1'] })
   })
 
   it('移除芯片时同步移除待发送工件 id', () => {
-    addChatArtifactIds(['a1', 'a2'])
+    addChatArtifacts([{ id: 'a1', uploadId: 'upload-1' }, { id: 'a2', uploadId: 'upload-2' }])
     removeChatArtifactId(' a1 ')
     removeChatArtifactId('')
-    expect(listChatArtifactIds()).toEqual(['a2'])
+    expect(captureChatArtifacts()).toMatchObject({ ids: ['a2'], uploadIds: ['upload-2'] })
   })
 
   it('上一轮已发出后重新上传，只保留本轮文件', () => {
-    addChatArtifactIds(['old-1', 'old-2'])
-    takeChatArtifactIds()
-    markChatArtifactsConsumed()
-
-    addChatArtifactIds(['new-1', 'new-2', 'new-3'])
-
+    addChatArtifacts([{ id: 'old-1', uploadId: 'upload-1' }, { id: 'old-2', uploadId: 'upload-2' }])
+    captureChatArtifacts()
+    addChatArtifacts(['new-1', 'new-2', 'new-3'].map(id => ({ id })))
     expect(listChatArtifactIds()).toEqual(['new-1', 'new-2', 'new-3'])
   })
 
-  it('失败重试沿用上一轮已提交的工件', () => {
-    addChatArtifactIds(['a1'])
-    takeChatArtifactIds()
-    markChatArtifactsConsumed()
-
-    expect(takeChatArtifactIds({ retry: true })).toEqual(['a1'])
-  })
-
   it('非重试的新消息丢弃上一轮残留', () => {
-    addChatArtifactIds(['old'])
-    takeChatArtifactIds()
-    markChatArtifactsConsumed()
-
-    expect(takeChatArtifactIds()).toEqual([])
-    expect(listChatArtifactIds()).toEqual([])
+    addChatArtifacts([{ id: 'old', uploadId: 'upload-1' }])
+    captureChatArtifacts()
+    expect(captureChatArtifacts()).toMatchObject({ ids: [], uploadIds: [] })
   })
 })
