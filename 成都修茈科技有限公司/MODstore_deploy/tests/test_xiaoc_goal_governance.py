@@ -67,9 +67,7 @@ def test_priority_uses_only_observed_gap_and_freshness_not_invented_money(operat
     assert "not_financial_roi" in goal["priority"]["scope"]
     smaller = observed_priority("acceptance", 2, value["observed_at"], now=now)
     assert goal["priority"]["score"] > smaller["score"]
-    older = observed_priority(
-        "acceptance", 4, (now - timedelta(hours=3)).isoformat(), now=now
-    )
+    older = observed_priority("acceptance", 4, (now - timedelta(hours=3)).isoformat(), now=now)
     assert goal["priority"]["score"] > older["score"]
     for invalid_count in (True, 0, -1):
         with pytest.raises(ValueError):
@@ -124,7 +122,10 @@ def test_incompatible_bounds_and_explicit_exclusion_block_without_cross_owner_le
 def test_candidate_source_and_success_condition_cannot_be_silently_rewritten(operating):
     now, _, state, goal, _ = operating
     assert governance_gate(goal, state["goals"], now=now)["status"] == "reviewable"
-    with_receipt = {**goal, "evidence_refs": [*goal["evidence_refs"], "strategic_portfolio:approved"]}
+    with_receipt = {
+        **goal,
+        "evidence_refs": [*goal["evidence_refs"], "strategic_portfolio:approved"],
+    }
     assert governance_gate(with_receipt, [with_receipt], now=now)["status"] == "reviewable"
     for field, changed in (
         ("acceptance", {**goal["acceptance"], "target": 1}),
@@ -135,11 +136,14 @@ def test_candidate_source_and_success_condition_cannot_be_silently_rewritten(ope
         assert governance_gate(corrupted, [corrupted], now=now)["status"] == (
             "blocked_invalid_candidate"
         )
-    assert governance_gate(
-        {**goal, "review_deadline": (now - timedelta(seconds=1)).isoformat()},
-        state["goals"],
-        now=now,
-    )["status"] == "blocked_invalid_candidate"
+    assert (
+        governance_gate(
+            {**goal, "review_deadline": (now - timedelta(seconds=1)).isoformat()},
+            state["goals"],
+            now=now,
+        )["status"]
+        == "blocked_invalid_candidate"
+    )
 
 
 def test_dependencies_require_original_independent_receipts(operating):
@@ -181,16 +185,16 @@ def test_autonomous_review_compiles_two_safe_original_opportunities(operating):
 
     now, value, state, goal, _ = operating
     limits = {
-        "cost_cents": 7, "tokens": 5, "compute_seconds": 5,
+        "cost_cents": 7,
+        "tokens": 5,
+        "compute_seconds": 5,
         "expires_at": (now + timedelta(days=1)).isoformat(),
     }
     policy = {"employee_id": "existing-employee", "task_input": {}, "portfolio_limits": limits}
     rows, bindings = compile_autonomous_review_plan(
         goal, owner=17, policy=policy, goals=state["goals"], current_value=value, now=now
     )
-    assert [row["opportunity_id"] for row in rows] == [
-        bindings["inspect"], bindings["plan"]
-    ]
+    assert [row["opportunity_id"] for row in rows] == [bindings["inspect"], bindings["plan"]]
     assert rows[1]["depends_on"] == [rows[0]["opportunity_id"]]
     assert all(row["input_data"] == {} and row["risk"] == "medium" for row in rows)
     assert sum(row["tokens"] for row in rows) == 5
@@ -199,19 +203,30 @@ def test_autonomous_review_compiles_two_safe_original_opportunities(operating):
     assert all(not row["customer_goal_bindings"] for row in rows)
     with pytest.raises(LifePolicyError):
         compile_autonomous_review_plan(
-            goal, owner=17, policy={**policy, "task_input": {"unexpected": "write"}},
-            goals=state["goals"], current_value=value, now=now,
+            goal,
+            owner=17,
+            policy={**policy, "task_input": {"unexpected": "write"}},
+            goals=state["goals"],
+            current_value=value,
+            now=now,
         )
     with pytest.raises(LifePolicyError):
         compile_autonomous_review_plan(
-            goal, owner=17, policy=policy, goals=state["goals"],
-            current_value={**value, "status": "unknown"}, now=now,
+            goal,
+            owner=17,
+            policy=policy,
+            goals=state["goals"],
+            current_value={**value, "status": "unknown"},
+            now=now,
         )
     with pytest.raises(LifePolicyError):
         compile_autonomous_review_plan(
-            goal, owner=17,
+            goal,
+            owner=17,
             policy={**policy, "portfolio_limits": {**limits, "compute_seconds": 1}},
-            goals=state["goals"], current_value=value, now=now,
+            goals=state["goals"],
+            current_value=value,
+            now=now,
         )
 
 
@@ -219,13 +234,9 @@ def test_resumable_candidate_uses_existing_identity_after_policy_is_granted(oper
     from modstore_server.xiaoc_goal_management import resumable_operating_candidate
 
     now, value, state, goal, fact = operating
-    assert resumable_operating_candidate(
-        {"customer_value": value}, state, 17, now=now
-    ) is None
+    assert resumable_operating_candidate({"customer_value": value}, state, 17, now=now) is None
     state["policy"] = {"employee_id": "existing", "portfolio_limits": {"cost_cents": 10}}
-    recovered = resumable_operating_candidate(
-        {"customer_value": value}, state, 17, now=now
-    )
+    recovered = resumable_operating_candidate({"customer_value": value}, state, 17, now=now)
     assert recovered is not None
     original, source = recovered
     assert original["id"] == goal["id"]
@@ -233,18 +244,17 @@ def test_resumable_candidate_uses_existing_identity_after_policy_is_granted(oper
     assert "decision_id" not in original
     original["next_review_at"] = (now + timedelta(hours=1)).isoformat()
     state["goals"] = [original]
-    assert resumable_operating_candidate(
-        {"customer_value": value}, state, 17, now=now
-    ) is None
+    assert resumable_operating_candidate({"customer_value": value}, state, 17, now=now) is None
     original.pop("next_review_at")
     original["status"] = "cancelled"
-    assert resumable_operating_candidate(
-        {"customer_value": value}, state, 17, now=now
-    ) is None
+    assert resumable_operating_candidate({"customer_value": value}, state, 17, now=now) is None
     original["status"] = "proposed"
-    assert resumable_operating_candidate(
-        {"customer_value": {**value, "status": "unknown"}}, state, 17, now=now
-    ) is None
+    assert (
+        resumable_operating_candidate(
+            {"customer_value": {**value, "status": "unknown"}}, state, 17, now=now
+        )
+        is None
+    )
 
 
 def test_autonomous_discovery_still_only_submits_review_proposal(operating, monkeypatch):
@@ -255,15 +265,20 @@ def test_autonomous_discovery_still_only_submits_review_proposal(operating, monk
 
     now, value, state, goal, _ = operating
     limits = {
-        "cost_cents": 7, "tokens": 5, "compute_seconds": 5,
+        "cost_cents": 7,
+        "tokens": 5,
+        "compute_seconds": 5,
         "expires_at": (now + timedelta(days=1)).isoformat(),
     }
     state["policy"] = {
-        "employee_id": "existing-employee", "task_input": {}, "portfolio_limits": limits,
+        "employee_id": "existing-employee",
+        "task_input": {},
+        "portfolio_limits": limits,
     }
     monkeypatch.setattr(strategy_business_context, "customer_value_context", lambda: value)
     monkeypatch.setattr(
-        xiaoc_self_model, "employee_preflight",
+        xiaoc_self_model,
+        "employee_preflight",
         lambda employee, owner: {"status": "registered_unverified", "reason": ""},
     )
     proposals = []
@@ -296,7 +311,9 @@ def test_candidate_management_revision_events_and_never_cancels_bound_execution(
 
     monkeypatch.setattr(xiaoc_life_store, "_mutate", transact)
     monkeypatch.setattr(xiaoc_life_store, "_active_principal", lambda session, uid: uid == 17)
-    monkeypatch.setattr(xiaoc_life_store, "_event", lambda session, eid, **kw: events.append((eid, kw)))
+    monkeypatch.setattr(
+        xiaoc_life_store, "_event", lambda session, eid, **kw: events.append((eid, kw))
+    )
     monkeypatch.setattr(xiaoc_life_store, "read_state", lambda: deepcopy(state))
     from modstore_server import strategy_business_context
 
@@ -317,15 +334,24 @@ def test_candidate_management_revision_events_and_never_cancels_bound_execution(
     assert res["goals"][0]["status"] == "proposed" and res["revision"] == 6
     shortened = (now + timedelta(days=2)).isoformat()
     res = xiaoc_life_store.manage_operating_goal(
-        goal["id"], action="adjust", actor_user_id=17, expected_revision=6,
-        reason="提前复核", review_note="需独立客户验收", review_deadline=shortened,
+        goal["id"],
+        action="adjust",
+        actor_user_id=17,
+        expected_revision=6,
+        reason="提前复核",
+        review_note="需独立客户验收",
+        review_deadline=shortened,
     )
     assert res["goals"][0]["review_deadline"] == shortened
     assert events[-1][1]["details"]["current"]["review_note"] == "需独立客户验收"
     with pytest.raises(LifePolicyError):
         xiaoc_life_store.manage_operating_goal(
-            goal["id"], action="adjust", actor_user_id=17, expected_revision=7,
-            reason="延长期限", review_deadline=(now + timedelta(days=9)).isoformat(),
+            goal["id"],
+            action="adjust",
+            actor_user_id=17,
+            expected_revision=7,
+            reason="延长期限",
+            review_deadline=(now + timedelta(days=9)).isoformat(),
         )
     goal["decision_id"] = "approved-decision"
     with pytest.raises(LifePolicyError, match="原审批/执行"):
@@ -366,7 +392,6 @@ def test_revoked_admin_or_stale_source_cannot_resume(operating, monkeypatch):
         xiaoc_life_store.manage_operating_goal(
             goal["id"], action="resume", actor_user_id=17, expected_revision=4, reason="复核"
         )
-
 
 
 def test_dependency_cannot_borrow_another_owner_or_choose_duplicate(operating):

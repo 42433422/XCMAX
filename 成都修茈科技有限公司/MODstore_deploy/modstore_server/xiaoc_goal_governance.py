@@ -85,7 +85,11 @@ def observed_priority(stage: str, count: int, observed_at: str, *, now: datetime
     return {
         "basis": "observed_gap_severity_recency_minus_unknown_cost_risk/v1",
         "score": score,
-        "benefit_proxy": {"metric": "verified_gap_count", "count": count, "severity": STAGE_SEVERITY[stage]},
+        "benefit_proxy": {
+            "metric": "verified_gap_count",
+            "count": count,
+            "severity": STAGE_SEVERITY[stage],
+        },
         "urgency": {"evidence_age_hours_ceiling": math.ceil(age / 3600), "score": urgency},
         "risk": {"cost_not_measured": True, "penalty": unknown_cost_risk},
         "scope": "relative_review_order_not_financial_roi_or_execution_authority",
@@ -193,9 +197,7 @@ def goal_dependency_gate(goal: dict[str, Any], others: list[dict[str, Any]]) -> 
     pending = []
     owner = goal.get("candidate_owner_user_id")
     for dependency in dependencies:
-        matches = [
-            row for row in others if isinstance(row, dict) and row.get("id") == dependency
-        ]
+        matches = [row for row in others if isinstance(row, dict) and row.get("id") == dependency]
         if len(matches) != 1:
             return {"status": "blocked", "reason": "missing_or_ambiguous_goal_dependency"}
         predecessor = matches[0]
@@ -243,9 +245,7 @@ def candidate_contract_valid(goal: dict[str, Any], *, now: datetime) -> bool:
             or goal["evidence_refs"][0] != "customer-value-gap:" + _hash(observation)
         ):
             return False
-        return parse_time(observation["observed_at"]) <= now < parse_time(
-            goal["review_deadline"]
-        )
+        return parse_time(observation["observed_at"]) <= now < parse_time(goal["review_deadline"])
     except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
         return False
 
@@ -314,6 +314,7 @@ def project_goal_governance(state: dict[str, Any], *, now: datetime) -> dict[str
                 ),
             }
         )
+
     def score(row: dict[str, Any]) -> int:
         priority = row.get("priority")
         number = priority.get("score") if isinstance(priority, dict) else None

@@ -262,7 +262,10 @@ def resumable_operating_candidate(
         return None
     selected = sorted(pending, key=lambda row: (-row[0], row[1]["id"]))[0][1]
     observation = selected["observation"]
-    fact = {"ref": selected["evidence_refs"][0], "text": json.dumps(observation, ensure_ascii=False)}
+    fact = {
+        "ref": selected["evidence_refs"][0],
+        "text": json.dumps(observation, ensure_ascii=False),
+    }
     return dict(selected), fact
 
 
@@ -475,14 +478,16 @@ def compile_autonomous_review_plan(
         raise LifePolicyError("原预算不足以执行两个可核验的原子调查步骤")
     # A single review step may consume at most 240 seconds in the approved worker.
     allowed_seconds = min(seconds, 480)
-    resources = {
-        name: limits.get(name) for name in ("cost_cents", "tokens", "compute_seconds")
-    }
+    resources = {name: limits.get(name) for name in ("cost_cents", "tokens", "compute_seconds")}
     if any(type(value) is not int or value < 0 for value in resources.values()):
         raise LifePolicyError("原预算资源合同不完整")
     allocations = []
     for index, step in enumerate(EXECUTION_STEPS):
-        cost = limits["cost_cents"] // 2 if index == 0 else limits["cost_cents"] - limits["cost_cents"] // 2
+        cost = (
+            limits["cost_cents"] // 2
+            if index == 0
+            else limits["cost_cents"] - limits["cost_cents"] // 2
+        )
         tokens = limits["tokens"] // 2 if index == 0 else limits["tokens"] - limits["tokens"] // 2
         compute = allowed_seconds // 2 if index == 0 else allowed_seconds - allowed_seconds // 2
         allocations.append(
