@@ -19,7 +19,7 @@ from app.utils.time import utc_now_naive
 class MobileNotificationOutbox(Base):
     __tablename__ = "mobile_notification_outbox"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
     title = Column(String(200), nullable=False, default="")
     body = Column(Text, nullable=False, default="")

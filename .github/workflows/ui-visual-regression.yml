@@ -108,7 +108,9 @@ jobs:
                     src/components/floating-agent/floating-agent-panel/PanelComposer.test.ts
                 fi
               fi
-              VISUAL_CAPTURE_SIDE="$side" VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" npx playwright test --config playwright.visual.config.ts
+              VISUAL_CAPTURE_SIDE="$side" VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" \
+                npx playwright test --config playwright.visual.config.ts --trace retain-on-failure \
+                  --output "$RUNNER_TEMP/visual/$side/playwright-results"
             ) || status=1
           done
           exit "$status"

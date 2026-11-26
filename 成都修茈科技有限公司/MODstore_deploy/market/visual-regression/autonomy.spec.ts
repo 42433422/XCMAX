@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
+import { existsSync, readFileSync } from 'node:fs'
 import { capture, isolate } from './capture'
+
+const controlSource = new URL('../src/components/floating-agent/XiaoCLifeControl.vue', import.meta.url)
+const baselineLacksPopover = process.env.VISUAL_CAPTURE_SIDE === 'baseline'
+  && (!existsSync(controlSource) || !readFileSync(controlSource, 'utf8').includes('data-xiaoc-autonomy-trigger'))
 
 // Fixed synthetic identity. The scenario never authorizes or mutates a real company.
 const lifeState = {
@@ -15,9 +20,7 @@ const lifeState = {
 
 for (const [width, height] of [[1440, 900], [375, 812]]) {
   test('autonomy popover keyboard and touch viewport ' + width, async ({ page, baseURL }) => {
-    // No matching control exists in the base SHA. Never fabricate a baseline.
-    // Candidate captures still require independent human visual approval.
-    test.skip(process.env.VISUAL_CAPTURE_SIDE === 'baseline', 'New autonomy popover absent from base; explicit visual review required')
+    test.skip(baselineLacksPopover, 'New autonomy popover absent from base; explicit visual review required')
     await page.setViewportSize({ width, height })
     await isolate(page, baseURL!)
     const origin = new URL(baseURL!).origin

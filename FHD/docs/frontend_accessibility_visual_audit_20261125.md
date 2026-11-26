@@ -5,7 +5,7 @@
 ## 本轮已执行源码核验
 - 已将 Desktop `ConfirmDialog.vue` 4 类操作按钮正常/hover 色改用既有 enterprise 设计 Token，增加双态可见键盘焦点、44px 操作目标、窄屏滚动、减少动画；办公壳 `base.css` 补充深浅环境均可辨识的双色焦点环。
 - Market `AppConfirmDialog.vue` 保持既有 Element Plus 焦点陷阱、Escape、返回焦点逻辑，主操作按钮使用 `--xc-token-market-light-wb-accent-primary`，危险按钮使用 `--xc-token-market-light-wb-status-danger`；焦点环与两种背景也纳入检查。
-- Flutter 修复浅色品牌主色与三级文字、深色三级文字、按钮/错误/成功前景色；加入审批 Semantics、状态播报、输入永久标签与安全区；既有 SSOT 同步生成 Desktop CSS、Flutter Dart、Market CSS。
+- Flutter 修复浅色品牌主色与三级文字、深色三级文字、按钮/错误/成功前景色；加入审批 Semantics、状态播报、输入永久标签与安全区；[跨端设计 Token](design_tokens.md) 同步生成 Desktop CSS、Flutter Dart、Market CSS。
 - 增加 `test/theme_accessibility_contrast_test.dart` 和 `test/approval_accessibility_test.dart`；扩充原有三端截图用例，使用合成数据，不执行真实审批写入。
 - 独立重新执行最新源码对应的 `audit-accessibility-contrast.mjs` 静态算法（JS 运行环境，注入同 HEAD 的 GitHub 真实源码读取）**25/25 明确色对通过，exitCode=0**；`generate-design-tokens.mjs` 实际渲染结果与仓库 Desktop CSS / Flutter Dart / Market CSS **3/3 字节一致**。这不等于本地 Node/Flutter CLI 或产品画面验收。
 
@@ -40,13 +40,13 @@
 
 ## 责任边界与复现
 协调评论：[7161895550](https://github.com/42433422/XCMAX/pull/3605#issuecomment-7161895550)。
-Token 组负责 SSOT、生成器和全局主题；弹层/动效组负责共享确认框、滑杆、焦点管理和动效；聊天与任务组负责相应运行时组件。无障碍组修改独立审批页面和测试文件，使用 blob SHA 检查共享视觉文件。暂无相应负责人明确回复，不视为交接完成。
+Token 组负责[跨端设计 Token](design_tokens.md)、生成器和全局主题；弹层/动效组负责共享确认框、滑杆、焦点管理和动效；聊天与任务组负责相应运行时组件。无障碍组修改独立审批页面和测试文件，使用 blob SHA 检查共享视觉文件。暂无相应负责人明确回复，不视为交接完成。
 
 在 FHD 仓库树运行：
 ```sh
 node FHD/scripts/design/audit-accessibility-contrast.mjs
 ```
-审计脚本已读取上述静态复核 SHA 的实际 SSOT 和 ConfirmDialog 源文件，在 JS 运行环境执行算法（文件读取由连接器返回的同一 SHA 内容注入，而非本地 Node 文件系统）。公式自检：黑白 21:1，相同颜色 1:1；最终 exitCode=1，15 个不透明明确色对中 3 个通过、12 个失败。仅计算指定纯色对；渐变、透明合成、真实背景、禁用/焦点/选中状态均需运行时测量。颜色作为装饰时不能直接据此判定 WCAG 失败；下表失败是按普通文本用途的目标判定。
+审计脚本已读取上述静态复核 SHA 的[设计 Token 源文件](../config/mobile_design_tokens.json)和 ConfirmDialog 源文件，在 JS 运行环境执行算法（文件读取由连接器返回的同一 SHA 内容注入，而非本地 Node 文件系统）。公式自检：黑白 21:1，相同颜色 1:1；最终 exitCode=1，15 个不透明明确色对中 3 个通过、12 个失败。仅计算指定纯色对；渐变、透明合成、真实背景、禁用/焦点/选中状态均需运行时测量。颜色作为装饰时不能直接据此判定 WCAG 失败；下表失败是按普通文本用途的目标判定。
 
 | ID | 源码色对（前景 / 背景） | 比值 | 结果 / 责任 |
 |---|---|---:|---|

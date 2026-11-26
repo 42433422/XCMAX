@@ -10,6 +10,13 @@ from PIL import Image, ImageChops
 
 # Exact planned captures for the current specs; count drift must fail until reviewed.
 EXPECTED = {"desktop": 16, "market": 19, "flutter": 40}
+NEW_CASES = {
+    "market": {
+        f"autonomy-{state}-{width}.png"
+        for state in ("collapsed", "open", "preview")
+        for width in (375, 1440)
+    }
+}
 
 
 def pixel_hash(image):
@@ -31,18 +38,29 @@ def compare(root, surface, base_sha, candidate_sha, manifest):
               "expected_case_count": EXPECTED.get(surface, 1),
               "baseline_case_count": len(base), "candidate_case_count": len(candidate),
               "cases": [], "unused_approvals": []}
-    ok = len(base) == EXPECTED.get(surface, 1) and base.keys() == candidate.keys()
+    ok = len(candidate) == EXPECTED.get(surface, 1)
     used = set()
     diff_dir = root / "diff"
     diff_dir.mkdir(parents=True, exist_ok=True)
     for name in sorted(base.keys() | candidate.keys()):
         row = {"name": name}
         report["cases"].append(row)
-        if name not in base or name not in candidate:
-            row["status"] = "missing_baseline" if name not in base else "missing_candidate"
+        if name not in candidate:
+            row["status"] = "missing_candidate"
             ok = False
             continue
-        a, b = read_image(base[name]), read_image(candidate[name])
+        b = read_image(candidate[name])
+        if name not in base:
+            pair = {"baseline": None, "candidate": pixel_hash(b)}
+            row.update(pair, candidate_size=b.size)
+            if name in NEW_CASES.get(surface, ()) and approvals.get(name) == pair:
+                row["status"] = "explicitly_approved_new_case"
+                used.add(name)
+            else:
+                row["status"] = "missing_baseline"
+                ok = False
+            continue
+        a = read_image(base[name])
         pair = {"baseline": pixel_hash(a), "candidate": pixel_hash(b)}
         row.update(pair)
         row["baseline_size"], row["candidate_size"] = a.size, b.size
@@ -103,6 +121,27 @@ def self_test():
         assert not compare(root, "probe", "base", "head", empty)[0]
         (root / "baseline" / "probe.png").unlink()
         assert not compare(root, "probe", "base", "head", empty)[0]
+        existing_count = EXPECTED["market"] - len(NEW_CASES["market"])
+        ordinary_cases = {f"unchanged-{i}.png" for i in range(existing_count)}
+        for name in ordinary_cases | NEW_CASES["market"]:
+            a.save(root / "candidate" / name)
+        for name in ordinary_cases:
+            a.save(root / "baseline" / name)
+        approved_new = {name: {"baseline": None, "candidate": pixel_hash(a)} for name in NEW_CASES["market"]}
+        approval = {"base_sha": "base", "surfaces": {"market": approved_new}}
+        assert not compare(root, "market", "base", "head", empty)[0]
+        assert compare(root, "market", "base", "head", approval)[0]
+        assert not compare(root, "market", "different-base", "head", approval)[0]
+        name = min(NEW_CASES["market"])
+        b.save(root / "candidate" / name)
+        assert not compare(root, "market", "base", "head", approval)[0]
+        (root / "candidate" / name).unlink()
+        assert not compare(root, "market", "base", "head", approval)[0]
+        a.save(root / "candidate" / name)
+        unexpected = min(ordinary_cases)
+        (root / "baseline" / unexpected).unlink()
+        approved_new[unexpected] = {"baseline": None, "candidate": pixel_hash(a)}
+        assert not compare(root, "market", "base", "head", approval)[0]
     print("visual comparator positive/negative controls PASS")
 
 
