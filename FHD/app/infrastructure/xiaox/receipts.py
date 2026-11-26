@@ -73,7 +73,7 @@ def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
 
 
 def resume_error(
-    store: CodexBindingStore, binding: CodexBinding, rows: list[dict[str, Any]]
+    store: XiaoxBindingStore, binding: XiaoxBinding, rows: list[dict[str, Any]]
 ) -> str:
     if error := run_lifecycle.continuation_conversation_error(binding.run, binding.context):
         return error

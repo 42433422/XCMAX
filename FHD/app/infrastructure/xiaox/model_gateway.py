@@ -269,11 +269,14 @@ def _claim(
         except _ModelCallLimitReached as exhausted:
             # The refusal itself must survive as a readable host fact, so the
             # reason is committed before the request is rejected.
+            max_model_calls = exhausted.max_model_calls
+            used_model_calls = exhausted.used_model_calls
+
             def record(run: Any, metadata: dict[str, Any]) -> None:
                 metadata["model_call_limit"] = {
                     "reason": "model_call_budget_exhausted",
-                    "max_model_calls": exhausted.max_model_calls,
-                    "used_model_calls": exhausted.used_model_calls,
+                    "max_model_calls": max_model_calls,
+                    "used_model_calls": used_model_calls,
                 }
 
             store.update(binding.run_id, record, generation=binding.metadata.get("generation"))

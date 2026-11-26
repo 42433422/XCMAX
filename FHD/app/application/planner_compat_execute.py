@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.application.planner_compat.protocols import (
     AwaitTimeout,
@@ -15,6 +16,14 @@ from app.application.planner_compat.protocols import (
 from app.application.planner_compat.runtime import observed_chat_run
 from app.application.planner_compat.tracing import TurnTrace
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+if TYPE_CHECKING:
+    from fastapi import Request
+
+    from app.application.planner_compat_service import (
+        XcagiCompatChatBatchBody,
+        XcagiCompatChatBody,
+    )
 
 
 @dataclass(frozen=True)

@@ -20,27 +20,37 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal
 
-from app.application.agent_orchestrator import run_lifecycle
-from app.application.agent_orchestrator.run_models import AgentRun, RunStatus
+from app.application.agent_orchestrator.run_lifecycle import (
+    continuation_conversation_error,
+    safe_continuation_error,
+)
+from app.application.agent_orchestrator.run_models import AgentRun, RunStatus, tool_call_from_dict
 from app.application.tool_execution_deadline import remaining_invocation_seconds
-from app.domain.task_lifecycle.agent_runtime_results import ACTIVE_STATES as _ACTIVE
-from app.domain.task_lifecycle.agent_runtime_results import WAITING_STATES as _WAITING
-from app.domain.task_lifecycle.agent_runtime_results import base_runtime_result as _base_result
+from app.domain.task_lifecycle.agent_runtime_results import (
+    ACTIVE_STATES as _ACTIVE,
+)
+from app.domain.task_lifecycle.agent_runtime_results import (
+    WAITING_STATES as _WAITING,
+)
+from app.domain.task_lifecycle.agent_runtime_results import (
+    base_runtime_result as _base_result,
+)
 from app.domain.task_lifecycle.agent_runtime_results import (
     classification_metadata,
     failure_diagnostics,
     withhold_runtime_output,
 )
-from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result as _classify
-from app.domain.task_lifecycle.agent_runtime_results import model_unsettled as _model_unsettled
-from app.domain.task_lifecycle.agent_runtime_results import receipt_state as _receipt_state
-from app.domain.task_lifecycle.agent_runtime_results import withhold_runtime_output
-from app.infrastructure.xiaox.binding import (
-    XiaoxBindingError,
-    XiaoxBindingStore,
+from app.domain.task_lifecycle.agent_runtime_results import (
+    classify_runtime_result as _classify,
 )
-from app.infrastructure.codex.receipts import project_child_calls, resume_error
-from app.infrastructure.codex.transport import CodexTransportError
+from app.domain.task_lifecycle.agent_runtime_results import (
+    model_unsettled as _model_unsettled,
+)
+from app.domain.task_lifecycle.agent_runtime_results import (
+    receipt_state as _receipt_state,
+)
+from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.transport import XiaoxTransportError as CodexTransportError
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -512,7 +522,7 @@ async def run_xiaox_agent(
                         run.metadata[key] = value
                     else:
                         run.metadata.pop(key, None)
-                project_child_calls(run, rows)
+                _project_child_calls(run, rows)
                 if run.status not in _TERMINAL and run.status != "paused":
                     run.status = status
                 elif run.status != "completed" and result["ok"]:

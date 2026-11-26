@@ -788,7 +788,7 @@ def aiopen_openclaw_chat(
     body: dict = Body(default_factory=dict),
     x_aiopen_key: AiOpenKeyHeader = None,
 ):
-    if not verify_api_key(x_aiopen_key):
+    if not authorize_api_key(x_aiopen_key):
         return _unauthorized()
     message = str(body.get("message") or "").strip()
     if not message:

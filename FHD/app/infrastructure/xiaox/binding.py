@@ -477,11 +477,11 @@ class XiaoxBindingStore:
             if metadata.get("model_reconciliation_required") or any(
                 item.get("state") == "unknown" for item in model_calls
             ):
-                raise CodexBindingError(
+                raise XiaoxBindingError(
                     "reconciliation_required", "原模型计量结果尚待核对，未创建业务任务"
                 )
             if any(item.get("state") == "reserved" for item in model_calls):
-                raise CodexBindingError(
+                raise XiaoxBindingError(
                     "call_in_progress", "原模型请求尚未结束，请先等待其计量回执"
                 )
             if any((c.get("receipt") or {}).get("pending_approval") for c in calls.values()):
