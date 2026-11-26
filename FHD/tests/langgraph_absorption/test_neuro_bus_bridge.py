@@ -25,9 +25,9 @@ from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
 from app.neuro_bus.events.events_base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-# Reviewed with PR #2749 bounded entity dispatch, plus the desktop cap that drops
-# the oldest half of the event buffer once it passes 2000 entries.
-_BUS_SHA256 = "e6f51d3341c96bcf6d0b4d0494ce2ad1892238fd8fa75da0f940ddda10cdc3c7"
+# Reviewed with PR #2749 bounded entity dispatch, the desktop buffer cap,
+# and PR #3532 event outcomes; original dispatch contracts remain separately tested.
+_BUS_SHA256 = "be65564048745fe2ed2e036502f45526b53a5a06cd81cce6a0f9e261a4bb2025"
 
 
 class RecordingBus:
