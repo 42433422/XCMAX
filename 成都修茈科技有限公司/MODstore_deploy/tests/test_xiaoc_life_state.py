@@ -858,6 +858,320 @@ def test_explicit_stop_survives_new_sessions_and_requires_explicit_start(databas
     )
 
 
+@pytest.mark.parametrize(
+    ("command", "status"),
+    [
+        ({"paused": False, "stopped": False}, "thinking"),
+        ({"paused": True}, "paused"),
+        ({"stopped": True}, "stopped"),
+    ],
+)
+def test_repeating_lifecycle_command_preserves_cycle_and_state(
+    database, monkeypatch, command, status
+):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    initial = configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    store.record_cycle_phase(claim, "observe")
+    if status != "thinking":
+        store.update_settings(
+            LifeUpdate(expected_revision=initial["revision"], **command), actor_user_id=7
+        )
+    before = store.read_state()
+    with database() as session:
+        cycle = json.loads(session.get(XiaoCLifeState, before["identity_id"]).state_json)[
+            "active_cycle"
+        ]
+    assert before["status"] == status
+    assert before["activity"]["id"] == cycle["cycle_id"] == claim["cycle_id"]
+    assert before["budget"]["cycles"] == 1
+    assert before["budget"]["reserved_tokens"] == 200
+    assert cycle["lease_token"] == claim["lease_token"]
+    now += timedelta(seconds=1)
+    result = store.update_settings(
+        LifeUpdate(expected_revision=before["revision"], **command), actor_user_id=7
+    )
+    for field in (
+        "identity_id",
+        "revision",
+        "state_version",
+        "activity",
+        "budget",
+        "next_wake_at",
+        "updated_at",
+        "events",
+    ):
+        assert result[field] == before[field]
+    with database() as session:
+        row = session.get(XiaoCLifeState, before["identity_id"])
+        assert json.loads(row.state_json)["active_cycle"] == cycle
+    assert store.cycle_active(claim) is (status == "thinking")
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [{"level": 5}, {"mission": "更新企业使命"}, {"policy": {"daily_cycle_limit": 8}}],
+)
+def test_repeated_lifecycle_flag_does_not_skip_settings_update(database, settings):
+    initial = configure()
+    paused = store.update_settings(
+        LifeUpdate(expected_revision=initial["revision"], paused=True), actor_user_id=7
+    )
+    updated = store.update_settings(
+        LifeUpdate(expected_revision=paused["revision"], paused=True, **settings), actor_user_id=7
+    )
+    assert updated["paused"]
+    assert updated["revision"] == paused["revision"] + 1
+    assert updated["state_version"] == paused["state_version"] + 1
+    for field, value in settings.items():
+        if field == "policy":
+            assert updated["policy"]["daily_cycle_limit"] == value["daily_cycle_limit"]
+        else:
+            assert updated[field] == value
+
+
+def test_repeated_lifecycle_command_still_checks_expected_revision(database):
+    initial = configure()
+    command = LifeUpdate(expected_revision=initial["revision"], paused=True)
+    paused = store.update_settings(command, actor_user_id=7)
+    with pytest.raises(LifePolicyError, match="全企业自主设置已变动"):
+        store.update_settings(command, actor_user_id=7)
+    assert store.read_state()["state_version"] == paused["state_version"]
+
+
+def test_graph_act_outbound_and_closeout_have_idempotent_persistent_audit(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    assert store.begin_cycle_graph(claim)
+    assert not store.begin_cycle_graph(claim)
+    for phase in ("observe", "decide"):
+        store.record_cycle_phase(claim, phase)
+    assert store.admit_cycle_act(claim)
+    assert not store.admit_cycle_act(claim)
+    store.mark_model_attempt(claim)
+    store.mark_model_attempt(claim)
+    store.record_cycle_phase(claim, "act")
+    receipt = {"status": "verified", "actual_tokens": 0}
+    assert store.prepare_native_closeout(claim, "checkpoint:original", receipt)
+    assert store.prepare_native_closeout(claim, "checkpoint:original", receipt)
+    with database() as session:
+        rows = session.scalars(
+            select(XiaoCLifeEvent).where(
+                XiaoCLifeEvent.kind == "life_transition",
+                XiaoCLifeEvent.id.in_(
+                    [
+                        f"life:graph:{claim['cycle_id']}",
+                        f"life:act:{claim['cycle_id']}",
+                        f"life:outbound:{claim['cycle_id']}",
+                        f"life:closeout:{claim['cycle_id']}",
+                    ]
+                ),
+            )
+        ).all()
+    assert len(rows) == 4
+    assert {row.status for row in rows} == {
+        "graph_started",
+        "act_admitted",
+        "model_attempted",
+        "closeout_prepared",
+    }
+    details = [json.loads(row.details_json) for row in rows]
+    assert "lease_token" not in json.dumps(details)
+
+
+def test_experiences_api_keeps_lifecycle_audit_in_separate_state_feed(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    store.record_cycle_phase(claim, "observe")
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=7, is_admin=True)
+    with TestClient(app) as client:
+        experiences = client.get("/life/experiences").json()
+        status = client.get("/life").json()
+    assert experiences["items"]
+    assert all(item["kind"] != "life_transition" for item in experiences["items"])
+    assert any(item["status"] == "observe" for item in status["lifecycle_events"])
+    assert status["activity"]["id"] == claim["cycle_id"]
+
+
+def test_lifecycle_phase_transitions_are_append_only_and_concurrent_retries_idempotent(
+    database,
+):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(lambda _: store.record_cycle_phase(claim, "observe"), range(2)))
+    for phase in ("decide", "act", "reflect"):
+        store.record_cycle_phase(claim, phase)
+    with database() as session:
+        persisted = list(
+            session.scalars(
+                select(XiaoCLifeEvent).where(
+                    XiaoCLifeEvent.kind == "life_transition",
+                    XiaoCLifeEvent.id.startswith(f"life:phase:{claim['cycle_id']}:"),
+                )
+            )
+        )
+    by_status = {row.status: json.loads(row.details_json) for row in persisted}
+    assert set(by_status) == {"claimed", "observe", "decide", "act", "reflect"}
+    assert by_status["observe"]["from"] == "claimed"
+    assert by_status["decide"]["from"] == "observe"
+    assert by_status["act"]["from"] == "decide"
+    assert by_status["reflect"]["from"] == "act"
+    assert all(event["kind"] != "life_transition" for event in store.read_state()["events"])
+    assert (
+        len(
+            [
+                event
+                for event in store.read_state()["lifecycle_events"]
+                if event["status"] == "observe"
+            ]
+        )
+        == 1
+    )
+    finish(claim)
+    with database() as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.kind == "life_transition",
+                    XiaoCLifeEvent.id.startswith(f"life:phase:{claim['cycle_id']}:"),
+                )
+            )
+            == 5
+        )
+
+
+@pytest.mark.parametrize("reason", ["paused", "stopped", "revoked", "expired"])
+def test_admission_denial_persists_once_and_never_reclaims_on_repeat(database, monkeypatch, reason):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    state = configure(authorization_expires_at=(now + timedelta(minutes=5)).isoformat())
+    if reason in ("paused", "stopped"):
+        field = "paused" if reason == "paused" else "stopped"
+        store.update_settings(
+            LifeUpdate(expected_revision=state["revision"], **{field: True}),
+            actor_user_id=7,
+        )
+    elif reason == "revoked":
+        with database() as session:
+            session.get(User, 7).is_admin = False
+            session.commit()
+    else:
+        monkeypatch.setattr(store, "utcnow", lambda: now + timedelta(minutes=6))
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=200) is None
+    first = store.read_state()
+    expected_status = {
+        "paused": "paused",
+        "stopped": "stopped",
+        "revoked": "blocked",
+        "expired": "blocked",
+    }[reason]
+    assert first["status"] == expected_status
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=200) is None
+    assert store.read_state()["state_version"] == first["state_version"]
+    with database() as session:
+        denial = list(
+            session.scalars(
+                select(XiaoCLifeEvent).where(
+                    XiaoCLifeEvent.kind == "life_transition",
+                    XiaoCLifeEvent.status == "blocked",
+                )
+            )
+        )
+    assert len(denial) == 1
+    assert json.loads(denial[0].details_json)["reasons"]
+    assert store.read_state()["budget"]["cycles"] == 0
+
+
+def test_budget_exhaustion_has_immutable_admission_and_settlement_evidence(database):
+    configure(daily_token_limit=200, exploration_percent=0)
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None and store.cycle_active(claim)
+    with database() as session:
+        exhausted = session.get(XiaoCLifeEvent, f"life:limit:{claim['cycle_id']}")
+        assert exhausted is not None and exhausted.status == "budget_exhausted"
+        assert json.loads(exhausted.details_json)["budget_date"]
+    finish(claim, actual_tokens=200)
+    state = store.read_state()
+    assert state["budget"]["used_tokens"] == 200
+    assert state["budget"]["reserved_tokens"] == 0
+    assert state["status"] == "blocked"
+    assert state["events"][0]["details"]["terminal_status"] == "completed"
+    store.wake(actor_user_id=7, expected_revision=state["revision"])
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=0) is None
+    after_denial = store.read_state()
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=0) is None
+    assert store.read_state()["state_version"] == after_denial["state_version"]
+    with database() as session:
+        assert session.get(XiaoCLifeEvent, f"life:limit:{claim['cycle_id']}") is not None
+        assert session.get(XiaoCLifeEvent, f"cycle:{claim['cycle_id']}") is not None
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.kind == "life_transition",
+                    XiaoCLifeEvent.status == "blocked",
+                )
+            )
+            == 1
+        )
+
+
+def test_policy_audit_captures_stop_pause_resume_edges_without_duplicate_events(
+    database,
+):
+    configured = configure()
+    paused = store.update_settings(
+        LifeUpdate(expected_revision=configured["revision"], paused=True),
+        actor_user_id=7,
+    )
+    stopped = store.update_settings(
+        LifeUpdate(expected_revision=paused["revision"], stopped=True),
+        actor_user_id=7,
+    )
+    resumed = store.update_settings(
+        LifeUpdate(expected_revision=stopped["revision"], stopped=False, paused=False),
+        actor_user_id=7,
+    )
+    assert resumed["status"] != "stopped"
+    assert not resumed["paused"] and not resumed["stopped"]
+    with database() as session:
+        history = {
+            row.id: json.loads(row.details_json)
+            for row in session.scalars(
+                select(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "policy")
+            )
+        }
+    edges = [history[f"policy:{snapshot['revision']}"] for snapshot in (paused, stopped, resumed)]
+    assert [
+        (item["before_paused"], item["paused"], item["before_stopped"], item["stopped"])
+        for item in edges
+    ] == [
+        (False, True, False, False),
+        (True, True, False, True),
+        (True, False, True, False),
+    ]
+    duplicate = store.update_settings(
+        LifeUpdate(expected_revision=resumed["revision"], stopped=False, paused=False),
+        actor_user_id=7,
+    )
+    assert duplicate["state_version"] == resumed["state_version"]
+    with database() as session:
+        assert session.scalar(
+            select(func.count()).select_from(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "policy")
+        ) == len(history)
+
+
 def test_budget_exhaustion_blocks_even_zero_token_new_cycle(database):
     configure(daily_token_limit=200, exploration_percent=0)
     claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
