@@ -18,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       backend_shards:
-        description: "Backend partitions (concurrency is capped at 8)"
+        description: "Backend partitions (concurrency is capped at 24)"
         required: false
-        default: '8'
+        default: '16'
         type: choice
         options: ['4', '8', '16', '24']
       release_channel:
@@ -307,7 +307,7 @@ jobs:
         id: plan
         working-directory: .
         env:
-          SHARD_TOTAL: ${{ inputs.backend_shards || '8' }}
+          SHARD_TOTAL: ${{ inputs.backend_shards || '16' }}
         run: python FHD/scripts/ci/backend_shards.py plan --total "$SHARD_TOTAL"
       - uses: actions/upload-artifact@v4
         with:
@@ -454,7 +454,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 24
       matrix: ${{ fromJSON(needs.guard-temp-scripts.outputs.backend_matrix) }}
     services:
       redis:
@@ -710,12 +710,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 8
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       FRONTEND_SHARD_INDEX: ${{ matrix.shard }}
-      FRONTEND_SHARD_TOTAL: "4"
+      FRONTEND_SHARD_TOTAL: "8"
       FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -750,7 +750,7 @@ jobs:
     outputs:
       skip: ${{ needs.guard-temp-scripts.outputs.frontend_skip }}
     env:
-      FRONTEND_SHARD_TOTAL: "4"
+      FRONTEND_SHARD_TOTAL: "8"
       FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - name: Validate prerequisites and skip semantics
