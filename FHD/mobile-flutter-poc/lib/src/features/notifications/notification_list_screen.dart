@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../api/mobile_session_store.dart' show MobileSessionData;
+import '../../policy/mobile_error_policy.dart';
 
 import '../../api/mobile_models.dart';
 import '../../data/mobile_repository.dart';
@@ -15,10 +19,16 @@ class NotificationListScreen extends StatefulWidget {
   State<NotificationListScreen> createState() => _NotificationListScreenState();
 }
 
-class _NotificationListScreenState extends State<NotificationListScreen> {
+class _NotificationListScreenState extends State<NotificationListScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   late Future<List<_NotificationItem>> _future;
-  final _readIds = <String>{};
+  late final int _generation;
+  StreamSubscription<MobileSessionData>? _sessionSubscription;
+  Timer? _poll;
+  bool _loading = false;
+  bool _marking = false;
+  bool get _revoked => _generation != _repository.client.authGeneration;
 
   @override
   void initState() {
@@ -27,7 +37,40 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       context,
       explicit: widget.repository,
     );
+    _generation = _repository.client.authGeneration;
+    _sessionSubscription = _repository.client.sessionChanges.listen((_) {
+      if (mounted && _revoked) setState(() {});
+    });
+    WidgetsBinding.instance.addObserver(this);
     _future = _load();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted && !_revoked && ModalRoute.of(context)?.isCurrent != false) {
+        unawaited(_refresh());
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refresh());
+      _startPolling();
+    } else {
+      _poll?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_sessionSubscription?.cancel());
+    super.dispose();
   }
 
   @override
@@ -39,11 +82,21 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         bottom: false,
         child: Column(
           children: [
-            const WeTopBar(title: '通知与公告'),
+            WeTopBar(title: '通知与公告', actions: [
+              IconButton(onPressed: _revoked ? null : _refresh,
+                  icon: const Icon(Icons.refresh), tooltip: '刷新通知'),
+            ]),
             Expanded(
               child: FutureBuilder<List<_NotificationItem>>(
                 future: _future,
                 builder: (context, snapshot) {
+                  if (_revoked) return const Center(child: Text('账号已切换，请重新打开通知'));
+                  if (snapshot.hasError) {
+                    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(mobileErrorText(snapshot.error)),
+                      TextButton(onPressed: _refresh, child: const Text('重试')),
+                    ]));
+                  }
                   if (snapshot.connectionState != ConnectionState.done) {
                     return Center(
                       child: CircularProgressIndicator(color: colors.brand),
@@ -72,8 +125,8 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                         final item = items[index];
                         return _NotificationCell(
                           item: item,
-                          isRead: item.read || _readIds.contains(item.id),
-                          onTap: () => setState(() => _readIds.add(item.id)),
+                          isRead: item.read,
+                          onTap: () => unawaited(_markRead(item)),
                         );
                       },
                       itemCount: items.length,
@@ -89,21 +142,40 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   }
 
   Future<List<_NotificationItem>> _load() async {
-    try {
-      final notifications = await _repository.loadPendingNotifications();
-      return notifications.map(_NotificationItem.fromPending).toList();
-    } catch (_) {
-      // Honest empty state — do not mask API failure with demo rows.
-      return const <_NotificationItem>[];
-    }
+    if (_revoked) throw StateError('账号已切换');
+    final notifications = await _repository.loadNotificationInbox();
+    if (_revoked) throw StateError('账号已切换');
+    final unique = {for (final item in notifications) if (item.id > 0) item.id: _NotificationItem.fromPending(item)};
+    return unique.values.toList();
   }
 
   Future<void> _refresh() async {
+    if (!mounted || _revoked || _loading || _marking) return;
+    _loading = true;
     final future = _load();
     setState(() {
       _future = future;
     });
-    await future;
+    try { await future; } catch (_) {
+      // FutureBuilder renders the real error.
+    } finally { _loading = false; }
+  }
+
+  Future<void> _markRead(_NotificationItem item) async {
+    if (_revoked || _marking || _loading || item.read) return;
+    final id = int.tryParse(item.id);
+    if (id == null || id <= 0) return;
+    _marking = true;
+    try {
+      await _repository.markNotificationRead(id);
+    } catch (error) {
+      if (mounted && !_revoked) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mobileErrorText(error))));
+      }
+    } finally {
+      _marking = false;
+      await _refresh();
+    }
   }
 }
 
@@ -238,6 +310,7 @@ class _NotificationItem {
     required this.title,
     required this.content,
     required this.dateText,
+    required this.read,
   });
 
   final String id;
@@ -245,7 +318,7 @@ class _NotificationItem {
   final String title;
   final String content;
   final String dateText;
-  final bool read = false;
+  final bool read;
 
   factory _NotificationItem.fromPending(PendingNotification notification) {
     return _NotificationItem(
@@ -253,7 +326,8 @@ class _NotificationItem {
       type: _typeFromChannel(notification.channel),
       title: notification.title.ifEmpty('系统通知'),
       content: notification.body,
-      dateText: '刚刚',
+      dateText: notification.createdAt,
+      read: notification.isRead,
     );
   }
 }

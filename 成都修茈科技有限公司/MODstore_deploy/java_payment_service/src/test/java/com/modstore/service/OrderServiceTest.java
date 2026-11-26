@@ -222,12 +222,12 @@ class OrderServiceTest {
         void buyoutCheckoutUsesServerPriceAndRejectsDuplicatePermanentPurchase() {
             PlanTemplate plan = new PlanTemplate();
             plan.setId(AccountLicensePlans.STANDARD_PLAN_ID);
-            plan.setPrice(new BigDecimal("6800.00"));
+            plan.setPrice(new BigDecimal("3000.00"));
             plan.setActive(true);
             when(planTemplateRepository.findById(plan.getId())).thenReturn(Optional.of(plan));
             Map<String, Object> resolved = orderService.resolveCheckoutFields(
                     Map.of("plan_id", plan.getId(), "total_amount", "0.01"), user);
-            assertThat((BigDecimal) resolved.get("total_amount")).isEqualByComparingTo("6800.00");
+            assertThat((BigDecimal) resolved.get("total_amount")).isEqualByComparingTo("3000.00");
 
             when(entitlementService.hasPermanentLicense(user)).thenReturn(true);
             for (String planId : List.of(plan.getId(), "saas-trial-30")) {
@@ -346,6 +346,36 @@ class OrderServiceTest {
 
     @Nested
     class FulfillOrder {
+        @Test
+        void repricedStandardOrderUsesOriginalPendingAmountNotCurrentTemplate() {
+            Order order = buildPendingOrder("OT-STANDARD-OLD", "plan", new BigDecimal("6800.00"));
+            order.setPlanId(AccountLicensePlans.STANDARD_PLAN_ID);
+            PlanTemplate plan = new PlanTemplate();
+            plan.setId(order.getPlanId());
+            plan.setPrice(new BigDecimal("3000.00"));
+            plan.setActive(true);
+            when(orderRepository.findByOutTradeNoForUpdate(order.getOutTradeNo())).thenReturn(Optional.of(order));
+            when(planTemplateRepository.findById(plan.getId())).thenReturn(Optional.of(plan));
+
+            assertThatThrownBy(() -> orderService.processAlipayNotify(order.getOutTradeNo(), "TRADE_SUCCESS",
+                    "TRADE-OLD", "BUYER-OLD", new BigDecimal("3000.00")))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("支付金额不匹配");
+            assertThat(order.getStatus()).isEqualTo("pending");
+            assertThat(order.isFulfilled()).isFalse();
+            verifyNoInteractions(walletService, entitlementService, webhookDispatcher);
+
+            for (int callback = 0; callback < 2; callback++) {
+                orderService.processAlipayNotify(order.getOutTradeNo(), "TRADE_SUCCESS",
+                        "TRADE-OLD", "BUYER-OLD", new BigDecimal("6800.00"));
+            }
+            assertThat(order.getTotalAmount()).isEqualByComparingTo("6800.00");
+            assertThat(order.isFulfilled()).isTrue();
+            verify(walletService, times(1)).recordExternalPayment(order);
+            verify(walletService, times(1)).recordOrderSpend(order);
+            verify(entitlementService, times(1)).activatePlan(user, plan, order.getOutTradeNo());
+            verify(webhookDispatcher, times(1)).publishPaymentPaid(order);
+        }
+
         @Test
         void historicalPaidOrderKeepsSnapshotAmountAndFulfillsOnlyOnce() {
             Order order = buildPendingOrder("OT-LEGACY", "plan", new BigDecimal("0.01"));

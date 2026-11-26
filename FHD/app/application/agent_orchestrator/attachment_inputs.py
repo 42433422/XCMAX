@@ -6,6 +6,8 @@ import hashlib
 import io
 from datetime import UTC, datetime
 from typing import Any
+from zipfile import BadZipFile, ZipFile
+from zlib import error as ZlibError
 
 from app.application.shipment_excel_elt_security import open_elt_input_file
 from app.db.models.elt import EltUpload
@@ -20,6 +22,93 @@ MAX_TEXT = 24_000
 
 class AttachmentInputError(ValueError):
     """Safe actionable error; never includes a local path or parser traceback."""
+
+
+def _docx_preview(raw: bytes, coverage: dict[str, Any]) -> str:
+    from docx import Document
+    from docx.oxml.exceptions import InvalidXmlError
+    from docx.oxml.ns import qn
+    from docx.text.paragraph import Paragraph
+
+    max_tables, max_rows, max_columns, max_cell_chars = 20, 200, 40, 500
+    coverage.update(
+        scope="paragraphs_and_tables",
+        max_tables=max_tables,
+        max_rows_per_table=max_rows,
+        max_columns=max_columns,
+        max_cell_chars=max_cell_chars,
+    )
+    paragraph_tag, table_tag, row_tag, cell_tag = map(qn, ("w:p", "w:tbl", "w:tr", "w:tc"))
+    lines: list[str] = []
+    remaining = MAX_TEXT
+
+    def append(text: str, *, cell: bool = False) -> bool:
+        nonlocal remaining
+        separator = int(bool(lines))
+        if len(text) + separator > remaining:
+            coverage["truncated"] = True
+            if not cell and remaining > separator:
+                lines.append(text[: remaining - separator])
+            return False
+        lines.append(text)
+        remaining -= len(text) + separator
+        return True
+
+    package = io.BytesIO(raw)
+    try:
+        with ZipFile(package) as archive:
+            # Bound expanded bytes before python-docx loads related package parts.
+            if sum(member.file_size for member in archive.infolist()) > 2 * MAX_ATTACHMENT_BYTES:
+                raise AttachmentInputError("附件解压后体积过大，请重新上传较小的文件")
+        package.seek(0)
+        document = Document(package)
+        table_index = 0
+        for block in document.element.body:
+            if block.tag == paragraph_tag:
+                if not append(Paragraph(block, document).text):
+                    break
+            elif block.tag == table_tag:
+                table_index += 1
+                if table_index > max_tables:
+                    coverage["truncated"] = True
+                    continue
+                for row_index, row in enumerate(block.iterchildren(row_tag), start=1):
+                    if row_index > max_rows:
+                        coverage["truncated"] = True
+                        break
+                    column = 1 + row.grid_before
+                    if column < 1 or row.grid_after < 0:
+                        raise ValueError("Invalid DOCX grid offset")
+                    for cell in row.iterchildren(cell_tag):
+                        if column > max_columns:
+                            coverage["truncated"] = True
+                            break
+                        # Do not expand merged cells into duplicate values or allocate by grid span.
+                        span = cell.grid_span
+                        if span < 1:
+                            raise ValueError("Invalid DOCX grid span")
+                        if cell.find(table_tag) is not None:
+                            coverage["truncated"] = True
+                        if cell.vMerge != "continue":
+                            text = " ".join(
+                                Paragraph(p, document).text
+                                for p in cell.iterchildren(paragraph_tag)
+                            )
+                            text = " ".join(text.split())
+                            if len(text) > max_cell_chars:
+                                coverage["truncated"] = True
+                            if text and not append(
+                                f"[表格 {table_index} 行 {row_index} 列 {column}] {text[:max_cell_chars]}",
+                                cell=True,
+                            ):
+                                return "\n".join(lines)
+                        column += span
+                    coverage["truncated"] |= column - 1 + row.grid_after > max_columns
+            elif block.tag != qn("w:sectPr"):
+                coverage["truncated"] = True
+    except (BadZipFile, InvalidXmlError, KeyError, SyntaxError, ZlibError) as exc:
+        raise AttachmentInputError("附件解析失败，请重新上传可读取的文件") from exc
+    return "\n".join(lines)
 
 
 def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
@@ -89,11 +178,7 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
     if suffix == ".csv":
         return finish(raw.decode("utf-8-sig"))
     if suffix == ".docx":
-        from docx import Document
-
-        document = Document(io.BytesIO(raw))
-        coverage.update(scope="paragraphs_only", truncated=bool(document.tables))
-        return finish("\n".join(p.text for p in document.paragraphs))
+        return finish(_docx_preview(raw, coverage))
     raise AttachmentInputError("附件格式暂不支持，请重新上传 PDF、图片、CSV 或 XLSX")
 
 
@@ -172,6 +257,13 @@ def resolve_attachment_context(context: dict[str, Any]):
     return {
         **context,
         "file_context": {
-            "verified_uploads": [{"name": item["name"], **item["preview"]} for item in artifacts]
+            "verified_uploads": [
+                {
+                    "name": item["name"],
+                    "upload_id": item["metadata"]["upload_id"],
+                    **item["preview"],
+                }
+                for item in artifacts
+            ]
         },
     }, artifacts

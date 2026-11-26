@@ -72,44 +72,24 @@ class TestGetCustomersSessionAdditional:
             result = get_customers_session()
         assert result is mock_session
 
-    def test_resolve_customers_session_import_error_fallback(self):
-        """Test that ImportError falls back to SessionLocal."""
-        mock_session_local = MagicMock()
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            ImportError("adapter unavailable"),
+            _db_error("store unavailable"),
+            RuntimeError("resolver failed"),
+        ],
+    )
+    def test_resolve_customers_session_error_does_not_switch_repository(self, failure):
         with (
             patch(
                 "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-                side_effect=ImportError("module not found"),
+                side_effect=failure,
             ),
-            patch("app.db.SessionLocal", return_value=mock_session_local),
+            patch("app.db.SessionLocal") as fallback,
+            pytest.raises(type(failure)),
         ):
-            result = get_customers_session()
-        assert result is mock_session_local
-
-    def test_resolve_customers_session_storage_error_fallback(self):
-        """A classified session I/O failure falls back to SessionLocal."""
-        mock_session_local = MagicMock()
-        with (
-            patch(
-                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-                side_effect=_db_error("runtime error"),
-            ),
-            patch("app.db.SessionLocal", return_value=mock_session_local),
-        ):
-            result = get_customers_session()
-        assert result is mock_session_local
-
-    def test_resolve_customers_session_runtime_error_does_not_switch_repository(self):
-        """An unexpected adapter failure must not silently select another repository."""
-        mock_session_local = MagicMock()
-        with (
-            patch(
-                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-                side_effect=RuntimeError("runtime error"),
-            ),
-            patch("app.db.SessionLocal", return_value=mock_session_local) as fallback,
-        ):
-            with pytest.raises(RuntimeError, match="runtime error"):
-                get_customers_session()
+            get_customers_session()
         fallback.assert_not_called()
 
 

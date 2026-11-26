@@ -41,7 +41,7 @@
           class="admin-business-customers-search"
           placeholder="搜索客户名称 / 账号 / 邮箱 / 电话 / 行业 / VIP"
         />
-        <span class="muted">共 {{ filteredCustomers.length }} / {{ customers.length }} 个业务对象</span>
+        <span class="muted">匹配 {{ filteredCustomers.length }} / 已加载 {{ customers.length }} 个业务对象</span>
       </section>
 
       <section class="admin-business-customers-table-wrap" aria-label="具体客户列表">
@@ -67,7 +67,7 @@
               <td colspan="9" class="admin-business-customers-empty">暂无客户数据</td>
             </tr>
             <template v-else>
-              <tr v-for="customer in filteredCustomers" :key="customer.key">
+              <tr v-for="customer in visibleCustomers" :key="customer.key">
                 <td>
                   <span class="admin-business-source" :class="`admin-business-source--${customer.source}`">
                     {{ customer.sourceLabel }}
@@ -89,12 +89,17 @@
           </tbody>
         </table>
       </section>
+      <nav v-if="pageCount > 1" class="admin-business-customers-pagination" aria-label="已加载客户分页">
+        <button type="button" :disabled="page === 1" @click="page -= 1">上一页</button>
+        <span aria-live="polite">{{ page }} / {{ pageCount }} · {{ (page - 1) * PAGE_SIZE + 1 }}-{{ Math.min(page * PAGE_SIZE, filteredCustomers.length) }} 条</span>
+        <button type="button" :disabled="page === pageCount" @click="page += 1">下一页</button>
+      </nav>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 
@@ -168,6 +173,8 @@ const customers = ref<BusinessCustomerRow[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
 const searchText = ref('')
+const page = ref(1)
+const PAGE_SIZE = 100
 
 const ACCOUNT_TIER_LABELS: Record<string, string> = {
   normal: '普通',
@@ -196,6 +203,11 @@ const filteredCustomers = computed(() => {
   if (!q) return customers.value
   return customers.value.filter((customer) => customer.searchText.includes(q))
 })
+
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredCustomers.value.length / PAGE_SIZE)))
+const visibleCustomers = computed(() => filteredCustomers.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+watch(searchText, () => { page.value = 1 })
+watch(pageCount, (count) => { if (page.value > count) page.value = count })
 
 const platformCustomerCount = computed(() => customers.value.filter((customer) => customer.source === 'platform').length)
 const erpCustomerCount = computed(() => customers.value.filter((customer) => customer.source === 'erp').length)

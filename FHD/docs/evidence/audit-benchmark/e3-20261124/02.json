@@ -1,0 +1,394 @@
+{
+  "domain": "02",
+  "title": "ERP 订单与资金闭环：下单→出库→收款→冲销→重启恢复",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "7ae9e323b3df5df90e5dbb30da8632fb73cbd74c",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "建商品 → 入库 100 → 下单 10 件 → 出库 → 收款 25000 → 冲销 → 超量出库负向 → SIGKILL 重启 → 复核",
+    "negative": "超量出库必须拒绝",
+    "concurrency": 1,
+    "data_volume": "isolated tenant 1"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "stock_out beyond on-hand quantity",
+      "status": 200,
+      "rejected": true,
+      "excerpt": "{\"success\":false,\"error_code\":\"inventory_insufficient_stock\",\"message\":\"库存不足或库存记录不存在\",\"outcome\":\"unknown\",\"retryable\":false,\"reconciliation_required\":true,\"run_id\":\"run_7e6b568b67820d6812b0042e031c3bb4\",\"agent_run_id\":\"run_7e6b568b67820d6812b0042e031c3bb4\",\"agent_status\":\"blocked\"}"
+    },
+    {
+      "fault": "SIGKILL after ERP chain, then restart",
+      "mode": "kill9",
+      "pids_before": [
+        26876
+      ],
+      "pids_killed": [
+        26876
+      ],
+      "down_after_kill": true,
+      "pid_after": 26970,
+      "readiness": {
+        "liveness": true,
+        "routes_ready": true,
+        "wait_ms": 3230,
+        "pid": 26970
+      }
+    }
+  ],
+  "evidence_ids": [
+    "02-products-list",
+    "02-product-add",
+    "02-warehouse-list",
+    "02-stock-in",
+    "02-order-create",
+    "02-dashboard-before",
+    "02-stock-out",
+    "02-stock-out-overissue",
+    "02-stock-summary",
+    "02-receipt",
+    "02-receipt-readback",
+    "02-receipt-list",
+    "02-dashboard-after-receipt",
+    "02-reversal-void",
+    "02-reversal-void-readback",
+    "02-dashboard-after-reversal",
+    "02-reversal-delete-target",
+    "02-reversal-delete",
+    "02-reversal-delete-verify",
+    "02-after-restart-orders",
+    "02-after-restart-stock"
+  ],
+  "observed_results": [
+    {
+      "step_id": "02-products-list",
+      "method": "GET",
+      "path": "/api/mod/xcagi-erp-domain-bridge/products/list?per_page=100",
+      "status": 200,
+      "elapsed_ms": 31,
+      "response_sha256": "c5c0e89005779bd4b2cc38627d3d895f21ebdd1f74025448fe37c589d92f2b73",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":7,\"model_number\":\"E3-商品-1795456439-25kg-件\",\"name\":\"E3 商品 1795456439\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:53:59.460945\",\"updated_at\":\"2026-11-24T01:53:59.460949\"},{\"id\":6,\"model_number\":\"E3-商品-1795456356-25kg-件\",\"name\":\"E3 商品 1795456356\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:52:36.414872\",\"updated_at\":\"2026-11-24T01:52:36.414875\"},{\"id\":5,\"model_number\":\"E3-商品-1795456247-25kg-件\",\"name\":\"E3 商品 1795456247\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:50:47.563149\",\"updated_at\":\"2026-11-24T01:50:47.563152\"},{\"id\":4,\"model_number\":\"E3-商品-1795456193-25kg-件\",\"name\":\"E3 商品 1795456193\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:49:53.872863\",\"updated_at\":\"2026-11-24T01:49:53.872866\"},{\"id\":3,\"model_number\":\"E3-商品-1795456061-25kg-件\",\"name\":\"E3 商品 1795456061\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:47:41.620860\",\"updated_at\":\"2026-11-24T01:47:41.620862\"},{\"id\":2,\"model_number\":\"E3-测试商品-1124-25kg-件\",\"name\":\"E3 测试商品 1124\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:34:30.524695\",\"updated_at\":\"2026-11-24T01:34:30.524697\"},{\"id\":1,\"model_number\":\"E3-Widget-25kg-件\",\"name\":\"E3 Widget\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:27:23.164123\",\"updated_at\":\"2026-11-24T01:27:23.164128\"}],\"total\":7,\"source\":\"mod:xcagi-erp-domain-bridge\",\"execution_path\":\"mod_domain_handler\",\"repository_provider\":\"mod:xcagi-erp-domain-bridge\",\"storage_path\":\"mod_delegated_adapter\",\"adapter_kind\":\"mod_delegated\",\"handler_via\":\"products_service\"}"
+    },
+    {
+      "step_id": "02-product-add",
+      "method": "POST",
+      "path": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "status": 200,
+      "elapsed_ms": 100,
+      "response_sha256": "6ad4601000d0eace9e86d2de337ea43dffa83f1e98435f1322c349caaaa3e7b8",
+      "response_excerpt": "{\"success\":true,\"data\":{\"id\":8},\"source\":\"mod:xcagi-erp-domain-bridge\",\"execution_path\":\"mod_domain_handler\",\"handler_via\":\"products_service\"}"
+    },
+    {
+      "step_id": "02-warehouse-list",
+      "method": "GET",
+      "path": "/api/inventory/warehouses",
+      "status": 200,
+      "elapsed_ms": 11,
+      "response_sha256": "c83bcd9c4168f31a597b04acf6eeda82e9c62bb4ee2d84b832229f83c54063a2",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":2,\"code\":\"E3WHB\",\"name\":\"E3 仓 B\",\"type\":\"normal\",\"address\":null,\"manager\":null,\"status\":\"active\",\"created_at\":\"2026-11-24T01:35:20.910914\",\"updated_at\":null,\"tenant_id\":1},{\"id\":1,\"code\":\"WH-T1-DEFAULT\",\"name\":\"默认仓库\",\"type\":\"normal\",\"address\":null,\"manager\":null,\"status\":\"active\",\"created_at\":\"2026-11-24T01:30:23.874622\",\"updated_at\":null,\"tenant_id\":1}],\"count\":2}"
+    },
+    {
+      "step_id": "02-stock-in",
+      "method": "POST",
+      "path": "/api/inventory/in",
+      "status": 200,
+      "elapsed_ms": 1792,
+      "response_sha256": "9b73e33cb8bf5f1728992ca9bbbbbe31b9583ca6778769c0baf4f980207a9a53",
+      "response_excerpt": "{\"success\":true,\"message\":\"入库成功\",\"data\":{\"ledger_id\":7,\"quantity\":100.0,\"total_quantity\":100.0},\"run_id\":\"run_8a6c1713197e177aa4a6296164578fb2\",\"agent_run_id\":\"run_8a6c1713197e177aa4a6296164578fb2\",\"agent_status\":\"completed\"}"
+    },
+    {
+      "step_id": "02-order-create",
+      "method": "POST",
+      "path": "/api/mod/xcagi-erp-domain-bridge/orders",
+      "status": 201,
+      "elapsed_ms": 1593,
+      "response_sha256": "3d734f5d2a3b2f6826ece09150559d367e5de4a3f0d53efb02379db35db6b5f1",
+      "response_excerpt": "{\"success\":true,\"message\":\"发货单创建成功\",\"shipment\":{\"id\":7,\"order_number\":\"20261124021033\",\"purchase_unit\":\"E3 客户 1795457432\",\"contact_person\":\"E3\",\"contact_phone\":\"13800000000\",\"contact_address\":null,\"items\":[{\"id\":null,\"product_name\":\"E3 商品 1795457430\",\"model_number\":\"\",\"quantity_tins\":10,\"quantity_kg\":250.0,\"spec_per_tin\":25.0,\"unit_price\":100,\"amount\":25000.0}],\"status\":\"pending\",\"created_at\":\"2026-11-24T02:10:33.868762\",\"updated_at\":\"2026-11-24T02:10:33.880672\",\"printed_at\":null,\"printer_name\":null,\"total_amount\":25000.0,\"total_quantity_tins\":10,\"total_quantity_kg\":250.0},\"run_id\":\"run_9f456a8724ed3932c6213666f46b0cf3\",\"agent_run_id\":\"run_9f456a8724ed3932c6213666f46b0cf3\",\"agent_status\":\"completed\"}"
+    },
+    {
+      "step_id": "02-dashboard-before",
+      "method": "GET",
+      "path": "/api/finance/dashboard",
+      "status": 200,
+      "elapsed_ms": 11,
+      "response_sha256": "65018852a7a7a07968423842fd4557cb3f3a54a20fa6b2902f698ba0159555aa",
+      "response_excerpt": "{\"success\":true,\"data\":{\"total_revenue\":175000.0,\"total_cost\":0.0,\"gross_profit\":175000.0,\"gross_margin_pct\":100.0,\"total_payable\":0.0,\"manual_receipt\":0.0,\"manual_payment\":0.0,\"period\":{\"start\":null,\"end\":null}}}"
+    },
+    {
+      "step_id": "02-stock-out",
+      "method": "POST",
+      "path": "/api/inventory/out",
+      "status": 200,
+      "elapsed_ms": 1614,
+      "response_sha256": "51bde3cc66ef29435bc0dd9f58dabf4fd18dacb0e4c3b795e9f16f46ae2fecda",
+      "response_excerpt": "{\"success\":true,\"message\":\"出库成功\",\"data\":{\"ledger_id\":7,\"quantity\":10.0,\"remaining_quantity\":90.0},\"run_id\":\"run_77f2638e4a526bbe3ef9f1f69094ea55\",\"agent_run_id\":\"run_77f2638e4a526bbe3ef9f1f69094ea55\",\"agent_status\":\"completed\"}"
+    },
+    {
+      "step_id": "02-stock-out-overissue",
+      "method": "POST",
+      "path": "/api/inventory/out",
+      "status": 200,
+      "elapsed_ms": 1720,
+      "response_sha256": "e356aff8d4436c2aa5b6bb4cfe432c84459a4545e27b4393eb93679021fff81a",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"inventory_insufficient_stock\",\"message\":\"库存不足或库存记录不存在\",\"outcome\":\"unknown\",\"retryable\":false,\"reconciliation_required\":true,\"run_id\":\"run_7e6b568b67820d6812b0042e031c3bb4\",\"agent_run_id\":\"run_7e6b568b67820d6812b0042e031c3bb4\",\"agent_status\":\"blocked\"}"
+    },
+    {
+      "step_id": "02-stock-summary",
+      "method": "GET",
+      "path": "/api/inventory/summary?product_id=8",
+      "status": 200,
+      "elapsed_ms": 11,
+      "response_sha256": "7d4336f4417018de282dda413c909ec6f66ebd8c08408fce90d5357c81e152b1",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"product_id\":1,\"product_name\":\"E3 Widget\",\"model_number\":\"E3-Widget-25kg-件\",\"total_quantity\":105.0,\"total_available\":105.0},{\"product_id\":3,\"product_name\":\"E3 商品 1795456061\",\"model_number\":\"E3-商品-1795456061-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":4,\"product_name\":\"E3 商品 1795456193\",\"model_number\":\"E3-商品-1795456193-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":5,\"product_name\":\"E3 商品 1795456247\",\"model_number\":\"E3-商品-1795456247-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":6,\"product_name\":\"E3 商品 1795456356\",\"model_number\":\"E3-商品-1795456356-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":7,\"product_name\":\"E3 商品 1795456439\",\"model_number\":\"E3-商品-1795456439-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":8,\"product_name\":\"E3 商品 1795457430\",\"model_number\":\"E3-商品-1795457430-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0}]}"
+    },
+    {
+      "step_id": "02-receipt",
+      "method": "POST",
+      "path": "/api/finance/transactions",
+      "status": 200,
+      "elapsed_ms": 1503,
+      "response_sha256": "53251f8ee259cd218a55176ad1e9202d41fb2b6ab39999dba934b947b78e68b1",
+      "response_excerpt": "{\"success\":false,\"data\":{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 订单收款 20261124021033\",\"transaction_date\":\"2026-11-23T18:10:38.764379\",\"due_date\":null,\"status\":\"completed\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T18:10:38.765660\",\"updated_at\":\"2026-11-23T18:10:38.765664\"},\"error_code\":\"result_verification_inconclusive\",\"message\":\"工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。\",\"verification_code\":\"result_verifier_unavailable\",\"retryable\":false,\"reconciliation_required\":true,\"outcome\":\"unknown\",\"run_id\":\"run_ea38b176abe2f54c5f6eacaf0591dd36\",\"agent_run_id\":\"run_ea38b176abe2f54c5f6eacaf0591dd36\",\"agent_status\":\"blocked\"}"
+    },
+    {
+      "step_id": "02-receipt-readback",
+      "method": "GET",
+      "path": "/api/finance/transactions/3",
+      "status": 200,
+      "elapsed_ms": 9,
+      "response_sha256": "aefae6d2f4a3270670b8c94cf2cdc18ee78647f2a25e160ff149e696f98380b3",
+      "response_excerpt": "{\"success\":true,\"data\":{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 订单收款 20261124021033\",\"transaction_date\":\"2026-11-23T18:10:38.764379\",\"due_date\":null,\"status\":\"completed\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T18:10:38.765660\",\"updated_at\":\"2026-11-23T18:10:38.765664\"}}"
+    },
+    {
+      "step_id": "02-receipt-list",
+      "method": "GET",
+      "path": "/api/finance/transactions?transaction_type=receipt&per_page=20",
+      "status": 200,
+      "elapsed_ms": 7,
+      "response_sha256": "077619b1a09692297a813b2f5927ddb3ee2624824ebdd7fe97a9a6b8edc5c793",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 订单收款 20261124021033\",\"transaction_date\":\"2026-11-23T18:10:38.764379\",\"due_date\":null,\"status\":\"completed\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T18:10:38.765660\",\"updated_at\":\"2026-11-23T18:10:38.765664\"},{\"id\":2,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124015402,\"journal_entry_id\":null,\"description\":\"E3 冲销 20261124015402\",\"transaction_date\":\"2026-11-23T17:54:06.606976\",\"due_date\":null,\"status\":\"void\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T17:54:06.607754\",\"updated_at\":\"2026-11-23T17:54:08.038383\"},{\"id\":1,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124015239,\"journal_entry_id\":null,\"description\":\"E3 冲销\",\"transaction_date\":\"2026-11-23T17:52:43.892816\",\"due_date\":null,\"status\":\"void\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T17:52:43.893681\",\"updated_at\":\"2026-11-23T17:53:11.735786\"}],\"total\":3,\"page\":1,\"per_page\":20}"
+    },
+    {
+      "step_id": "02-dashboard-after-receipt",
+      "method": "GET",
+      "path": "/api/finance/dashboard",
+      "status": 200,
+      "elapsed_ms": 11,
+      "response_sha256": "4b3676fbdb10f47f83584e919ed1fe4ba329617979f960066f4a52a8025af65e",
+      "response_excerpt": "{\"success\":true,\"data\":{\"total_revenue\":175000.0,\"total_cost\":0.0,\"gross_profit\":175000.0,\"gross_margin_pct\":100.0,\"total_payable\":0.0,\"manual_receipt\":25000.0,\"manual_payment\":0.0,\"period\":{\"start\":null,\"end\":null}}}"
+    },
+    {
+      "step_id": "02-reversal-void",
+      "method": "PUT",
+      "path": "/api/finance/transactions/3",
+      "status": 200,
+      "elapsed_ms": 1492,
+      "response_sha256": "d1cd0b338ac60ebaed7edc2b425109c94c4899d8d25bc16a36bbaf39841a156b",
+      "response_excerpt": "{\"success\":false,\"data\":{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 冲销 20261124021033\",\"transaction_date\":\"2026-11-23T18:10:38.764379\",\"due_date\":null,\"status\":\"void\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T18:10:38.765660\",\"updated_at\":\"2026-11-23T18:10:40.288297\"},\"error_code\":\"result_verification_inconclusive\",\"message\":\"工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。\",\"verification_code\":\"result_verifier_unavailable\",\"retryable\":false,\"reconciliation_required\":true,\"outcome\":\"unknown\",\"run_id\":\"run_cfb13825b74615aba520eb5003fe5471\",\"agent_run_id\":\"run_cfb13825b74615aba520eb5003fe5471\",\"agent_status\":\"blocked\"}"
+    },
+    {
+      "step_id": "02-reversal-void-readback",
+      "method": "GET",
+      "path": "/api/finance/transactions/3",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "67a556d6186c52ba09ba21340c55fdec544d6ecbea66a44f2716fc28d60b8c1f",
+      "response_excerpt": "{\"success\":true,\"data\":{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 冲销 20261124021033\",\"transaction_date\":\"2026-11-23T18:10:38.764379\",\"due_date\":null,\"status\":\"void\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T18:10:38.765660\",\"updated_at\":\"2026-11-23T18:10:40.288297\"}}"
+    },
+    {
+      "step_id": "02-dashboard-after-reversal",
+      "method": "GET",
+      "path": "/api/finance/dashboard",
+      "status": 200,
+      "elapsed_ms": 6,
+      "response_sha256": "65018852a7a7a07968423842fd4557cb3f3a54a20fa6b2902f698ba0159555aa",
+      "response_excerpt": "{\"success\":true,\"data\":{\"total_revenue\":175000.0,\"total_cost\":0.0,\"gross_profit\":175000.0,\"gross_margin_pct\":100.0,\"total_payable\":0.0,\"manual_receipt\":0.0,\"manual_payment\":0.0,\"period\":{\"start\":null,\"end\":null}}}"
+    },
+    {
+      "step_id": "02-reversal-delete-target",
+      "method": "POST",
+      "path": "/api/finance/transactions",
+      "status": 200,
+      "elapsed_ms": 1475,
+      "response_sha256": "2e5f5cce6a143f191e0eb29c03062d0ff410149621657051270810bf7475921a",
+      "response_excerpt": "{\"success\":false,\"data\":{\"id\":4,\"transaction_type\":\"receipt\",\"amount\":999.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":null,\"journal_entry_id\":null,\"description\":\"E3 删除测试 1795457440\",\"transaction_date\":\"2026-11-23T18:10:41.774497\",\"due_date\":null,\"status\":\"completed\",\"counterparty_name\":null,\"counterparty_id\":null,\"created_by\":null,\"created_at\":\"2026-11-23T18:10:41.775350\",\"updated_at\":\"2026-11-23T18:10:41.775353\"},\"error_code\":\"result_verification_inconclusive\",\"message\":\"工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。\",\"verification_code\":\"result_verifier_unavailable\",\"retryable\":false,\"reconciliation_required\":true,\"outcome\":\"unknown\",\"run_id\":\"run_94c3764af1395a4efe43c66b045fe1f0\",\"agent_run_id\":\"run_94c3764af1395a4efe43c66b045fe1f0\",\"agent_status\":\"blocked\"}"
+    },
+    {
+      "step_id": "02-reversal-delete",
+      "method": "DELETE",
+      "path": "/api/finance/transactions/4",
+      "status": 200,
+      "elapsed_ms": 1508,
+      "response_sha256": "debb1833d82e6390a9d3015c50d97963b625ff1903b627689d518e22c77de9c9",
+      "response_excerpt": "{\"success\":false,\"message\":\"工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。\",\"error_code\":\"result_verification_inconclusive\",\"verification_code\":\"result_verifier_unavailable\",\"retryable\":false,\"reconciliation_required\":true,\"outcome\":\"unknown\",\"run_id\":\"run_93674eb44b1a6e16fe05709f0e3990d1\",\"agent_run_id\":\"run_93674eb44b1a6e16fe05709f0e3990d1\",\"agent_status\":\"blocked\"}"
+    },
+    {
+      "step_id": "02-reversal-delete-verify",
+      "method": "GET",
+      "path": "/api/finance/transactions/4",
+      "status": 200,
+      "elapsed_ms": 18,
+      "response_sha256": "29b460d39e7d7fb1a67bbc949c6be32849d2655b87bc05e6d829c111633e8a50",
+      "response_excerpt": "{\"success\":false,\"message\":\"凭证不存在\"}"
+    },
+    {
+      "step_id": "02-after-restart-orders",
+      "method": "GET",
+      "path": "/api/mod/xcagi-erp-domain-bridge/orders",
+      "status": 200,
+      "elapsed_ms": 22,
+      "response_sha256": "46611e95c132b4ae6fe7e22558ed87b6eb7d3e0f036b8a087d7f844c4001352c",
+      "response_excerpt": "{\"success\":true,\"data\":{\"success\":true,\"data\":[{\"purchase_unit\":\"E3 客户 1795457432\",\"unit_id\":null,\"product_name\":\"E3 商品 1795457430\",\"model_number\":\"\",\"quantity_kg\":250.0,\"quantity_tins\":10,\"tin_spec\":25.0,\"unit_price\":100.0,\"amount\":25000.0,\"status\":\"pending\",\"printed_at\":null,\"printer_name\":null,\"raw_text\":\"source=shipment_excel_elt\",\"parsed_data\":\"{\\\"id\\\": null, \\\"order_number\\\": \\\"20261124021033\\\", \\\"purchase_unit\\\": \\\"E3 客户 1795457432\\\", \\\"contact_person\\\": \\\"E3\\\", \\\"contact_phone\\\": \\\"13800000000\\\", \\\"contact_address\\\": null, \\\"items\\\": [{\\\"id\\\": null, \\\"product_name\\\": \\\"E3 商品 1795457430\\\", \\\"model_number\\\": \\\"\\\", \\\"quantity_tins\\\": 10, \\\"quantity_kg\\\": 250.0, \\\"spec_per_tin\\\": 25.0, \\\"unit_price\\\": 100, \\\"amount\\\": 25000.0}], \\\"status\\\": \\\"pending\\\", \\\"created_at\\\": \\\"2026-11-24T02:10:33.868762\\\", \\\"updated_at\\\": \\\"2026-11-24T02:10:33.880672\\\", \\\"printed_at\\\": null, \\\"printer_name\\\": null, \\\"total_amount\\\": 25000.0, \\\"total_quantity_tins\\\": 10, \\\"total_quantity_kg\\\": 250.0}\",\"id\":7,\"created_at\":\"2026-11-24T02:10:33.868762\",\"updated_at\":\"2026-11-24T02:10:33.880672\",\"tenant_id\":1},{\"purchase_unit\":\"E3 客户 1795456440\",\"unit_id\":null,\"product_name\":\"E3 商品 1795456439\",\"model_number\":\"\",\"quantity_kg\":250.0,\"quantity_tins\":10,\"tin_spec\":25.0,\"unit_price\":100.0,\"amount\":25000.0,\"status\":\"pending\",\"printed_at\":null,\"printer_name\":null,\"raw_text\":\"source=shipment_excel_elt\",\"parsed_data\":\"{\\\"id\\\": null, \\\"order_number\\\": \\\"20261124015402\\\", \\\"purchase_unit\\\": \\\"E3 客户 1795456440\\\", \\\"contact_person\\\": \\\"E3\\\", \\\"contact_phone\\\": \\\"13800000000\\\", \\\"contact_address\\\": null, \\\"items\\\": [{\\\"id\\\": null, \\\"product_name\\\": \\\"E3 商品 1795456439\\\", \\\"model_number\\\": \\\"\\\", \\\"quantity_tins\\\": 10, \\\"quantity_kg\\\": 250.0, \\\"spec_per_tin\\\": 25.0, \\\"unit_price\\\": 100, \\\"amount\\\": 25000.0}], \\\"status\\\": \\\"pending\\\", \\\"created_at\\\": \\\"2026-11-24T01:54:02.301722\\\", \\\"updated_at\\\": \\\"2026-11-24T01:54:02.312971\\\", \\\"printed_at\\\": null, \\\"printer_name\\\": null, \\\"total_amount\\\": 25000.0, \\\"total_quantity_tins\\\": 10, \\\"total_quantity_kg\\\": 250.0}\",\"id\":6,\"created_at\":\"2026-11-24T01:54:02.301722\",\"updated_at\":\"2026-11-24T01:54:02.312971\",\"tenant_id\":1},{\"purchase_unit\":\"E3 客户 1795456358\",\"unit_id\":null,\"product_name\":\"E3 商品 1795456356\",\"model_number\":\"\",\"quantity_kg\":250.0,\"quantity_tins\":10,\"tin_spec\":25.0,\"unit_price\":100.0,\"amount\":25000.0,\"status\":\"pending\",\"printed_at\":null,\"printer_name\":null,\"raw_text\":\"source=shipment_excel_elt\",\"parsed_data\":\"{\\\"id\\\": null, \\\"order_number\\\": \\\"20261124015239\\\", \\\"purchase_unit\\\": \\\"E3 客户 1795456358\\\", \\\"contact_person\\\": \\\"E3\\\", \\\"contact_phone\\\": \\\"13800000000\\\", \\\"contact_address\\\": null, \\\"items\\\": [{\\\"id\\\": null, \\\"product_name\\\": \\\"E3 商品 1795456356\\\", \\\"model_number\\\": \\\"\\\", \\\"quantity_tins\\\": 10, \\\"quantity_kg\\\": 250.0, \\\"spec_per_tin\\\": 25.0, \\\"unit_price\\\": 100, \\\"amount\\\": 25000.0}], \\\"status\\\": \\\"pending\\\", \\\"created_at\\\": \\\"2026-11-24T01:52:39.495389\\\", \\\"updated_at\\\": \\\"2026-11-24T01:52:39.509042\\\", \\\"printed_at\\\": null, \\\""
+    },
+    {
+      "step_id": "02-after-restart-stock",
+      "method": "GET",
+      "path": "/api/inventory/summary?product_id=8",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "7d4336f4417018de282dda413c909ec6f66ebd8c08408fce90d5357c81e152b1",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"product_id\":1,\"product_name\":\"E3 Widget\",\"model_number\":\"E3-Widget-25kg-件\",\"total_quantity\":105.0,\"total_available\":105.0},{\"product_id\":3,\"product_name\":\"E3 商品 1795456061\",\"model_number\":\"E3-商品-1795456061-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":4,\"product_name\":\"E3 商品 1795456193\",\"model_number\":\"E3-商品-1795456193-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":5,\"product_name\":\"E3 商品 1795456247\",\"model_number\":\"E3-商品-1795456247-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":6,\"product_name\":\"E3 商品 1795456356\",\"model_number\":\"E3-商品-1795456356-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":7,\"product_name\":\"E3 商品 1795456439\",\"model_number\":\"E3-商品-1795456439-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0},{\"product_id\":8,\"product_name\":\"E3 商品 1795457430\",\"model_number\":\"E3-商品-1795457430-25kg-件\",\"total_quantity\":90.0,\"total_available\":90.0}]}"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "02.product",
+      "description": "真实创建/读取商品主数据",
+      "passed": true,
+      "detail": "product_id=8"
+    },
+    {
+      "id": "02.warehouse",
+      "description": "租户仓库真实存在",
+      "passed": true,
+      "detail": "warehouse_id=2"
+    },
+    {
+      "id": "02.stock-in",
+      "description": "入库真实落账并返回库存量",
+      "passed": true,
+      "detail": "total=100.0 {\"success\":true,\"message\":\"入库成功\",\"data\":{\"ledger_id\":7,\"quantity\":100.0,\"total_quantity\":100.0},\"run_id\":\"run_8a6c1713197e177aa4a6296164578fb2\",\"agent_run_id\":\"run_8a6c1713197e177aa4a6296164578fb2\",\"a"
+    },
+    {
+      "id": "02.order",
+      "description": "订单真实创建并落库",
+      "passed": true,
+      "detail": "order=20261124021033"
+    },
+    {
+      "id": "02.stock-out",
+      "description": "按订单出库真实扣减",
+      "passed": true,
+      "detail": "{\"success\":true,\"message\":\"出库成功\",\"data\":{\"ledger_id\":7,\"quantity\":10.0,\"remaining_quantity\":90.0},\"run_id\":\"run_77f2638e4a526bbe3ef9f1f69094ea55\",\"agent_run_id\":\"run_77f2638e4a526bbe3ef9f1f69094ea55\",\"agent_status\":\"completed\"}"
+    },
+    {
+      "id": "02.over-issue-rejected",
+      "description": "超量出库被拒绝",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "id": "02.stock-consistent",
+      "description": "本商品库存扣减后余量=90 且未出现负数",
+      "passed": true,
+      "detail": "available=90.0"
+    },
+    {
+      "id": "02.receipt-write",
+      "description": "收款凭证写入调用已到达真实服务端并返回凭证对象",
+      "passed": true,
+      "detail": "txn=3 {\"success\":false,\"data\":{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 订单收款 202611"
+    },
+    {
+      "id": "02.receipt",
+      "description": "收款凭证真实落库且金额/类型正确（独立读回）",
+      "passed": true,
+      "detail": "readback={\"id\": 3, \"transaction_type\": \"receipt\", \"amount\": 25000.0, \"currency\": \"CNY\", \"reference_type\": null, \"reference_id\": 20261124021033, \"journal_entry_id\": null, \"description\": \"E3 订单收款 20261124021033\""
+    },
+    {
+      "id": "02.receipt-list",
+      "description": "收款凭证可在真实列表中查到",
+      "passed": true,
+      "detail": "ids=[3, 2, 1]"
+    },
+    {
+      "id": "02.dashboard-receipt",
+      "description": "财务看板收款金额较基线增加 25000",
+      "passed": true,
+      "detail": "manual_receipt=25000.0 base=0.0 revenue_before=175000.0"
+    },
+    {
+      "id": "02.reversal",
+      "description": "收款凭证经冲销置为 void（独立读回确认）",
+      "passed": true,
+      "detail": "status=void id=3"
+    },
+    {
+      "id": "02.reversal-dashboard",
+      "description": "冲销后看板收款金额回落到基线",
+      "passed": true,
+      "detail": "manual_receipt=0.0 base=0.0"
+    },
+    {
+      "id": "02.reversal-api-envelope",
+      "description": "记录 API 对 finance 写入的保守响应（success=false / outcome=unknown）",
+      "passed": true,
+      "detail": "envelope={\"success\":false,\"data\":{\"id\":3,\"transaction_type\":\"receipt\",\"amount\":25000.0,\"currency\":\"CNY\",\"reference_type\":null,\"reference_id\":20261124021033,\"journal_entry_id\":null,\"description\":\"E3 冲销 20261124021033\",\"transaction"
+    },
+    {
+      "id": "02.reversal-delete",
+      "description": "硬删除后凭证经独立读回确认不存在",
+      "passed": true,
+      "detail": "verify={\"success\":false,\"message\":\"凭证不存在\"}"
+    },
+    {
+      "id": "02.restart-persistence",
+      "description": "重启后订单仍存在",
+      "passed": true,
+      "detail": "order=20261124021033 found_numbers=['20261124021033', '20261124015402', '20261124015239', '20261124015050', '20261124014956', '20261124013433', '20261124012709']"
+    },
+    {
+      "id": "02.stock-persistence",
+      "description": "重启后库存汇总可读且未出现负数",
+      "passed": true,
+      "detail": "{\"success\":true,\"data\":[{\"product_id\":1,\"product_name\":\"E3 Widget\",\"model_number\":\"E3-Widget-25kg-件\",\"total_quantity\":105.0,\"total_available\":105.0},{\"product_id\":3,\"product_name\":\"E3 商品 1795456061\",\"model_number\":\"E3-商品-1795456061-25kg-件\",\"total_qua"
+    }
+  ],
+  "assertions_passed": 17,
+  "assertions_total": 17,
+  "unknowns": [
+    "多币种与跨期间对账未在本轮执行",
+    "真实开票（税控/百望渠道）未接入，未验证开票闭环",
+    "采购到付款（应付侧）未执行"
+  ],
+  "axis_levels": null,
+  "domain_status": "E3",
+  "level": "E3",
+  "score": 90,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:10:46.892305+00:00",
+  "order_number": "20261124021033",
+  "product_id": 8,
+  "warehouse_id": 2,
+  "receipt_txn_id": 3
+}

@@ -4,6 +4,7 @@ import {
   buildChatSessionMetaKey,
   extractSessionIdForActiveMod,
   CHAT_MESSAGES_STORAGE_PREFIX,
+  resolveChatStorageScope,
 } from './chatStorageKeys'
 import { writeActiveExtensionModIdToStorage, readAiSessionIdFromStorage, writeAiSessionIdToStorage } from './xcagiStorageKeys'
 import { setTenantStorageScopeCache } from './tenantStorageScope'
@@ -151,4 +152,29 @@ describe('chatStorageKeys tenant isolation', () => {
       extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, `${CHAT_MESSAGES_STORAGE_PREFIX}tenant:8:sess-z`, 'm', 'tenant:9'),
     ).toBeNull()
   })
+})
+
+
+it('does not reopen the previous owner history during a same-tenant identity gap', () => {
+  localStorage.clear()
+  sessionStorage.clear()
+  setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+  writeActiveExtensionModIdToStorage('m', 'tenant:9')
+  writeAiSessionIdToStorage('owner-a-session')
+  persistExcelAnalysisContext('same-session', { file_path: '/owner-a/private.xlsx' })
+  const oldKey = buildChatMessagesKey('owner-a-session', 'm')
+  setRuntimeTenantStorageScopeInput({ tenantId: 9 })
+  expect(resolveChatStorageScope()).toBe('tenant:9:owner-pending')
+  expect(readAiSessionIdFromStorage()).toBe('')
+  expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, oldKey, 'm')).toBeNull()
+  expect(readPersistedExcelAnalysisContext('same-session')).toBeNull()
+  writeAiSessionIdToStorage('unresolved')
+  persistExcelAnalysisContext('same-session', { file_path: '/unknown.xlsx' })
+  expect(readAiSessionIdFromStorage()).toBe('')
+  setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 2 })
+  expect(readAiSessionIdFromStorage()).toBe('')
+  expect(readPersistedExcelAnalysisContext('same-session')).toBeNull()
+  setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+  expect(readAiSessionIdFromStorage()).toBe('owner-a-session')
+  expect(readPersistedExcelAnalysisContext('same-session')).toEqual({ file_path: '/owner-a/private.xlsx' })
 })

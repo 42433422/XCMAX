@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date, datetime, time
 from io import BytesIO
 from typing import Any, TypedDict
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _json_safe_cell(value: Any) -> Any:
+    """Excel 单元格值转为 JSON 安全类型；日期时间保留 ISO 文本。"""
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 class _HeaderEntry(TypedDict):
@@ -148,7 +158,7 @@ def _extract_structured_excel_preview(
                     value = ws.cell(r, h["column_index"]).value
                     if value is not None and str(value).strip() != "":
                         has_non_empty = True
-                    row_data[h["name"]] = value
+                    row_data[h["name"]] = _json_safe_cell(value)
                 if has_non_empty:
                     sample_rows.append(row_data)
                 if len(sample_rows) >= sample_limit:

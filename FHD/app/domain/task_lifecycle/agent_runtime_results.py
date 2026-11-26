@@ -5,8 +5,13 @@ from __future__ import annotations
 import copy
 from typing import Any, Literal
 
-from app.domain.task_lifecycle.agent_runtime_contract import goal_answers, goal_report_coverage
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    canonical_digest,
+    goal_answers,
+    goal_report_coverage,
+)
 from app.domain.task_lifecycle.results import (
+    execution_result_error,
     execution_result_outcome_unknown,
     execution_result_proven_not_executed,
 )
@@ -19,7 +24,7 @@ ACTIVE_STATES = frozenset({"queued", "planning", "running", "retrying", "submitt
 def base_runtime_result(run_id: str) -> dict[str, Any]:
     return {
         "handler": "agent",
-        "runtime": "codex",
+        "runtime": "xiaox",
         "run_id": run_id,
         "ok": False,
         "business_completed": False,
@@ -36,14 +41,67 @@ def base_runtime_result(run_id: str) -> dict[str, Any]:
     }
 
 
+def withhold_runtime_output(result: dict[str, Any], *, status: str, error: str) -> None:
+    """Keep reviewed evidence, but retract an apparent success rejected by the host."""
+    result.update(
+        ok=False,
+        business_completed=False,
+        reply_completed=False,
+        exit_status=status,
+        execution_state=status,
+        error=error,
+        output="本轮结果未通过核验，未发布正文。",
+        session_messages=[
+            message for message in result.get("session_messages", []) if message["role"] == "user"
+        ],
+    )
+
+
 def receipt_state(row: dict[str, Any]) -> str:
-    receipt = row.get("receipt") or {}
-    if execution_result_outcome_unknown(receipt, include_execution=True) or row.get("state") in {
-        "claimed",
-        "unknown",
-    }:
+    """Require the durable child state and its latest receipt to agree.
+
+    A late success from a timed-out, cancelled or replaced attempt cannot
+    overwrite the original unknown effect or license a second dispatch.
+    """
+    receipt = row.get("receipt")
+    if not isinstance(receipt, dict) or not receipt:
         return "unknown"
-    return str(receipt.get("status") or row.get("state") or "unknown")
+    state = str(row.get("state") or "").strip()
+    reported = str(receipt.get("status") or "").strip()
+    if (
+        not state
+        or not reported
+        or state != reported
+        or state in {"claimed", "unknown", "interrupted", "partial", "timed_out"}
+        or execution_result_outcome_unknown(receipt, include_execution=True)
+    ):
+        return "unknown"
+    return state
+
+
+def receipt_verified(row: dict[str, Any]) -> bool:
+    """Only host-backed, settled receipts can be presented as verified operations."""
+    receipt = row.get("receipt")
+    if not isinstance(receipt, dict):
+        return False
+    try:
+        fingerprint = canonical_digest(
+            {key: row.get(key) for key in ("tool_id", "action", "params")}
+        )
+    except (TypeError, ValueError):
+        return False
+    return (
+        row.get("state") == "completed"
+        and bool(row.get("child_run_id"))
+        and bool(row.get("child_task_id"))
+        and row.get("fingerprint") == fingerprint
+        and receipt.get("run_id") == row["child_run_id"]
+        and receipt.get("task_id") == row["child_task_id"]
+        and receipt_state(row) == "completed"
+        and receipt.get("success") is True
+        and receipt.get("verified") is True
+        and not execution_result_error(receipt)
+    )
 
 
 def model_unsettled(metadata: dict[str, Any]) -> bool:
@@ -55,7 +113,7 @@ def model_unsettled(metadata: dict[str, Any]) -> bool:
 
 def classification_metadata(run: Any) -> dict[str, Any]:
     return {
-        **copy.deepcopy(run.metadata["codex_runtime"]),
+        **copy.deepcopy(run.metadata["xiaox_runtime"]),
         "goal_contract": run.metadata.get("runtime_goal_contract"),
         "goal_verification": run.metadata.get("runtime_goal_verification"),
         "goal_answers": goal_answers(run),
@@ -71,7 +129,10 @@ def failure_diagnostics(run: Any, result: dict[str, Any]) -> dict[str, str]:
         kind = str(report.get("error_code") or "goal_verification_required")
         reason = str(report.get("feedback") or result.get("error") or "")
     elif result.get("execution_state") == "unknown":
-        model_unknown = model_unsettled(run.metadata.get("codex_runtime") or {})
+        model_unknown = any(
+            model_unsettled(run.metadata.get(key) or {})
+            for key in ("xiaox_runtime", "codex_runtime")
+        )
         stage = "model" if model_unknown else "business"
         kind = "model_usage_unknown" if model_unknown else "business_outcome_unknown"
         reason = str(result.get("error") or "")
@@ -108,17 +169,28 @@ def classify_runtime_result(
             "task_id": row.get("child_task_id"),
             "success": receipt_state(row) == "completed"
             and (row.get("receipt") or {}).get("success") is True,
-            "verified": (row.get("receipt") or {}).get("verified") is True,
+            "verified": receipt_verified(row),
             "execution_state": receipt_state(row),
         }
         for row in rows
     ]
     states = {receipt_state(row) for row in rows}
-    if "unknown" in states or model_unsettled(metadata):
+    # A successful write claim without host identity/verification may have
+    # committed. Do not promote it to a confirmed effect or allow a replay.
+    unbound_write = any(
+        receipt_state(row) == "completed"
+        and row.get("read_only") is not True
+        and row["receipt"].get("success") is True
+        and not receipt_verified(row)
+        for row in rows
+    )
+    if "unknown" in states or unbound_write or model_unsettled(metadata):
         result.update(
             exit_status="unknown",
             execution_state="unknown",
             reconciliation_required=True,
+            needs_verification=True,
+            retryable=False,
             error="执行或模型计量结果尚未确定，请核对原任务回执",
             output="执行或模型计量结果尚未确定，请核对原任务回执。",
         )
@@ -167,13 +239,7 @@ def classify_runtime_result(
             output=question,
         )
         return "waiting_user"
-    verified_rows = [
-        row
-        for row in rows
-        if receipt_state(row) == "completed"
-        and (row.get("receipt") or {}).get("success") is True
-        and (row.get("receipt") or {}).get("verified") is True
-    ]
+    verified_rows = [row for row in rows if receipt_verified(row)]
     report = metadata.get("goal_verification")
     if not isinstance(report, dict):
         report = {}
@@ -242,7 +308,7 @@ def classify_runtime_result(
             exit_status="goal_verification_required",
             execution_state="blocked",
             error="已执行动作不等于整体目标完成，原任务目标仍需核对",
-            output=f"已核验 {len(verified_rows)} 项操作，整体目标尚未完成。\n{feedback}",
+            output="本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。",
             goal_response=reviewed_output,
             verification_feedback=feedback,
             retryable=isinstance(report, dict)

@@ -108,6 +108,16 @@ def test_unknown_and_unversioned_receipts_are_not_success_or_failure():
     assert result["excluded_unmeasured"] == 1
 
 
+def test_conflicting_receipt_does_not_inflate_completion_or_hide_risk():
+    originals = [cycle(str(index), day=index) for index in range(20)]
+    conflict = {**originals[-1], "status": "failed"}
+    result = completion_review(SCOPE, originals + [conflict])
+    assert result["conflicting_cycle_receipts"] == 1
+    assert result["status"] == "review_recommended"
+    assert result["groups"][0]["sample_count"] == 19
+    assert result["groups"][0]["status"] == "insufficient_evidence"
+
+
 def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tmp_path):
     from modstore_server import strategy_bets, strategy_planner
 
@@ -150,9 +160,46 @@ def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tm
     # A shorter catalog cannot quietly improve measured coverage by dropping a test.
     catalog["domains"][0]["anchor_60"].pop()
     persist()
-    assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
+    assert audit_projection() == {
+        "status": "unknown",
+        "reason": "audit_source_unavailable",
+    }
 
     # Duplicated anchors do not count as independently registered capabilities.
     catalog["domains"][0]["anchor_60"].append(catalog["domains"][1]["anchor_60"][0])
     persist()
-    assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
+    assert audit_projection() == {
+        "status": "unknown",
+        "reason": "audit_source_unavailable",
+    }
+
+
+def test_conflicting_cost_journal_is_never_selected_by_order():
+    original = cycle("conflict", calls=["r1"])
+    conflicting = cycle("conflict", calls=["r2"])
+    valid = cycle("valid", calls=["r3"])
+    for rows in ([original, conflicting, valid], [conflicting, original, valid]):
+        read_keys = []
+
+        def read(key):
+            read_keys.append(key[3])
+            return settled(cents=9)
+
+        result = accrual_projection(SCOPE, rows, read)
+        assert result["cost_cents"] is None
+        assert result["known_accrued_cents"] == 9
+        assert result["conflicting_cycle_count"] == 1
+        assert result["unknown_cycle_count"] == 1
+        assert result["supplier_cost_cents"] is None
+        assert result["supplier_cost_status"] == "unknown_no_supplier_invoice"
+        assert read_keys == ["r3"]
+
+
+def test_conflicting_cross_scope_cycle_cannot_contribute_to_current_cost():
+    original = cycle("conflict", calls=["r1"])
+    conflicting = cycle("conflict", calls=["r1"], scope="previous-scope")
+    for rows in ([original, conflicting], [conflicting, original]):
+        result = accrual_projection(SCOPE, rows, lambda _: settled())
+        assert result["cost_cents"] is None
+        assert result["conflicting_cycle_count"] == 1
+        assert result["unknown_cycle_refs"] == ["cycle:conflict"]

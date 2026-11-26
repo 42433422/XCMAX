@@ -114,7 +114,7 @@ def test_upgrade_preserves_legacy_rows_and_repairs_draft_index(_db_url, old_head
         before = conn.exec_driver_sql(
             "SELECT id,quantity,reference_type,reference_id FROM inventory_transactions ORDER BY id"
         ).all()
-    command.upgrade(config, "head")
+    command.upgrade(config, "2026_11_15_stock_posting_key")
     with engine.begin() as conn:
         assert (
             conn.exec_driver_sql(
@@ -139,7 +139,7 @@ def test_upgrade_preserves_legacy_rows_and_repairs_draft_index(_db_url, old_head
             if i["name"] == "uq_inventory_out_business_ref"
         )
         assert "document_posting" in str(predicate["dialect_options"]["sqlite_where"])
-    command.downgrade(config, "2026_11_11_agent_permissions")
+    command.downgrade(config, "2026_11_15_delivery_ref_merge")
     command.upgrade(config, "head")
     with engine.connect() as conn:
         assert (

@@ -55,7 +55,7 @@
             {{ accountUsername }}
           </div>
         </div>
-        <TopQuickNav @select="handleViewChange" />
+        <TopQuickNav @select="handleViewChange" @command="handleWorkspaceCommand" />
         <div class="top-bar-actions">
           <button
             type="button"
@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElDrawer } from 'element-plus'
 import 'element-plus/theme-chalk/base.css'
 import 'element-plus/theme-chalk/el-overlay.css'
@@ -104,9 +104,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useModsStore } from '@/stores/mods'
 import { useAccountProfileStore } from '@/stores/accountProfile'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import {
+  workspaceCommandStorageKey, readWorkspaceCommandPreferences, writeWorkspaceCommandPreferences,
+} from '@/utils/workspaceCommandShortcuts'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { LS_MARKET_USER_JSON } from '@/api/marketAccount'
 import { isAdminConsoleSpa as detectAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { isDesktopShell } from '@/utils/desktopShell'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { ADMIN_OPERATOR_BRAND_SUBTITLE } from '@/constants/adminOperatorNav'
 import { appAlert } from '@/utils/appDialog'
 import { useResizablePane } from '@/composables/useResizablePane'
@@ -149,6 +155,7 @@ const isAnyTutorialActive = computed(() => onboardingTutorialActive.value || leg
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
 const accountProfileStore = useAccountProfileStore()
+const workspaceTaskCenter = useAgentTaskCenterStore()
 const { modsForUi } = storeToRefs(modsStore)
 const { displayBrand, isImpersonating, impersonatingUsername, companyBrand } = storeToRefs(accountProfileStore)
 const endingImpersonation = ref(false)
@@ -265,6 +272,18 @@ const currentRouteName = computed(() => {
 const pendingSidebarView = ref('')
 const failedSidebarView = ref('')
 let routeNavGeneration = 0
+let workspaceCommandGeneration = 0
+let workspaceCommandTimer = null
+const workspaceCommandScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
+  accountProfileStore.tenantId, accountProfileStore.localUserId, accountProfileStore.marketUserId,
+  accountProfileStore.impersonatingMarketUserId, accountProfileStore.accountKind, modsStore.activeModId]))
+function invalidateWorkspaceCommand() {
+  workspaceCommandGeneration++
+  if (workspaceCommandTimer !== null) window.clearTimeout(workspaceCommandTimer)
+  workspaceCommandTimer = null
+  return workspaceCommandGeneration
+}
+watch(workspaceCommandScope, invalidateWorkspaceCommand, { flush: 'sync' })
 const displayedActiveView = computed(() => currentRouteName.value)
 
 function syncPendingSidebarWithRoute() {
@@ -296,6 +315,9 @@ watch([() => route.fullPath, routeChunkErrorPath], () => {
 watch(currentRouteName, () => {
   syncPendingSidebarWithRoute()
   syncAppNavIntentWithRoute()
+  if (isDesktopShell()) window.dispatchEvent(new CustomEvent('xcagi:workspace-nav-visited', {
+    detail: { key: currentRouteName.value },
+  }))
 })
 watch(() => route.fullPath, () => { mobileSidebarOpen.value = false })
 
@@ -357,6 +379,7 @@ const pendingViewStage = computed(() => {
 async function navigateToView(viewKey, source = 'shell') {
   const normalized = String(viewKey || '').trim()
   if (!normalized) return
+  if (source !== 'workspace-shortcut') invalidateWorkspaceCommand()
   // Same target while already pending: ignore duplicate click noise.
   // Same target after failure: allow retry (failedSidebarView is set, pending cleared).
   if (pendingSidebarView.value === normalized && !failedSidebarView.value) return
@@ -395,6 +418,72 @@ const handleViewChange = (viewKey) => {
   void navigateToView(viewKey, 'sidebar-or-quicknav')
 }
 
+async function handleWorkspaceCommand(command) {
+  const generation = invalidateWorkspaceCommand()
+  const scope = workspaceCommandScope.value
+  const current = () => layoutActive && generation === workspaceCommandGeneration && scope === workspaceCommandScope.value
+  if (!isSidebarFeatureEnabled.value && command === 'sidebar') return
+  if (command === 'sidebar') {
+    clearSidebarCollapseTimer()
+    clearSidebarHoverTimer()
+    sidebarCollapsed.value = !sidebarCollapsed.value
+    const key = workspaceCommandStorageKey()
+    if (key) {
+      const prefs = readWorkspaceCommandPreferences(key)
+      writeWorkspaceCommandPreferences(key, { ...prefs, sidebarCollapsed: sidebarCollapsed.value })
+    }
+    return
+  }
+  if (command === 'tasks') {
+    workspaceTaskCenter.drawerOpen = true
+    void workspaceTaskCenter.refresh()
+    return
+  }
+  if (!['chat', 'new-chat', 'new-task', 'sessions'].includes(command)) return
+  await navigateToView('chat', 'workspace-shortcut')
+  if (!current() || router.currentRoute.value.name !== 'chat') return
+  const destination = router.currentRoute.value.fullPath
+  const navGeneration = routeNavGeneration
+  // The route resolves before Vue's async component/keep-alive activation may settle.
+  await nextTick()
+  const dispatch = () => {
+    if (!current() || navGeneration !== routeNavGeneration || router.currentRoute.value.fullPath !== destination) return false
+    const input = document.getElementById('messageInput')
+    if (!input || !input.isConnected || input.closest('[inert]')) return false
+    if (command === 'new-chat') window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    else if (command === 'new-task') window.dispatchEvent(new Event('xcagi:workspace-new-task'))
+    else if (command === 'sessions') window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
+    else input.focus({ preventScroll: true })
+    return true
+  }
+  if (current() && !dispatch()) {
+    workspaceCommandTimer = window.setTimeout(() => { workspaceCommandTimer = null; dispatch() }, 100)
+  }
+}
+
+let restoredSidebarScope = null
+function restoreWorkspaceSidebarPreference() {
+  const scope = workspaceCommandScope.value
+  const changed = restoredSidebarScope !== scope
+  restoredSidebarScope = scope
+  if (changed) sidebarCollapsed.value = false
+  if (!isSidebarFeatureEnabled.value) return
+  const key = workspaceCommandStorageKey()
+  if (!key) return
+  const preference = readWorkspaceCommandPreferences(key).sidebarCollapsed
+  if (typeof preference === 'boolean') sidebarCollapsed.value = preference
+}
+function onWorkspacePreferenceStorage(event) {
+  const key = workspaceCommandStorageKey()
+  if (!key || event.key !== key || event.storageArea !== localStorage) return
+  restoreWorkspaceSidebarPreference()
+}
+watch(
+  () => [workspaceCommandScope.value, accountProfileStore.loaded],
+  () => { void nextTick(restoreWorkspaceSidebarPreference) },
+  { immediate: true, flush: 'post' },
+)
+
 function openSettings() {
   // Share the same intent channel as sidebar / ecosystem so races invalidate correctly.
   void navigateToView('settings', 'top-settings')
@@ -424,11 +513,11 @@ const ensureSidebarExpandedForTutorial = () => {
 
 const scheduleSidebarAutoCollapse = () => {
   clearSidebarCollapseTimer()
-  if (document.documentElement.classList.contains('xcagi-electron')) return void (sidebarCollapsed.value = false)
+  if (document.documentElement.classList.contains('xcagi-electron')) return
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
-    if (isAnyTutorialActive.value) return
+    if (document.documentElement.classList.contains('xcagi-electron') || isAnyTutorialActive.value) return
     sidebarCollapsed.value = true
   }, SIDEBAR_INACTIVITY_MS)
 }
@@ -502,6 +591,10 @@ function syncMobileViewport() {
 }
 
 onMounted(() => {
+  window.addEventListener('storage', onWorkspacePreferenceStorage)
+  if (isDesktopShell()) void nextTick(() => {
+    window.dispatchEvent(new CustomEvent('xcagi:workspace-nav-visited', { detail: { key: currentRouteName.value } }))
+  })
   sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
   if (sidebarViewportMedia) {
     onViewportChange(sidebarViewportMedia)
@@ -545,7 +638,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('storage', onWorkspacePreferenceStorage)
   layoutActive = false
+  invalidateWorkspaceCommand()
   window.visualViewport?.removeEventListener('resize', syncMobileViewport)
   window.visualViewport?.removeEventListener('scroll', syncMobileViewport)
   stopSidebarResize()

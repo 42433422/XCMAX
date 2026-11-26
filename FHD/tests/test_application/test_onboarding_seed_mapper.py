@@ -293,8 +293,12 @@ class TestResolveModDir:
         assert result.parent.parent.parent.name == "FHD"
         assert (result / "manifest.json").is_file()
 
-    def test_mod_resolves_from_export_copy_when_no_source(self):
+    def test_mod_resolves_from_export_copy_when_no_source(self, monkeypatch, tmp_path):
         """FHD/mods 不再保留 mutation 副本时，回退解析到 XCAGI 导出副本。"""
+        monkeypatch.setattr(osm, "__file__", str(tmp_path / "app/application/seed_mapper.py"))
+        exported = tmp_path / "XCAGI/mods/attendance-industry"
+        exported.mkdir(parents=True)
+        (exported / "manifest.json").write_text("{}")
         result = osm._resolve_mod_dir("attendance-industry")
         assert result is not None
         assert result.name == "attendance-industry"

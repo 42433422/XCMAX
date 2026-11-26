@@ -87,6 +87,8 @@ def finance_unified_ledger_rebuild(body: FinanceLedgerRebuildBody):
 
         market_user_id = body.market_user_id
         result = rebuild_ledger_archive(market_user_id=market_user_id)
+        if not result.get("complete"):
+            return JSONResponse({"success": False, **result}, status_code=409)
         return {"success": True, **result}
     except RECOVERABLE_ERRORS:
         logger.exception("unified-ledger rebuild failed")

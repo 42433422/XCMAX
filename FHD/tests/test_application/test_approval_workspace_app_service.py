@@ -44,6 +44,7 @@ from app.application.approval_workspace_app_service import (
     update_flow,
     withdraw_request,
 )
+from app.db.models import User
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -1049,6 +1050,17 @@ class TestSubmitRequest:
         assert exc_info.value.status_code == 400
 
 
+def _bind_decision_actor(db, query, request):
+    request.tenant_id = 1
+    query.first.return_value = request
+    query.update.return_value = 1
+    user = User(id=1, tenant_id=1, is_active=True, role="user")
+    reviewer = MagicMock()
+    reviewer.filter.return_value.with_for_update.return_value.first.return_value = user
+    reviewer.filter.return_value.first.return_value = user
+    db.query.side_effect = lambda model: reviewer if model is User else query
+
+
 class TestApproveRequest:
     def test_legacy_plan_cannot_resume_through_retired_executor(self):
         plan = SimpleNamespace(plan_id="plan-ai", intent="business_db_write", nodes=[object()])
@@ -1143,7 +1155,7 @@ class TestApproveRequest:
         mock_query.filter.return_value = mock_query
         req = Mock()
         req.status = ApprovalStatus.APPROVED.value
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1163,7 +1175,7 @@ class TestApproveRequest:
         req = Mock()
         req.status = ApprovalStatus.PENDING.value
         req.current_node = None
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1186,7 +1198,7 @@ class TestApproveRequest:
         node.id = 10
         node.approver_ids = "[2, 3]"
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1213,7 +1225,7 @@ class TestApproveRequest:
         node.node_order = 1
         node.approver_ids = "[1]"
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1257,7 +1269,7 @@ class TestApproveRequest:
         node.approver_ids = "[1]"
         req.current_node = node
         req.current_node_order = node.node_order
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1320,7 +1332,7 @@ class TestApproveRequest:
         req.applicant_id = 1
         req.title = "AI 写库审批"
         req.business_data = "{}"
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1383,7 +1395,7 @@ class TestApproveRequest:
         req.applicant_id = 1
         req.title = "AI 写库审批"
         req.business_data = "{}"
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1515,7 +1527,7 @@ class TestApproveRequest:
         node.approver_ids = "[1]"
         req.current_node = node
         req.current_node_order = node.node_order
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1576,7 +1588,7 @@ class TestApproveRequest:
         node.node_order = 1
         node.approver_ids = "[1]"
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1638,7 +1650,7 @@ class TestRejectRequest:
         mock_query.filter.return_value = mock_query
         req = Mock()
         req.status = ApprovalStatus.APPROVED.value
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1658,7 +1670,7 @@ class TestRejectRequest:
         req = Mock()
         req.status = ApprovalStatus.PENDING.value
         req.current_node = None
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1681,7 +1693,7 @@ class TestRejectRequest:
         node.id = 10
         node.approver_ids = "[2]"
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1706,7 +1718,7 @@ class TestRejectRequest:
         node.node_order = 1
         node.approver_ids = "[1]"
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1740,7 +1752,7 @@ class TestRejectRequest:
         node.node_order = 1
         node.approver_ids = "[1]"
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1770,7 +1782,7 @@ class TestRejectRequest:
         req.request_no = "req-ai-1"
         req.business_type = "workflow_tool"
         req.current_node = None
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1814,7 +1826,7 @@ class TestRejectRequest:
         req.current_node = None
         req.applicant_id = 1
         req.title = "已过期 AI 工作流"
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor", return_value=1),
@@ -1919,7 +1931,7 @@ class TestWithdrawRequest:
         req = Mock()
         req.applicant_id = 2
         req.status = ApprovalStatus.PENDING.value
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1939,7 +1951,7 @@ class TestWithdrawRequest:
         req = Mock()
         req.applicant_id = 1
         req.status = ApprovalStatus.APPROVED.value
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1963,7 +1975,7 @@ class TestWithdrawRequest:
         flow = Mock()
         flow.allow_withdraw = False
         req.flow = flow
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -1994,7 +2006,7 @@ class TestWithdrawRequest:
         flow.allow_withdraw = True
         req.flow = flow
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
@@ -2028,7 +2040,7 @@ class TestWithdrawRequest:
         req.request_no = "APR001"
         req.flow = None
         req.current_node = node
-        mock_query.first.return_value = req
+        _bind_decision_actor(mock_db, mock_query, req)
 
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,

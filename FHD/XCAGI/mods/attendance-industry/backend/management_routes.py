@@ -98,10 +98,8 @@ def register(router, *, logger, get_database_path) -> None:
                     "WHERE TRIM(attendance_group) <> '' AND owner_user_id = ? "
                     "GROUP BY attendance_group ORDER BY attendance_group",
                     (owner,),
-                ).fetchall()
-            return {
-                "success": True,
-                "schedule_groups": [
+                )
+                schedule_groups = [
                     {
                         "name": name,
                         "headcount": f"{count} 人",
@@ -109,9 +107,8 @@ def register(router, *, logger, get_database_path) -> None:
                         "lines": [],
                     }
                     for name, count in groups
-                ],
-                "lines": [],
-            }
+                ]
+            return {"success": True, "schedule_groups": schedule_groups, "lines": []}
         except sqlite3.Error:
             logger.exception("读取排班资源失败")
             return _error("读取排班资源失败", 500)
@@ -524,7 +521,7 @@ def register(router, *, logger, get_database_path) -> None:
                     "SELECT DISTINCT month_label FROM attendance_daily_records "
                     "WHERE owner_user_id = ? AND TRIM(month_label) <> '' ORDER BY month_label DESC",
                     (owner,),
-                ).fetchall()
+                )
             ]
             return {
                 "success": True,

@@ -1,0 +1,186 @@
+{
+  "domain": "01",
+  "title": "依赖注入与分层：真实进程启动 / 强杀 / 重启 / 会话与数据持久化",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "5a7f575c671bfaac40d759bb8576a8af8291f37b",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "启动真实 FHD → 读业务数据 → SIGKILL → 重启 → 复核健康/路由/会话/数据",
+    "fault": "SIGKILL(9) 真实进程",
+    "concurrency": 1,
+    "data_volume": "isolated SQLite tenant 1"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "SIGKILL real server process, then restart",
+      "mode": "kill9",
+      "pids_before": [
+        26860
+      ],
+      "pids_killed": [
+        26860
+      ],
+      "down_after_kill": true,
+      "pid_after": 26876,
+      "readiness": {
+        "liveness": true,
+        "routes_ready": true,
+        "wait_ms": 2905,
+        "pid": 26876
+      }
+    }
+  ],
+  "evidence_ids": [
+    "01-health-liveness",
+    "01-health-api",
+    "01-health-neurobus",
+    "01-health-autonomy",
+    "01-products-before",
+    "01-relogin-me",
+    "01-products-after"
+  ],
+  "observed_results": [
+    {
+      "step_id": "01-health-liveness",
+      "method": "GET",
+      "path": "/health/liveness",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "409e59430859e60f061a77b8b60100450b4376aa6e7d372acef166f2ce063d1e",
+      "response_excerpt": "{\"status\":\"alive\",\"timestamp\":\"2026-11-23T18:10:26.925768+00:00\",\"python_version\":\"3.12.13 (main, Jun 11 2026, 03:55:21) [Clang 22.1.3 ]\"}"
+    },
+    {
+      "step_id": "01-health-api",
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "elapsed_ms": 29,
+      "response_sha256": "ee65a05b026f55ba5d9d2ed4116ea46aee505235634aaeeac0379575a078238c",
+      "response_excerpt": "{\"status\":\"degraded\",\"version\":\"1.0.0.7\",\"service\":\"xcagi-fastapi\",\"runtime\":{\"status\":\"healthy\",\"components\":{\"desktop_runtime_routes\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"desktop_automation_routes\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"gdpr_routes\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"platform_shell_routes\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:xcmax_admin\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:xiaoc_admin_context\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:order_bridge_webhook\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:xcmax_private_delivery_admin\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:founder_autonomy\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:ops_autonomy\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:ops_wechat_ingest\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:admin_audit\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:genai_traces\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:aibiz_terminal\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:agent\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:tutorial_v2\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:knowledge_v1\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:knowledge_public\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:elt_api\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:elt_auto_ingest\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:elt_sources\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:taiyangniao_attendance_compat\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:purchase\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:inventory\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:finance_unified_ledger\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:finance_invoices\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:finance\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:reports\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:rbac\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:mods\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:workspace_prefs\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:local_files\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:business_bridge\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:mod_store\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:control\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:voice\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:attachment_artifacts\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:mobile_api\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:im_v0\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:internal_im\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"business_route:production_line_event\":{\"ok\":true,\"required\":false,\"det"
+    },
+    {
+      "step_id": "01-health-neurobus",
+      "method": "GET",
+      "path": "/api/neurobus/health",
+      "status": 200,
+      "elapsed_ms": 9,
+      "response_sha256": "f36df799bd06e26149a86ced79ce49dbf6b17f946e10c4eb2cf173d93a20b37f",
+      "response_excerpt": "{\"status\":\"healthy\",\"running\":true,\"published\":18,\"processed\":16,\"errors\":0,\"dropped\":0,\"queue_size\":2,\"handlers\":44,\"global_handlers\":0,\"active_events\":0,\"handler_timeouts\":0,\"reliability\":{\"fhd_env\":\"\",\"dedup\":false,\"rate_limit\":false,\"circuit_breaker\":false,\"lifeline\":false,\"tracer\":false,\"sla_log\":false,\"sla_controller\":false,\"retry\":false,\"dlq_auto\":false,\"redis_pubsub\":false,\"trace_sample_rate\":null},\"dropped_recent\":0,\"dropped_reasons\":{},\"components\":{\"bus_running\":true,\"queue_size\":2,\"domains\":[\"intent\",\"order\",\"inventory\",\"product\",\"customer\",\"ai_service\",\"print\",\"ocr\",\"payment\",\"safety\",\"shipment\"]},\"processors\":{\"coordinator\":{\"reflex\":0,\"subconscious\":0,\"conscious\":0,\"total\":0,\"fallbacks\":0,\"errors\":0,\"reflex_rate\":0.0,\"fallback_rate\":0.0},\"reflex\":{\"cache_size\":0,\"max_cache_size\":1000,\"hits\":0,\"misses\":0,\"hit_rate\":0.0,\"timeouts\":0,\"patterns\":5},\"subconscious\":{\"processed\":0,\"batched\":0,\"errors\":0,\"timeouts\":0,\"avg_latency_ms\":0.0,\"handlers\":1,\"batch_handlers\":0,\"running\":false},\"conscious\":{\"processed\":0,\"success\":0,\"errors\":0,\"deduplicated\":0,\"circuit_open\":0,\"sandbox_rejected\":0,\"sla_violations\":0,\"success_rate\":0.0,\"handlers\":7,\"reliability_enabled\":true}},\"cognition\":{\"enabled\":true,\"conscious_processor\":{\"processed\":0,\"success\":0,\"errors\":0,\"deduplicated\":0,\"circuit_open\":0,\"sandbox_rejected\":0,\"sla_violations\":0,\"success_rate\":0.0,\"handlers\":7,\"reliability_enabled\":true},\"subconscious_processor\":{\"processed\":0,\"batched\":0,\"errors\":0,\"timeouts\":0,\"avg_latency_ms\":0.0,\"handlers\":1,\"batch_handlers\":0,\"running\":false},\"cognition\":{\"llm_port_available\":false},\"subconscious_ml\":{\"anomaly_detector\":{\"total_samples\":0,\"total_predictions\":0,\"anomalies_detected\":0,\"anomaly_rate\":0.0,\"model_ready\":false,\"samples_since_fit\":0},\"pattern_predictor\":{\"total_observations\":0,\"ngram_order\":3,\"ngram_patterns\":0,\"markov_states\":0,\"history_size\":0},\"local_embedder\":{\"cache_size\":66}},\"evolution\":{\"handler\":{\"total_handled\":0,\"total_success\":0,\"success_rate\":0.0,\"supported_events\":[\"error.occurred\",\"evolution.reflect\",\"evolution.mine\",\"evolution.index\",\"evolution.export\",\"evolution.search\"],\"kb_stats\":{\"total_entries\":66,\"by_kind\":{\"pattern\":13,\"fix\":53},\"indexed\":true,\"kb_root\":\"/Users/Shared/XCMAX/FHD/XCAGI/kb\"},\"miner_stats\":{\"log_path\":\"routing_decisions.jsonl\",\"log_exists\":false,\"records_scanned\":0,\"min_occurrences\":3,\"min_confidence\":0.8},\"fixer_stats\":{\"total_proposals\":0,\"actionable_proposals\":0,\"actionable_rate\":0.0,\"min_score\":0.3,\"kb_stats\":{\"total_entries\":66,\"by_kind\":{\"pattern\":13,\"fix\":53},\"indexed\":true,\"kb_root\":\"/Users/Shared/XCMAX/FHD/XCAGI/kb\"}}},\"kb_retriever\":{\"total_entries\":66,\"by_kind\":{\"pattern\":13,\"fix\":53},\"indexed\":true,\"kb_root\":\"/Users/Shared/XCMAX/FHD/XCAGI/kb\"},\"reflex_pattern_miner\":{\"log_path\":\"routing_decisions.jsonl\",\"log_exists\":false,\"records_scanned\":0,\"min_occurrences\":3,\"min_confidence\":0.8},\"runtime_self_fix\":{\"total_proposals\":0,\"actionable_proposals\":0,\"actionable_rate\":0.0,\"min_score\":0.3,\"kb_stats\":{\""
+    },
+    {
+      "step_id": "01-health-autonomy",
+      "method": "GET",
+      "path": "/api/ops/autonomy/health",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "af8a2058f0fb643576f75faae43a6bae6d1e48759c0479332860d883385be643",
+      "response_excerpt": "{\"ok\":true,\"service\":\"ops-autonomy-approval\"}"
+    },
+    {
+      "step_id": "01-products-before",
+      "method": "GET",
+      "path": "/api/mod/xcagi-erp-domain-bridge/products/list?per_page=100",
+      "status": 200,
+      "elapsed_ms": 33,
+      "response_sha256": "c5c0e89005779bd4b2cc38627d3d895f21ebdd1f74025448fe37c589d92f2b73",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":7,\"model_number\":\"E3-商品-1795456439-25kg-件\",\"name\":\"E3 商品 1795456439\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:53:59.460945\",\"updated_at\":\"2026-11-24T01:53:59.460949\"},{\"id\":6,\"model_number\":\"E3-商品-1795456356-25kg-件\",\"name\":\"E3 商品 1795456356\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:52:36.414872\",\"updated_at\":\"2026-11-24T01:52:36.414875\"},{\"id\":5,\"model_number\":\"E3-商品-1795456247-25kg-件\",\"name\":\"E3 商品 1795456247\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:50:47.563149\",\"updated_at\":\"2026-11-24T01:50:47.563152\"},{\"id\":4,\"model_number\":\"E3-商品-1795456193-25kg-件\",\"name\":\"E3 商品 1795456193\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:49:53.872863\",\"updated_at\":\"2026-11-24T01:49:53.872866\"},{\"id\":3,\"model_number\":\"E3-商品-1795456061-25kg-件\",\"name\":\"E3 商品 1795456061\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:47:41.620860\",\"updated_at\":\"2026-11-24T01:47:41.620862\"},{\"id\":2,\"model_number\":\"E3-测试商品-1124-25kg-件\",\"name\":\"E3 测试商品 1124\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:34:30.524695\",\"updated_at\":\"2026-11-24T01:34:30.524697\"},{\"id\":1,\"model_number\":\"E3-Widget-25kg-件\",\"name\":\"E3 Widget\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:27:23.164123\",\"updated_at\":\"2026-11-24T01:27:23.164128\"}],\"total\":7,\"source\":\"mod:xcagi-erp-domain-bridge\",\"execution_path\":\"mod_domain_handler\",\"repository_provider\":\"mod:xcagi-erp-domain-bridge\",\"storage_path\":\"mod_delegated_adapter\",\"adapter_kind\":\"mod_delegated\",\"handler_via\":\"products_service\"}"
+    },
+    {
+      "step_id": "01-relogin-me",
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200,
+      "elapsed_ms": 43,
+      "response_sha256": "b54c55c028a5cb882a3dcb29bc582c0dcd3cb3e7444e04d372a95359cf63b6e9",
+      "response_excerpt": "{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"e3runner\",\"display_name\":\"E3 Runner\",\"email\":\"e3@local\",\"email_display\":\"e3@local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"employee.execute\",\"customer.view\",\"tool.excel_analysis.read\",\"customer.edit\",\"product.view\",\"product.edit\",\"dataset.read\",\"shipment.view\",\"dataset.write\",\"shipment.create\",\"shipment.edit\",\"elt.read\",\"elt.template.manage\",\"print.label\",\"elt.execute\",\"material.view\",\"material.edit\",\"approval.workflow\",\"tool.sales.create_order\",\"memory_v2.write\",\"tool.inventory.stock_out\",\"tool.sales.query\",\"tool.finance.create_transaction\",\"tool.reports.export\",\"tool.reports.sales_summary\",\"employee.list\",\"tool.inventory.create_warehouse\",\"tool.inventory.update_warehouse\",\"tool.inventory.delete_warehouse\",\"tool.inventory.stock_in\",\"tool.inventory.transfer\",\"tool.inventory.query_transactions\",\"tool.inventory.create_storage_location\",\"tool.inventory.inventory_count\",\"tool.inventory.update_storage_location\",\"tool.finance.update_transaction\",\"tool.finance.delete_transaction\"],\"tenant_is_owner\":false,\"account_kind\":\"enterprise\",\"company_brand\":\"e3runner\",\"market_is_admin\":false,\"market_is_enterprise\":false,\"market_user_id\":null,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"e3runner\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"normal\",\"personal_plan\":false,\"budget_range\":null,\"entitled_industries\":[],\"market_membership_tier\":null,\"email_verified\":false,\"mfa_enabled\":false}}"
+    },
+    {
+      "step_id": "01-products-after",
+      "method": "GET",
+      "path": "/api/mod/xcagi-erp-domain-bridge/products/list?per_page=100",
+      "status": 200,
+      "elapsed_ms": 37,
+      "response_sha256": "c5c0e89005779bd4b2cc38627d3d895f21ebdd1f74025448fe37c589d92f2b73",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":7,\"model_number\":\"E3-商品-1795456439-25kg-件\",\"name\":\"E3 商品 1795456439\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:53:59.460945\",\"updated_at\":\"2026-11-24T01:53:59.460949\"},{\"id\":6,\"model_number\":\"E3-商品-1795456356-25kg-件\",\"name\":\"E3 商品 1795456356\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:52:36.414872\",\"updated_at\":\"2026-11-24T01:52:36.414875\"},{\"id\":5,\"model_number\":\"E3-商品-1795456247-25kg-件\",\"name\":\"E3 商品 1795456247\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:50:47.563149\",\"updated_at\":\"2026-11-24T01:50:47.563152\"},{\"id\":4,\"model_number\":\"E3-商品-1795456193-25kg-件\",\"name\":\"E3 商品 1795456193\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:49:53.872863\",\"updated_at\":\"2026-11-24T01:49:53.872866\"},{\"id\":3,\"model_number\":\"E3-商品-1795456061-25kg-件\",\"name\":\"E3 商品 1795456061\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:47:41.620860\",\"updated_at\":\"2026-11-24T01:47:41.620862\"},{\"id\":2,\"model_number\":\"E3-测试商品-1124-25kg-件\",\"name\":\"E3 测试商品 1124\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:34:30.524695\",\"updated_at\":\"2026-11-24T01:34:30.524697\"},{\"id\":1,\"model_number\":\"E3-Widget-25kg-件\",\"name\":\"E3 Widget\",\"specification\":\"25kg/件\",\"price\":100.0,\"quantity\":0,\"description\":\"\",\"category\":\"\",\"brand\":\"\",\"unit\":\"件\",\"is_active\":true,\"created_at\":\"2026-11-24T01:27:23.164123\",\"updated_at\":\"2026-11-24T01:27:23.164128\"}],\"total\":7,\"source\":\"mod:xcagi-erp-domain-bridge\",\"execution_path\":\"mod_domain_handler\",\"repository_provider\":\"mod:xcagi-erp-domain-bridge\",\"storage_path\":\"mod_delegated_adapter\",\"adapter_kind\":\"mod_delegated\",\"handler_via\":\"products_service\"}"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "01.bootstrap",
+      "description": "真实进程启动且四个健康端点均 200",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "id": "01.data-before",
+      "description": "重启前存在真实业务数据（商品主数据）",
+      "passed": true,
+      "detail": "products=7"
+    },
+    {
+      "id": "01.fault-kill",
+      "description": "kill -9 后服务确实不可用",
+      "passed": true,
+      "detail": "{\"mode\": \"kill9\", \"pids_before\": [26860], \"pids_killed\": [26860], \"down_after_kill\": true, \"pid_after\": 26876, \"readiness\": {\"liveness\": true, \"routes_ready\": true, \"wait_ms\": 2905, \"pid\": 26876}}"
+    },
+    {
+      "id": "01.recovery-routes",
+      "description": "重启后业务路由完整就绪（不被 SPA 兜底吞掉）",
+      "passed": true,
+      "detail": "{\"liveness\": true, \"routes_ready\": true, \"wait_ms\": 2905, \"pid\": 26876}"
+    },
+    {
+      "id": "01.relogin",
+      "description": "重启后会话可重新建立",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "id": "01.persistence",
+      "description": "重启后商品数量不减少",
+      "passed": true,
+      "detail": "before=7 after=7"
+    },
+    {
+      "id": "01.db-integrity",
+      "description": "重启后 SQLite 主库可读且可计算哈希",
+      "passed": true,
+      "detail": "ca0b908479b9ddacae4de3d4402108ebdf17b33f1976d4c2a8649ba99936e694"
+    }
+  ],
+  "assertions_passed": 7,
+  "assertions_total": 7,
+  "unknowns": [
+    "本轮未做运行时替换适配器（替换实现）注入，DI 组合根替换路径未在真实进程验证",
+    "未做多实例并发启动与端口竞争场景"
+  ],
+  "axis_levels": null,
+  "domain_status": "E3",
+  "level": "E3",
+  "score": 90,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:10:30.417924+00:00",
+  "version": "1.0.0.7",
+  "db_sha256_before": "e709e435223e035d6865036a9c348140d5ae1a24a628ac4ba45fe3dea3158bcc",
+  "db_sha256_after": "ca0b908479b9ddacae4de3d4402108ebdf17b33f1976d4c2a8649ba99936e694"
+}

@@ -22,6 +22,8 @@ export interface XcagiChatTransportOptions {
   onTrace?: (items: ChatTraceItem[], seq: number) => void
   /** 传送层异常原样交回调用方，避免被框架改写身份 */
   onStreamError?: (error: unknown) => void
+  /** Actual opaque SSE cursor, not the connection-local UI sequence. */
+  onCursor?: (id: string) => void
 }
 
 const TEXT_ID = 'text-1'
@@ -33,7 +35,7 @@ const TEXT_ID = 'text-1'
  * 异常不会抛给消费方，而是通过 ``onStreamError`` 原样交回控制面，再正常关闭流。
  */
 export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
-  async function buildStream(fetchStream: () => Promise<Response>, signal?: AbortSignal) {
+  async function buildStream(fetchStream: () => Promise<Response>, signal?: AbortSignal, after?: string) {
     let response: Response
     try {
       response = await fetchStream()
@@ -48,7 +50,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
       options.onStreamError?.(error)
       return terminalStream(error.message)
     }
-    return translate(response, signal)
+    return translate(response, signal, after)
   }
 
   /** 连接都没建立：只吐一个错误就结束，保证消费方一定 settle。 */
@@ -63,7 +65,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     })
   }
 
-  function translate(response: Response, signal?: AbortSignal): ReadableStream<UIMessageChunk> {
+  function translate(response: Response, signal?: AbortSignal, after?: string): ReadableStream<UIMessageChunk> {
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
         let seq = 0
@@ -79,6 +81,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
               applyEvent(controller, event, seq, toolCalls)
             },
             signal,
+            { after, onCursor: options.onCursor },
           )
         } catch (error) {
           options.onStreamError?.(error)
@@ -168,8 +171,8 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     async sendMessages(arg: { abortSignal?: AbortSignal; body?: object }) {
       return buildStream(() => chatApi.sendChatStream((arg.body || {}) as ChatRequest & Record<string, unknown>, { signal: arg.abortSignal }), arg.abortSignal)
     },
-    async reconnectToStream(turnId: string, signal?: AbortSignal) {
-      return buildStream(() => chatApi.resumeChatStream(turnId, signal), signal)
+    async reconnectToStream(turnId: string, signal?: AbortSignal, after?: string) {
+      return buildStream(() => after ? chatApi.resumeChatStream(turnId, signal, after) : chatApi.resumeChatStream(turnId, signal), signal, after)
     },
   }
 }

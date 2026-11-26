@@ -20,30 +20,26 @@ function scopedSuffix(sessionId: string, modId: string, scope?: string): string 
 }
 
 /**
- * 身份刷新（profile clear → 重新 hydrate）会短暂让运行时身份缺少 owner。
- * 记住同一租户上一次已解析的 owner scope，避免聊天会话键在 owner:2 ↔ owner-pending 间抖动：
- * 抖动会触发身份 watcher 取消正在进行的对话轮次，前端显示失败而后端其实已经成功。
- * 真正的换账号会给出不同的 owner；未登录且从未解析过时仍返回 pending。
+ * Never infer a private owner from the previous tenant session. A partial
+ * profile may temporarily hide history; only a resolved server principal
+ * may reopen it. This avoids A -> unknown -> B disclosing A's cache.
  */
-let lastResolvedChatScope: { tenant: string; scope: string } | null = null
-
 export function resolveChatStorageScope(): string {
   const identity = getRuntimeTenantStorageScopeInput()
   const tenant = resolveTenantStorageScopeFromRuntime(true)
   const owner = identity?.localUserId ?? identity?.marketUserId ?? identity?.marketUsername
   if (!tenant.startsWith('tenant:')) {
-    lastResolvedChatScope = null
+    if (!identity && tenant !== 'local') return `${tenant}:owner-pending`
     return tenant
   }
   if (owner != null && String(owner).trim()) {
-    const scope = `${tenant}:owner:${encodeURIComponent(String(owner))}`
-    lastResolvedChatScope = { tenant, scope }
-    return scope
-  }
-  if (lastResolvedChatScope?.tenant === tenant) {
-    return lastResolvedChatScope.scope
+    return `${tenant}:owner:${encodeURIComponent(String(owner))}`
   }
   return `${tenant}:owner-pending`
+}
+
+export function isChatOwnerUnresolved(scope = resolveChatStorageScope()): boolean {
+  return scope.endsWith(':owner-pending')
 }
 
 export function resolveChatIdentity(modId = readActiveModIdFromStorage()): string {
@@ -64,10 +60,12 @@ export function buildChatScopedKey(prefix: string, sessionId: string, modId?: st
 }
 
 export function readAiSessionIdFromStorage(): string {
+  if (isChatOwnerUnresolved()) return ''
   return String(readTenantScopedStorageItem(buildChatScopedKey('ai_session_id_', 'current'), 'local') || '').trim()
 }
 
 export function writeAiSessionIdToStorage(sessionId: string | null | undefined): void {
+  if (isChatOwnerUnresolved()) return
   const key = buildChatScopedKey('ai_session_id_', 'current')
   const next = String(sessionId || '').trim()
   if (next) writeTenantScopedStorageItem(key, next, 'local')
@@ -76,6 +74,7 @@ export function writeAiSessionIdToStorage(sessionId: string | null | undefined):
 
 function stripTenantSegment(suffix: string, scope?: string): string | null {
   const s = scope || resolveChatStorageScope()
+  if (isChatOwnerUnresolved(s)) return null
   if (s === 'local') return /^(?:tenant|user|session|platform):/.test(suffix) ? null : suffix
   const needle = `${s}:`
   if (!suffix.startsWith(needle)) return null

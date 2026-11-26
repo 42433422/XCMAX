@@ -18,6 +18,7 @@ from app.db.models.approval import (
     ApprovalRequest,
     ApprovalStatus,
 )
+from app.db.models.user import User
 
 from .access import FINAL_STATUSES, normalize_statuses
 from .protocols import ApprovalAccess, AuditWriter, JsonObject, RequestView, WorkspaceResponse
@@ -207,7 +208,8 @@ class RequestLifecycle:
     def withdraw_request(
         self, request_id: int, http_request: Request, body: JsonObject, x_user_id: str | None
     ) -> WorkspaceResponse:
-        actor = self.access.actor(http_request, x_user_id, fallback=body.get("user_id"))
+        # Never accept an untrusted body user_id as withdrawal authority.
+        actor = self.access.actor(http_request, x_user_id)
         if actor is None:
             raise HTTPException(status_code=401, detail="请先登录")
         with self.repository.session() as db:
@@ -219,6 +221,21 @@ class RequestLifecycle:
             if req.applicant_id != actor:
                 return JSONResponse(
                     {"success": False, "message": "只有申请人可以撤回"}, status_code=403
+                )
+            # Hold the original applicant row through the withdrawal commit.
+            # Account deactivation or tenant transfer must not race this CAS.
+            applicant = (
+                db.query(User)
+                .filter(User.id == actor, User.is_active.is_(True))
+                .with_for_update(read=True)
+                .first()
+            )
+            if applicant is None or (
+                req.tenant_id is not None and applicant.tenant_id != req.tenant_id
+            ):
+                return JSONResponse(
+                    {"success": False, "message": "申请人已停用或企业归属发生变更"},
+                    status_code=403,
                 )
             if req.status not in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value):
                 return JSONResponse(
@@ -236,20 +253,18 @@ class RequestLifecycle:
                     business = json.loads(req.business_data or "{}")
                 except (ValueError, TypeError):
                     business = {}
-                snapshot = (
-                    business.get("durable_workflow_snapshot")
-                    if isinstance(business, dict)
-                    else None
-                )
+                (business.get("durable_workflow_snapshot") if isinstance(business, dict) else None)
                 conflict = isinstance(business, dict) and "agent_execution_claim" in business
-                if not conflict and isinstance(snapshot, dict) and snapshot.get("agent_run_id"):
-                    # Compete with execution before recording withdrawal, even
-                    # when this session read the request before its claim.
+                if not conflict:
+                    # Reject stale snapshots and duplicate withdrawal commits.
                     conflict = (
                         db.query(ApprovalRequest)
                         .filter(
                             ApprovalRequest.id == req.id,
+                            ApprovalRequest.tenant_id == req.tenant_id,
                             ApprovalRequest.status == status_before,
+                            ApprovalRequest.current_node_id == req.current_node_id,
+                            ApprovalRequest.current_node_order == req.current_node_order,
                             ApprovalRequest.business_data == req.business_data,
                         )
                         .update(
@@ -262,6 +277,28 @@ class RequestLifecycle:
                     db.rollback()
                     return JSONResponse(
                         {"success": False, "message": "该审批已被领取或状态已变更，请核对原任务。"},
+                        status_code=409,
+                    )
+            if not self.access.is_workflow(req):
+                claimed = (
+                    db.query(ApprovalRequest)
+                    .filter(
+                        ApprovalRequest.id == req.id,
+                        ApprovalRequest.tenant_id == req.tenant_id,
+                        ApprovalRequest.status == status_before,
+                        ApprovalRequest.current_node_id == req.current_node_id,
+                        ApprovalRequest.current_node_order == req.current_node_order,
+                    )
+                    .update(
+                        {ApprovalRequest.status: ApprovalStatus.WITHDRAWN.value},
+                        synchronize_session=False,
+                    )
+                    == 1
+                )
+                if not claimed:
+                    db.rollback()
+                    return JSONResponse(
+                        {"success": False, "message": "申请已被审批或状态变更，请刷新原申请"},
                         status_code=409,
                     )
             current_node = req.current_node

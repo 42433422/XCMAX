@@ -2275,7 +2275,7 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    """The legacy catalog name now exercises the unique Codex goal/context entry."""
+    """The legacy catalog name exercises the Xiaox goal/context entry."""
     from starlette.requests import Request
 
     from app.application.agent_task_context import scoped_personal_memory_id
@@ -2284,9 +2284,9 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
     try:
-        from evals.owned_attachment_eval import codex_eval_runtime
+        from evals.owned_attachment_eval import xiaox_eval_runtime
     except ModuleNotFoundError:
-        from owned_attachment_eval import codex_eval_runtime
+        from owned_attachment_eval import xiaox_eval_runtime
 
     client = SimpleNamespace(headers={})
     expected = dict(task.get("expected") or {})
@@ -2333,7 +2333,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
                 wraps=memory_service.format_memory_v2_for_prompt,
             )
         )
-        runtime = codex_eval_runtime(stack, Path(root), client, task)
+        runtime = xiaox_eval_runtime(stack, Path(root), client, task)
         request = Request(
             {
                 "type": "http",
@@ -2398,7 +2398,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             True,
         )
         _check_equal(checks, "original_goal_verified", run.status, "completed")
-        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "codex")
+        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "xiaox")
         for key, present in (("summary_contains", True), ("summary_not_contains", False)):
             if expected.get(key):
                 fragment = str(expected[key])

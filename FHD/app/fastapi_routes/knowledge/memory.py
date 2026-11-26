@@ -132,6 +132,17 @@ class MemoryReview:
             status_code = 403
         return JSONResponse(payload, status_code=status_code)
 
+    def auto_review(
+        self, dataset_id: str, request: Request, *, scope: str, limit: int, after: str
+    ) -> JSONResponse:
+        unsupported = self._dataset_error(dataset_id)
+        if unsupported is not None:
+            return unsupported
+        payload = self._service().auto_review_pending(
+            access_context=self._access(request), scope=scope, limit=limit, after=after
+        )
+        return self._response(payload, request=request, action="auto_review")
+
     def confirm(
         self, dataset_id: str, memory_id: str, req: PersyMemoryMutationRequest, request: Request
     ) -> JSONResponse:

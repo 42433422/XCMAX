@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -111,6 +112,9 @@ def _registered_router_excel_analysis(
                 if snapshot.suffix not in {".xlsx", ".xls", ".xlsm", ".csv"}:
                     raise PermissionError("文件类型不支持表格分析")
                 result = handle_excel_analysis({**payload, "file_path": str(snapshot)})
+                if result.get("success") is True:
+                    with snapshot.open("rb") as source:
+                        result["source_sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
             if isinstance(result, dict):
                 result["file_path"] = original
                 result.pop("resolved_path", None)
@@ -141,10 +145,14 @@ def _registered_router_excel_analysis(
         summary = result.get("numeric_summary") or {}
         for column, expected in (params.get("expected_totals") or {}).items():
             # Sales exports name the money column amount. Plans often say total_amount.
-            source = column
-            if source not in summary and source == "total_amount" and "amount" in summary:
-                source = "amount"
-            actual = summary.get(source, {}).get("sum")
+            summary_column = column
+            if (
+                summary_column not in summary
+                and summary_column == "total_amount"
+                and "amount" in summary
+            ):
+                summary_column = "amount"
+            actual = summary.get(summary_column, {}).get("sum")
             if actual is None or not isclose(
                 float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
             ):
@@ -169,6 +177,14 @@ def _registered_router_excel_analysis(
                 "sheet_name": result.get("sheet_name"),
                 "header_row": result.get("header_row"),
             },
+        }
+    if result.get("success") is True and result.get("source_sha256"):
+        result["data"]["source"] = {
+            "file": result["file_path"],
+            "sha256": result["source_sha256"],
+            "sheet": result.get("sheet_name"),
+            "header_row": result.get("header_row"),
+            **(result.get("source_rows") or {}),
         }
     return result
 

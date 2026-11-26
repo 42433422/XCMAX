@@ -232,3 +232,69 @@ def test_body_only_root_is_removed_before_employee_continuity(roots, monkeypatch
     result = EmployeeAgent("clerk").run("task", {"workspace_root": str(outside)})
     assert not result["success"]
     assert captured["workspace_root"] is None
+
+
+def test_delegated_credential_cannot_be_injected_or_replaced(roots):
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.runtime_context import (
+        RuntimeContextOwnershipError,
+        merge_runtime_context,
+    )
+    from app.application.agent_orchestrator.tool_permission import (
+        handoff_runtime_context,
+        merge_turn_context,
+        overlay_resume_context,
+    )
+
+    key = "_credential_authorization"
+    credential = {"kind": "aiopen", "credential_id": "original", "scopes": ["read"]}
+    forged = {key: {"kind": "aiopen", "credential_id": "other"}}
+    stored = {key: credential, "user_id": "17"}
+    assert key not in without_runtime_identity(forged)
+    assert key not in merge_turn_context({}, forged)
+    assert merge_turn_context(stored, forged)[key] == credential
+    assert overlay_resume_context(stored, forged)[key] == credential
+    assert key not in overlay_resume_context({}, forged)
+    run = AgentRun(user_id="17", message="fixture")
+    run.metadata["runtime_context"] = stored
+    with pytest.raises(RuntimeContextOwnershipError):
+        merge_runtime_context(run, forged)
+    assert merge_runtime_context(run, {key: credential})[key] == credential
+    child = handoff_runtime_context(
+        stored,
+        employee_id="clerk",
+        allowlist=["customers.list"],
+        parent_task_id="task",
+        parent_run_id="run",
+    )
+    assert child[key] == credential
+
+
+@pytest.mark.parametrize("registry_error", [False, True])
+def test_delegated_tool_denial_precedes_other_authority(monkeypatch, registry_error):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.application.aiopen import service
+
+    def deny(*args):
+        if registry_error:
+            raise OSError("registry unavailable")
+        return False
+
+    monkeypatch.setattr(service, "api_key_permits_execution", deny)
+    result = actor_tool_denial(
+        "customers", "list", {"_credential_authorization": {"kind": "aiopen"}}
+    )
+    assert result is not None
+    assert result["error_code"] == "tool_permission_denied"
+
+
+def test_public_projection_does_not_disclose_or_mutate_delegated_credential():
+    from app.fastapi_routes.domains.agent.route_support import redact_internal_errors
+
+    original = {
+        "metadata": {"runtime_context": {"_credential_authorization": {"credential_id": "x"}}}
+    }
+    assert redact_internal_errors(original) == {"metadata": {"runtime_context": {}}}
+    assert original["metadata"]["runtime_context"]["_credential_authorization"] == {
+        "credential_id": "x"
+    }

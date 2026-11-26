@@ -627,21 +627,27 @@ def test_stock_location_history_preserves_original_move(
     assert identity["location_id"] is not None
     service = InventoryService()
     with tenant_scope(actor.tenant_id):
+        destination = identity["warehouse_id"]
+        if later_change == "relocate":
+            warehouse = service.create_warehouse({"name": "调入仓", "code": "later-warehouse"})
+            assert warehouse["success"] is True, warehouse
+            destination = warehouse["data"]["id"]
         created = service.create_storage_location(
-            {"warehouse_id": identity["warehouse_id"], "code": "later-location"}
+            {"warehouse_id": destination, "code": "later-location"}
         )
         assert created["success"] is True
         later_location = created["data"]["id"]
         if later_change == "relocate":
-            result = service.inventory_count(
+            result = service.inventory_transfer(
                 identity["product_id"],
-                identity["warehouse_id"],
-                actual_quantity=10,
+                from_warehouse_id=identity["warehouse_id"],
+                to_warehouse_id=destination,
+                quantity=1,
                 batch_no=identity["batch_no"],
-                location_id=later_location,
-                confirmed=True,
+                from_location_id=identity["location_id"],
+                to_location_id=later_location,
             )
-            assert result["success"] is True
+            assert result["success"] is True, result
         elif later_change == "unlocated_in":
             result = service.inventory_in(
                 identity["product_id"],
@@ -661,9 +667,10 @@ def test_stock_location_history_preserves_original_move(
                 original = db.get(InventoryTransaction, identity["id"])
                 assert {field: getattr(original, field) for field in identity} == identity
                 ledger = db.get(InventoryLedger, identity["ledger_id"])
-                assert ledger.location_id == (
-                    later_location if later_change == "relocate" else identity["location_id"]
-                )
+                assert ledger.location_id == identity["location_id"]
+                if later_change == "relocate":
+                    destination_row = db.get(InventoryLedger, result["data"]["to_ledger_id"])
+                    assert destination_row.location_id == later_location
     step, call = run.steps[0], run.tool_calls[0]
     report = verify_step_result(
         run=run,

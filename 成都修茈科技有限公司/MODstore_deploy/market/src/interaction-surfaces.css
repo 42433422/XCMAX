@@ -1,0 +1,93 @@
+/* Shared interactive surfaces. Values come exclusively from generated XCMAX tokens.
+   Element Plus owns positioning, collision avoidance, focus trapping and z-index. */
+@import 'element-plus/theme-chalk/base.css';
+@import 'element-plus/theme-chalk/el-icon.css';
+@import 'element-plus/theme-chalk/el-overlay.css';
+@import 'element-plus/theme-chalk/el-dialog.css';
+
+:root {
+  --el-transition-duration: var(--xc-token-motion-standard-ms);
+  --el-transition-duration-fast: var(--xc-token-motion-feedback-ms);
+  --el-border-radius-base: var(--xc-token-radius-small);
+}
+
+/* Never animate the Popper node's transform: Floating UI / Popper uses it for placement. */
+.el-popper:is(.el-popover, .el-dropdown__popper, .el-select__popper, .el-tooltip__popper) {
+  box-sizing: border-box;
+  max-width: calc(100vw - var(--xc-token-spacing-xxl));
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
+}
+.el-popper:is(.el-popover, .el-dropdown__popper, .el-select__popper) {
+  border-radius: var(--xc-token-radius-medium);
+}
+.el-popper .el-dropdown-menu,
+.el-popper .el-select-dropdown {
+  max-height: min(60vh, 420px);
+  max-height: min(60dvh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.el-popper :is(button, [role='menuitem'], [role='option']):focus-visible,
+.el-dialog :is(button, input, textarea, select):focus-visible,
+.el-drawer :is(button, input, textarea, select):focus-visible {
+  outline: var(--xc-token-focus-ring-width) solid var(--el-color-primary);
+  outline-offset: calc(var(--xc-token-spacing-xs) / 2);
+}
+.el-overlay .el-dialog {
+  box-sizing: border-box;
+  max-width: calc(100vw - var(--xc-token-spacing-xxl));
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
+  max-height: calc(100dvh - var(--xc-token-spacing-xxl));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--xc-token-radius-large);
+}
+.el-overlay .el-drawer {
+  max-width: 100dvw;
+  max-height: 100dvh;
+  overscroll-behavior: contain;
+}
+/* The separate native bottom sheet uses Material's modal manager in Flutter. */
+.app-confirm-dialog.el-dialog {
+  --el-dialog-bg-color: var(--wb-dialog-bg, var(--color-bg-elevated));
+  --el-text-color-primary: var(--wb-dialog-text, var(--color-text-primary));
+  --el-text-color-regular: var(--wb-dialog-text-muted, var(--color-text-secondary));
+  width: min(400px, calc(100dvw - var(--xc-token-spacing-xxl))) !important;
+  padding: var(--xc-token-spacing-lg);
+  background: var(--el-dialog-bg-color);
+  color: var(--el-text-color-primary);
+  border: 1px solid var(--wb-dialog-border, var(--color-border-subtle));
+  box-shadow: 0 var(--xc-token-spacing-sm) var(--xc-token-spacing-xxl) var(--xc-token-market-global-black-alpha-12);
+}
+.app-confirm-dialog .el-dialog__title {
+  color: var(--el-text-color-primary);
+  font-weight: var(--xc-token-font-weights-semibold);
+}
+.app-confirm-dialog .app-confirm-dialog__message {
+  color: var(--el-text-color-regular);
+}
+@media (pointer: coarse) {
+  .el-popper :is(.el-dropdown-menu__item, .el-select-dropdown__item) { min-height: 44px; }
+}
+/* Accessibility: remove decorative movement, never disable pointer/focus/scroll. */
+@media (prefers-reduced-motion: reduce) {
+  .el-overlay, .el-overlay *, .el-popper, .el-popper *,
+  .el-drawer, .el-drawer *, .el-dialog, .el-dialog *,
+  .el-fade-in-linear-enter-active, .el-fade-in-linear-leave-active,
+  .dialog-fade-enter-active, .dialog-fade-leave-active,
+  .el-zoom-in-top-enter-active, .el-zoom-in-top-leave-active {
+    animation-duration: var(--xc-token-motion-reduced-ms) !important;
+    transition-duration: var(--xc-token-motion-reduced-ms) !important;
+    transition-delay: var(--xc-token-motion-reduced-ms) !important;
+  }
+  .dialog-fade-enter-from .el-overlay-dialog,
+  .dialog-fade-leave-to .el-overlay-dialog {
+    transform: none !important;
+  }
+}
+
+/* Visible keyboard focus for the direct workbench composer in both themes. */
+#wb-home-input:focus-visible {
+  outline: var(--xc-token-focus-ring-width) solid var(--wb-accent-primary, var(--el-color-primary));
+  outline-offset: var(--xc-token-spacing-xs);
+}

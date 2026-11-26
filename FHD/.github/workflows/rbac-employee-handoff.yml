@@ -1,0 +1,149 @@
+name: XCMAX RBAC Employee Inflight Handoff
+
+on:
+  push:
+    branches: [fix/employee-org-dispatch-guard-20261125]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [fix/p0-rbac-atomic-revocation-20261125]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  integrated-revoke:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: employee-ci-only
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      XCAGI_TEST_POSTGRES_URL: postgresql+psycopg://postgres:employee-ci-only@127.0.0.1:5432/postgres
+    steps:
+      - name: Checkout exact integrated SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Source identity
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+
+      - name: Install pinned dependencies
+        run: |
+          set -euo pipefail
+          pins="$(python scripts/dev/check_requirements_lock.py --test-toolchain-pins)"
+          read -r -a requirements <<< "$pins"
+          uv pip install --system --python "$(command -v python)" \
+            -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${requirements[@]}"
+          uv pip check --system --python "$(command -v python)"
+
+      - name: Ruff auth, employee and Mod regression
+        run: |
+          ruff check app/application/rbac_app_service.py app/security/web_jwt.py \
+            tests/test_application/test_employee_handoff_durability.py \
+            tests/test_application/test_employee_projection_identity_binding.py \
+            tests/test_application/test_group_chat_organization_dispatch_guards.py \
+            tests/test_security/test_web_jwt_revocation.py \
+            tests/test_application/test_rbac_atomic_revocation.py \
+            app/fastapi_routes/mod_store/install_routes.py app/fastapi_routes/mod_store/packages.py \
+            tests/test_deep_mods/test_mod_uninstall_authorization.py \
+            tests/test_routes/test_mod_store_component_boundaries.py
+
+      - name: Cross-domain original execution and PG readback
+        run: |
+          python -m pytest -q --tb=short \
+            tests/test_application/test_rbac_atomic_revocation.py \
+            tests/test_security/test_web_jwt_revocation.py \
+            tests/test_application/test_employee_handoff_durability.py \
+            tests/test_application/test_ai_group_chat_dispatch_reassign.py \
+            tests/application/test_employee_runtime_tool_scope.py \
+            tests/application/test_employee_runtime_workspace_guard.py \
+            tests/test_application/test_employee_projection_identity_binding.py \
+            tests/test_application/test_group_chat_organization_dispatch_guards.py \
+            tests/test_application/test_enterprise_projection.py::test_foreign_tenant_owner_and_rbac_cannot_reuse_cache \
+            tests/test_application/test_enterprise_projection.py::test_mod_scope_and_owner_change_revalidated \
+            tests/test_deep_mods/test_mod_uninstall_authorization.py \
+            tests/test_routes/test_mod_store_component_boundaries.py \
+            --junitxml=rbac-employee-handoff.xml
+
+      - name: Reject skipped cross-domain checks
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+
+          path = Path("rbac-employee-handoff.xml")
+          if not path.is_file():
+              raise SystemExit("BLOCKED: no integrated JUnit")
+          cases = ET.parse(path).findall(".//testcase")
+          for required in (
+              "test_postgres_two_processes_observe_same_committed_revocation",
+              "test_inflight_handoff_rechecks_original_session_after_role_revocation[role_revoke]",
+              "test_inflight_handoff_rechecks_original_session_after_role_revocation[disable_account]",
+              "test_child_attachment_requires_same_owner_tenant_and_mod",
+              "test_parent_public_view_refreshes_bound_child_without_writing_or_replaying",
+              "test_parent_child_and_receipt_survive_repository_and_claim_memory_reentry",
+              "test_same_operation_cannot_change_arguments_target_or_delegated_scope",
+              "test_completed_handoff_becomes_the_next_employees_real_parent",
+              "test_inflight_duplicate_never_dispatches_a_second_child",
+              "test_sealed_actor_mod_scope_is_preserved_and_revocation_rechecked",
+              "test_process_exit_recovers_only_persisted_receipts_without_reexecution",
+              "test_new_operation_cannot_move_the_same_task_to_another_workspace",
+              "test_unavailable_handoff_target_cannot_start_a_child",
+              "test_unknown_original_dispatch_cannot_start_replacement",
+              "test_uncertain_relay_create_never_falls_back",
+              "test_runtime_workspace_override_cannot_widen_pack_policy",
+              "test_pack_action_restriction_is_preserved_for_admin_actor",
+          ):
+              matched = [case for case in cases if case.get("name") == required]
+              if len(matched) != 1 or any(
+                  matched[0].find(tag) is not None for tag in ("skipped", "error", "failure")
+              ):
+                  raise SystemExit("BLOCKED: missing/failed cross-domain check: " + required)
+          # Parameterized cases must all be present, and none may be skipped.
+          for prefix, count in (
+              ("test_signed_upload_binds_receipt_to_authenticated_workspace", 2),
+              ("test_invalid_credentials_cannot_fall_back_to_anonymous_global_upload", 3),
+              ("test_upload_rechecks_session_after_normalization_before_install", 1),
+              ("test_anonymous_upload_keeps_signed_global_install_unowned", 1),
+              ("test_other_customer_cannot_unload_or_remove_owner_install", 2),
+              ("test_admin_cannot_remove_another_accounts_install", 1),
+              ("test_foreign_tenant_owner_and_rbac_cannot_reuse_cache", 1),
+              ("test_mod_scope_and_owner_change_revalidated", 1),
+          ):
+              matched = [c for c in cases if c.get("name", "").split("[", 1)[0] == prefix]
+              if len(matched) != count or any(
+                  c.find(tag) is not None for c in matched for tag in ("skipped", "error", "failure")
+              ):
+                  raise SystemExit("BLOCKED: missing/failed resource boundary check: " + prefix)
+          print("PASS: same HEAD PostgreSQL revocation + employee handoff + Mod and tenant boundaries")
+          PY
+
+      - name: Upload original JUnit
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rbac-employee-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
+          path: FHD/rbac-employee-handoff.xml
+          if-no-files-found: warn
+          retention-days: 14

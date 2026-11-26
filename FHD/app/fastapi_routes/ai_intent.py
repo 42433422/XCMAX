@@ -112,6 +112,20 @@ def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
             **receipt,
             "_http_status": 409,
         }
+    if payload.get("runtime") == "xiaox" and payload.get("execution_state") == "queued" and run_id:
+        from app.application.agent_runtime.chat import runtime_chat_payload
+
+        context = payload.get("runtime_context_update")
+        conversation = context.get("conversation_id") if isinstance(context, dict) else None
+        accepted = runtime_chat_payload(
+            {
+                "run_id": run_id,
+                "execution_state": "queued",
+                "output": "任务已受理，正在等待后台执行。",
+            },
+            conversation_id=conversation if isinstance(conversation, str) else "",
+        )
+        return {**accepted, **identity, "_http_status": 202}
     if bool(payload.get("success")):
         return payload
     raw_status = payload.get("_http_status", 500)

@@ -88,7 +88,7 @@
       "
     >
       <input type="checkbox" :checked="proactiveSuggestionsEnabled" @change="onProactiveChange" />
-      {{ $t('chat.proactiveSuggestions') }}
+      <span class="toolbar-toggle-text">{{ $t('chat.proactiveSuggestions') }}</span>
     </label>
     <label
       :title="$t('chat.ttsTitle')"
@@ -104,7 +104,8 @@
       "
     >
       <input type="checkbox" :checked="ttsEnabled" @change="$emit('toggle-tts', !ttsEnabled)" />
-      <i class="fa fa-volume-up" aria-hidden="true"></i> {{ $t('chat.ttsToggle') }}
+      <i class="fa fa-volume-up" aria-hidden="true"></i>
+      <span class="toolbar-toggle-text">{{ $t('chat.ttsToggle') }}</span>
     </label>
   </div>
 </template>
@@ -160,6 +161,11 @@ function onProactiveChange(event: Event) {
 .input-toolbar {
   align-items: center;
   flex-wrap: wrap;
+}
+
+.toolbar-toggle-text {
+  /* Avoid fractional inherited leading in these centered flex text items. */
+  line-height: 1;
 }
 
 .approval-mode {

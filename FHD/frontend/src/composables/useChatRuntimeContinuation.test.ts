@@ -6,7 +6,7 @@ import type { ChatPlannerPayload } from '@/types/chat'
 import type { UiChatMessage } from '@/types/chat-ui'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
-import { pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { pendingRuntimeRunId, runtimeContinuationFromPayload, isRuntimeWaiting } from '@/utils/chatRuntimeContinuation'
 import { chatMessageExtrasFromServerRow, resetChatMessageStores, useChatMessages } from './useChatMessages'
 import { persistDetachedPlannerResult } from './useChatSessionActivity'
 import { useChatRequest } from './useChatRequest'
@@ -21,7 +21,7 @@ vi.mock('@/api/chat', () => ({ default: {
 vi.mock('@/utils/tts', () => ({ speakText: vi.fn(), stopSpeaking: vi.fn(), cleanTextForSpeech: (text: string) => text }))
 
 const waiting: ChatPlannerPayload = {
-  success: false, response: '请补充客户名称', runtime: 'codex', run_id: 'parent-1',
+  success: false, response: '请补充客户名称', runtime: 'xiaox', run_id: 'parent-1',
   execution_state: 'waiting_user', needs_user_input: true,
   runtime_context_update: { agent_runtime_run_id: 'parent-1', conversation_id: 'room-1' },
 }
@@ -59,6 +59,14 @@ afterEach(() => {
 })
 
 describe('runtime continuation through message history and chat requests', () => {
+  it('keeps the original waiting run across the Xiaox runtime label migration', () => {
+    const migrated = { ...waiting, runtime: 'xiaox', data: { runtime: 'xiaox' } }
+    expect(runtimeContinuationFromPayload(migrated)).toEqual(pointer)
+    expect(isRuntimeWaiting(migrated)).toBe(true)
+    expect(runtimeContinuationFromPayload({ ...waiting, runtime: 'unknown', data: { runtime: 'xiaox' } })).toBeUndefined()
+    expect(isRuntimeWaiting({ ...migrated, execution_state: 'queued' })).toBe(false)
+  })
+
   it('restores the server waiting message, survives local reload and sends only the parent hint', async () => {
     const first = setupChat()
     const extras = chatMessageExtrasFromServerRow({ role: 'assistant', id: 7, metadata: { ui: { runtimeContinuation: pointer } } })

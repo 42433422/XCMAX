@@ -16,6 +16,8 @@ from app.db.models import (
     Warehouse,
 )
 from app.domain.shared_services.inventory_service import InventoryService
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _fluent(*, first=None, all_=None, count_=0) -> MagicMock:
@@ -71,6 +73,32 @@ class _FakeRow:
 @pytest.fixture
 def svc() -> InventoryService:
     return InventoryService()
+
+
+@pytest.fixture
+def stocked_warehouse(svc, trusted_actor):
+    actor = trusted_actor(role="admin")
+    with tenant_scope(actor.tenant_id):
+        with actor.factory.begin() as db:
+            product = Product(name="苹果", unit="箱", model_number="A1")
+            source = Warehouse(code="W1", name="主仓", status="active")
+            target = Warehouse(code="W2", name="分仓", status="active")
+            db.add_all([product, source, target])
+            db.flush()
+            location = StorageLocation(warehouse_id=source.id, code="L1", status="active")
+            db.add(location)
+            db.flush()
+            product_id, source_id, target_id, location_id = (
+                product.id,
+                source.id,
+                target.id,
+                location.id,
+            )
+        receipt = svc.inventory_in(
+            product_id, source_id, 10, batch_no="B1", location_id=location_id
+        )
+        assert receipt["success"] is True, receipt
+        yield product_id, source_id, target_id, location_id, receipt["data"]["ledger_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -263,14 +291,11 @@ def test_inventory_in_new_ledger(svc: InventoryService) -> None:
     assert out["data"]["quantity"] == 5
 
 
-def test_inventory_in_existing_ledger(svc: InventoryService) -> None:
-    product = Product(id=1, name="苹果", unit="箱", model_number="A1")
-    warehouse = Warehouse(id=1, code="W1", name="主仓", status="active")
-    ledger = InventoryLedger(id=9, product_id=1, warehouse_id=1, quantity=10, available_quantity=10)
-    s = _session([_fluent(first=product), _fluent(first=warehouse), _fluent(first=ledger)])
-    with _patch_db(s):
-        out = svc.inventory_in(product_id=1, warehouse_id=1, quantity=5)
-    assert out["success"] is True
+def test_inventory_in_existing_ledger(svc: InventoryService, stocked_warehouse) -> None:
+    product, source, _, location, ledger = stocked_warehouse
+    out = svc.inventory_in(product, source, 5, batch_no="B1", location_id=location)
+    assert out["success"] is True, out
+    assert out["data"]["ledger_id"] == ledger
     assert out["data"]["total_quantity"] == 15.0
 
 
@@ -292,14 +317,11 @@ def test_inventory_out_insufficient(svc: InventoryService) -> None:
     assert out["success"] is False
 
 
-def test_inventory_out_success(svc: InventoryService) -> None:
-    ledger = InventoryLedger(id=9, product_id=1, warehouse_id=1, quantity=10, available_quantity=10)
-    s = _session([_fluent(first=ledger)])
-    with _patch_db(s):
-        out = svc.inventory_out(
-            product_id=1, warehouse_id=1, quantity=4, batch_no="B1", location_id=2
-        )
-    assert out["success"] is True
+def test_inventory_out_success(svc: InventoryService, stocked_warehouse) -> None:
+    product, source, _, location, ledger = stocked_warehouse
+    out = svc.inventory_out(product, source, 4, batch_no="B1", location_id=location)
+    assert out["success"] is True, out
+    assert out["data"]["ledger_id"] == ledger
     assert out["data"]["remaining_quantity"] == 6.0
 
 
@@ -312,29 +334,24 @@ def test_inventory_transfer_source_insufficient(svc: InventoryService) -> None:
     assert out["success"] is False
 
 
-def test_inventory_transfer_existing_target(svc: InventoryService) -> None:
-    src = InventoryLedger(id=1, product_id=1, warehouse_id=1, quantity=10, available_quantity=10)
-    src.unit = "箱"
-    dst = InventoryLedger(id=2, product_id=1, warehouse_id=2, quantity=3, available_quantity=3)
-    s = _session([_fluent(first=src), _fluent(first=dst)])
-    with _patch_db(s):
-        out = svc.inventory_transfer(
-            product_id=1, from_warehouse_id=1, to_warehouse_id=2, quantity=4
-        )
-    assert out["success"] is True
-    assert out["data"]["from_ledger_id"] == 1
-    assert out["data"]["to_ledger_id"] == 2
+def test_inventory_transfer_existing_target(svc: InventoryService, stocked_warehouse) -> None:
+    product, source, target, location, ledger = stocked_warehouse
+    existing = svc.inventory_in(product, target, 3, batch_no="B1")
+    assert existing["success"] is True, existing
+    out = svc.inventory_transfer(product, source, target, 4, from_location_id=location)
+    assert out["success"] is True, out
+    assert out["data"]["from_ledger_id"] == ledger
+    assert out["data"]["to_ledger_id"] == existing["data"]["ledger_id"]
 
 
-def test_inventory_transfer_new_target(svc: InventoryService) -> None:
-    src = InventoryLedger(id=1, product_id=1, warehouse_id=1, quantity=10, available_quantity=10)
-    src.unit = "箱"
-    s = _session([_fluent(first=src), _fluent(first=None)])
-    with _patch_db(s):
-        out = svc.inventory_transfer(
-            product_id=1, from_warehouse_id=1, to_warehouse_id=2, quantity=4, batch_no="B1"
-        )
-    assert out["success"] is True
+def test_inventory_transfer_new_target(svc: InventoryService, stocked_warehouse) -> None:
+    product, source, target, location, ledger = stocked_warehouse
+    out = svc.inventory_transfer(
+        product, source, target, 4, batch_no="B1", from_location_id=location
+    )
+    assert out["success"] is True, out
+    assert out["data"]["from_ledger_id"] == ledger
+    assert out["data"]["to_ledger_id"] != ledger
 
 
 # ---------------------------------------------------------------------------

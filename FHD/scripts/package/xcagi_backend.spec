@@ -48,6 +48,10 @@ for required_resource in (
     if not (ROOT / required_resource).is_file():
         raise FileNotFoundError(f"missing required label font resource: {required_resource}")
 
+# Memory semantic assets are release requirements, not runtime downloads.
+_memory_model = runpy.run_path(str(ROOT / "scripts/dev/provision_memory_model.py"))
+_memory_model["verify"](ROOT / "resources/models/fastembed")
+
 datas = []
 binaries = []
 for item in [
@@ -259,10 +263,18 @@ for module in ["ctranslate2", "av"]:
     except Exception:
         pass
 
+# Semantic memory must be available in the signed frozen runtime.
+for module in ("fastembed", "onnxruntime"):
+    if importlib.util.find_spec(module) is None:
+        raise ModuleNotFoundError(f"Required semantic memory dependency missing: {module}")
+    datas.extend(collect_data_files(module, include_py_files=False))
+    binaries.extend(collect_dynamic_libs(module))
+    datas.extend(copy_metadata(module))
+
 # 长期记忆：mem0 通过 importlib 字符串加载 LLM/embedder/向量库实现，静态分析
 # 看不到；qdrant-client 本地模式需要随包携带其运行时模块，否则冻结包启动后
 # 长期记忆会静默降级为旧链路。
-for module in ["mem0", "qdrant_client"]:
+for module in ["mem0", "qdrant_client", "fastembed", "onnxruntime"]:
     try:
         hiddenimports.extend(collect_submodules(module))
     except Exception:
@@ -378,6 +390,8 @@ desktop_excludes = [
 ]
 if BUNDLE_COMPUTER_USE:
     desktop_excludes.remove("playwright")
+
+hiddenimports.append("app.mod_sdk.workbook_controls")
 
 a = Analysis(
     [str(ROOT / "XCAGI" / "run_fastapi.py")],

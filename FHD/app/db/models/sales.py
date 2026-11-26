@@ -330,4 +330,6 @@ def inclusive_order_bound(value: Any, *, end: bool) -> datetime | None:
     if not text:
         return None
     parsed = datetime.fromisoformat(text)
-    return parsed.replace(hour=23, minute=59, second=59) if end and len(text) == 10 else parsed
+    if end and len(text) == 10:
+        return datetime.combine(parsed.date(), datetime.max.time())
+    return parsed

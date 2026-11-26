@@ -10,6 +10,7 @@ const {
   addAndSaveMessage,
   upsertTask,
   agentListEvents,
+  agentGetRun,
 } = vi.hoisted(() => ({
   requestChatByModeWithTimeout: vi.fn(),
   requestChatByModeBatchWithTimeout: vi.fn(),
@@ -18,6 +19,7 @@ const {
   addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
   upsertTask: vi.fn(),
   agentListEvents: vi.fn(),
+  agentGetRun: vi.fn(),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -168,7 +170,7 @@ vi.mock('@/stores/mods', () => ({
 vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: { searchProducts: vi.fn() } }))
 vi.mock('@/api/agentRuns', () => ({
-  default: { listEvents: agentListEvents },
+  default: { listEvents: agentListEvents, getRun: agentGetRun },
 }))
 vi.mock('@/utils/chatSseStream', () => ({
   readPlannerSseResponse: vi.fn(),
@@ -257,10 +259,10 @@ describe('useChatOrchestration batch/json', () => {
     )
   })
 
-  it('retains a Codex child approval and parent continuation on a success=false JSON wait', async () => {
+  it('retains a Xiaox child approval and parent continuation on a success=false JSON wait', async () => {
     enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
     requestChatByModeWithTimeout.mockResolvedValueOnce({
-      success: false, response: '等待原任务审批', runtime: 'codex', run_id: 'parent', execution_state: 'waiting_approval',
+      success: false, response: '等待原任务审批', runtime: 'xiaox', run_id: 'parent', execution_state: 'waiting_approval',
       runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' },
       data: { action: 'approval_pending', data: { approval_card: { run_id: 'child', approval_required: true } } },
     })
@@ -273,10 +275,31 @@ describe('useChatOrchestration batch/json', () => {
     expect(addMessage.mock.calls.some(call => String(call[0]).startsWith('处理失败'))).toBe(false)
   })
 
+  it('shows a queued JSON turn then publishes only its original persisted reply', async () => {
+    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
+    agentListEvents.mockResolvedValue({ data: [] })
+    agentGetRun.mockResolvedValueOnce({ data: {
+      run_id: 'queued-json', status: 'completed', final_output: { xiaox_result: {
+        ok: true, output: '原任务的持久化答复', execution_state: 'completed',
+      } },
+    } })
+    requestChatByModeWithTimeout.mockResolvedValueOnce({
+      success: false, response: '已受理', runtime: 'xiaox', run_id: 'queued-json', execution_state: 'queued',
+    })
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('查看订单')
+    await vi.waitFor(() => expect(addMessage).toHaveBeenCalledWith(
+      '原任务的持久化答复', 'ai', expect.any(Object), expect.any(Object),
+    ))
+    expect(addMessage.mock.calls.filter(([text]) => text === '原任务的持久化答复')).toHaveLength(1)
+    expect(addMessage).toHaveBeenCalledWith('已受理', 'ai', expect.any(Object), expect.any(Object))
+    expect(agentGetRun).toHaveBeenCalledExactlyOnceWith('queued-json')
+    expect(requestChatByModeWithTimeout).toHaveBeenCalledOnce()
+  })
+
   it.each([false, true])('keeps a preserved parent on a blocked JSON admission without showing the round as waiting (batch=%s)', async (batch) => {
     enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(batch ? ['first', 'second'] : ['only-one']))
     const blocked = {
-      success: false, message: 'runtime_not_qualified', runtime: 'codex', run_id: 'parent', execution_state: 'blocked',
+      success: false, message: 'runtime_not_qualified', runtime: 'xiaox', run_id: 'parent', execution_state: 'blocked',
       runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's', status: 'waiting_user' },
     }
     if (batch) {

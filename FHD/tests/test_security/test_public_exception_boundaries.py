@@ -16,8 +16,8 @@ from app.application.admin_control.protocols import ErrorPolicy
 from app.fastapi_routes.admin_control.profiles import UserProfiles
 from app.fastapi_routes.admin_control.synchronization import Synchronization
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.test_application.test_codex_tools import _invoke
-from tests.test_application.test_codex_tools import bridge_setup as bridge_setup
+from tests.test_application.test_xiaox_tools import _invoke
+from tests.test_application.test_xiaox_tools import bridge_setup as bridge_setup
 
 PRIVATE = "Traceback /private/state.sqlite token=secret-boundary-test"
 ERRORS = ErrorPolicy(lambda: (OSError, ValueError, RuntimeError), logging.getLogger(__name__))
@@ -264,6 +264,18 @@ def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outc
         assert result["retryable"] is False
 
 
+def _bind_runtime_test_receipt(row, name):
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+    row["child_run_id"] = f"run-{name}"
+    row["child_task_id"] = f"task-{name}"
+    row["fingerprint"] = canonical_digest(
+        {key: row.get(key) for key in ("tool_id", "action", "params")}
+    )
+    row["receipt"].update(run_id=row["child_run_id"], task_id=row["child_task_id"])
+    return row
+
+
 @pytest.mark.parametrize("next_state", ["unknown", "failed", "cancelled"])
 def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_state):
     """The current Codex runtime retains confirmed writes after later failures."""
@@ -289,6 +301,8 @@ def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_
             "receipt": {"status": next_state, "success": False, "error": PRIVATE},
         },
     ]
+    for index, row in enumerate(rows):
+        _bind_runtime_test_receipt(row, str(index))
     runtime = {"run_id": "original-run", "output": PRIVATE}
     assert classify_runtime_result(runtime, rows, {}, "business", "failed") == "blocked"
     assert runtime["business_receipts"][0]["receipt"]["verified"] is True
@@ -319,7 +333,7 @@ def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only)
     if read_only is not None:
         prior["read_only"] = read_only
     rows = [
-        prior,
+        _bind_runtime_test_receipt(prior, "prior"),
         {"state": "failed", "receipt": {"status": "failed", "success": False}},
     ]
     result = {"run_id": "original-run"}
@@ -332,6 +346,35 @@ def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only)
         assert result["execution_state"] == "partial"
         assert result["reconciliation_required"] is True
         assert result["retryable"] is False
+
+
+@pytest.mark.parametrize("damage", ["fingerprint", "child_task_id", "receipt_run_id"])
+def test_unbound_successful_write_requires_reconciliation(damage):
+    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
+
+    row = _bind_runtime_test_receipt(
+        {
+            "state": "completed",
+            "read_only": False,
+            "tool_id": "materials",
+            "action": "create",
+            "params": {"name": "A"},
+            "receipt": {"status": "completed", "success": True, "verified": True},
+        },
+        "original",
+    )
+    if damage == "receipt_run_id":
+        row["receipt"]["run_id"] = "different-run"
+    else:
+        row.pop(damage)
+    result = {"run_id": "original-run"}
+    assert classify_runtime_result(result, [row], {}, "business", "completed") == "blocked"
+    assert result["execution_state"] == "unknown"
+    assert result["reconciliation_required"] is True
+    assert result["retryable"] is False
+    assert result["verified_operations"] is False
+    assert result["business_completed"] is False
+    assert result["business_receipts"] == [row]
 
 
 @pytest.fixture
@@ -495,7 +538,7 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(
         base_runtime_result,
         classify_runtime_result,
     )
-    from app.infrastructure.codex.binding import CodexBindingStore
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
 
     setup = recovered_bound_receipts
     repository = setup.store.repository
@@ -569,7 +612,7 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(
         stored = db.get(AgentRunRecord, child.run_id)
         stored.payload_json = json.dumps(child.to_dict(), ensure_ascii=False, default=str)
         stored.status = child.status
-    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     rows = reopened.receipt_snapshot(original.run_id)
     failed = next(row for row in rows if row["call_id"] == "original-rejection")
     verified = next(row for row in rows if row["call_id"] == "verified-write")

@@ -3,6 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.application.excel_export_limits import (
+    MAX_EXPORT_COLUMNS,
+    MAX_EXPORT_ROWS,
+)
 from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
 from app.domain.enterprise_cognition.contracts import ENTERPRISE_INPUT_SCHEMAS
 from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
@@ -477,6 +481,27 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "remark": {"type": "string"},
         },
     ),
+    ("purchase", "post_return"): _object_schema(
+        ["return_no", "inbound_id", "approval_request_id", "items"],
+        {
+            "return_no": {"type": "string", "minLength": 1, "maxLength": 50},
+            "inbound_id": {"type": "integer", "minimum": 1},
+            "approval_request_id": {"type": "integer", "minimum": 1},
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "required": ["inbound_item_id", "quantity"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "inbound_item_id": {"type": "integer", "minimum": 1},
+                        "quantity": {"type": ["string", "number"]},
+                    },
+                },
+            },
+        },
+    ),
     ("finance", "create_transaction"): _object_schema(
         ["transaction_type", "amount"],
         {
@@ -803,7 +828,12 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         ["file_path", "rows"],
         {
             "file_path": {"type": "string"},
-            "rows": {"type": "array", "minItems": 1},
+            "rows": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": MAX_EXPORT_ROWS,
+                "items": {"type": "object", "maxProperties": MAX_EXPORT_COLUMNS},
+            },
         },
     ),
     ("excel_analysis", "read"): _object_schema(

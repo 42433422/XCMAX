@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-_SALES_FILTERS = {
+_DATE_BOUNDS = {
     "start_date": {"type": "string", "description": "开始日期 YYYY-MM-DD"},
     "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD，包含当天"},
+}
+_REPORT_PERIOD = {
+    "type": "string",
+    "enum": ["this_month"],
+    "description": "用户要求本月或这个月时传 this_month，由宿主计算完整自然月，勿同时传日期",
+}
+
+_SALES_FILTERS = {
+    **_DATE_BOUNDS,
     "customer_id": {"type": "integer"},
     "customer_name": {"type": "string", "description": "客户完整名称"},
     "status": {"type": "string", "description": "订单状态，已确认用 confirmed"},
@@ -54,7 +63,22 @@ REPORT_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("reports", "sales_summary"): {
         "type": "object",
         "additionalProperties": False,
-        "properties": {**_SALES_FILTERS, "group_by": {"type": "string"}},
+        "properties": {**_SALES_FILTERS, "period": _REPORT_PERIOD, "group_by": {"type": "string"}},
+    },
+    ("finance", "ledger_query"): {
+        "type": "object",
+        "properties": {
+            **{
+                name: {**schema, "type": ["string", "null"]}
+                for name, schema in _DATE_BOUNDS.items()
+            },
+            "period": _REPORT_PERIOD,
+            "account_id": {"type": ["integer", "string", "null"]},
+            "account_code": {"type": ["string", "null"]},
+            "status": {"type": ["string", "null"]},
+            "page": {"type": "integer"},
+            "per_page": {"type": "integer"},
+        },
     },
     ("reports", "export"): {
         "type": "object",

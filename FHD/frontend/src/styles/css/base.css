@@ -10,58 +10,55 @@
 }
 
 :root {
-  --primary-color: #4a90d9;
-  --secondary-color: #6c757d;
-  --success-color: #28a745;
-  --warning-color: #ffc107;
-  --danger-color: #dc3545;
-  --bg-color: #f5f7fa;
-  --card-bg: #ffffff;
+  --primary-color: var(--xc-token-desktop-office-base-primary-color);
+  --secondary-color: var(--xc-token-desktop-office-base-secondary-color);
+  --success-color: var(--xc-token-desktop-office-base-success-color);
+  --warning-color: var(--xc-token-desktop-office-base-warning-color);
+  --danger-color: var(--xc-token-desktop-office-base-danger-color);
+  --bg-color: var(--xc-token-desktop-office-base-bg-color);
+  --card-bg: var(--xc-token-desktop-office-base-card-bg);
 
   /* 全站间距与排版（与 pro 主题 variables.css 互补：此处偏办公浅色壳） */
-  --app-space-xs: 4px;
-  --app-space-sm: 8px;
-  --app-space-md: 16px;
-  --app-space-lg: 24px;
-  --app-space-xl: 32px;
-  --app-font-size-title: 16px;
-  --app-font-size-body: 14px;
-  --app-font-size-caption: 12px;
-  --app-font-weight-semibold: 600;
-  --app-text-primary: #333333;
-  --app-text-secondary: #4b5563;
-  --app-text-muted: #6b7280;
-  --app-text-strong: #111827;
-  --app-text-caption: #666666;
-  --app-border-default: #e0e0e0;
-  --app-border-subtle: #e5e7eb;
-  --app-border-strong: #d1d5db;
-  --app-topbar-height: 50px;
-  --app-startup-text: #262626;
-  --app-startup-text-muted: #8c8c8c;
-  --app-accent: #1890ff;
-  --app-accent-soft: #69c0ff;
-  --app-interactive: #3b82f6;
-  --app-interactive-bg: #eff6ff;
-  --app-interactive-text: #1d4ed8;
-  --app-bg-gradient:
-    radial-gradient(circle at 16% 12%, rgba(72, 149, 239, 0.16), transparent 30%),
-    radial-gradient(circle at 86% 4%, rgba(14, 165, 233, 0.12), transparent 28%),
-    linear-gradient(135deg, #edf4fb 0%, #f7f9fc 45%, #e8eef7 100%);
-  --app-surface: rgba(255, 255, 255, 0.86);
-  --app-surface-strong: #ffffff;
-  --app-surface-muted: rgba(248, 250, 252, 0.84);
-  --app-glass-border: rgba(255, 255, 255, 0.72);
-  --app-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --app-shadow-sm: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --app-shadow-md: 0 18px 44px rgba(15, 23, 42, 0.12);
-  --app-radius-sm: 8px;
-  --app-radius-md: 12px;
-  --app-radius-lg: 18px;
-  --app-radius-xl: 24px;
-  --app-focus-ring: 0 0 0 3px rgba(24, 144, 255, 0.18);
-  --app-transition-fast: 160ms ease;
-  --app-transition-medium: 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --app-space-xs: var(--xc-token-desktop-office-base-app-space-xs);
+  --app-space-sm: var(--xc-token-desktop-office-base-app-space-sm);
+  --app-space-md: var(--xc-token-desktop-office-base-app-space-md);
+  --app-space-lg: var(--xc-token-desktop-office-base-app-space-lg);
+  --app-space-xl: var(--xc-token-desktop-office-base-app-space-xl);
+  --app-font-size-title: var(--xc-token-desktop-office-base-app-font-size-title);
+  --app-font-size-body: var(--xc-token-desktop-office-base-app-font-size-body);
+  --app-font-size-caption: var(--xc-token-desktop-office-base-app-font-size-caption);
+  --app-font-weight-semibold: var(--xc-token-desktop-office-base-app-font-weight-semibold);
+  --app-text-primary: var(--xc-token-desktop-office-base-app-text-primary);
+  --app-text-secondary: var(--xc-token-desktop-office-base-app-text-secondary);
+  --app-text-muted: var(--xc-token-desktop-office-base-app-text-muted);
+  --app-text-strong: var(--xc-token-desktop-office-base-app-text-strong);
+  --app-text-caption: var(--xc-token-desktop-office-base-app-text-caption);
+  --app-border-default: var(--xc-token-desktop-office-base-app-border-default);
+  --app-border-subtle: var(--xc-token-desktop-office-base-app-border-subtle);
+  --app-border-strong: var(--xc-token-desktop-office-base-app-border-strong);
+  --app-topbar-height: var(--xc-token-desktop-office-base-app-topbar-height);
+  --app-startup-text: var(--xc-token-desktop-office-base-app-startup-text);
+  --app-startup-text-muted: var(--xc-token-desktop-office-base-app-startup-text-muted);
+  --app-accent: var(--xc-token-desktop-office-base-app-accent);
+  --app-accent-soft: var(--xc-token-desktop-office-base-app-accent-soft);
+  --app-interactive: var(--xc-token-desktop-office-base-app-interactive);
+  --app-interactive-bg: var(--xc-token-desktop-office-base-app-interactive-bg);
+  --app-interactive-text: var(--xc-token-desktop-office-base-app-interactive-text);
+  --app-bg-gradient: var(--xc-token-desktop-office-base-app-bg-gradient);
+  --app-surface: var(--xc-token-desktop-office-base-app-surface);
+  --app-surface-strong: var(--xc-token-desktop-office-base-app-surface-strong);
+  --app-surface-muted: var(--xc-token-desktop-office-base-app-surface-muted);
+  --app-glass-border: var(--xc-token-desktop-office-base-app-glass-border);
+  --app-shadow-xs: var(--xc-token-desktop-office-base-app-shadow-xs);
+  --app-shadow-sm: var(--xc-token-desktop-office-base-app-shadow-sm);
+  --app-shadow-md: var(--xc-token-desktop-office-base-app-shadow-md);
+  --app-radius-sm: var(--xc-token-desktop-office-base-app-radius-sm);
+  --app-radius-md: var(--xc-token-desktop-office-base-app-radius-md);
+  --app-radius-lg: var(--xc-token-desktop-office-base-app-radius-lg);
+  --app-radius-xl: var(--xc-token-desktop-office-base-app-radius-xl);
+  --app-focus-ring: var(--xc-token-desktop-office-base-app-focus-ring);
+  --app-transition-fast: var(--xc-token-desktop-office-base-app-transition-fast);
+  --app-transition-medium: var(--xc-token-desktop-office-base-app-transition-medium);
 }
 
 body {
@@ -578,3 +575,20 @@ textarea:focus,
   margin: 0;
 }
 
+
+/* Dual-tone focus indication: one ring remains perceptible on both light and dark
+   surfaces, even when the original translucent theme shadow is low contrast. */
+.btn:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.form-control:focus-visible,
+[role="button"]:focus-visible,
+[role="slider"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--xc-token-colors-neutral-light-n00, #ffffff);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--xc-token-colors-neutral-light-n900, #141619);
+}

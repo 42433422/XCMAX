@@ -15,11 +15,11 @@ from fastapi.testclient import TestClient
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import PlanGraph, plan_to_dict
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
-from app.infrastructure.codex.policy import RuntimePolicyError
+from app.infrastructure.xiaox.policy import RuntimePolicyError
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
 
@@ -129,9 +129,11 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(
         events = _events(
             b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
         )
-    assert events[-1]["type"] == "done"
-    result = events[-1]["result"]
-    assert result["runtime"] == "codex" and result["requires_confirmation"] is True, result
+        assert events[-1]["type"] == "done"
+        ack = events[-1]["result"]
+        assert ack["execution_state"] == "queued", ack
+        result = finish_queued_chat(state, ack)
+    assert result["runtime"] == "xiaox" and result["requires_confirmation"] is True, result
     parent = state.repository.get(result["run_id"])
     assert parent.metadata["runtime_goal_contract"]["request"]["text"] == body.message
     child_id = result["data"]["data"]["approval_card"]["run_id"]
@@ -231,8 +233,10 @@ def test_stream_missing_spec_requests_clarification_without_document(
     body = _body(message=ISSUE_MESSAGE, user_id="u-2292")
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment):
         raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
-    result = _events(raw)[-1]["result"]
-    assert result["runtime"] == "codex" and result["needs_user_input"] is True, result
+        ack = _events(raw)[-1]["result"]
+        assert ack["execution_state"] == "queued", ack
+        result = finish_queued_chat(state, ack)
+    assert result["runtime"] == "xiaox" and result["needs_user_input"] is True, result
     assert "计量单位" in result["response"]
     assert "已生成" not in result["response"]
     parent = state.repository.get(result["run_id"])
@@ -302,6 +306,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
     )
     app = FastAPI()
     app.include_router(router, prefix="/api")
+    streaming = endpoint.endswith("/stream")
     with tenant_scope(7), actor.factory.begin() as db:
         upload = UploadServiceMixin().save_upload(
             db,
@@ -320,10 +325,13 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
             },
         )
         assert response.status_code == 200, response.text
+        ack = _events(response.content)[-1]["result"] if streaming else response.json()
+        assert ack["execution_state"] == "queued", ack
+        completed = finish_queued_chat(state, ack)
         assert len(seen) == 1
         assert len(reviewed) == 1
         assert "paint" in seen[0]["attachments"][0]["preview"]["text"]
-        assert "已查看附件" in response.text
+        assert "已查看附件" in completed["response"]
         with tenant_scope(7), actor.factory.begin() as db:
             db.query(EltUpload).filter(EltUpload.id == upload["upload_id"]).one().owner_user_id = 99
         denied = client.post(
@@ -334,10 +342,10 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
                 "context": {"attachment_upload_ids": [upload["upload_id"]]},
             },
         )
-        assert "重新上传" in denied.text
-        denied_payload = (
-            _events(denied.content)[-1]["result"] if endpoint.endswith("/stream") else denied.json()
-        )
+        assert denied.status_code == 200, denied.text
+        denied_ack = _events(denied.content)[-1]["result"] if streaming else denied.json()
+        denied_payload = finish_queued_chat(state, denied_ack)
+        assert "重新上传" in denied_payload["response"]
         assert denied_payload["needs_user_input"] is True
         assert denied_payload["requires_confirmation"] is False
         assert len(seen) == 1
@@ -354,8 +362,11 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
             },
         )
         assert raw_path.status_code == 200, raw_path.text
+        ack = _events(raw_path.content)[-1]["result"] if streaming else raw_path.json()
+        assert ack["execution_state"] == "queued", ack
+        completed = finish_queued_chat(state, ack)
         assert len(seen) == 2
         assert len(reviewed) == 2
         assert "PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ" not in str(seen[-1])
         assert seen[-1]["attachments"] == []
-        assert "owned_upload" not in raw_path.text
+        assert "owned_upload" not in str(completed)

@@ -10,9 +10,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeypatch) -> None:
@@ -137,9 +137,9 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         monkeypatch.setattr(chat, method, Mock())
     context = {**actor.context, "tool_execution_profile": profile, "memory_capture_enabled": False}
     with tenant_scope(actor.tenant_id):
-        waiting_payload = chat.process_chat(
-            str(actor.user_id), prompt, source=source, context=context
-        )
+        waiting_ack = chat.process_chat(str(actor.user_id), prompt, source=source, context=context)
+        assert waiting_ack["execution_state"] == "queued", waiting_ack
+        waiting_payload = finish_queued_chat(state, waiting_ack)
         assert waiting_payload["data"]["action"] == "approval_pending", str(
             {"payload": waiting_payload, "receipts": state.receipts}
         )
@@ -156,8 +156,8 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         with actor.factory() as db:
             assert db.query(ShipmentRecord).count() == 0
         context.update(waiting_payload["runtime_context_update"])
-        confirmed_payload = chat.process_chat(
-            str(actor.user_id), "确认", source=source, context=context
+        confirmed_payload = finish_queued_chat(
+            state, chat.process_chat(str(actor.user_id), "确认", source=source, context=context)
         )
         assert confirmed_payload["data"]["action"] == "approval_pending", confirmed_payload
         assert confirmed_payload["run_id"] == parent_id
@@ -191,7 +191,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         assert state.model_requests == []
         parent = state.drain(parent_id)
         assert parent.status == "completed", parent.final_output
-        assert parent.final_output["codex_result"]["business_completed"] is True
+        assert parent.final_output["xiaox_result"]["business_completed"] is True
         assert parent.metadata["runtime_goal_contract"] == contract
         assert len(state.model_requests) == 1
         assert len(state.transports) == 2

@@ -66,6 +66,17 @@ class PgUserMemoryVectorStore(VectorStorePort):
             )
             conn.execute(
                 text(
+                    """CREATE TABLE IF NOT EXISTS user_memory_semantic_vectors (
+                        chunk_id TEXT NOT NULL REFERENCES user_memory_vector_chunks(chunk_id) ON DELETE CASCADE,
+                        fingerprint TEXT NOT NULL,
+                        content_sha TEXT NOT NULL,
+                        embedding TEXT NOT NULL,
+                        PRIMARY KEY (chunk_id, fingerprint)
+                    )"""
+                )
+            )
+            conn.execute(
+                text(
                     "CREATE INDEX IF NOT EXISTS idx_user_memory_vector_chunks_index_id ON user_memory_vector_chunks(index_id)"
                 )
             )
@@ -212,6 +223,56 @@ class PgUserMemoryVectorStore(VectorStorePort):
             for row in rows
         ]
 
+    def semantic_snapshot(
+        self, index_id: str, fingerprint: str, cutoff: float, governed_only: bool, limit: int
+    ) -> list[dict[str, Any]]:
+        governed = (
+            " AND c.metadata->>'source_owner_id' = :owner "
+            "AND c.metadata->>'source_memory_id' IS NOT NULL"
+            if governed_only
+            else ""
+        )
+        with self._engine.begin() as conn:
+            rows = (
+                conn.execute(
+                    text(
+                        "SELECT c.chunk_id, c.content, c.metadata, s.content_sha, s.embedding "
+                        "FROM user_memory_vector_chunks c LEFT JOIN user_memory_semantic_vectors s "
+                        "ON s.chunk_id = c.chunk_id AND s.fingerprint = :fingerprint "
+                        "WHERE c.index_id = :owner AND c.created_at >= :cutoff"
+                        + governed
+                        + " ORDER BY c.created_at DESC, c.chunk_id DESC LIMIT :limit"
+                    ),
+                    {
+                        "owner": index_id,
+                        "fingerprint": fingerprint,
+                        "cutoff": cutoff,
+                        "limit": limit,
+                    },
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(row) for row in rows]
+
+    def cache_semantic_vectors(
+        self, index_id: str, fingerprint: str, rows: list[dict[str, Any]]
+    ) -> None:
+        with self._engine.begin() as conn:
+            for row in rows:
+                conn.execute(
+                    text(
+                        "INSERT INTO user_memory_semantic_vectors "
+                        "(chunk_id, fingerprint, content_sha, embedding) "
+                        "SELECT chunk_id, :fingerprint, :content_sha, :embedding "
+                        "FROM user_memory_vector_chunks "
+                        "WHERE index_id = :owner AND chunk_id = :chunk_id AND content = :content "
+                        "ON CONFLICT (chunk_id, fingerprint) DO UPDATE SET "
+                        "content_sha = EXCLUDED.content_sha, embedding = EXCLUDED.embedding"
+                    ),
+                    {**row, "owner": index_id, "fingerprint": fingerprint},
+                )
+
     def prune_index(self, *, index_id: str, older_than: float, max_chunks: int) -> int:
         """Physically expire old user memory and retain only the newest bounded set."""
         bounded = max(1, min(10000, int(max_chunks)))
@@ -343,6 +404,15 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
                 """
             )
             conn.execute(
+                """CREATE TABLE IF NOT EXISTS user_memory_semantic_vectors (
+                    chunk_id TEXT NOT NULL REFERENCES user_memory_vector_chunks(chunk_id) ON DELETE CASCADE,
+                    fingerprint TEXT NOT NULL,
+                    content_sha TEXT NOT NULL,
+                    embedding TEXT NOT NULL,
+                    PRIMARY KEY (chunk_id, fingerprint)
+                )"""
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_user_memory_vector_chunks_index_id ON user_memory_vector_chunks(index_id)"
             )
             conn.commit()
@@ -471,6 +541,60 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
 
         scored.sort(key=lambda item: item["score"], reverse=True)
         return scored[: max(int(top_k), 1)]
+
+    def semantic_snapshot(
+        self, index_id: str, fingerprint: str, cutoff: float, governed_only: bool, limit: int
+    ) -> list[dict[str, Any]]:
+        where = "c.index_id = ? AND c.created_at >= ?"
+        params: list[Any] = [fingerprint, index_id, cutoff]
+        if governed_only:
+            where += (
+                " AND json_extract(c.metadata, '$.source_owner_id') = ?"
+                " AND json_extract(c.metadata, '$.source_memory_id') IS NOT NULL"
+            )
+            params.append(index_id)
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT c.chunk_id, c.content, c.metadata, s.content_sha, s.embedding "
+                "FROM user_memory_vector_chunks c LEFT JOIN user_memory_semantic_vectors s "
+                "ON s.chunk_id = c.chunk_id AND s.fingerprint = ? WHERE "
+                + where
+                + " ORDER BY c.created_at DESC, c.chunk_id DESC LIMIT ?",
+                [*params, limit],
+            ).fetchall()
+        return [
+            {
+                "chunk_id": row[0],
+                "content": row[1],
+                "metadata": json.loads(row[2]),
+                "content_sha": row[3],
+                "embedding": row[4],
+            }
+            for row in rows
+        ]
+
+    def cache_semantic_vectors(
+        self, index_id: str, fingerprint: str, rows: list[dict[str, Any]]
+    ) -> None:
+        with self._get_conn() as conn:
+            for row in rows:
+                conn.execute(
+                    "INSERT INTO user_memory_semantic_vectors "
+                    "(chunk_id, fingerprint, content_sha, embedding) "
+                    "SELECT chunk_id, ?, ?, ? FROM user_memory_vector_chunks "
+                    "WHERE index_id = ? AND chunk_id = ? AND content = ? "
+                    "ON CONFLICT(chunk_id, fingerprint) DO UPDATE SET "
+                    "content_sha = excluded.content_sha, embedding = excluded.embedding",
+                    (
+                        fingerprint,
+                        row["content_sha"],
+                        row["embedding"],
+                        index_id,
+                        row["chunk_id"],
+                        row["content"],
+                    ),
+                )
+            conn.commit()
 
     def prune_index(self, *, index_id: str, older_than: float, max_chunks: int) -> int:
         """Physically expire old user memory and retain only the newest bounded set."""

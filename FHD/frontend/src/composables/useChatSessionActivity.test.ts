@@ -34,6 +34,29 @@ describe('useChatSessionActivity', () => {
     expect(activity.statuses.value['task-b']).toBe('waiting')
   })
 
+  it('keeps a manual stop on its own turn until a new round starts', () => {
+    const sessionId = ref('chat-a')
+    const identity = ref('account-a')
+    const activity = useChatSessionActivity(sessionId, () => identity.value)
+    const round = activity.beginRound('chat-a', 'turn-a')
+    round.setLoading(true)
+
+    expect(activity.cancelSession('chat-a', { showStopNotice: true })).toBe(true)
+    expect(activity.stoppedTurnId.value).toBe('turn-a')
+    expect(round.signal.aborted).toBe(true)
+    sessionId.value = 'chat-b'
+    expect(activity.stoppedTurnId.value).toBeUndefined()
+    sessionId.value = 'chat-a'
+    identity.value = 'account-b'
+    expect(activity.stoppedTurnId.value).toBeUndefined()
+    identity.value = 'account-a'
+    const next = activity.beginRound('chat-a', 'turn-b')
+    expect(activity.stoppedTurnId.value).toBeUndefined()
+    next.setLoading(true)
+    activity.cancelSession()
+    expect(activity.stoppedTurnId.value).toBeUndefined()
+  })
+
   it('records product fast paths under the original task identity', async () => {
     await recordProductFastPathTask('task-a', '查询 5003', '5003', [{ model_number: '5003' }], 1, '命中 1 条')
     expect(agentRunsApi.observeTool).toHaveBeenCalledWith(

@@ -70,13 +70,13 @@ def test_retired_alias_has_no_dispatch(name, monkeypatch):
     ],
 )
 def test_employee_cannot_escape_projected_action_schema(args, trusted_actor, monkeypatch):
-    from app.application.employee_runtime.agent_runner import _codex_employee_tool_scope
+    from app.application.employee_runtime.agent_runner import _xiaox_employee_tool_scope
     from app.application.employee_runtime.tool_scope import resolve_employee_tools
 
     actor = trusted_actor(permissions=["customer.view"])
     tools = resolve_employee_tools("e", {}, {"tools": ["business_db"]}, actor.context)
     execute = Mock(side_effect=AssertionError("out-of-scope model action must not dispatch"))
-    allowed, check = _codex_employee_tool_scope(tools, execute)
+    allowed, check = _xiaox_employee_tool_scope(tools, execute)
     assert allowed == ["business_db.read"]
     assert check(args["tool_id"], args["action"], args["params"])["ok"] is False
     execute.assert_not_called()

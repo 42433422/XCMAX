@@ -32,16 +32,45 @@ def _db_error(message: str) -> OperationalError:
 
 
 class TestGetCustomersSession:
-    def test_fallback_to_session_local(self):
+    @pytest.mark.parametrize(
+        "error",
+        [ImportError("no mod"), RuntimeError("provider broken"), _db_error("db unavailable")],
+    )
+    def test_resolver_error_never_falls_back_to_host_database(self, error):
         with (
             patch(
                 "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-                side_effect=ImportError("no mod"),
+                side_effect=error,
             ),
-            patch("app.db.SessionLocal") as mock_sl,
+            patch("app.db.SessionLocal") as host_session,
         ):
-            get_customers_session()
-            mock_sl.assert_called_once()
+            with pytest.raises(type(error)):
+                get_customers_session()
+            host_session.assert_not_called()
+
+    def test_selected_session_is_authoritative(self):
+        selected = MagicMock()
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                return_value=selected,
+            ),
+            patch("app.db.SessionLocal") as host_session,
+        ):
+            assert get_customers_session() is selected
+            host_session.assert_not_called()
+
+    def test_missing_session_fails_instead_of_falling_back(self):
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                return_value=None,
+            ),
+            patch("app.db.SessionLocal") as host_session,
+        ):
+            with pytest.raises(RuntimeError, match="did not provide a session"):
+                get_customers_session()
+            host_session.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +286,56 @@ class TestUpdate:
             result = svc.update(1, {"customer_name": "Duplicate"})
             assert result["success"] is False
             assert "已存在" in result["message"]
+
+
+@pytest.mark.parametrize("failed_step", ["commit", "refresh"])
+def test_customer_update_commit_uncertainty_does_not_invite_retry(failed_step):
+    """A timeout near commit or failed post-commit read must not be called a safe failure."""
+    svc = CustomerApplicationService()
+    session = MagicMock()
+    customer = MagicMock()
+    customer.id = 11
+    customer.unit_name = "Existing"
+    customer.version = 1
+    session.query.return_value.filter.return_value.first.return_value = customer
+    getattr(session, failed_step).side_effect = _db_error("connection lost")
+    with patch.object(svc, "_get_session", return_value=session):
+        out = svc.update(11, {"contact_person": "Updated"})
+    assert out["success"] is False
+    assert out["outcome"] == "unknown"
+    assert out["retryable"] is False
+    assert out["reconciliation_required"] is True
+    assert out["error_code"] == "customer_update_commit_unknown"
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
+
+
+def test_customer_update_programming_fault_propagates_after_commit():
+    svc = CustomerApplicationService()
+    session = MagicMock()
+    customer = MagicMock()
+    customer.id = 11
+    customer.unit_name = "Existing"
+    customer.version = 1
+    session.query.return_value.filter.return_value.first.return_value = customer
+    session.refresh.side_effect = RuntimeError("programming bug")
+    with patch.object(svc, "_get_session", return_value=session):
+        with pytest.raises(RuntimeError, match="programming bug"):
+            svc.update(11, {"contact_person": "Updated"})
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
+
+
+def test_customer_update_precommit_db_error_is_not_a_commit_uncertainty():
+    svc = CustomerApplicationService()
+    session = MagicMock()
+    session.query.side_effect = _db_error("read refused")
+    with patch.object(svc, "_get_session", return_value=session):
+        out = svc.update(11, {"contact_person": "Updated"})
+    assert out["success"] is False
+    assert out.get("outcome") != "unknown"
+    session.commit.assert_not_called()
+    session.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

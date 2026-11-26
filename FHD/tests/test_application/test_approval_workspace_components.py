@@ -12,6 +12,7 @@ import pytest
 from fastapi.responses import JSONResponse
 
 from app.application import approval_workspace_app_service as service
+from app.db.models import User
 from app.db.models.approval import ApprovalFlowNode, ApprovalRequest, ApprovalStatus
 
 
@@ -44,7 +45,11 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node, 
     query = MagicMock()
     query.filter.return_value = query
     query.first.return_value = req
-    db.query.return_value = query
+    reviewer = MagicMock()
+    reviewer.filter.return_value.with_for_update.return_value.first.return_value = User(
+        id=7, tenant_id=1, is_active=True
+    )
+    db.query.side_effect = lambda model: reviewer if model is User else query
 
     @contextmanager
     def session():

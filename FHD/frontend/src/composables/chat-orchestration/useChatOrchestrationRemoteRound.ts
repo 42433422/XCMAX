@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { extractAgentRunId, type useAgentRunEventSync } from '../useAgentRunEvents'
+import { chatPayloadFromRun, extractAgentRunId, waitForAgentRunTerminal, type useAgentRunEventSync } from '../useAgentRunEvents'
 import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
@@ -11,6 +11,7 @@ import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
 import chatApi from '@/api/chat'
 import { useAiSdkChatRound } from './useAiSdkChatRound'
+import type { XcagiUIMessage } from './xcagiChatTransport'
 import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useModsStore } from '@/stores/mods'
@@ -25,7 +26,7 @@ import { asPlannerPayload, errorMessage, requiresTurnReconciliation, plannerExec
 import { classifyRawError } from '@/utils/networkStability'
 import { activeChatTurnMessage, droppedRoundFromHistory, readActiveChatTurn, readDroppedRoundOutcome, type ActiveChatTurn } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
-import type { UiChatMessageExtras } from '@/types/chat-ui'
+import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { captureAuthSession, probeEnterpriseSession } from '@/utils/authSessionCache'
 import { noteModelPath } from '@/components/sidebar/modelPathHealth'
@@ -33,7 +34,7 @@ import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatF
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { isFixedRuntimePayload, isRuntimeQueued, isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -158,10 +159,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
 
   function isUnfinishedResponse(value: unknown): boolean {
     const payload = asPlannerPayload(value)
-    const isRuntime = payload.runtime === 'codex' || asRecord(payload.data).runtime === 'codex'
     // A rejected runtime admission is terminal for this round, even when its parent is retained.
     // Canonical state keeps reconciliation and authorization waits ahead of the runtime envelope.
-    if (isRuntime && ['blocked', 'reply_completed'].includes(plannerExecutionState(payload))) return false
+    if (isFixedRuntimePayload(payload) && ['blocked', 'reply_completed'].includes(plannerExecutionState(payload))) return false
     return isUnfinishedPlannerResponse(payload)
   }
 
@@ -244,6 +244,52 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (round.isActive()) addMessage(text, 'ai', { turnId: requestScope.turnId, ...extras }, { speak: ttsEnabled.value })
     }
     const primaryText = remoteMessages[0] || ''
+    /**
+     * Follow one durable queued run and publish its terminal reply once.
+     * Reads persisted events only: a dropped or refreshed observer never
+     * re-submits the turn or creates a second run.
+     */
+    const followQueuedRun = async (
+      runId: string,
+      target?: UiChatMessage,
+    ): Promise<void> => {
+      if (!runId) return
+      const run = await waitForAgentRunTerminal(runId, () => round.isActive())
+      if (!round.isActive()) return
+      await syncAgentRunFromPayload(
+        { run_id: runId, agent_run_id: runId },
+        primaryText,
+        () => round.isActive(),
+      ).catch(() => undefined)
+      if (!round.isActive() || !run) return
+      const payload = chatPayloadFromRun(run)
+      if (!payload) return
+      const typed = asPlannerPayload(payload)
+      const text = String(typed.response || typed.message || '').trim()
+      if (!text) return
+      const extras = responseExtras(typed, typed.success === false)
+      let index = target ? messages.value.indexOf(target) : -1
+      if (index < 0) {
+        for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+          if (messages.value[i]?.role === 'ai' && messages.value[i]?.turnId === requestScope.turnId) {
+            index = i
+            break
+          }
+        }
+      }
+      // A replayed stream may hand back the same terminal state; publish once.
+      if (index >= 0 && messages.value[index]?.workflowAction === 'completed') return
+      if (index >= 0) {
+        applyPlainTextToMessageIndex(index, text, extras)
+        delete messages.value[index]?.streamingShell
+      } else {
+        await addRoundMessage(text, extras)
+      }
+      attachAgentRunTraceToLastAiMessage(runId)
+      attachBusinessResultToLastAiMessage(typed)
+      attachApprovalCardToLastAiMessage(typed)
+      await saveMessage('ai', text, requestScope.sessionId, extras)
+    }
     const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, requestScope.sessionId))
     const aiModBrief = !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
 
@@ -456,12 +502,43 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let replaying = false
       let plannerEventHandler: ((event: PlannerSseEvent) => void) | null = null
       let handlePlannerEventRef: ((event: PlannerSseEvent) => void) | null = null
+      // The AI SDK emits a fresh UIMessage for every text delta. Projecting all
+      // tool parts on each delta caused an extra reactive message-list update per
+      // token despite the separate rAF text batch. Tool receipts drive projection.
+      let toolProjectionDirty = false
+      let latestToolParts: XcagiUIMessage['parts'] | null = null
+      let toolProjectionFrame = 0
+      let textProgressNotified = false
+      const flushToolProjection = () => {
+        if (toolProjectionFrame) window.cancelAnimationFrame(toolProjectionFrame)
+        toolProjectionFrame = 0
+        const parts = latestToolParts
+        latestToolParts = null
+        if (!toolProjectionDirty || !parts) return
+        toolProjectionDirty = false
+        if (canUpdateStream() && streamMessage) {
+          const projected = stepsFromAiParts(parts)
+          // Cursor replay may contain only the suffix; never drop earlier tools.
+          if (replaying) {
+            const byId = new Map((streamMessage.liveSteps || []).map(step => [step.id, step]))
+            for (const step of projected) byId.set(step.id, { ...byId.get(step.id), ...step })
+            streamMessage.liveSteps = [...byId.values()]
+          } else streamMessage.liveSteps = projected
+        }
+      }
       const aiChatRound = useAiSdkChatRound({
-        onEvent: (event) => plannerEventHandler?.(event),
+        onEvent: (event) => {
+          if (event.type === 'tool_call') toolProjectionDirty = true
+          if (event.type === 'tool_call' || event.type === 'tool_progress'
+            || (event.type === 'token' && event.ephemeral)) textProgressNotified = false
+          plannerEventHandler?.(event)
+        },
         onMessage: (message) => {
           if (!canUpdateStream() || !streamMessage) return
-          streamMessage.streamStatus = 'streaming'
-          streamMessage.liveSteps = stepsFromAiParts(message.parts)
+          if (streamMessage.streamStatus !== 'streaming') streamMessage.streamStatus = 'streaming'
+          if (!toolProjectionDirty) return
+          latestToolParts = message.parts
+          if (!toolProjectionFrame) toolProjectionFrame = window.requestAnimationFrame(flushToolProjection)
         },
         // 附件工件取数轨迹：累积到当前 assistant 消息，气泡「附件读取」按需展开。
         onTrace: (items) => {
@@ -473,8 +550,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           streamPlain = value
           if (!canUpdateStream()) return
           scheduleStreamFrame()
-          if (streamMessage) delete streamMessage.waitingHint
-          setLoadingProgress('正在生成回复…', requestScope.sessionId)
+          if (streamMessage?.waitingHint) delete streamMessage.waitingHint
+          if (!textProgressNotified) {
+            textProgressNotified = true
+            setLoadingProgress('正在生成回复…', requestScope.sessionId)
+          }
         },
       })
       let doneResult: unknown = null
@@ -497,6 +577,21 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         const donePayload = asPlannerPayload(doneResult)
         round.setStatus(conversationStatus(donePayload))
         consumeRoute(donePayload.route_metadata)
+        if (isRuntimeQueued(donePayload)) {
+          if (canUpdateStream() && streamMessage) {
+            const extras = responseExtras(donePayload, false, streamMessages.value)
+            applyStreamText(String(donePayload.response || '任务已受理，正在等待后台执行。'), extras)
+            streamMessage.workflowAction = 'queued'
+            delete streamMessage.streamingShell
+          }
+          const queuedRunId = extractAgentRunId(donePayload)
+          if (queuedRunId) {
+            syncTaskFromChatResponse(donePayload, primaryText)
+            syncStreamRun(donePayload, true)
+            void followQueuedRun(queuedRunId, streamMessage || undefined)
+          }
+          return
+        }
         const activeTurn = readActiveChatTurn(donePayload)
         if (activeTurn) {
           if (canUpdateStream() && streamMessage) {
@@ -661,6 +756,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
         plannerEventHandler = handlePlannerEventRef
         const roundResult = await aiChatRound.send(submittedBody, controller.signal)
+        // Read the final receipt even when the event stream finishes before rAF.
+        flushToolProjection()
         plannerEventHandler = null
         streamTextFromAi = false
         if (!isOwnerCurrent()) return
@@ -791,18 +888,18 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       } finally {
         plannerEventHandler = null
         streamTextFromAi = false
+        flushToolProjection()
         cancelStreamFrame()
         if (streamMessage) streamMessage.streamStatus = streamMessage.workflowAction === 'failed' ? 'error' : 'ready'
         if (canUpdateStream() && streamMessage) delete streamMessage.waitingHint
         if (!doneApplied && canUpdateStream() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()
           const unfinished = leftover
-            ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
-            : '处理失败：本轮回复已结束，但没有收到正文。请重试。'
+            ? `${leftover}\n\n[回复未完成] 原任务回执待核对，请勿重复提交。`
+            : '回复已中断，原任务执行结果未知，请到任务工作区核对回执，勿重复提交。'
           applyStreamText(unfinished, failureExecution ? { execution: failureExecution } : undefined)
-          observeModelOutcome(unfinished, failureExecution ? { execution: failureExecution } : undefined)
-          streamMessage.workflowAction = 'failed'
-          round.setStatus('error')
+          streamMessage.workflowAction = 'unknown'
+          round.setStatus('review')
           delete streamMessage.streamingShell
           delete streamMessage.waitingHint
         }
@@ -897,6 +994,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       attachBusinessResultToLastAiMessage(part)
       const activeTurn = readActiveChatTurn(part)
       if (activeTurn) deps.observeActiveTurn?.(activeTurn)
+      if (isRuntimeQueued(part)) {
+        const queuedRunId = extractAgentRunId(part)
+        if (queuedRunId) void followQueuedRun(queuedRunId)
+      }
     }
     if (data.batch && Array.isArray(data.results)) {
       if (data.success || results.some(isUnfinishedResponse) || results.some(part => runtimeContinuationFromPayload(part))) {

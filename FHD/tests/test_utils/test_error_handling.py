@@ -92,8 +92,8 @@ class TestWithErrorHandling:
         def boom():
             raise RuntimeError("boom")
 
-        out = boom()
-        assert out["error_code"].endswith("unexpected_error")
+        with pytest.raises(RuntimeError, match="boom"):
+            boom()
 
     def test_reraise_tuple(self):
         @with_error_handling(reraise=(ValueError,))
@@ -109,9 +109,21 @@ class TestWithErrorHandling:
 
         @with_error_handling(fallback=fb)
         def bad():
-            raise TypeError("t")
+            raise ValueError("invalid field")
 
         assert bad() == {"fallback": True}
+
+    @pytest.mark.parametrize("failure", [TypeError, RuntimeError, KeyError, AttributeError])
+    def test_programming_error_never_invokes_fallback(self, failure):
+        calls = []
+
+        @with_error_handling(fallback=lambda *_args, **_kwargs: calls.append("fallback"))
+        def fail():
+            raise failure("internal contract broken")
+
+        with pytest.raises(failure, match="internal contract broken"):
+            fail()
+        assert calls == []
 
 
 class TestWithSqliteRetry:

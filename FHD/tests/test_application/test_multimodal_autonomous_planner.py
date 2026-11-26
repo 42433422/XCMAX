@@ -1,4 +1,4 @@
-"""Owned multimodal Codex goals retain real approval and independent receipts."""
+"""Owned multimodal Xiaox goals retain real approval and independent receipts."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def signed_actor(tmp_path):
         "owned_pdf_explicit_knowledge_import",
     ],
 )
-def test_owned_multimodal_codex_goals_preserve_effects_and_approval(tmp_path, task_id):
+def test_owned_multimodal_xiaox_goals_preserve_effects_and_approval(tmp_path, task_id):
     from app.domain.task_lifecycle.agent_runtime_contract import validate_goal_contract
     from evals.run_agent_eval import load_tasks, run_eval
 
@@ -66,7 +66,7 @@ def test_owned_multimodal_codex_goals_preserve_effects_and_approval(tmp_path, ta
     assert contract["scope"]["run_id"] == run["run_id"]
     assert contract["scope"]["owner_id"] == run["user_id"]
     assert run["metadata"]["runtime_goal_digest"] == contract["digest"]
-    assert run["metadata"]["runtime_type"] == "codex"
+    assert run["metadata"]["runtime_type"] == "xiaox"
     assert "runtime_frozen_plan" not in run["metadata"]
     source = run["artifacts"][0]
     assert source["source"] == "owned_elt_upload"

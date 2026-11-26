@@ -279,6 +279,12 @@ def test_excel_read_actions_use_registered_contract_and_real_owned_upload(
                 {"item": "primer", "count": 1},
                 {"item": "brush", "count": 5},
             ],
+            "source": {
+                "file": params["file_path"],
+                "header_row": 1,
+                "sha256": owned_csv_capability.upload["sha256"],
+                "sheet": None,
+            },
         }
         assert "llm_understanding" not in output
     elif action == "query":

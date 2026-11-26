@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from openpyxl import load_workbook
+
+from tests.test_mods._excel_runtime import load_module as _load_module
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,15 +27,6 @@ SUNBIRD_TEMPLATE = (
 )
 
 
-def _load_module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _load_vendor_pkgs():
     import sys
 
@@ -47,6 +38,129 @@ def _load_vendor_pkgs():
     import excel_rules_map.infer as infer_mod
 
     return infer_mod, compile_mod, qc_checks
+
+
+@pytest.fixture
+def row_insertion_chain(tmp_path):
+    writer = _load_module("excel_row_writer", WRITER_CONVERT)
+    qc = _load_module("excel_row_qc", QC_VENDOR / "excel_qc/checks.py")
+    template, output = tmp_path / "template.xlsx", tmp_path / "inserted.xlsx"
+
+    def run(book, phases):
+        book.save(template)
+        book.close()
+        plan = {"phases": phases}
+        writer.convert_file(
+            None, output, template_path=template, payload={"plan": plan}, ctx={}, rule_spec={}
+        )
+        return output, lambda: qc.run_qc(output, plan, template_path=template)
+
+    return run
+
+
+@pytest.mark.parametrize(
+    "tampered", [("Data", "B1"), ("Data", "B4"), ("Data", "C4"), ("Other", "C1")]
+)
+def test_insert_rows_scopes_references_and_qc_rejects_corruption(row_insertion_chain, tampered):
+    from openpyxl import Workbook
+    from openpyxl.worksheet.table import Table
+
+    book = Workbook()
+    data = book.active
+    data.title = "Data"
+    data["A3"], data["A4"] = 11, 22
+    data["B1"] = "=SUM(A3:A4)+$A$3"
+    data["B3"] = "=Other!A3+'Other Sheet'!$A$3+Data!A3+A3"
+    data["C3"] = '=SUM(Sales[Q1])+IF(A3="Q1",1,0)'
+    other = book.create_sheet("Other")
+    for values in (("Q1", "Q2"), (1, 2), (3, 4)):
+        other.append(values)
+    other.add_table(Table(displayName="Sales", ref="A1:B3"))
+    other["C1"] = "=Data!A3+A3"
+    book.create_sheet("Other Sheet")["B1"] = "='Data'!$A$3"
+    output, inspect = row_insertion_chain(
+        book, [{"phase": "insert_rows", "sheet": "Data", "row": 2, "count": 1}]
+    )
+    expected = {
+        ("Data", "B1"): "=SUM(A4:A5)+$A$4",
+        ("Data", "B4"): "=Other!A3+'Other Sheet'!$A$3+Data!A4+A4",
+        ("Data", "C4"): '=SUM(Sales[Q1])+IF(A4="Q1",1,0)',
+        ("Other", "C1"): "=Data!A4+A3",
+        ("Other Sheet", "B1"): "='Data'!$A$4",
+    }
+    result = load_workbook(output)
+    for (sheet, ref), formula in expected.items():
+        assert result[sheet][ref].value == formula
+    assert inspect()["verdict"] == "PASS"
+    result[tampered[0]][tampered[1]] = "=0"
+    result.save(output)
+    result.close()
+    assert inspect()["sections"]["conformance"]["status"] == "fail"
+
+
+@pytest.mark.parametrize(
+    "area,at,target,shifted",
+    [
+        ("A3:A4", 2, "A4", "A4:A5"),
+        ("A1:A3", 2, "A1", "A1:A4"),
+        ("A1:A2", 4, "A1", "A1:A2"),
+    ],
+)
+def test_insert_rows_preserves_merged_anchor_and_height(
+    row_insertion_chain, area, at, target, shifted
+):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Data"
+    anchor = sheet[area.split(":")[0]]
+    anchor.value, anchor.font = "preserve me", Font(bold=True, size=13)
+    sheet.row_dimensions[anchor.row].height = 31
+    sheet.merge_cells(area)
+    output, inspect = row_insertion_chain(
+        book, [{"phase": "insert_rows", "sheet": "Data", "row": at, "count": 1}]
+    )
+    result = load_workbook(output)
+    assert result.active[target].value == "preserve me"
+    assert result.active[target].font.bold and result.active[target].font.sz == 13
+    assert result.active.row_dimensions[result.active[target].row].height == 31
+    assert {str(region) for region in result.active.merged_cells.ranges} == {shifted}
+    result.close()
+    assert inspect()["verdict"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    "operations,rows,formula",
+    [
+        ([(2, 1), (4, 2)], [1, 3, 6, 7], "=SUM(A3:A7)"),
+        ([(4, 2), (2, 1)], [1, 3, 4, 7], "=SUM(A3:A7)"),
+        ([(1, 1), (2, 1)], [3, 4, 5, 6], "=SUM(A4:A6)"),
+        ([(2, 1), (2, 1)], [1, 4, 5, 6], "=SUM(A4:A6)"),
+    ],
+)
+def test_qc_composes_sequential_insertions(row_insertion_chain, operations, rows, formula):
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.title = "Data"
+    for value in range(1, 5):
+        book.active.append([value])
+    book.active["B1"] = "=SUM(A2:A4)"
+    phases = [
+        {"phase": "insert_rows", "sheet": "Data", "row": row, "count": count}
+        for row, count in operations
+    ]
+    output, inspect = row_insertion_chain(book, phases)
+    result = load_workbook(output)
+    assert [result.active.cell(row, 1).value for row in rows] == [1, 2, 3, 4]
+    assert result.active.cell(rows[0], 2).value == formula
+    assert inspect()["verdict"] == "PASS"
+    result.active.cell(rows[-1], 1).value = "corrupted"
+    result.save(output)
+    result.close()
+    assert inspect()["sections"]["conformance"]["status"] == "fail"
 
 
 def _synthetic_template(path: Path) -> None:
@@ -425,3 +539,38 @@ def test_qc_on_synthetic_attendance_chain(tmp_path: Path) -> None:
     assert write_result["violations"] == []
     # 数值对账命中
     assert sections["expected"]["stats"]["file_sum"]["SYNTHETIC-001"] == 4.0
+
+
+def test_qc_protection_accepts_absolute_range_tokens(tmp_path: Path) -> None:
+    """计划用 $A$1:$B$10 声明保护区时，核验必须按同一语法解析而非判为无法对照。"""
+    _, _, qc = _load_vendor_pkgs()
+    from openpyxl import Workbook
+
+    template = tmp_path / "template.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "明细"
+    ws["A1"], ws["B1"] = "日期", 10
+    ws["A2"], ws["B2"] = "2026-09-01", 20
+    wb.save(template)
+
+    filled = tmp_path / "filled.xlsx"
+    wb = Workbook()
+    out = wb.active
+    out.title = "明细"
+    out["A1"], out["B1"] = "日期", 10
+    out["A2"], out["B2"] = "2026-09-01", 20
+    wb.save(filled)
+
+    plan = {"plan_version": 1, "protected_ranges": ["明细!$A$1:$B$10"], "phases": []}
+    report = qc.run_qc(filled, plan, template_path=template)
+    assert report["sections"]["protection"]["status"] == "pass", report["sections"]["protection"]
+
+    wb = Workbook()
+    out = wb.active
+    out.title = "明细"
+    out["A1"], out["B1"] = "日期", 10
+    out["A2"], out["B2"] = "2026-09-01", 99
+    wb.save(filled)
+    report2 = qc.run_qc(filled, plan, template_path=template)
+    assert report2["sections"]["protection"]["status"] == "fail"

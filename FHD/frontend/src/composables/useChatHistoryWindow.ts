@@ -1,5 +1,6 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 
 export const CHAT_HISTORY_WINDOW = 80
 const PAGE_STEP = 60 // Keep an overlap so an on-screen message can anchor navigation.
@@ -30,13 +31,14 @@ export function useChatHistoryWindow(messages: () => ChatMessage[], host: Ref<HT
     const anchor = el && Array.from(el.querySelectorAll<HTMLElement>('[data-message-index]'))
       .find((row) => row.getBoundingClientRect().bottom > el.getBoundingClientRect().top)
     const anchorTop = anchor?.getBoundingClientRect().top ?? 0
-    const index = anchor?.dataset.messageIndex
+    const anchorKey = anchor?.dataset.messageKey
     const current = ++navigation
     followingLatest.value = false
     start.value = Math.max(0, Math.min(messages().length - CHAT_HISTORY_WINDOW, targetStart ?? (start.value + direction * PAGE_STEP)))
     await nextTick()
-    if (!el || current !== navigation) return
-    const retained = index && el.querySelector<HTMLElement>(`[data-message-index="${index}"]`)
+    if (!el || host.value !== el || current !== navigation) return
+    const retained = anchorKey && Array.from(el.querySelectorAll<HTMLElement>('[data-message-key]'))
+      .find(row => row.dataset.messageKey === anchorKey)
     el.scrollTop = retained ? el.scrollTop + retained.getBoundingClientRect().top - anchorTop : 0
   }
 
@@ -52,14 +54,31 @@ export function useChatHistoryWindow(messages: () => ChatMessage[], host: Ref<HT
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
-  watch([messages, scope], ([items, key], previous) => {
-    if (!previous || key !== previous[1] || items[0] !== previous[0][0]) showLatest()
-  })
-  watch([() => messages().length, () => messages()[messages().length - 1]?.content], () => {
+  const firstKey = () => {
+    const first = messages()[0]
+    return first ? chatMessageKey(first) : ''
+  }
+  const lastKey = () => {
     const items = messages()
     const last = items[items.length - 1]
-    // 用户自己刚发出消息（含语音通话）时必须回到最新，否则会停在历史窗口里看不到这轮对话。
-    if (!followingLatest.value && last?.role === 'user') {
+    return last ? chatMessageKey(last) : ''
+  }
+  watch([scope, firstKey], ([key, first], [previousScope, previousFirst]) => {
+    if (key !== previousScope || !first || !previousFirst) { showLatest(); return }
+    if (first === previousFirst) return
+    // The server can prepend an earlier page, replacing the array. Keep the
+    // same window of stable IDs instead of jumping to the latest message.
+    const offset = messages().findIndex(message => chatMessageKey(message) === previousFirst)
+    if (offset <= 0) { showLatest(); return }
+    start.value = Math.min(start.value + offset, Math.max(0, messages().length - CHAT_HISTORY_WINDOW))
+    if (followingLatest.value) void nextTick().then(bottom)
+  })
+  watch([() => messages().length, lastKey, () => messages()[messages().length - 1]?.content], ([, lastId], [, previousLastId]) => {
+    const items = messages()
+    const last = items[items.length - 1]
+    // Only a newly appended user message should force the latest window.
+    // Prepending history or editing existing content must not steal the viewport.
+    if (!followingLatest.value && last?.role === 'user' && lastId !== previousLastId) {
       showLatest()
       return
     }

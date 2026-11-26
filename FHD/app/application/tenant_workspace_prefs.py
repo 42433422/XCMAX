@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import contextmanager
 from typing import Any
 
 from fastapi import Request
@@ -14,6 +15,40 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 WORKSPACE_PREFS_KEY = "workspace_prefs"
+WORKSPACE_PREFS_REVISION_KEY = "_revision"
+
+
+@contextmanager
+def _workspace_base_db_scope():
+    """Preferences are host-owned even when a mobile or Mod route is active.
+
+    Only the preference DB operation is routed to the host. Restore the Mod
+    context immediately so downstream enterprise business reads keep their
+    original scope and authorization decisions.
+    """
+    from app.request_active_mod_ctx import (
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
+
+    token = set_request_active_mod_id("")
+    try:
+        yield
+    finally:
+        reset_request_active_mod_id(token)
+
+
+class WorkspacePrefsVersionConflict(ValueError):
+    """The client edited a stale workspace snapshot; reload before retrying."""
+
+
+def workspace_prefs_revision(value: dict[str, Any]) -> int:
+    """Unversioned legacy preferences begin at revision zero."""
+    revision = value.get(WORKSPACE_PREFS_REVISION_KEY, 0)
+    if type(revision) is not int or revision < 0:
+        raise ValueError("Invalid persisted workspace preferences revision")
+    return revision
+
 
 ALLOWED_TOP_LEVEL_KEYS = frozenset(
     {
@@ -78,7 +113,8 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
     try:
         from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-        raw = get_user_preference_service().get_preference(owner, WORKSPACE_PREFS_KEY)
+        with _workspace_base_db_scope():
+            raw = get_user_preference_service().get_preference(owner, WORKSPACE_PREFS_KEY)
         if not raw:
             return {}
         data = json.loads(raw)
@@ -88,19 +124,6 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
         return {}
 
 
-def _save_workspace_prefs(owner_id: str, prefs: dict[str, Any]) -> None:
-    owner = str(owner_id or "").strip()
-    if not owner:
-        return
-    from app.domain.shared_services.user_preference_service import get_user_preference_service
-
-    get_user_preference_service().set_preference(
-        owner,
-        WORKSPACE_PREFS_KEY,
-        json.dumps(prefs, ensure_ascii=False),
-    )
-
-
 _OWNER_PREF_PREFIX = "user_pref:"
 
 
@@ -108,7 +131,8 @@ def get_owner_preferences(owner_id: str) -> dict[str, str]:
     """设置页等零散键值偏好，与工作区偏好同库、按工作区归属隔离。"""
     from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-    rows = get_user_preference_service().get_all_preferences(owner_id)
+    with _workspace_base_db_scope():
+        rows = get_user_preference_service().get_all_preferences(owner_id)
     n = len(_OWNER_PREF_PREFIX)
     return {k[n:]: v for k, v in rows.items() if k.startswith(_OWNER_PREF_PREFIX)}
 
@@ -116,7 +140,8 @@ def get_owner_preferences(owner_id: str) -> dict[str, str]:
 def set_owner_preference(owner_id: str, key: str, value: str) -> None:
     from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-    get_user_preference_service().set_preference(owner_id, _OWNER_PREF_PREFIX + key, value)
+    with _workspace_base_db_scope():
+        get_user_preference_service().set_preference(owner_id, _OWNER_PREF_PREFIX + key, value)
 
 
 def workspace_owner_id_from_user(user: Any) -> str | None:
@@ -152,31 +177,55 @@ def _industry_mod_id_for_workspace(industry_id: str, explicit_mod_id: str = "") 
         return ""
 
 
-def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, Any]:
-    """浅合并顶层字段；workflow_ai_employees 做 dict 合并。"""
+def patch_workspace_prefs(
+    owner_id: str,
+    partial: dict[str, Any],
+    *,
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Merge fields atomically; optional revision token fences stale clients."""
+    if expected_revision is not None and (
+        type(expected_revision) is not int or expected_revision < 0
+    ):
+        raise ValueError("Invalid expected workspace preferences revision")
     owner = str(owner_id or "").strip()
     if not owner:
         return {}
-    current = get_workspace_prefs(owner)
-    merged = dict(current)
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-    for key, value in (partial or {}).items():
-        if key not in ALLOWED_TOP_LEVEL_KEYS:
-            continue
-        if key == "workflow_ai_employees" and isinstance(value, dict):
-            wae = dict(merged.get("workflow_ai_employees") or {})
-            for emp_id, enabled in value.items():
-                eid = str(emp_id or "").strip()
-                if not eid:
-                    continue
-                if isinstance(enabled, bool):
-                    wae[eid] = enabled
-            merged["workflow_ai_employees"] = wae
-        else:
-            merged[key] = value
+    def merge(raw: str | None) -> str:
+        current = json.loads(raw) if raw is not None else {}
+        if not isinstance(current, dict):
+            raise ValueError("Workspace preferences must contain a JSON object")
+        revision = workspace_prefs_revision(current)
+        if expected_revision is not None and expected_revision != revision:
+            raise WorkspacePrefsVersionConflict(
+                f"workspace_prefs_version_conflict expected={expected_revision} actual={revision}"
+            )
+        merged = dict(current)
 
-    _save_workspace_prefs(owner, merged)
-    return merged
+        for key, value in (partial or {}).items():
+            if key not in ALLOWED_TOP_LEVEL_KEYS:
+                continue
+            if key == "workflow_ai_employees" and isinstance(value, dict):
+                wae = dict(merged.get("workflow_ai_employees") or {})
+                for emp_id, enabled in value.items():
+                    eid = str(emp_id or "").strip()
+                    if eid and isinstance(enabled, bool):
+                        wae[eid] = enabled
+                merged["workflow_ai_employees"] = wae
+            else:
+                merged[key] = value
+
+        merged[WORKSPACE_PREFS_REVISION_KEY] = revision + 1
+        return json.dumps(merged, ensure_ascii=False)
+
+    with _workspace_base_db_scope():
+        saved = get_user_preference_service().mutate_preference(owner, WORKSPACE_PREFS_KEY, merge)
+    prefs = json.loads(saved)
+    if not isinstance(prefs, dict):
+        raise ValueError("Workspace preferences must contain a JSON object")
+    return prefs
 
 
 def bind_selected_industry_for_user(
@@ -185,8 +234,9 @@ def bind_selected_industry_for_user(
     *,
     industry_mod_id: str = "",
     owner_id: str | None = None,
+    persist_workspace_prefs: bool = True,
 ) -> dict[str, Any]:
-    """Bind selected industry to both User SSOT fields and tenant workspace prefs."""
+    """Bind industry to User SSOT; optionally skip a redundant preference write."""
     iid = str(industry_id or "").strip()
     if not iid or user is None:
         return {}
@@ -200,7 +250,7 @@ def bind_selected_industry_for_user(
                 init_entitled_industries_for_user,
             )
 
-            with get_db() as db:
+            with _workspace_base_db_scope(), get_db() as db:
                 db_user = db.query(User).filter(User.id == uid).first()
                 if db_user is not None:
                     db_user.industry_id = iid
@@ -213,6 +263,10 @@ def bind_selected_industry_for_user(
 
     if not resolved_owner:
         return {}
+    if not persist_workspace_prefs:
+        # Caller already completed the guarded workspace preference write.
+        # Reapplying it would increment its revision twice.
+        return get_workspace_prefs(resolved_owner)
     partial: dict[str, Any] = {"selected_industry_id": iid}
     mid = _industry_mod_id_for_workspace(iid, industry_mod_id)
     if mid:
@@ -235,7 +289,7 @@ def bind_selected_industry_for_username(
         from app.db.models.user import User
         from app.db.session import get_db
 
-        with get_db() as db:
+        with _workspace_base_db_scope(), get_db() as db:
             user = db.query(User).filter(User.username == uname).first()
             if user is None:
                 return {}
@@ -288,6 +342,9 @@ def save_selected_industry(
 
 __all__ = [
     "WORKSPACE_PREFS_KEY",
+    "WORKSPACE_PREFS_REVISION_KEY",
+    "WorkspacePrefsVersionConflict",
+    "workspace_prefs_revision",
     "bind_selected_industry_for_user",
     "bind_selected_industry_for_username",
     "get_selected_industry_id",

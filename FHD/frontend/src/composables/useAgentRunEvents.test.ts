@@ -9,7 +9,8 @@ vi.mock('@/api/agentRuns', () => ({
   default: agentRunsApiMock,
 }))
 
-import { buildAgentRunTaskUpdate, extractAgentRunId, useAgentRunEventSync } from './useAgentRunEvents'
+import { buildAgentRunTaskUpdate, chatPayloadFromRun, extractAgentRunId, useAgentRunEventSync, waitForAgentRunTerminal } from './useAgentRunEvents'
+import type { AgentRun } from '@/api/agentRuns'
 import { isFirstAiTaskPending, queueFirstAiTaskPrompt, readProductFlowCompleted } from '@/constants/productFlow'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
@@ -18,7 +19,8 @@ describe('useAgentRunEvents', () => {
     vi.clearAllMocks()
     localStorage.clear()
     setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
-    agentRunsApiMock.getRun.mockRejectedValue(new Error('not configured'))
+    agentRunsApiMock.listEvents.mockReset()
+    agentRunsApiMock.getRun.mockReset().mockRejectedValue(new Error('not configured'))
   })
 
   it('extracts run id from common response shapes', () => {
@@ -26,6 +28,67 @@ describe('useAgentRunEvents', () => {
     expect(extractAgentRunId({ data: { run_id: 'run_data' } })).toBe('run_data')
     expect(extractAgentRunId({ data: { agent_run: { run_id: 'run_nested' } } })).toBe('run_nested')
     expect(extractAgentRunId({})).toBe('')
+  })
+
+  it('retains the durable event cursor across a transient read failure', async () => {
+    vi.useFakeTimers()
+    const terminal = { run_id: 'original', status: 'paused' }
+    agentRunsApiMock.listEvents
+      .mockResolvedValueOnce({ data: [{ event_id: 'e1' }] })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ data: [{ event_id: 'e2' }] })
+    agentRunsApiMock.getRun
+      .mockResolvedValueOnce({ data: { run_id: 'original', status: 'running' } })
+      .mockResolvedValueOnce({ data: terminal })
+    try {
+      const pending = waitForAgentRunTerminal(' original ')
+      await vi.advanceTimersByTimeAsync(4000)
+      await expect(pending).resolves.toEqual(terminal)
+      expect(agentRunsApiMock.listEvents.mock.calls).toEqual([
+        ['original', {}], ['original', { after_event_id: 'e1' }], ['original', { after_event_id: 'e1' }],
+      ])
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['events', 'detail'])('stops following when ownership ends during %s', async stage => {
+    let current = true
+    agentRunsApiMock.listEvents.mockImplementationOnce(async () => {
+      if (stage === 'events') current = false
+      return { data: [] }
+    })
+    agentRunsApiMock.getRun.mockImplementationOnce(async () => {
+      current = false
+      return { data: { run_id: 'original', status: 'completed' } }
+    })
+    await expect(waitForAgentRunTerminal('original', () => current)).resolves.toBeNull()
+    if (stage === 'events') expect(agentRunsApiMock.getRun).not.toHaveBeenCalled()
+  })
+
+  it('does not project missing text or attach another run’s terminal receipt', async () => {
+    vi.useFakeTimers()
+    agentRunsApiMock.listEvents.mockResolvedValueOnce({ data: [] })
+    agentRunsApiMock.getRun.mockResolvedValueOnce({ data: { run_id: 'unrelated', status: 'completed' } })
+    try {
+      const pending = waitForAgentRunTerminal('original', () => true, 100)
+      await vi.advanceTimersByTimeAsync(2000)
+      await expect(pending).resolves.toBeNull()
+      await expect(waitForAgentRunTerminal(' ')).resolves.toBeNull()
+      expect(chatPayloadFromRun(null)).toBeNull()
+      expect(chatPayloadFromRun({ run_id: 'original', status: 'completed' } as AgentRun)).toBeNull()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('projects only persisted Xiaox results, retaining errors, review state and receipts', () => {
+    const businessReceipt = { id: 'receipt-1' }
+    const run = { run_id: 'original', status: 'failed', final_output: { xiaox_result: {
+      ok: false, error: '等待核对原始凭证', exit_status: 'unknown', reconciliation_required: true,
+      business_receipts: [businessReceipt], active_seconds: 2,
+    } } } as AgentRun
+    expect(chatPayloadFromRun(run)).toMatchObject({
+      success: false, runtime: 'xiaox', run_id: 'original', response: '等待核对原始凭证',
+      execution_state: 'unknown', requires_reconciliation: true,
+      data: { business_receipts: [businessReceipt], active_seconds: 2, error_code: 'unknown' },
+    })
   })
 
   it.each(['events', 'run', 'error', 'generation'])('does not apply a late %s result to the next owner or generation', async stage => {

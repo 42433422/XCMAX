@@ -11,7 +11,7 @@ def test_permanent_price_does_not_depend_on_customer_budget() -> None:
         plan = sp.permanent_plan_for_budget(budget)
         assert plan is not None
         assert plan["id"] == "saas-permanent-standard"
-        assert plan["amount_cents"] == 680_000
+        assert plan["amount_cents"] == 300_000
         assert plan["account_tier"] == "normal"
         assert plan["quota_cents"] == 0
 

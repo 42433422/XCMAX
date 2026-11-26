@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import APIRouter, File, Query, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 
 from .commands import LocalCommands
 from .packages import PackageInstaller
@@ -24,6 +24,7 @@ class InstallRoutes:
 
         @router.post("/upload", response_model=ModStoreInstallResult)
         async def mod_store_upload(
+            request: Request,
             file: UploadFile = File(..., description="Mod 包文件 (.xcemp 或 .zip)"),
             activate: bool = Query(True, description="安装后是否立即激活"),
         ) -> ModStoreInstallResult:
@@ -35,7 +36,31 @@ class InstallRoutes:
               - 落地到临时文件后调用 ``mod_manager.install_mod_package``
               - 返回安装结果（含 manifest 元数据）
             """
-            return await packages().upload(file, activate)
+            from app.application.tenant_workspace_prefs import (
+                resolve_workspace_owner_id,
+            )
+            from app.infrastructure.auth.dependencies import (
+                get_logged_in_user,
+                session_id_from_request,
+            )
+
+            def resolve_owner_scope() -> str:
+                if not session_id_from_request(request):
+                    return ""
+                user = get_logged_in_user(request)
+                owner = resolve_workspace_owner_id(request, user)
+                if not owner:
+                    raise HTTPException(status_code=403, detail="无法确认工作区归属")
+                return owner
+
+            try:
+                owner_scope = resolve_owner_scope()
+            except HTTPException:
+                await file.close()
+                raise
+            return await packages().upload(
+                file, activate, owner_scope=owner_scope, owner_scope_check=resolve_owner_scope
+            )
 
         self.mod_store_upload = mod_store_upload
 

@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.desktop_runtime import router
-from tests.fixtures.codex_qualification import synthetic_qualification
+from tests.fixtures.xiaox_qualification import synthetic_qualification
 
 
 @_shared_scope_contextmanager
@@ -86,7 +86,7 @@ def test_runtime_qualification_status_requires_login_without_preparing(anon_clie
 def test_runtime_qualification_status_reads_authenticated_owner_without_model_calls(client):
     public_status = {
         "success": True,
-        "runtime": "codex",
+        "runtime": "xiaox",
         "qualification": "in_progress",
         "route": {"route_identity": "current-route"},
         "checks": {},
@@ -98,7 +98,7 @@ def test_runtime_qualification_status_reads_authenticated_owner_without_model_ca
             return_value=public_status,
             create=True,
         ) as read_status,
-        patch("app.infrastructure.codex.qualification.qualify_runtime") as probe,
+        patch("app.infrastructure.xiaox.qualification.qualify_runtime") as probe,
     ):
         response = client.get("/api/desktop/agent-runtime/qualification?owner=another-account")
     assert response.status_code == 200
@@ -132,14 +132,14 @@ def test_runtime_qualification_status_does_not_override_operator_configuration(c
     monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", "/operator/runtime.json")
     settings = object()
     with (
-        patch("app.infrastructure.codex.policy.runtime_settings", return_value=settings),
+        patch("app.infrastructure.xiaox.policy.runtime_settings", return_value=settings),
         patch(
             "app.application.agent_runtime.configuration.runtime_qualification_status",
             return_value={"success": True, "qualification": "required", "checks": {}},
             create=True,
         ) as read_status,
         patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup,
-        patch("app.infrastructure.codex.qualification.qualify_runtime") as probe,
+        patch("app.infrastructure.xiaox.qualification.qualify_runtime") as probe,
     ):
         response = client.get("/api/desktop/agent-runtime/qualification")
     assert response.status_code == 200
@@ -190,7 +190,7 @@ def test_runtime_qualification_failure_remains_actionable(client):
 @pytest.mark.parametrize("kind", ["policy", "known", "unknown"])
 def test_runtime_qualification_errors_expose_only_public_codes_and_checks(client, method, kind):
     from app.application.agent_runtime.configuration import RuntimeSetupError
-    from app.infrastructure.codex.policy import RuntimePolicyError
+    from app.infrastructure.xiaox.policy import RuntimePolicyError
 
     private = "/private/runtime/secret.json Bearer sensitive-probe-token"
     error = (
@@ -229,12 +229,12 @@ def test_runtime_qualification_errors_expose_only_public_codes_and_checks(client
 def test_runtime_qualification_keeps_internal_policy_diagnostics_private(
     client, monkeypatch, method
 ):
-    from app.infrastructure.codex.policy import RuntimePolicyError
+    from app.infrastructure.xiaox.policy import RuntimePolicyError
 
     monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", "/fixture/operator-runtime.json")
     diagnostic = "internal runtime diagnostic: /fixture/private/account-state.json"
     with patch(
-        "app.infrastructure.codex.policy.runtime_settings",
+        "app.infrastructure.xiaox.policy.runtime_settings",
         side_effect=RuntimePolicyError(diagnostic),
     ):
         response = client.request(method, "/api/desktop/agent-runtime/qualification", json={})
@@ -253,7 +253,7 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
     monkeypatch,
     mode,
 ):
-    from app.infrastructure.codex.policy import (
+    from app.infrastructure.xiaox.policy import (
         CODEX_VERSION,
         QUALIFICATION_CHECKS,
         ModelRoute,
@@ -304,7 +304,7 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
         patch(
             "app.application.agent_runtime.configuration.get_deployment_runtime_settings"
         ) as operator,
-        patch("app.infrastructure.codex.qualification.qualify_runtime") as producer,
+        patch("app.infrastructure.xiaox.qualification.qualify_runtime") as producer,
     ):
         response = client.post("/api/desktop/agent-runtime/qualification", json={"retry": True})
     setup.assert_not_called()

@@ -252,8 +252,8 @@ def build_pack_from_commit(*, commit_sha: str, repo_root: Path) -> Dict[str, Any
             raise RuntimeError("evaluate_employee_pack not implemented")
         risk_level, reason = evaluate_employee_pack(pack_id_resolved)
         approved = risk_level == "low"
-    except RECOVERABLE_ERRORS as e:
-        risk_level, reason = "high", f"evaluate_employee_pack failed: {e}"
+    except RECOVERABLE_ERRORS:
+        risk_level, reason = "high", "evaluate_employee_pack_failed"
         approved = False
 
     append_event(
@@ -266,8 +266,8 @@ def build_pack_from_commit(*, commit_sha: str, repo_root: Path) -> Dict[str, Any
             "package_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
             "stored_filename": archive_path.name,
             "commit_sha": commit_sha,
-            "risk_level": risk_level,
-            "risk_reason": reason,
+            "risk_level": "low" if approved else "high",
+            "risk_reason": "review_passed" if approved else "review_required",
             "final_status": "pack_listed" if approved else "pack_rejected",
         }
     )

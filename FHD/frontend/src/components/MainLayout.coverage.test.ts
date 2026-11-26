@@ -51,8 +51,10 @@ const testState = vi.hoisted(() => {
     }),
     // mods store 状态
     modsStore: vue.reactive({
+      mods: [] as unknown[],
       modsForUi: [] as unknown[],
       modRoutes: [] as unknown[],
+      activeModId: '',
       initialize: vi.fn().mockResolvedValue(undefined),
     }),
     // accountProfile store 状态
@@ -176,7 +178,8 @@ vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: () => testState.adminConsoleSpa,
 }))
 
-vi.mock('@/constants/adminOperatorNav', () => ({
+vi.mock('@/constants/adminOperatorNav', async importOriginal => ({
+  ...await importOriginal<typeof import('@/constants/adminOperatorNav')>(),
   ADMIN_OPERATOR_BRAND_SUBTITLE: '运维管理',
 }))
 

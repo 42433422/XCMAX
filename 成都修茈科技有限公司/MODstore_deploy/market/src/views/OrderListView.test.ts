@@ -17,7 +17,7 @@ describe('OrderListView', () => {
   let router: ReturnType<typeof createRouter>
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -176,6 +176,41 @@ describe('OrderListView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('清理展示')
+  })
+
+  it('discards an older filter response and keeps the most recently requested order list', async () => {
+    let finishOlder!: (result: { orders: { out_trade_no: string }[] }) => void
+    vi.mocked(api.paymentOrders)
+      .mockImplementationOnce(() => new Promise((resolve) => { finishOlder = resolve }))
+      .mockResolvedValueOnce({ orders: [{ out_trade_no: 'NEW-PAID', status: 'paid' }] })
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(OrderListView, { global: { plugins: [router] } })
+    await wrapper.findAll('.filter-btn')[2].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('NEW-PAID')
+    finishOlder({ orders: [{ out_trade_no: 'OLD-PENDING' }] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('NEW-PAID')
+    expect(wrapper.text()).not.toContain('OLD-PENDING')
+    expect(wrapper.get('.order-card').attributes('tabindex')).toBe('0')
+    wrapper.unmount()
+  })
+
+  it('exposes retry after a failed order read and does not label errors as empty data', async () => {
+    vi.mocked(api.paymentOrders)
+      .mockRejectedValueOnce(new Error('请求超时'))
+      .mockResolvedValueOnce({ orders: [{ out_trade_no: 'RETRY-OK' }] })
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(OrderListView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('请求超时')
+    expect(wrapper.text()).not.toContain('暂无订单')
+    await wrapper.get('.retry-btn').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('RETRY-OK')
+    wrapper.unmount()
   })
 
   it('reloads orders on filter click', async () => {

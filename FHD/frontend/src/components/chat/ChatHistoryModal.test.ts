@@ -43,6 +43,24 @@ describe('ChatHistoryModal', () => {
     wrapper.unmount()
   })
 
+  it.each([1000, 10000])('bounds mounted history entries for %i loaded sessions', async (count) => {
+    const sessions = Array.from({ length: count }, (_, i) => ({
+      session_id: `history-${i}`,
+      title: `历史会话 ${i}`,
+      message_count: 1,
+      last_message_at: '2026-07-12T08:30:00',
+    }))
+    const wrapper = mountModal({ historySessions: sessions, currentSessionId: 'history-9999' })
+    expect(wrapper.findAll('.history-session-item')).toHaveLength(60)
+    expect(wrapper.text()).not.toContain('历史会话 200')
+    await wrapper.get('.history-pagination button:last-child').trigger('click')
+    expect(wrapper.findAll('.history-session-item')).toHaveLength(60)
+    expect(wrapper.find('button.history-session-item').text()).toContain('历史会话 60')
+    await wrapper.setProps({ historySessions: sessions.slice(0, 10) })
+    expect(wrapper.findAll('.history-session-item')).toHaveLength(10)
+    wrapper.unmount()
+  })
+
   it('uses Chinese user-facing labels and shows the session date', () => {
     const wrapper = mountModal()
     expect(wrapper.text()).toContain('历史对话')

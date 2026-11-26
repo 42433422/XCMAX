@@ -76,3 +76,7 @@ ln -sfn .nm-e2e FHD/frontend/node_modules
 可用 `E2E_API_BASE_URL` 指定地址。30 次原始 HTTP 样本与构建提交身份随报告上传。
 
 仓根 [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../../../.github/workflows/e2e-playwright-reusable.yml)。
+
+## UI 视觉回归（合成数据，非客户/真机验收）
+
+仓根 `.github/workflows/ui-visual-regression.yml` 在同一 Linux runner 分别用同一夹具生成 PR 合并候选和 base SHA 的截图；复用已锁定 Playwright、Flutter Test 与 Pillow 12.3.0（HPND）。桌面两尺寸、Market 两尺寸、Flutter 浅深主题和窄屏双倍文字，当前预期 27 个截图场景。Flutter 注入测试 CJK 字体，不代表原生设备字体。缺图、尺寸或未经批准像素差异均失败。CI artifact 提供基线、候选、洋红差异图、源 SHA 与像素哈希。评审者检查差异图后可在 `FHD/config/visual_regression_approvals.json` 指定当前 `base_sha`，在 `surfaces` 下按 desktop/market/flutter 分类、按 PNG 文件名记录 `baseline` 和 `candidate` 两项报告哈希。仅精确成对哈希获准，旧 base 批准失效，同 base 未使用批准失败；不得自动提交批准。比较器有单像素负测，真实运行证据仍须 CI 产出。三个矩阵 check 是否为 main 必需检查由分支保护配置决定，本 workflow 不修改分支保护。

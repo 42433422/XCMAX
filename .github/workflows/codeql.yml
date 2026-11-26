@@ -38,6 +38,13 @@ jobs:
           path: controller
           persist-credentials: false
           fetch-depth: 0
+          # Extractors can resolve imports outside source-root. Keep only the
+          # trusted tools here so analysis never mixes base and candidate code.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/codeql/codeql-config.yml
+            /.github/codeql/strip_elt_dir_fd_path_injection_fps.py
+            /scripts/dev/change_classifier.py
 
       - name: Checkout source as scan data
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

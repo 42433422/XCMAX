@@ -19,11 +19,6 @@ vi.mock('@/composables/useChatView', () => ({
   }),
 }))
 
-vi.mock('@/utils/sanitizeHtml', () => ({
-  sanitizeChatBubbleHtml: vi.fn((html: string) => html),
-  plainTextFromChatHtml: vi.fn((html: string) => html),
-}))
-
 vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
   ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   readAiSessionIdFromStorage: vi.fn(() => 'voice-call-session'),

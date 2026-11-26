@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollEl" class="chat-history" :class="{ 'chat-history--corp': corpMode }" role="log" aria-label="对话历史" aria-live="polite">
+  <div ref="scrollEl" class="chat-history" :class="{ 'chat-history--corp': corpMode }" role="log" aria-label="对话历史" aria-live="polite" @scroll.passive="onScroll">
     <CorpWelcomeBoard
       v-if="showCorpWelcome"
       :title="welcomeTitle"
@@ -21,6 +21,8 @@
 
     <AgentMessageBubble v-for="msg in messages" :key="msg.id" :msg="msg" />
 
+    <button v-if="!followingLatest && messages.length" type="button" class="chat-follow-latest" aria-label="查看最新消息" @click="jumpToLatest">查看最新消息</button>
+
     <AgentActionPreview
       v-if="pendingAction"
       :action="pendingAction"
@@ -31,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { useAgentStore } from '../../stores/agent'
@@ -116,17 +118,30 @@ function onTask(action: QuickAction) {
 }
 
 const scrollEl = ref<HTMLDivElement | null>(null)
+const followingLatest = ref(true)
 
+function onScroll() {
+  const host = scrollEl.value
+  if (host) followingLatest.value = host.scrollHeight - host.scrollTop - host.clientHeight <= 48
+}
+
+function jumpToLatest() {
+  followingLatest.value = true
+  void nextTick(() => {
+    if (scrollEl.value && followingLatest.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+  })
+}
+
+onMounted(jumpToLatest)
+
+// Reading older turns must not force a jump to the bottom on every streamed token.
 watch(
-  messages,
-  () => {
-    nextTick(() => {
-      if (scrollEl.value) {
-        scrollEl.value.scrollTop = scrollEl.value.scrollHeight
-      }
-    })
+  () => [messages.value.length, messages.value.at(-1)?.content, messages.value.at(-1)?.isLoading, Boolean(pendingAction.value)] as const,
+  ([length], previous) => {
+    if (length > (previous?.[0] ?? 0) && messages.value.at(-1)?.role === 'user') followingLatest.value = true
+    if (followingLatest.value) jumpToLatest()
   },
-  { deep: true },
+  { flush: 'post' },
 )
 </script>
 
@@ -146,6 +161,8 @@ export default { name: 'AgentChatHistory' }
   scroll-behavior: smooth;
 }
 
+.chat-follow-latest { position: sticky; bottom: 10px; align-self: flex-end; z-index: 1; margin: 4px 0 0; padding: 8px 12px; min-height: 36px; border: 1px solid var(--xc-color-border, rgba(148,163,184,.3)); border-radius: 999px; background: var(--xc-color-surface, #202b3d); color: var(--xc-color-text, #fff); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.chat-follow-latest:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .chat-history--corp {
   flex: 1 1 auto;
   min-height: 120px;

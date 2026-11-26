@@ -1,149 +1,144 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ordersApi from '../api/orders'
 import type { Order } from '@/types/order'
 import { asRecord } from '@/utils/typeGuards'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 interface OperationResult {
   success: boolean
   data?: unknown
   message?: string
+  stale?: boolean
 }
+
+type OrderListResult = { success: true; rows: Order[] } | { success: false; message?: string }
+
+// Keep the host and legacy MOD envelopes at the boundary, not in page state.
+// A nested failure or an invalid envelope must never become a successful empty list.
+function normalizeOrders(data: unknown, depth = 0): OrderListResult {
+  if (depth > 4) return { success: false }
+  if (Array.isArray(data)) return { success: true, rows: data as Order[] }
+  const row = asRecord(data)
+  if (row.success === false) return { success: false, message: typeof row.message === 'string' ? row.message : undefined }
+  if (Array.isArray(row.data)) return { success: true, rows: row.data as Order[] }
+  if (Array.isArray(row.orders)) return { success: true, rows: row.orders as Order[] }
+  if (row.data && typeof row.data === 'object') return normalizeOrders(row.data, depth + 1)
+  return { success: false }
+}
+
+function matchesOrder(order: Order, number: string): boolean {
+  return String(order.order_number ?? '') === number || String(order.id ?? '') === number
+}
+
+const staleResult = (): OperationResult => ({ success: false, stale: true })
 
 export const useOrdersStore = defineStore('orders', () => {
   const orders = ref<Order[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-
   const orderCount = computed(() => orders.value.length)
 
-  function normalizeOrders(data: unknown, depth = 0): Order[] {
-    if (depth > 4) return []
-    if (Array.isArray(data)) return data as Order[]
-    const row = asRecord(data)
-    if (Array.isArray(row.data)) return row.data as Order[]
-    if (Array.isArray(row.orders)) return row.orders as Order[]
-    // The ERP Mod facade retains its envelope around the host response:
-    // { success, data: { success, data: [...] } }.  Normalize both the host
-    // and facade contracts so the desktop page does not render an empty table
-    // while the same record is already present in the database.
-    if (row.data && typeof row.data === 'object') {
-      return normalizeOrders(row.data, depth + 1)
-    }
-    return []
-  }
+  let readRevision = 0
+  let mutating = false
+  watch(productReadAccountEpoch, () => {
+    ++readRevision
+    mutating = false
+    orders.value = []
+    error.value = null
+    loading.value = false
+  }, { flush: 'sync' })
 
-  async function fetchOrders(params: Record<string, unknown> = {}): Promise<OperationResult> {
+  async function readOrders(request: () => Promise<unknown>, fallback: string): Promise<OperationResult> {
+    if (mutating) return staleResult()
+    const revision = ++readRevision
+    const epoch = productReadAccountEpoch.value
+    const current = () => revision === readRevision && epoch === productReadAccountEpoch.value
     loading.value = true
     error.value = null
     try {
-      const data = await ordersApi.getOrders(params)
-      if (data?.success === false) {
-        error.value = data?.message || '加载订单失败'
+      const data = await request()
+      if (!current()) return staleResult()
+      const normalized = normalizeOrders(data)
+      if (!normalized.success) {
+        error.value = normalized.message || fallback
         return { success: false, message: error.value }
       }
-      orders.value = normalizeOrders(data)
+      orders.value = normalized.rows
       return { success: true }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '加载订单失败'
-      console.error('加载订单失败:', e)
+      if (!current()) return staleResult()
+      error.value = e instanceof Error ? e.message : fallback
+      console.error(fallback, e)
       return { success: false, message: error.value }
     } finally {
-      loading.value = false
+      if (current()) loading.value = false
     }
   }
 
-  async function searchOrders(keyword: string): Promise<OperationResult> {
+  function fetchOrders(params: Record<string, unknown> = {}): Promise<OperationResult> {
+    return readOrders(() => ordersApi.getOrders(params), '加载订单失败')
+  }
+
+  function searchOrders(keyword: string): Promise<OperationResult> {
+    return readOrders(() => ordersApi.searchOrders(keyword), '搜索订单失败')
+  }
+
+  // One mutation owns loading and the authoritative list until its receipt arrives.
+  // Reads cannot resurrect pre-write snapshots or clear a newer operation's loading state.
+  async function mutate(
+    request: () => Promise<{ success: boolean; message?: string; data?: unknown }>,
+    fallback: string,
+    apply: (data: unknown) => OperationResult,
+  ): Promise<OperationResult> {
+    if (mutating) return { success: false, message: '正在处理订单，请稍候' }
+    const epoch = productReadAccountEpoch.value
+    const current = () => epoch === productReadAccountEpoch.value
+    ++readRevision
+    mutating = true
     loading.value = true
     error.value = null
     try {
-      const data = await ordersApi.searchOrders(keyword)
-      if (data?.success === false) {
-        error.value = data?.message || '搜索订单失败'
+      const response = await request()
+      if (!current()) return staleResult()
+      if (!response?.success) {
+        error.value = response?.message || fallback
         return { success: false, message: error.value }
       }
-      orders.value = normalizeOrders(data)
-      return { success: true }
+      return apply(response.data)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '搜索订单失败'
-      console.error('搜索订单失败:', e)
+      if (!current()) return staleResult()
+      error.value = e instanceof Error ? e.message : fallback
       return { success: false, message: error.value }
     } finally {
-      loading.value = false
+      if (current()) {
+        mutating = false
+        loading.value = false
+      }
     }
   }
 
-  async function deleteOrder(orderNumber: string): Promise<OperationResult> {
-    loading.value = true
-    error.value = null
-    try {
-      const data = await ordersApi.deleteOrder(orderNumber)
-      if (!data?.success) {
-        error.value = data?.message || '删除失败'
-        return { success: false, message: error.value }
-      }
-      orders.value = orders.value.filter((o) => (o.order_number || o.id) !== orderNumber)
+  function deleteOrder(orderNumber: string): Promise<OperationResult> {
+    return mutate(() => ordersApi.deleteOrder(orderNumber), '删除失败', () => {
+      orders.value = orders.value.filter(order => !matchesOrder(order, orderNumber))
       return { success: true }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '删除失败'
-      console.error('删除订单失败:', e)
-      return { success: false, message: error.value }
-    } finally {
-      loading.value = false
-    }
+    })
   }
 
-  async function updateOrder(orderNumber: string, payload: Record<string, unknown>): Promise<OperationResult> {
-    loading.value = true
-    error.value = null
-    try {
-      const data = await ordersApi.updateOrder(orderNumber, payload)
-      if (!data?.success) {
-        error.value = data?.message || '更新失败'
-        return { success: false, message: error.value }
-      }
-      const updated = asRecord(data.data) as unknown as Order
-      orders.value = orders.value.map((order) =>
-        String(order.id || order.order_number) === String(orderNumber) ? { ...order, ...updated } : order,
-      )
+  function updateOrder(orderNumber: string, payload: Record<string, unknown>): Promise<OperationResult> {
+    return mutate(() => ordersApi.updateOrder(orderNumber, payload), '更新失败', data => {
+      const updated = asRecord(data) as unknown as Order
+      orders.value = orders.value.map(order => matchesOrder(order, orderNumber) ? { ...order, ...updated } : order)
       return { success: true, data: updated }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '更新失败'
-      return { success: false, message: error.value }
-    } finally {
-      loading.value = false
-    }
+    })
   }
 
-  async function clearAllOrders(): Promise<OperationResult> {
-    loading.value = true
-    error.value = null
-    try {
-      const data = await ordersApi.clearAllOrders()
-      if (!data?.success) {
-        error.value = data?.message || '清空失败'
-        return { success: false, message: error.value }
-      }
+  function clearAllOrders(): Promise<OperationResult> {
+    return mutate(() => ordersApi.clearAllOrders(), '清空失败', () => {
       orders.value = []
       return { success: true }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '清空失败'
-      console.error('清空订单失败:', e)
-      return { success: false, message: error.value }
-    } finally {
-      loading.value = false
-    }
+    })
   }
 
-  return {
-    orders,
-    loading,
-    error,
-    orderCount,
-    fetchOrders,
-    searchOrders,
-    updateOrder,
-    deleteOrder,
-    clearAllOrders,
-  }
+  return { orders, loading, error, orderCount, fetchOrders, searchOrders, updateOrder, deleteOrder, clearAllOrders }
 })

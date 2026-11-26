@@ -71,6 +71,44 @@ describe('ChatMessageList', () => {
     expect(first).not.toBe(second)
   })
 
+  it('shows the pending turn under its own user message until the streaming reply takes over', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: '你好', time: '12:00', turnId: 'previous' },
+      { role: 'ai', content: '你好！', time: '12:00', turnId: 'previous' },
+      { role: 'user', content: '北京两日游', time: '12:01', turnId: 'current' },
+    ]
+    const wrapper = mount(ChatMessageList, { props: {
+      ...defaultProps, messages, isLoading: true, pendingTurnId: 'current',
+    } })
+    expect(wrapper.get('[data-message-index="2"] [data-testid="chat-turn-pending"]').text()).toContain('正在生成')
+    expect(wrapper.findAll('[data-testid="chat-turn-pending"]')).toHaveLength(1)
+    expect(wrapper.find('.chat-loading-row').exists()).toBe(false)
+
+    await wrapper.setProps({ messages: [...messages, {
+      role: 'ai', content: '', time: '12:01', turnId: 'current', streamingShell: true, streamStatus: 'submitted',
+    }], isStreamingReply: true })
+    expect(wrapper.find('[data-testid="chat-turn-pending"]').exists()).toBe(false)
+    expect(wrapper.findAll('.chat-typing-indicator')).toHaveLength(1)
+  })
+
+  it('shows a stop notice inside the stopped turn, not below a newer answer', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: '旧问题', time: '12:00', turnId: 'old' },
+      { role: 'ai', content: '已接收的部分正文', time: '12:00', turnId: 'old' },
+    ]
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages, stoppedTurnId: 'old' } })
+    expect(wrapper.get('[data-message-index="1"] [data-testid="chat-turn-stopped"]').text()).toContain('已停止接收本轮回复')
+    expect(wrapper.findAll('[role="listitem"]')).toHaveLength(2)
+
+    await wrapper.setProps({ messages: [...messages, {
+      role: 'user', content: '新问题', time: '12:01', turnId: 'new',
+    }, {
+      role: 'ai', content: '新答复', time: '12:02', turnId: 'new',
+    }] })
+    expect(wrapper.find('[data-testid="chat-turn-stopped"]').exists()).toBe(false)
+    expect(wrapper.get('[data-message-index="3"]').text()).toContain('新答复')
+  })
+
   it('keeps the activity indicator and receipt running after visible text removes the streaming shell', async () => {
     const messages = ref<ChatMessage[]>([{
       role: 'ai', content: '已开始读取附件。', time: '12:00', streamingShell: false, streamStatus: 'streaming',
@@ -520,8 +558,10 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
   expect(wrapper.find('script').exists()).toBe(false)
   expect(wrapper.findAll('.message')[0].attributes('style')).toContain('min-height: 200px')
   expect(wrapper.get('.chat-loading-row').text()).toContain('正在导出')
+  expect(wrapper.find('.message-tts-btn').exists()).toBe(false)
   wrapper.get('.message-shipment-actions a').element.addEventListener('click', event => event.preventDefault())
   await wrapper.get('.message-shipment-actions a').trigger('click')
+  await wrapper.setProps({ messages: [{ ...message, streamingShell: false }, ...wrapper.props('messages').slice(1)] })
   await wrapper.get('.message-tts-btn').trigger('click')
   await wrapper.get('.msg-fold__action--collapse').trigger('click')
   expect(wrapper.emitted('shipment-download-click')).toEqual([[]])

@@ -13,10 +13,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.tenant_workspace_prefs import (
+    WorkspacePrefsVersionConflict,
     bind_selected_industry_for_user,
     get_workspace_prefs,
     patch_workspace_prefs,
     resolve_workspace_owner_id,
+    workspace_prefs_revision,
 )
 from app.infrastructure.auth.dependencies import (
     get_logged_in_user,
@@ -34,6 +36,11 @@ _PREFS_JOBS: set[asyncio.Task[Any]] = set()
 
 class WorkspacePrefsPatch(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
+    # Optional during the rolling client upgrade; clients that supply it get
+    # explicit compare-and-swap protection against another device's changes.
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    expected_owner_id: str | None = Field(default=None, min_length=1, max_length=160)
 
     selected_industry_id: str | None = Field(default=None, max_length=32)
     industry_mod_id: str | None = None
@@ -73,10 +80,15 @@ def get_workspace_prefs_endpoint(request: Request):
     try:
         user = resolve_session_user(request)
         if user is None:
-            return {"success": True, "data": {}, "owner_id": None}
+            return {"success": True, "data": {}, "owner_id": None, "revision": 0}
         owner_id = resolve_workspace_owner_id(request, user)
         prefs = get_workspace_prefs(owner_id) if owner_id else {}
-        return {"success": True, "data": prefs, "owner_id": owner_id}
+        return {
+            "success": True,
+            "data": prefs,
+            "owner_id": owner_id,
+            "revision": workspace_prefs_revision(prefs),
+        }
     except RECOVERABLE_ERRORS:
         logger.exception("get_workspace_prefs_endpoint failed")
         return {"success": True, "data": {}, "owner_id": None}
@@ -87,20 +99,39 @@ def _patch_local_prefs(body: WorkspacePrefsPatch, request: Request):
     owner_id = resolve_workspace_owner_id(request, user)
     if not owner_id:
         raise HTTPException(status_code=400, detail="无法解析工作区归属，请先完成企业登录")
+    if body.expected_owner_id is not None and body.expected_owner_id != owner_id:
+        raise HTTPException(
+            status_code=409,
+            detail={"error_code": "workspace_prefs_owner_changed"},
+        )
 
-    partial: dict[str, Any] = body.model_dump(exclude_none=True)
+    partial: dict[str, Any] = body.model_dump(
+        exclude_none=True, exclude={"expected_revision", "expected_owner_id"}
+    )
     selected_industry_id = str(partial.get("selected_industry_id") or "").strip()
-    prefs = patch_workspace_prefs(owner_id, partial)
+    if body.expected_revision is None:
+        prefs = patch_workspace_prefs(owner_id, partial)
+    else:
+        prefs = patch_workspace_prefs(owner_id, partial, expected_revision=body.expected_revision)
     if selected_industry_id:
-        prefs = (
+        industry_mod_id = str(partial.get("industry_mod_id") or "").strip()
+        if body.expected_revision is not None:
+            # Keep the CAS write a single preference revision. Legacy callers
+            # retain their prior industry-binding behavior during rollout.
             bind_selected_industry_for_user(
                 user,
                 selected_industry_id,
-                industry_mod_id=str(partial.get("industry_mod_id") or "").strip(),
+                industry_mod_id=industry_mod_id,
                 owner_id=owner_id,
+                persist_workspace_prefs=False,
             )
-            or prefs
-        )
+        else:
+            prefs = (
+                bind_selected_industry_for_user(
+                    user, selected_industry_id, industry_mod_id=industry_mod_id, owner_id=owner_id
+                )
+                or prefs
+            )
     return prefs, owner_id, selected_industry_id, session_id_from_request(request)
 
 
@@ -139,9 +170,15 @@ async def patch_workspace_prefs_endpoint(body: WorkspacePrefsPatch, request: Req
             "success": True,
             "data": prefs,
             "owner_id": owner_id,
+            "revision": workspace_prefs_revision(prefs),
             "market_entitlements": market_entitlements,
         }
     except HTTPException:
         raise
+    except WorkspacePrefsVersionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error_code": "workspace_prefs_version_conflict", "message": str(exc)},
+        ) from exc
     except RECOVERABLE_ERRORS as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

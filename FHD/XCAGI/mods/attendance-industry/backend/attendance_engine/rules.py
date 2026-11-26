@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from typing import Any
 
 TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
 
-# 由 ``convert`` 在每次转换前注入 ``resources/config/approval_config.yaml`` 中的 ``attendance_policy``。
-ACTIVE_POLICY: dict[str, Any] = {}
+ACTIVE_POLICY: ContextVar[dict[str, Any] | None] = ContextVar("attendance_policy", default=None)
 
 
-def set_attendance_policy(policy: dict[str, Any] | None) -> None:
-    """用毕可传 ``{}`` 清空，避免测试间串味。"""
-    global ACTIVE_POLICY
-    ACTIVE_POLICY = dict(policy or {})
+def set_attendance_policy(policy: dict[str, Any] | None) -> Token[dict[str, Any] | None]:
+    return ACTIVE_POLICY.set(dict(policy or {}))
 
 
 @dataclass(frozen=True)
@@ -51,7 +49,7 @@ def normalize_group_text(*values: str | None) -> str:
 
 
 def _policy_company_keywords() -> tuple[str, ...]:
-    k = ACTIVE_POLICY.get("company_factory_group_keywords")
+    k = (ACTIVE_POLICY.get() or {}).get("company_factory_group_keywords")
     if isinstance(k, list) and k:
         return tuple(str(x).strip() for x in k if str(x).strip())
     return COMPANY_FACTORY_GROUP_KEYWORDS
@@ -79,7 +77,7 @@ def _segment_strings_to_ranges(segments: Any) -> tuple[TimeRange, ...] | None:
 
 
 def _policy_weekday_segments() -> tuple[TimeRange, ...]:
-    got = _segment_strings_to_ranges(ACTIVE_POLICY.get("weekday_segments"))
+    got = _segment_strings_to_ranges((ACTIVE_POLICY.get() or {}).get("weekday_segments"))
     return got if got is not None else DEFAULT_WEEKDAY_SEGMENTS
 
 
@@ -111,7 +109,7 @@ def resolve_schedule_ranges(
     weekday = work_date.weekday()
 
     if weekday == 6:
-        if ACTIVE_POLICY.get("sunday_empty_schedule", True):
+        if (ACTIVE_POLICY.get() or {}).get("sunday_empty_schedule", True):
             return ()
         return _policy_weekday_segments()
 

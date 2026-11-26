@@ -151,6 +151,48 @@ def test_performance_deduplicates_and_excludes_other_release_and_unknown(state):
     assert result["cost_cents"] is None
 
 
+def test_latest_identity_failure_overrides_older_success_in_any_order(state):
+    scope = self_model.execution_scope(state, now=NOW)
+    earlier = proof(scope, checked=NOW - timedelta(minutes=10))
+    later = proof(scope, checked=NOW, verdict="fail")
+    later["id"] = "self-check:later"
+    for events in ([earlier, later], [later, earlier]):
+        result = self_model.current_identity_evidence(scope, events, now=NOW)
+        assert result["status"] == "unavailable"
+        assert result["evidence_ref"] == "self-check:later"
+
+
+def test_ambiguous_identity_checks_never_claim_verified(state):
+    scope = self_model.execution_scope(state, now=NOW)
+    passed = proof(scope)
+    failed = proof(scope, verdict="fail")
+    failed["id"] = "self-check:conflicting"
+    result = self_model.current_identity_evidence(scope, [passed, failed], now=NOW)
+    assert result == {"status": "unverified", "reason": "conflicting_identity_proofs"}
+    failed["id"] = passed["id"]
+    assert (
+        self_model.current_identity_evidence(scope, [passed, failed], now=NOW)["status"]
+        == "unverified"
+    )
+
+
+def test_cycle_id_conflicts_are_quarantined_from_self_success(state):
+    scope = self_model.execution_scope(state, now=NOW)
+    original = {
+        "id": "cycle:conflict",
+        "status": "completed",
+        "actual_tokens": 7,
+        "details": {"execution_scope": scope},
+    }
+    contradicted = {**original, "status": "failed", "actual_tokens": 9}
+    valid = {**original, "id": "cycle:good"}
+    result = self_model.performance(scope, [original, contradicted, valid, valid])
+    assert result["conflicting_cycle_receipts"] == 1
+    assert result["current_scope_count"] == 1
+    assert result["statuses"] == {"completed": 1}
+    assert result["known_tokens"] == 7
+
+
 def test_promptfoo_candidate_is_historical_not_current_proof(state):
     event = {
         "id": "self-promptfoo:receipt",

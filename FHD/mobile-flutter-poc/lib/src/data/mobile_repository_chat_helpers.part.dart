@@ -107,8 +107,14 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     final dispatch = <String, Object?>{'scope': scope.split(':').last, 'channel': channel,
       'base_url': baseUrl, 'connection_base': await _client.resolveSessionBaseUrl(),
       'relay_id': relayId, 'client_request_id': turnId};
-    await store.saveTurnDispatch(conversationId, turnId, dispatch);
     await requireScope();
+    final claimed = await store.saveTurnDispatch(conversationId, turnId, dispatch);
+    await requireScope();
+    if (!claimed) {
+      throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: '原任务已登记，请核对原回执，未重新派发。',
+          body: {'turn_id': turnId, 'execution_state': 'unknown', 'requires_reconciliation': true});
+    }
     return dispatch;
   }
 

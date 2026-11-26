@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { useWorkflowEmployeeDesks, type WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
+import { employeeStatusOfTask } from '@/utils/workflowEmployeeTaskState'
+import { taskStatusLabel } from '@/utils/taskWorkspacePresentation'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const props = defineProps<{
   desks: WorkflowEmployeeDeskRow[]
@@ -21,6 +24,21 @@ const { statusLine, isBusy } = useWorkflowEmployeeDesks()
 const selectedRow = computed(() => props.desks.find(row => row.empId === props.selectedEmpId))
 
 const listRef = ref<HTMLElement | null>(null)
+const search = ref('')
+const filteredDesks = computed(() => props.desks.filter(row => `${row.shortName} ${row.panelTitle}`.toLowerCase().includes(search.value.trim().toLowerCase())))
+const EMPLOYEE_PAGE_SIZE = 60
+const employeePage = ref(0)
+const employeePageCount = computed(() => Math.max(1, Math.ceil(filteredDesks.value.length / EMPLOYEE_PAGE_SIZE)))
+const visibleDesks = computed(() =>
+  filteredDesks.value.slice(employeePage.value * EMPLOYEE_PAGE_SIZE, (employeePage.value + 1) * EMPLOYEE_PAGE_SIZE),
+)
+watch(search, () => { employeePage.value = 0 })
+watch(employeePageCount, count => { employeePage.value = Math.min(employeePage.value, count - 1) })
+const confirmedOn = (row: WorkflowEmployeeDeskRow) => wfEmp.confirmedEnabled[row.empId] === true
+const refreshPrefs = () => { void wfEmp.refreshConfirmedPreferences() }
+onMounted(() => { refreshPrefs(); window.addEventListener('focus', refreshPrefs) })
+onBeforeUnmount(() => window.removeEventListener('focus', refreshPrefs))
+watch(productReadAccountEpoch, refreshPrefs, { flush: 'post' })
 
 function select(empId: string) {
   emit('update:selectedEmpId', empId === props.selectedEmpId ? null : empId)
@@ -30,6 +48,9 @@ watch(
   () => props.selectedEmpId,
   async (id) => {
     if (!id || !listRef.value) return
+    const index = filteredDesks.value.findIndex(row => row.empId === id)
+    if (index < 0) return
+    employeePage.value = Math.floor(index / EMPLOYEE_PAGE_SIZE)
     await nextTick()
     const el = [...listRef.value.querySelectorAll<HTMLElement>('[data-emp-id]')].find(row => row.dataset.empId === id)
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -47,8 +68,10 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
 <template>
   <aside class="wfe-inspector" :class="{ 'wfe-inspector--pixel': pixelSkin }" role="complementary" aria-label="工作流员工列表与开关">
     <h3 class="wfe-inspector-h">员工与状态</h3>
-    <p class="wfe-inspector-lead">一键托管控制自动接单；任务进度与工作台同步，暂停、审批和结果在工作台处理。</p>
+    <p class="wfe-inspector-lead">一键托管控制自动接单；托管确认与实际执行状态分开显示。</p>
 
+    <input v-model="search" class="wfe-inspector-search" placeholder="搜索员工" aria-label="搜索员工" />
+    <p v-if="wfEmp.prefsError" class="wfe-inspector-sync" role="alert">托管状态未核实：{{ wfEmp.prefsError }} <button type="button" @click="refreshPrefs">重新同步</button></p>
     <section v-if="selectedRow" class="wfe-inspector-task" aria-label="选中员工的任务">
       <strong>{{ selectedRow.shortName }}</strong>
       <span>{{ statusLine(selectedRow) }}</span>
@@ -58,6 +81,7 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
         class="wfe-inspector-link"
       >{{ selectedRow.tasks?.[0]?.title || '查看当前任务' }}</router-link>
       <span v-else>当前可见任务中暂无该员工的记录</span>
+      <router-link v-for="task in (selectedRow.tasks || []).filter(task => task.task_id !== selectedRow?.taskId)" :key="task.task_id" :to="{ name: 'employee-workbench', query: { employee: selectedRow.empId, task: task.task_id } }" class="wfe-inspector-link wfe-inspector-task-row">{{ task.title }} · {{ taskStatusLabel(employeeStatusOfTask(task, selectedRow.empId)) }}</router-link>
       <div class="wfe-inspector-task-actions">
         <router-link :to="{ name: 'employee-workbench', query: { employee: selectedRow.empId } }" class="wfe-inspector-link">任务与结果</router-link>
         <router-link :to="{ name: 'employee-workbench', query: { employee: selectedRow.empId, compose: '1' } }" class="wfe-inspector-link">派发任务</router-link>
@@ -66,7 +90,7 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
 
     <div ref="listRef" class="wfe-inspector-list" role="list">
       <div
-        v-for="row in desks"
+        v-for="row in visibleDesks"
         :key="row.empId"
         class="wfe-inspector-row"
         :class="{ 'wfe-inspector-row--selected': selectedEmpId === row.empId }"
@@ -94,16 +118,22 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
         <button
           type="button"
           class="wfe-inspector-toggle"
-          :class="{ 'wfe-inspector-toggle--on': row.enabled }"
-          :aria-pressed="row.enabled"
-          :aria-label="(row.enabled ? '关闭' : '开启') + (row.promptOnly ? '上岗：' : '副窗托管：') + row.shortName"
-          @click="wfEmp.toggle(row.empId)"
+          :class="{ 'wfe-inspector-toggle--on': wfEmp.prefsReady && confirmedOn(row) }"
+          :disabled="!wfEmp.prefsReady || !!wfEmp.prefsSaving"
+          :aria-pressed="wfEmp.prefsReady ? confirmedOn(row) : undefined"
+          :aria-label="(confirmedOn(row) ? '关闭' : '开启') + (row.promptOnly ? '上岗：' : '副窗托管：') + row.shortName"
+          @click="wfEmp.setEmployeeEnabledConfirmed(row.empId, !confirmedOn(row))"
         >
-          {{ row.enabled ? '已开' : '已关' }}
+          {{ wfEmp.prefsSaving === row.empId ? '确认中' : !wfEmp.prefsReady ? '待核实' : confirmedOn(row) ? '已开' : '已关' }}
         </button>
       </div>
     </div>
 
+    <nav v-if="employeePageCount > 1" class="wfe-inspector-pagination" aria-label="员工列表分页">
+      <button type="button" :disabled="employeePage === 0" @click="employeePage--">上一页</button>
+      <span aria-live="polite">{{ employeePage + 1 }} / {{ employeePageCount }} · {{ filteredDesks.length }} 位员工</span>
+      <button type="button" :disabled="employeePage + 1 >= employeePageCount" @click="employeePage++">下一页</button>
+    </nav>
     <p v-if="!hideWorkspaceLink" class="wfe-inspector-foot">
       <router-link :to="{ name: 'workflow-employee-space', query: { employee: selectedEmpId || undefined }, hash: '#ews-workflow-monitor' }" class="wfe-inspector-link">
         在员工空间查看工位像素实况
@@ -152,7 +182,15 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
   overflow-wrap: anywhere;
 }
 
+.wfe-inspector-search { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--el-border-color, #dce5da); border-radius: 8px; padding: 8px 10px; color: var(--el-text-color-primary, #263c32); background: var(--el-bg-color, #fff); }
+.wfe-inspector-sync { font-size: 12px; overflow-wrap: anywhere; }
+.wfe-inspector-task-row { display: block; overflow-wrap: anywhere; }
+.wfe-inspector-toggle:disabled { cursor: default; opacity: .65; }
 .wfe-inspector-task-actions { display: flex; flex-wrap: wrap; gap: 16px; }
+
+.wfe-inspector-pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; font-size: 12px; }
+.wfe-inspector-pagination button { border: 1px solid var(--el-border-color, #ddd); border-radius: 8px; background: var(--el-bg-color, #fff); padding: 5px 8px; }
+.wfe-inspector-pagination button:disabled { opacity: .5; cursor: default; }
 
 .wfe-inspector-list {
   display: flex;

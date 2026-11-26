@@ -230,7 +230,11 @@ def actor_tool_denial(
     if "_credential_authorization" in ctx:
         from app.application.aiopen.service import api_key_permits_execution
 
-        if not api_key_permits_execution(ctx, tool_id, action):
+        try:
+            permitted = api_key_permits_execution(ctx, tool_id, action)
+        except OSError:
+            permitted = False
+        if not permitted:
             return _denial(
                 "tool_permission_denied",
                 "调用凭据已撤销、过期或未授权此能力",

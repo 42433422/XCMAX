@@ -15,8 +15,9 @@ from starlette.requests import Request
 
 from app.db.models import PurchaseUnit
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.mark.parametrize("entrypoint", ["chat", "voice"])
@@ -119,8 +120,8 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
                 request, {"message": message, "source": "normal"}
             )
             payload = json.loads(response.body)
-            receipt = payload
-            text = payload.get("response", "")
+            assert response.status_code == 202, payload
+            ack = payload
         else:
 
             async def invoke():
@@ -133,8 +134,10 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
                 )
 
             payload = asyncio.run(invoke())
-            receipt = payload["data"]["result"]
-            text = payload["data"]["result"].get("response", "")
+            ack = payload["data"]["result"]
+        assert ack.get("execution_state") == "queued", ack
+        receipt = finish_queued_chat(runtime, ack)
+        text = receipt.get("response", "")
         assert "已创建" not in text
         assert receipt["success"] is False
         assert receipt["execution_state"] == "unknown"

@@ -217,8 +217,11 @@ class PriorityEventQueue:
             del self._partitions[key]
         return event
 
-    def put(self, event: NeuroEvent) -> bool:
+    def put(self, event: NeuroEvent, *, preserve_identity: bool = False) -> bool:
         with self._lock:
+            if preserve_identity and event.metadata.event_id in self._event_ids:
+                self._dropped_count += 1
+                return False
             for attempt in range(4):
                 if event.metadata.event_id not in self._event_ids:
                     break

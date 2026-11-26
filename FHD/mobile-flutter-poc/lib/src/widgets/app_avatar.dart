@@ -28,6 +28,9 @@ class AppAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final source = imageSource?.trim();
     final effectiveSource = source == null || source.isEmpty ? null : source;
+    final decodeSize = avatarDecodeSize(
+      size, MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0,
+    );
 
     return Semantics(
       label: contentDescription,
@@ -36,48 +39,61 @@ class AppAvatar extends StatelessWidget {
         child: SizedBox.square(
           dimension: size,
           child: effectiveSource == null
-              ? _fallbackImage()
-              : _sourceImage(effectiveSource),
+              ? _fallbackImage(decodeSize)
+              : _sourceImage(effectiveSource, decodeSize),
         ),
       ),
     );
   }
 
-  Widget _sourceImage(String source) {
+  Widget _sourceImage(String source, int decodeSize) {
     // 员工头像池以资源路径下发，直接按内置资源加载。
     if (source.startsWith('assets/')) {
-      return Image.asset(
-        source,
+      return Image(
+        image: _boundedAvatar(AssetImage(source), decodeSize),
         fit: BoxFit.cover,
         width: size,
         height: size,
-        errorBuilder: (_, __, ___) => _fallbackImage(),
+        errorBuilder: (_, __, ___) => _fallbackImage(decodeSize),
       );
     }
     final provider = appAvatarImageProviderForSource(source);
-    if (provider == null) return _fallbackImage();
+    if (provider == null) return _fallbackImage(decodeSize);
     return Image(
-      image: provider,
+      image: _boundedAvatar(provider, decodeSize),
       fit: BoxFit.cover,
       width: size,
       height: size,
-      errorBuilder: (_, __, ___) => _fallbackImage(),
+      errorBuilder: (_, __, ___) => _fallbackImage(decodeSize),
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
-        return _fallbackImage();
+        return _fallbackImage(decodeSize);
       },
     );
   }
 
-  Widget _fallbackImage() {
-    return Image.asset(
-      fallback.assetPath,
+  Widget _fallbackImage(int decodeSize) {
+    return Image(
+      image: _boundedAvatar(AssetImage(fallback.assetPath), decodeSize),
       fit: BoxFit.cover,
       width: size,
       height: size,
     );
   }
 }
+
+/// Quantized physical pixel targets keep decoded variants bounded.
+int avatarDecodeSize(double logicalSize, double devicePixelRatio) {
+  final physical = logicalSize * devicePixelRatio;
+  if (!physical.isFinite || physical <= 0) return 64;
+  for (final bucket in const [64, 128, 256, 512]) {
+    if (physical <= bucket) return bucket;
+  }
+  return 512;
+}
+
+ImageProvider<Object> _boundedAvatar(ImageProvider<Object> provider, int size) =>
+    ResizeImage(provider, width: size, height: size, policy: ResizeImagePolicy.fit);
 
 ImageProvider<Object>? appAvatarImageProviderForSource(String source) {
   final text = source.trim();

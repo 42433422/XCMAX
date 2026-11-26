@@ -97,6 +97,19 @@ def test_sales_effect_requires_authoritative_readback_and_reverification_is_read
         event.remove(engine, "before_cursor_execute", observe)
 
 
+def test_open_effect_settlement_requires_original_verified_sales_readback(sales):
+    from app.application.agent_orchestrator.result_verification import verified_effect_receipt
+
+    case = prepare(sales, "confirm")
+    output = effect(sales, case)
+    assert output["success"] is True
+    assert verify(case, output)["status"] == "verified"
+    assert verified_effect_receipt(case.run, case.step)
+    # A contradictory receipt cannot settle an effect even if the step and report claim success.
+    case.call.output["success"] = False
+    assert not verified_effect_receipt(case.run, case.step)
+
+
 @pytest.mark.parametrize(
     "action", ["confirm", "cancel", "deliver", "invoice", "payment", "credit_note"]
 )

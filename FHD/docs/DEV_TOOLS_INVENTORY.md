@@ -22,6 +22,7 @@
 | check_layer_ratchet.py | `scripts/dev/check_layer_ratchet.py` | guard | no | stdlib |
 | check_mod_import_boundaries.py | `scripts/dev/check_mod_import_boundaries.py` | guard | no | stdlib |
 | check_net_deletion.py | `scripts/dev/check_net_deletion.py` | guard | yes | stdlib |
+| check_openapi_compat.py | `scripts/dev/check_openapi_compat.py` | guard | no | stdlib |
 | check_release_scope_evidence.py | `scripts/dev/check_release_scope_evidence.py` | guard | yes | stdlib |
 | check_requirements_lock.py | `scripts/dev/check_requirements_lock.py` | guard | no | stdlib |
 | check_schema_drift.py | `scripts/dev/check_schema_drift.py` | guard | no | stdlib |
@@ -51,6 +52,7 @@
 | verify_desktop_manifest_drift.py | `scripts/dev/verify_desktop_manifest_drift.py` | verify | no | stdlib |
 | verify_doc_claims.py | `scripts/dev/verify_doc_claims.py` | verify | no | stdlib |
 | verify_doc_versions.py | `scripts/dev/verify_doc_versions.py` | verify | no | stdlib |
+| verify_pg_history_upgrade.py | `scripts/dev/verify_pg_history_upgrade.py` | verify | yes | Alembic, SQLAlchemy, PostgreSQL |
 | verify_employee_contract.py | `scripts/dev/verify_employee_contract.py` | verify | no | stdlib |
 | verify_neuro_bus_prod.py | `scripts/dev/verify_neuro_bus_prod.py` | verify | no | stdlib |
 | verify_no_legacy_shims.py | `scripts/dev/verify_no_legacy_shims.py` | verify | no | stdlib |
@@ -76,4 +78,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：17 已纳入 ssot / 52 已登记清单 / 0 新游离
+合计：17 已纳入 ssot / 53 已登记清单 / 0 新游离

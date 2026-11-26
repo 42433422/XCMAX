@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -30,7 +31,7 @@ def _utc_iso() -> str:
 
 
 def _empty_state() -> dict[str, Any]:
-    return {"orders": {}, "entitlements": {}}
+    return {"orders": {}, "entitlements": {}, "unmatched_notifications": {}}
 
 
 def _load() -> dict[str, Any]:
@@ -41,17 +42,23 @@ def _load() -> dict[str, Any]:
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
             if not isinstance(data, dict):
-                return _empty_state()
+                raise ValueError("payment ledger root must be a mapping")
             data.setdefault("orders", {})
             if not isinstance(data["orders"], dict):
-                data["orders"] = {}
+                raise ValueError("payment orders must be a mapping")
             data.setdefault("entitlements", {})
             if not isinstance(data["entitlements"], dict):
-                data["entitlements"] = {}
+                raise ValueError("payment entitlements must be a mapping")
+            data.setdefault("unmatched_notifications", {})
+            if not isinstance(data["unmatched_notifications"], dict):
+                # Payment evidence must not be silently discarded or overwritten.
+                raise ValueError("unmatched payment evidence has invalid schema")
             return data
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("读取订单文件失败，将使用空表: %s", e)
-        return _empty_state()
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        # An unreadable existing ledger is not an empty payment ledger:
+        # treating it as empty could overwrite valid paid orders or evidence.
+        logger.error("payment order ledger unreadable: %s", e)
+        raise
 
 
 def _atomic_write(p: Path, payload: dict[str, Any]) -> None:
@@ -60,7 +67,15 @@ def _atomic_write(p: Path, payload: dict[str, Any]) -> None:
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(body)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, p)
+    if os.name == "posix":
+        directory_fd = os.open(str(p.parent), os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
 
 def record_checkout_pending(
@@ -91,6 +106,12 @@ def record_checkout_pending(
         }
         if local_user_id is not None:
             row["local_user_id"] = int(local_user_id)
+        if out_trade_no in orders or any(
+            item.get("out_trade_no") == out_trade_no
+            for item in data["unmatched_notifications"].values()
+            if isinstance(item, dict)
+        ):
+            raise ValueError("payment_order_requires_manual_identity_reconciliation")
         orders[out_trade_no] = row
         _atomic_write(order_store_path(), data)
     logger.info("[model-payment] order pending out_trade_no=%s plan_id=%s", out_trade_no, plan_id)
@@ -106,15 +127,62 @@ def apply_notify_paid(
     验签通过后调用：金额一致则置为 paid，重复通知幂等。
 
     返回 (reason, order_snapshot)；reason 取值：
-    marked_paid | already_paid | fulfillment_pending | unknown_order | amount_mismatch
+    marked_paid | already_paid | fulfillment_pending | unknown_order | amount_mismatch | trade_mismatch
+    | invalid_notify | reconciliation_required
     """
     with _lock:
         data = _load()
         orders: dict[str, Any] = data["orders"]
+        if not out_trade_no.strip() or not trade_no.strip() or not total_amount.strip():
+            return "invalid_notify", None
         o = orders.get(out_trade_no)
+        unmatched: dict[str, Any] = data.setdefault("unmatched_notifications", {})
+        if out_trade_no in orders and not isinstance(o, dict):
+            return "order_record_corrupt", None
         if not o:
-            logger.warning("[model-payment] notify: 未知 out_trade_no=%s", out_trade_no)
+            # Signed unknown payments must leave durable, retry-idempotent
+            # evidence. Never grant an entitlement or acknowledge the provider.
+            digest = hashlib.sha256(
+                json.dumps([out_trade_no, trade_no, total_amount], ensure_ascii=False).encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+            now = _utc_iso()
+            entry = unmatched.get(digest)
+            if not isinstance(entry, dict):
+                entry = {
+                    "out_trade_no": out_trade_no,
+                    "trade_no": trade_no,
+                    "total_amount": total_amount,
+                    "first_seen_at": now,
+                    "retry_count": 0,
+                    "state": "requires_reconciliation",
+                }
+            entry["last_seen_at"] = now
+            entry["retry_count"] = int(entry["retry_count"]) + 1
+            unmatched[digest] = entry
+            _atomic_write(order_store_path(), data)
+            logger.error(
+                "[model-payment] verified unmatched notification persisted out_trade_no=%s",
+                out_trade_no,
+            )
             return "unknown_order", None
+
+        # A newly located merchant order cannot silently consume a previously
+        # quarantined provider payment. Reconciliation must be explicit.
+        if any(
+            item.get("out_trade_no") == out_trade_no
+            for item in unmatched.values()
+            if isinstance(item, dict)
+        ):
+            return "reconciliation_required", dict(o)
+        # A provider trade identity may not pay two different local orders.
+        if any(
+            str(existing.get("trade_no") or "").strip() == trade_no
+            for key, existing in orders.items()
+            if key != out_trade_no and isinstance(existing, dict)
+        ):
+            return "trade_mismatch", dict(o)
 
         try:
             expected_yuan = f"{int(o['amount_cents']) / 100:.2f}"
@@ -129,6 +197,28 @@ def apply_notify_paid(
                 total_amount,
             )
             return "amount_mismatch", dict(o)
+
+        # A replay may only acknowledge the provider transaction originally
+        # bound to this order. A different signed trade ID is not the same
+        # payment, even when the amount and merchant order number match.
+        saved_trade_no = str(o.get("trade_no") or "").strip()
+        if saved_trade_no and trade_no != saved_trade_no:
+            logger.error(
+                "[model-payment] notify trade identity conflict for out_trade_no=%s",
+                out_trade_no,
+            )
+            return "trade_mismatch", dict(o)
+
+        # A delayed paid callback cannot undo a closed/refunded state or
+        # override an unresolved refund. Hold the identity for reconciliation.
+        if o.get("status") in {
+            "closed",
+            "refunded",
+            "partially_refunded",
+            "refund_requested",
+            "refund_pending_reconciliation",
+        }:
+            return "terminal_order_conflict", dict(o)
 
         now = _utc_iso()
         if o.get("status") == "paid":
@@ -339,3 +429,141 @@ def json_store_has_unmigrated_orders() -> bool:
         data = _load()
     orders = data.get("orders")
     return bool(isinstance(orders, dict) and orders)
+
+
+def list_unmatched_notifications() -> list[dict[str, Any]]:
+    """Read-only durable evidence for manual gateway reconciliation.
+
+    This JSON adapter is single-host legacy; it does not prove PostgreSQL
+    multi-process exactly-once semantics or independently verified settlement.
+    """
+    with _lock:
+        entries = _load().get("unmatched_notifications", {})
+    return [dict(item) for item in entries.values() if isinstance(item, dict)]
+
+
+def reserve_refund_attempt(
+    *, out_trade_no: str, out_request_no: str, amount_cents: int
+) -> tuple[str, dict[str, Any] | None]:
+    """Atomically reserve one distinct refund request in the original ledger.
+
+    No provider request may be made unless this durable claim is committed.
+    Pending or unknown provider outcomes cannot be auto-replayed. This is a
+    single-process JSON legacy safeguard, not PostgreSQL multi-process safety.
+    """
+    if (
+        not out_trade_no
+        or not out_request_no
+        or len(out_request_no) > 64
+        or type(amount_cents) is not int
+        or amount_cents <= 0
+    ):
+        return "refund_request_invalid", None
+    with _lock:
+        state = _load()
+        order = state["orders"].get(out_trade_no)
+        if not isinstance(order, dict):
+            return "refund_order_missing", None
+        if order.get("status") not in {"paid", "partially_refunded"}:
+            return "refund_order_not_settled", dict(order)
+        if type(order.get("amount_cents")) is not int or order["amount_cents"] <= 0:
+            return "refund_order_amount_missing", dict(order)
+        attempts = order.setdefault("refund_attempts", {})
+        if not isinstance(attempts, dict):
+            return "refund_history_corrupt", dict(order)
+        if out_request_no in attempts:
+            existing = attempts[out_request_no]
+            return "refund_request_replay", dict(existing) if isinstance(existing, dict) else None
+        confirmed = 0
+        for prior in attempts.values():
+            if not isinstance(prior, dict):
+                return "refund_history_corrupt", None
+            if prior.get("state") != "confirmed":
+                return "refund_requires_reconciliation", dict(order)
+            if type(prior.get("amount_cents")) is not int or prior["amount_cents"] < 0:
+                return "refund_history_corrupt", None
+            confirmed += prior["amount_cents"]
+        if confirmed + amount_cents > order["amount_cents"]:
+            return "refund_amount_exceeds_original", dict(order)
+        attempts[out_request_no] = {
+            "out_request_no": out_request_no,
+            "amount_cents": amount_cents,
+            "state": "pending_provider_confirmation",
+            "created_at": _utc_iso(),
+        }
+        order["status"] = "refund_pending_reconciliation"
+        _atomic_write(order_store_path(), state)
+        return "refund_reserved", dict(attempts[out_request_no])
+
+
+def observe_refund_provider_result(
+    *, out_trade_no: str, out_request_no: str, provider_reported_success: bool
+) -> bool:
+    """Persist an observation, never confuse provider response with settlement."""
+    with _lock:
+        state = _load()
+        order = state["orders"].get(out_trade_no)
+        attempt = (
+            (order.get("refund_attempts") or {}).get(out_request_no)
+            if isinstance(order, dict)
+            else None
+        )
+        if not isinstance(attempt, dict) or attempt.get("state") not in {
+            "pending_provider_confirmation",
+            "provider_reported_success",
+            "provider_response_unknown",
+        }:
+            return False
+        attempt["state"] = (
+            "provider_reported_success"
+            if provider_reported_success
+            else "provider_response_unknown"
+        )
+        attempt["last_provider_response_at"] = _utc_iso()
+        _atomic_write(order_store_path(), state)
+        return True
+
+
+def confirm_refund_from_provider_query(
+    *, out_trade_no: str, out_request_no: str, amount_cents: int
+) -> tuple[str, dict[str, Any] | None]:
+    """Confirm only the same original refund after a separate gateway query.
+
+    This verifies the provider query identity and requested amount. It does NOT
+    certify bank settlement or financial profit; independent external evidence
+    is still required for those claims.
+    """
+    with _lock:
+        state = _load()
+        order = state["orders"].get(out_trade_no)
+        attempt = (
+            (order.get("refund_attempts") or {}).get(out_request_no)
+            if isinstance(order, dict)
+            else None
+        )
+        if not isinstance(order, dict) or not isinstance(attempt, dict):
+            return "refund_request_missing", None
+        if type(amount_cents) is not int or attempt.get("amount_cents") != amount_cents:
+            return "refund_amount_mismatch", dict(attempt)
+        if attempt.get("state") == "confirmed":
+            return "already_confirmed", dict(attempt)
+        if attempt.get("state") not in {
+            "pending_provider_confirmation",
+            "provider_reported_success",
+            "provider_response_unknown",
+        }:
+            return "refund_request_invalid_state", dict(attempt)
+        attempts = order["refund_attempts"]
+        total = sum(
+            x["amount_cents"]
+            for x in attempts.values()
+            if isinstance(x, dict) and (x.get("state") == "confirmed" or x is attempt)
+        )
+        if type(order.get("amount_cents")) is not int or total > order["amount_cents"]:
+            return "refund_amount_exceeds_original", dict(attempt)
+        attempt["state"] = "confirmed"
+        attempt["confirmed_at"] = _utc_iso()
+        order["refunded_amount_cents"] = total
+        order["status"] = "refunded" if total == order["amount_cents"] else "partially_refunded"
+        _atomic_write(order_store_path(), state)
+        return "refund_confirmed", dict(attempt)

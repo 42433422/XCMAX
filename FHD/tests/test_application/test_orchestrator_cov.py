@@ -491,6 +491,39 @@ def test_prepare_repair_or_retry_not_auto_executable_returns_false():
     assert result is False
 
 
+@pytest.mark.parametrize(
+    ("policy_decision", "allowed", "requires_confirmation", "expected"),
+    [
+        ("require_human", False, True, False),
+        ("cooldown", False, True, False),
+        ("blocked", False, False, False),
+        ("allow", False, False, False),
+        ("approved", True, True, False),
+        ("approved", True, False, True),
+    ],
+)
+def test_auto_execution_respects_autonomy_policy(
+    monkeypatch, policy_decision, allowed, requires_confirmation, expected
+):
+    from app.application.agent_orchestrator.run_repair import RunRepair
+    from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
+
+    decision = RiskDecision(
+        requires_confirmation=requires_confirmation,
+        reason="policy test",
+        allowed=allowed,
+        risk_level=RiskLevel.MEDIUM,
+        decision=policy_decision,
+    )
+    monkeypatch.setattr(
+        "app.domain.autonomy.autonomy_guard.evaluate_risk",
+        Mock(return_value=decision),
+    )
+    step = _make_step(risk="medium", idempotent=False)
+    context = {"chat_approval_mode": "auto"}
+    assert RunRepair.can_auto_execute(step, context) is expected
+
+
 # ---------------------------------------------------------------------------
 # Line 871-872: repair limit exceeded
 # ---------------------------------------------------------------------------

@@ -149,6 +149,14 @@
   overflow-wrap: anywhere;
 }
 
+/* Long live responses remain selectable without parsing/sanitizing the entire
+   growing Markdown document on every animation frame. Full Markdown returns on completion. */
+.message-html--streaming-long {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
 .message-html > :first-child {
   margin-top: 0;
 }
@@ -470,6 +478,7 @@
   border-radius: 16px;
   padding: 13px 14px;
   resize: none;
+  field-sizing: content;
   font-family: inherit;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);

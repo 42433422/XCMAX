@@ -40,9 +40,9 @@ from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.domain.shared_services import user_memory_service
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 def _seed_order(actor):
@@ -168,7 +168,7 @@ def test_sql_approval_cannot_forget_its_original_enterprise_binding(
         )
         waiting = state.drain(run.run_id)
         assert waiting.status == "waiting_user", waiting.to_dict()
-        child_id = waiting.metadata["codex_runtime"]["calls"]["confirm"]["child_run_id"]
+        child_id = waiting.metadata["xiaox_runtime"]["calls"]["confirm"]["child_run_id"]
         run = repository.get(child_id)
         assert run.status == "waiting_user" and not run.tool_calls
         grant = issue_approval_grant(run, principal_id=str(actor.user_id))
@@ -285,15 +285,22 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     ]
 
     def review(prompt):
-        result = fixture_goal_review(prompt, kind="write")
+        verified = {
+            row["action"]: row["evidence_id"]
+            for row in prompt["evidence"]
+            if row["receipt"].get("verified") is True
+        }
+        result = fixture_goal_review(
+            prompt, kind="write", source="先审批确认订单", evidence_ids=[verified["confirm"]]
+        )
         result["goals"].append(
             {
                 "goal_id": "original-business-objective",
                 "source_id": "objective",
                 "source": prompt["host_constraints"]["objective"],
-                "kind": "constraint",
+                "kind": "write",
                 "status": "satisfied",
-                "evidence_ids": [row["evidence_id"] for row in prompt["evidence"]],
+                "evidence_ids": [verified["deliver"]],
                 "reason": "Verify the original order remaining quantity against independently read delivery receipts",
             }
         )
@@ -342,7 +349,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
 
         waiting = state.drain(run.run_id)
         assert waiting.status == "waiting_user", waiting.to_dict()
-        confirm_id = waiting.metadata["codex_runtime"]["calls"]["confirm"]["child_run_id"]
+        confirm_id = waiting.metadata["xiaox_runtime"]["calls"]["confirm"]["child_run_id"]
         confirm_child = repository.get(confirm_id)
         assert confirm_child.steps[0].risk == "high" and not confirm_child.tool_calls
         confirmed, _ = _approve_and_execute(actor, repository, queue, dispatcher, confirm_child)
@@ -357,7 +364,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
 
         waiting = state.drain(run.run_id)
         assert waiting.status == "waiting_user", waiting.to_dict()
-        deliver_id = waiting.metadata["codex_runtime"]["calls"]["deliver"]["child_run_id"]
+        deliver_id = waiting.metadata["xiaox_runtime"]["calls"]["deliver"]["child_run_id"]
         deliver_child = repository.get(deliver_id)
         assert deliver_child.steps[0].risk == "high" and not deliver_child.tool_calls
         delivered, last_grant = _approve_and_execute(
@@ -366,8 +373,12 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
         assert delivered.status == "completed", delivered.to_dict()
         assert len(delivered.tool_calls) == 1
         completed = state.drain(run.run_id)
-        assert completed.status == "completed", completed.final_output
-        assert completed.final_output["codex_result"]["business_completed"] is True
+        result = completed.final_output["xiaox_result"]
+        assert completed.status == "completed", (
+            result.get("error"),
+            completed.metadata.get("runtime_goal_verification"),
+        )
+        assert completed.final_output["xiaox_result"]["business_completed"] is True
         assert len(state.model_requests) == 1
         for child in (confirmed, delivered):
             approvals = [event for event in child.events if event.event_type == "step.approved"]

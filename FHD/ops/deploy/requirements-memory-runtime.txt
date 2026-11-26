@@ -1,0 +1,2 @@
+# FastEmbed version already pinned by requirements-server-api.lock.txt / uv.lock intent-semantic extra.
+fastembed==0.9.1

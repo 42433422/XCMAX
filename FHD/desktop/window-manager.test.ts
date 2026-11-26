@@ -28,7 +28,7 @@ const sessionMocks = vi.hoisted(() => {
   }
 })
 
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import fs from 'node:fs'
 import http from 'node:http'
 import { createHmac } from 'node:crypto'
@@ -37,7 +37,7 @@ vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
   app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false, focus: vi.fn(), isHidden: vi.fn(() => false) },
   dialog: { showErrorBox: vi.fn() },
-  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
+  screen: { on: vi.fn(), removeListener: vi.fn(), getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
   shell: {},
   session: {
     defaultSession: { cookies: { get: sessionMocks.defaultGet } },
@@ -78,7 +78,7 @@ vi.mock('./desktop-navigation', () => ({
   isTrustedDesktopOrigin: vi.fn(),
 }))
 
-import { clampWindowBounds } from './window-state'
+import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { handleDesktopWindowOpen, handleDesktopWillNavigate, isTrustedDesktopOrigin } from './desktop-navigation'
 import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, resetAuxiliaryPartitionSerialForTests, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
@@ -97,6 +97,10 @@ function makeWindow(overrides: Partial<{
     isDestroyed: vi.fn(() => false),
     isVisible: vi.fn(() => overrides.isVisible ?? true),
     isMinimized: vi.fn(() => overrides.isMinimized ?? false),
+    isMaximized: vi.fn(() => false),
+    isFullScreen: vi.fn(() => false),
+    getMinimumSize: vi.fn(() => [800, 640]),
+    setMinimumSize: vi.fn(),
     show: vi.fn(),
     hide: vi.fn(),
     focus: vi.fn(),
@@ -120,6 +124,8 @@ beforeEach(() => {
   desktopRuntime.mainApplicationReady = null
   desktopRuntime.auxiliaryWindows.clear()
   vi.mocked(BrowserWindow).mockReset()
+  vi.mocked(screen.on).mockClear()
+  vi.mocked(screen.removeListener).mockClear()
   vi.mocked(isTrustedDesktopOrigin).mockReset()
 })
 
@@ -276,11 +282,13 @@ describe('toggleMainWindow（托盘显隐切换语义保持不变）', () => {
   })
 })
 
-it('拉回几乎不在工作区里的窗口，避免托盘单击后仍看不见', () => {
+it('拉回几乎不在工作区里的窗口，避免托盘单击后仍看不见', async () => {
   const win = makeWindow({ isVisible: false })
   win.getBounds = vi.fn(() => ({ x: -4000, y: 80, width: 1280, height: 800 }))
   desktopRuntime.mainWindow = win
   vi.mocked(clampWindowBounds).mockClear()
+  const actual = await vi.importActual<typeof import('./window-state')>('./window-state')
+  vi.mocked(clampWindowBounds).mockImplementationOnce(actual.clampWindowBounds)
   showMainWindow()
   expect(clampWindowBounds).toHaveBeenCalled()
   expect(win.setBounds).toHaveBeenCalled()
@@ -317,6 +325,40 @@ it('macOS 托盘唤起会抢前台，隐藏窗口才能露出来', () => {
   } finally {
     Object.defineProperty(process, 'platform', { value: original, configurable: true })
   }
+})
+
+it('restores maximized presentation and persists normal bounds with maximized state', async () => {
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  vi.mocked(readWindowState).mockReturnValueOnce({ x: 50, y: 40, width: 1100, height: 700, maximized: true })
+  const normal = { x: 50, y: 40, width: 1100, height: 700 }
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), maximize: vi.fn(), isMaximized: vi.fn(() => true),
+    getNormalBounds: vi.fn(() => normal), isFullScreen: vi.fn(() => false),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'http://127.0.0.1:17500/'),
+      setWindowOpenHandler: vi.fn(), session: { on: vi.fn() },
+      executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  const firstPaint = win.once.mock.calls.find(([name]) => name === 'ready-to-show')?.[1] as (() => void) | undefined
+  expect(firstPaint).toBeTypeOf('function')
+  firstPaint?.()
+  expect(win.maximize).toHaveBeenCalledOnce()
+  expect(win.show).toHaveBeenCalledOnce()
+  const onMaximize = win.on.mock.calls.find(([name]) => name === 'maximize')?.[1] as (() => void) | undefined
+  expect(onMaximize).toBeTypeOf('function')
+  onMaximize?.()
+  await vi.waitFor(() => expect(vi.mocked(writeWindowState)).toHaveBeenCalledWith(
+    expect.stringContaining('window-state.json'),
+    { ...normal, maximized: true },
+  ))
+  await desktopRuntime.mainApplicationReady?.catch(() => undefined)
 })
 
 it('keeps the activated startup window and its in-flight readiness task', async () => {
@@ -526,6 +568,12 @@ describe('同一进程附加窗口', () => {
         for (const cb of listeners.closed || []) cb()
       }),
       getBounds: vi.fn(() => ({ x: 10, y: 10, width: 1200, height: 800 })),
+      isMinimized: vi.fn(() => false),
+      isMaximized: vi.fn(() => false),
+      isFullScreen: vi.fn(() => false),
+      getMinimumSize: vi.fn(() => [800, 640]),
+      setMinimumSize: vi.fn(),
+      setBounds: vi.fn(),
       loadURL: vi.fn(async () => undefined),
       webContents: {
         on: vi.fn(),
@@ -555,6 +603,51 @@ describe('同一进程附加窗口', () => {
     created[0].destroy()
     expect(desktopWindowCount()).toBe(MAX_DESKTOP_WINDOWS - 1)
     expect(openAuxiliaryWindow(url)).not.toBeNull()
+  })
+
+  it('clamps auxiliary bounds and native minimum size to a small secondary display', async () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    const main = makeWindow()
+    const origin = { x: -710, y: 20, width: 1280, height: 800 }
+    main.getBounds = vi.fn(() => origin)
+    desktopRuntime.mainWindow = main
+    const workArea = { x: -720, y: 0, width: 720, height: 580 }
+    vi.mocked(screen.getDisplayMatching).mockReturnValueOnce({ workArea } as Electron.Display)
+    const actual = await vi.importActual<typeof import('./window-state')>('./window-state')
+    vi.mocked(clampWindowBounds).mockImplementationOnce(actual.clampWindowBounds)
+    vi.mocked(BrowserWindow).mockImplementationOnce(function () {
+      return fakeAux() as unknown as BrowserWindow
+    })
+    expect(openAuxiliaryWindow('http://127.0.0.1:17500/')).not.toBeNull()
+    expect(screen.getDisplayMatching).toHaveBeenCalledWith(origin)
+    expect(BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({
+      ...workArea, minWidth: 720, minHeight: 580,
+    }))
+  })
+
+  it('recovers an auxiliary window after display removal and unregisters listeners on close', async () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    desktopRuntime.mainWindow = makeWindow()
+    const aux = fakeAux()
+    vi.mocked(BrowserWindow).mockImplementationOnce(function () { return aux as unknown as BrowserWindow })
+    expect(openAuxiliaryWindow('http://127.0.0.1:17500/')).not.toBeNull()
+    const callbacks = vi.mocked(screen.on).mock.calls as unknown as Array<[string, () => void]>
+    const recover = callbacks.find(([event]) => event === 'display-removed')?.[1]
+    expect(recover).toBeTypeOf('function')
+    const workArea = { x: 0, y: 20, width: 720, height: 580 }
+    aux.getBounds.mockReturnValue({ x: -1200, y: 30, width: 1200, height: 800 })
+    vi.mocked(screen.getDisplayMatching).mockReturnValueOnce({ workArea } as Electron.Display)
+    const actual = await vi.importActual<typeof import('./window-state')>('./window-state')
+    vi.mocked(clampWindowBounds).mockImplementationOnce(actual.clampWindowBounds)
+    recover?.()
+    expect(aux.setMinimumSize).toHaveBeenCalledWith(720, 580)
+    expect(aux.setBounds).toHaveBeenCalledWith(workArea)
+    aux.isMaximized.mockReturnValue(true)
+    recover?.()
+    expect(aux.setBounds).toHaveBeenCalledTimes(1)
+    aux.destroy()
+    expect(screen.removeListener).toHaveBeenCalledWith('display-removed', recover)
+    expect(screen.removeListener).toHaveBeenCalledWith('display-metrics-changed', recover)
   })
 
   it('拒绝不可信地址，且不创建窗口', () => {

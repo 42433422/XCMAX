@@ -197,3 +197,33 @@ async def test_partition_task_cancelled_before_start_has_one_terminal_outcome(
         "unhandled": 0,
         "cancelled": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_stream_ingress_does_not_double_count_origin_admission(isolated_bus, monkeypatch):
+    """Redis transport ACK is counted once; local dispatch is not a second publish."""
+    from unittest.mock import MagicMock
+
+    from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
+
+    bus = isolated_bus()
+    bridge = RedisStreamsBridge(bus=bus, redis_client=MagicMock())
+    monkeypatch.setattr(bridge, "publish_remote", lambda event: "1-0")
+    bus._redis_bridge = bridge
+    bus._running = True
+    bus._shutdown = False
+    event = _event("stream.once")
+    before = _snapshot()
+    waiter = asyncio.get_running_loop().create_future()
+    try:
+        assert bus.publish(event)
+        assert _delta(before)["accepted"] == 1
+        bus._stream_waiters[id(event)] = waiter
+        assert bus.ingest_remote_event(event)
+        assert bus._event_queue.size() == 1
+        assert _delta(before)["accepted"] == 1
+        assert bus._published_count == 1
+    finally:
+        bus._stream_waiters.clear()
+        bus._running = False
+        bus._executor.shutdown(wait=False)

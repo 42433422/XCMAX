@@ -1,0 +1,61 @@
+name: Frontend mobile E04 migration and reconciliation gate
+
+on:
+  push:
+    branches:
+      - integration/frontend-desktop-mobile-20261125
+    paths:
+      - 'FHD/mobile-flutter-poc/lib/src/data/offline/mobile_offline_store.dart'
+      - 'FHD/mobile-flutter-poc/lib/src/data/mobile_repository_chat.part.dart'
+      - 'FHD/mobile-flutter-poc/test/offline_store_test.dart'
+      - 'FHD/mobile-flutter-poc/test/offline_store_migration_test.dart'
+      - 'FHD/mobile-flutter-poc/test/mobile_lan_ambiguous_dispatch_test.dart'
+      - '.github/workflows/frontend-mobile-e04-integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'FHD/mobile-flutter-poc/lib/src/data/offline/mobile_offline_store.dart'
+      - 'FHD/mobile-flutter-poc/lib/src/data/mobile_repository_chat.part.dart'
+      - 'FHD/mobile-flutter-poc/test/offline_store_test.dart'
+      - 'FHD/mobile-flutter-poc/test/offline_store_migration_test.dart'
+      - 'FHD/mobile-flutter-poc/test/mobile_lan_ambiguous_dispatch_test.dart'
+      - '.github/workflows/frontend-mobile-e04-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One completed, immutable HEAD is the evidence. Parallel frontend commits
+# must not cancel the previous SHA before its tests finish.
+concurrency:
+  group: frontend-e04-integration-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  cache-migration-and-original-receipts:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Read pinned Flutter SDK
+        id: flutter_sdk
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.flutter_sdk.outputs.version }}
+          channel: stable
+          cache: true
+      - name: Flutter pub get
+        run: flutter pub get
+      - name: Flutter analyze
+        run: flutter analyze
+      - name: File-backed v2-v3, TTL and transport receipt regressions
+        run: |
+          env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy NO_PROXY=127.0.0.1,localhost \
+            flutter test --no-pub \
+              test/offline_store_test.dart \
+              test/offline_store_migration_test.dart \
+              test/mobile_lan_ambiguous_dispatch_test.dart

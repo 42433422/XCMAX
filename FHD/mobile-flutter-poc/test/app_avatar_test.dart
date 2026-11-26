@@ -3,6 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/widgets/app_avatar.dart';
 
 void main() {
+  test('avatar decode targets are bounded and quantized by physical size', () {
+    expect(avatarDecodeSize(36, 2), 128);
+    expect(avatarDecodeSize(40, 3), 128);
+    expect(avatarDecodeSize(180, 3), 512);
+    expect(avatarDecodeSize(double.infinity, 2), 64);
+    expect(avatarDecodeSize(0, 1), 64);
+  });
+
   test('AppAvatar resolves local file sources for mobile avatars', () {
     final provider = appAvatarImageProviderForSource('/tmp/xcagi-avatar.png');
 

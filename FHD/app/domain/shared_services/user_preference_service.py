@@ -4,8 +4,13 @@
 提供用户偏好设置的业务逻辑。
 """
 
+import hashlib
+import json
 import logging
+from collections.abc import Callable
 from typing import cast
+
+from sqlalchemy import text
 
 from app.db.models import UserPreference
 from app.db.session import get_db
@@ -13,6 +18,24 @@ from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 logger = logging.getLogger(__name__)
+
+
+def _lock_preference_write(db, user_id: str, preference_key: str) -> None:
+    """Serialize writes even before the first preference row exists."""
+    dialect = db.get_bind().dialect.name
+    if dialect == "sqlite":
+        # Acquire the database writer reservation before reading the old value.
+        db.execute(text("BEGIN IMMEDIATE"))
+    elif dialect == "postgresql":
+        identity = json.dumps([user_id, preference_key], ensure_ascii=False)
+        lock_id = int.from_bytes(
+            hashlib.sha256(identity.encode("utf-8")).digest()[:8], "big", signed=True
+        )
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(CAST(:lock_id AS bigint))"), {"lock_id": lock_id}
+        )
+    else:
+        raise ValueError("Unsupported database dialect for atomic preference writes")
 
 
 class UserPreferenceService(NeuroEventPublisherMixin):
@@ -57,28 +80,42 @@ class UserPreferenceService(NeuroEventPublisherMixin):
         Returns:
             是否设置成功
         """
+        self.mutate_preference(user_id, preference_key, lambda _old: preference_value)
+        return True
+
+    def mutate_preference(
+        self, user_id: str, preference_key: str, transform: Callable[[str | None], str]
+    ) -> str:
+        """Read, transform and persist under one database transaction."""
         with get_db() as db:
-            preference = (
+            _lock_preference_write(db, user_id, preference_key)
+            rows = (
                 db.query(UserPreference)
                 .filter(
                     UserPreference.user_id == user_id,
                     UserPreference.preference_key == preference_key,
                 )
-                .first()
+                .limit(2)
+                .all()
             )
-
-            if preference:
-                preference.preference_value = preference_value
+            if len(rows) > 1:
+                raise ValueError("Ambiguous duplicate preference rows")
+            preference = rows[0] if rows else None
+            value = transform(preference.preference_value if preference else None)
+            if not isinstance(value, str):
+                raise TypeError("Preference value must be a string")
+            if preference is not None:
+                preference.preference_value = value
             else:
-                preference = UserPreference(
-                    user_id=user_id,
-                    preference_key=preference_key,
-                    preference_value=preference_value,
+                db.add(
+                    UserPreference(
+                        user_id=user_id,
+                        preference_key=preference_key,
+                        preference_value=value,
+                    )
                 )
-                db.add(preference)
-
-            db.commit()
-            return True
+            # The existing get_db scope owns commit and rollback.
+        return value
 
     def get_all_preferences(self, user_id: str) -> dict[str, str]:
         """
@@ -107,6 +144,7 @@ class UserPreferenceService(NeuroEventPublisherMixin):
             是否删除成功
         """
         with get_db() as db:
+            _lock_preference_write(db, user_id, preference_key)
             result = (
                 db.query(UserPreference)
                 .filter(

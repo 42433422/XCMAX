@@ -96,7 +96,7 @@ def test_deployment_runtime_check_missing_explicit_config_is_nonzero_without_acc
     monkeypatch.setattr(brain, "BrainClient", forbidden)
     monkeypatch.setattr(brain, "SessionStore", forbidden)
     monkeypatch.setattr(configuration, "get_account_runtime_settings", forbidden)
-    monkeypatch.setattr("app.infrastructure.codex.qualification.qualify_runtime", forbidden)
+    monkeypatch.setattr("app.infrastructure.xiaox.qualification.qualify_runtime", forbidden)
     assert brain.main(["--json", "runtime-check", "--deployment", "--retry"]) == 1
     result = json.loads(capsys.readouterr().out)
     assert result["success"] is False and result["error_code"] == "runtime_configuration_required"

@@ -2,81 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
-import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
-import 'package:xcagi_flutter_poc/src/data/ai_employee_profile.dart';
-import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/features/workspace/employee_workspace_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/webview/desktop_tool_webview_screen.dart';
 
-const employee = AiEmployeeProfile(
-  modId: 'account-mod',
-  modName: '企业应用',
-  modDescription: '',
-  modVersion: '',
-  modAuthor: '',
-  industryName: '',
-  employeeId: 'employee-one',
-  name: '订单助理',
-  title: '订单助理',
-  summary: '核对订单与进度',
-  apiBasePath: '/api/mod/account-mod',
-  phoneChannel: 'chat',
-  workflowPlaceholder: false,
-  profileSource: 'installed',
-  marketConnected: true,
-  marketPkgId: '',
-  marketVersion: '',
-  marketAuthor: '',
-  marketMaterialCategory: '',
-  marketLicenseScope: '',
-  marketSecurityLevel: '',
-);
-
-class Api extends MobileApiClient {
-  Api()
-      : super(
-            sessionStore: MemoryMobileSessionStore(MobileSessionData.empty
-                .copyWith(
-                    userId: 1,
-                    accountKind: 'enterprise',
-                    accessToken: 'account-one')));
-  bool enabled = false;
-  bool failPrefs = false;
-  Completer<Map<String, Object?>>? pending;
-  final writes = <(String, bool)>[];
-  Map<String, Object?> response() => {
-        'success': true,
-        'owner_id': 'owner-one',
-        'data': {
-          'workflow_ai_employees': {'employee-one': enabled}
-        }
-      };
-  @override
-  Future<Map<String, Object?>> workspacePreferences() async {
-    if (failPrefs) throw StateError('offline');
-    return response();
-  }
-
-  @override
-  Future<Map<String, Object?>> setWorkspaceEmployeeEnabled(
-      String id, bool value,
-      {required int expectedGeneration, required String expectedBase}) async {
-    writes.add((id, value));
-    if (pending != null) return pending!.future;
-    enabled = value;
-    return response();
-  }
-}
-
-class Repository extends MobileRepository {
-  Repository(Api api) : super(client: api);
-  @override
-  Future<List<AiEmployeeProfile>> loadAiEmployees() async => [employee];
-  @override
-  Future<List<MobileTaskSummary>> loadTasks({int limit = 50}) async => [];
-}
+import 'employee_workspace_fixture.dart';
 
 Future<void> show(WidgetTester tester, Api api) async {
   tester.view.physicalSize = const Size(430, 1400);
@@ -92,6 +22,17 @@ Future<void> show(WidgetTester tester, Api api) async {
 }
 
 void main() {
+  test('employee task identity and step status use explicit assignment data', () {
+    final task = MobileTaskSummary.fromJson({
+      'task_id': 't-1', 'status': 'running', 'employee_ids': ['employee-one', 'employee-two'],
+      'employee_assignments': [{'employee_id': 'employee-one', 'status': 'completed'}, {'employee_id': 'employee-two', 'status': 'running'}],
+    });
+    expect(task.employeeIds, ['employee-one', 'employee-two']);
+    expect(task.employeeStatus('employee-one'), 'completed');
+    expect(task.employeeStatus('employee-two'), 'running');
+    final uncertain = MobileTaskSummary.fromJson({'status': 'completed', 'outcome_uncertain': true});
+    expect(uncertain.employeeStatus('employee-one'), 'unknown');
+  });
   testWidgets('native employee cards search without creating a WebView',
       (tester) async {
     final api = Api();

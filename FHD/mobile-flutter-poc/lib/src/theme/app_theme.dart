@@ -1,30 +1,32 @@
 import 'package:flutter/material.dart';
 
+import 'design_tokens.generated.dart';
+
 class AppTheme {
-  static const brand = Color(0xFF6366F1);
-  static const brandContainer = Color(0xFFEAEBFE);
-  static const brandGradientEnd = Color(0xFF7C3AED);
-  static const danger = Color(0xFFEF4444);
-  static const success = Color(0xFF10B981);
-  static const warning = Color(0xFFF59E0B);
-  static const weChatOnline = Color(0xFF10B981);
-  static const momentAccent = Color(0xFF5145CD);
-  static const momentChipBg = Color(0xFFECEDFE);
-  static const replyBoxBg = Color(0xFFF4F5F7);
-  static const page = Color(0xFFF5F6FA);
-  static const surface = Color(0xFFFFFFFF);
-  static const surfaceHigh = Color(0xFFE8E9EB);
-  static const divider = Color(0xFFDEE0E3);
-  static const textPrimary = Color(0xFF1F2329);
-  static const textSecondary = Color(0xFF646A73);
-  static const textStrongSecondary = Color(0xFF494E56);
-  static const textTertiary = Color(0xFF8F959E);
+  static const brand = DesignTokens.semanticLightPrimary;
+  static const brandContainer = DesignTokens.colorsBrandPrimaryContainer;
+  static const brandGradientEnd = DesignTokens.colorsBrandGradientEnd;
+  static const danger = DesignTokens.colorsStatusDanger;
+  static const success = DesignTokens.colorsStatusSuccess;
+  static const warning = DesignTokens.colorsStatusWarning;
+  static const weChatOnline = DesignTokens.colorsStatusSuccess;
+  static const momentAccent = DesignTokens.colorsMomentAccentLight;
+  static const momentChipBg = DesignTokens.colorsMomentChipBgLight;
+  static const replyBoxBg = DesignTokens.colorsMomentReplyBgLight;
+  static const page = DesignTokens.semanticLightPage;
+  static const surface = DesignTokens.semanticLightSurface;
+  static const surfaceHigh = DesignTokens.semanticLightSurfaceHigh;
+  static const divider = DesignTokens.semanticLightBorder;
+  static const textPrimary = DesignTokens.semanticLightTextPrimary;
+  static const textSecondary = DesignTokens.semanticLightTextSecondary;
+  static const textStrongSecondary = DesignTokens.colorsNeutralLightN600;
+  static const textTertiary = DesignTokens.colorsNeutralLightN500;
 
   static Duration motionDuration(BuildContext context,
-          {int milliseconds = 180}) =>
+          {int milliseconds = DesignTokens.motionStandardMs}) =>
       MediaQuery.disableAnimationsOf(context) ||
               MediaQuery.accessibleNavigationOf(context)
-          ? Duration.zero
+          ? const Duration(milliseconds: DesignTokens.motionReducedMs)
           : Duration(milliseconds: milliseconds);
 
   static XcagiThemeColors colors(BuildContext context) {
@@ -43,11 +45,11 @@ class AppTheme {
       primary: brand,
       onPrimary: surface,
       primaryContainer: brandContainer,
-      onPrimaryContainer: const Color(0xFF312E81),
+      onPrimaryContainer: DesignTokens.mobileColorsLightOnBrandContainer,
       secondary: success,
-      onSecondary: surface,
-      secondaryContainer: const Color(0xFFE7FAF3),
-      onSecondaryContainer: const Color(0xFF064E3B),
+      onSecondary: DesignTokens.colorsNeutralLightN900,
+      secondaryContainer: DesignTokens.colorsStatusSuccessContainer,
+      onSecondaryContainer: DesignTokens.mobileColorsLightOnSuccessContainer,
       tertiary: brand,
       surfaceTint: brand,
       surface: surface,
@@ -57,40 +59,41 @@ class AppTheme {
       outline: textSecondary,
       outlineVariant: divider,
       error: danger,
-      onError: surface,
-      errorContainer: const Color(0xFFFFECEC),
-      onErrorContainer: const Color(0xFF6B1A1A),
+      onError: DesignTokens.colorsNeutralLightN900,
+      errorContainer: DesignTokens.mobileColorsLightErrorContainer,
+      onErrorContainer: DesignTokens.mobileColorsLightOnErrorContainer,
     );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: scheme,
+      focusColor: brand.withValues(alpha: DesignTokens.focusRingAlpha),
       extensions: const [XcagiThemeColors.light],
       scaffoldBackgroundColor: page,
       appBarTheme: const AppBarTheme(
         backgroundColor: surface,
         foregroundColor: textPrimary,
-        elevation: 0,
+        elevation: DesignTokens.elevationNone,
         centerTitle: false,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
         indicatorColor: brandContainer,
-        height: 66,
+        height: DesignTokens.mobileGeometryNavigationHeight,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
-            size: 24,
+            size: DesignTokens.mobileGeometryNavigationIcon,
             color:
                 states.contains(WidgetState.selected) ? brand : textSecondary,
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            fontSize: 11,
+            fontSize: DesignTokens.mobileGeometryNavigationLabel,
             fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w700
-                : FontWeight.w500,
+                ? DesignTokens.typographyDisplayLargeWeight
+                : DesignTokens.typographyLabelLargeWeight,
             color:
                 states.contains(WidgetState.selected) ? brand : textSecondary,
           ),
@@ -98,55 +101,41 @@ class AppTheme {
       ),
       dividerTheme: const DividerThemeData(
         color: divider,
-        thickness: 0.6,
+        thickness: DesignTokens.mobileGeometryDividerThickness,
         space: 0,
       ),
-      cardTheme: CardThemeData(
-        color: surface,
-        elevation: 0,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 48),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: InputBorder.none,
-        filled: false,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      ),
+      cardTheme: _cardTheme(surface),
+      dialogTheme: _dialogTheme(surface),
+      bottomSheetTheme: _bottomSheetTheme(surface, divider),
+      popupMenuTheme: _popupMenuTheme(surface),
+      sliderTheme: _sliderTheme(brand, divider),
+      filledButtonTheme: _filledButtonTheme(),
+      inputDecorationTheme: _inputDecorationTheme,
       textTheme: _typography(textPrimary),
     );
   }
 
   static ThemeData dark() {
-    const darkBg = Color(0xFF0E0F11);
-    const darkSurface = Color(0xFF161719);
-    const darkSurfaceVariant = Color(0xFF1F2124);
-    const darkBorder = Color(0xFF2A2C30);
-    const darkTextPrimary = Color(0xFFF2F3F5);
-    const darkTextSecondary = Color(0xFF9AA0A6);
-    const darkBrand = Color(0xFF818CF8);
+    const darkBg = DesignTokens.mobileColorsDarkPage;
+    const darkSurface = DesignTokens.mobileColorsDarkSurface;
+    const darkSurfaceVariant = DesignTokens.mobileColorsDarkSurfaceHigh;
+    const darkBorder = DesignTokens.mobileColorsDarkDivider;
+    const darkTextPrimary = DesignTokens.mobileColorsDarkTextPrimary;
+    const darkTextSecondary = DesignTokens.mobileColorsDarkTextSecondary;
+    const darkBrand = DesignTokens.colorsBrandPrimaryLight;
 
     final scheme = ColorScheme.fromSeed(
       seedColor: darkBrand,
       brightness: Brightness.dark,
     ).copyWith(
       primary: darkBrand,
-      onPrimary: Colors.white,
-      primaryContainer: const Color(0xFF1A3A80),
-      onPrimaryContainer: const Color(0xFFB8CCFF),
+      onPrimary: DesignTokens.colorsNeutralLightN900,
+      primaryContainer: DesignTokens.mobileColorsDarkBrandContainer,
+      onPrimaryContainer: DesignTokens.mobileColorsDarkOnBrandContainer,
       secondary: success,
-      onSecondary: Colors.white,
-      secondaryContainer: const Color(0xFF005B3F),
-      onSecondaryContainer: const Color(0xFF34D399),
+      onSecondary: DesignTokens.colorsNeutralLightN900,
+      secondaryContainer: DesignTokens.mobileColorsDarkSuccessContainer,
+      onSecondaryContainer: DesignTokens.colorsStatusSuccessLight,
       tertiary: darkBrand,
       surfaceTint: darkBrand,
       surface: darkSurface,
@@ -156,21 +145,22 @@ class AppTheme {
       outline: darkBorder,
       outlineVariant: darkSurfaceVariant,
       error: danger,
-      onError: Colors.white,
-      errorContainer: const Color(0xFF5C1A1A),
-      onErrorContainer: const Color(0xFFFFB3B3),
+      onError: DesignTokens.colorsNeutralLightN900,
+      errorContainer: DesignTokens.mobileColorsDarkErrorContainer,
+      onErrorContainer: DesignTokens.mobileColorsDarkOnErrorContainer,
     );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: scheme,
+      focusColor: darkBrand.withValues(alpha: DesignTokens.focusRingAlpha),
       extensions: const [XcagiThemeColors.dark],
       scaffoldBackgroundColor: darkBg,
       appBarTheme: const AppBarTheme(
         backgroundColor: darkSurface,
         foregroundColor: darkTextPrimary,
-        elevation: 0,
+        elevation: DesignTokens.elevationNone,
         centerTitle: false,
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -178,10 +168,10 @@ class AppTheme {
         indicatorColor: darkSurfaceVariant,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            fontSize: 11,
+            fontSize: DesignTokens.mobileGeometryNavigationLabel,
             fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w700
-                : FontWeight.w500,
+                ? DesignTokens.typographyDisplayLargeWeight
+                : DesignTokens.typographyLabelLargeWeight,
             color: states.contains(WidgetState.selected)
                 ? darkBrand
                 : darkTextSecondary,
@@ -190,12 +180,97 @@ class AppTheme {
       ),
       dividerTheme: const DividerThemeData(
         color: darkBorder,
-        thickness: 0.6,
+        thickness: DesignTokens.mobileGeometryDividerThickness,
         space: 0,
       ),
+      cardTheme: _cardTheme(darkSurface),
+      dialogTheme: _dialogTheme(darkSurface),
+      bottomSheetTheme: _bottomSheetTheme(darkSurface, darkBorder),
+      popupMenuTheme: _popupMenuTheme(darkSurface),
+      sliderTheme: _sliderTheme(darkBrand, darkBorder),
+      filledButtonTheme: _filledButtonTheme(),
+      inputDecorationTheme: _inputDecorationTheme,
       textTheme: _typography(darkTextPrimary),
     );
   }
+
+  // Use native Material overlays and their built-in focus, modal barrier, layer
+  // and keyboard behavior. Geometry and motion values come from DesignTokens.
+  static DialogThemeData _dialogTheme(Color color) => DialogThemeData(
+        backgroundColor: color,
+        surfaceTintColor: Colors.transparent,
+        elevation: DesignTokens.elevationLevel2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLarge),
+        ),
+      );
+
+  static BottomSheetThemeData _bottomSheetTheme(Color color, Color divider) =>
+      BottomSheetThemeData(
+        backgroundColor: color,
+        modalBackgroundColor: color,
+        surfaceTintColor: Colors.transparent,
+        elevation: DesignTokens.elevationLevel2,
+        modalElevation: DesignTokens.elevationLevel3,
+        showDragHandle: true,
+        dragHandleColor: divider,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(DesignTokens.radiusLarge),
+          ),
+        ),
+      );
+
+  static PopupMenuThemeData _popupMenuTheme(Color color) =>
+      PopupMenuThemeData(
+        color: color,
+        surfaceTintColor: Colors.transparent,
+        elevation: DesignTokens.elevationLevel2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+        ),
+      );
+
+  static SliderThemeData _sliderTheme(Color primary, Color divider) =>
+      SliderThemeData(
+        trackHeight: DesignTokens.spacingXs,
+        activeTrackColor: primary,
+        inactiveTrackColor: divider,
+        thumbColor: primary,
+      );
+
+  // Native Material components keep the same geometry in both themes.
+  static CardThemeData _cardTheme(Color color) => CardThemeData(
+        color: color,
+        elevation: DesignTokens.componentsCardElevation,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.componentsCardRadius),
+        ),
+      );
+
+  static FilledButtonThemeData _filledButtonTheme() => FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, DesignTokens.mobileGeometryButtonMinHeight),
+          elevation: DesignTokens.elevationNone,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(DesignTokens.mobileGeometryButtonRadius),
+          ),
+          textStyle: const TextStyle(
+            fontSize: DesignTokens.componentsButtonLabelSize,
+            fontWeight: DesignTokens.componentsButtonWeight,
+          ),
+        ),
+      );
+
+  static const _inputDecorationTheme = InputDecorationTheme(
+    border: InputBorder.none,
+    filled: false,
+    contentPadding: EdgeInsets.symmetric(
+      horizontal: DesignTokens.mobileGeometryInputPaddingX,
+      vertical: DesignTokens.componentsInputPaddingY,
+    ),
+  );
 
   static TextTheme _typography(Color color) {
     TextStyle style(double fontSize, FontWeight fontWeight, double lineHeight) {
@@ -209,21 +284,21 @@ class AppTheme {
     }
 
     return TextTheme(
-      displayLarge: style(28, FontWeight.w700, 36),
-      displayMedium: style(24, FontWeight.w700, 32),
-      displaySmall: style(20, FontWeight.w600, 28),
-      headlineLarge: style(24, FontWeight.w700, 32),
-      headlineMedium: style(20, FontWeight.w600, 28),
-      headlineSmall: style(18, FontWeight.w600, 26),
-      titleLarge: style(18, FontWeight.w600, 24),
-      titleMedium: style(17, FontWeight.w600, 22),
-      titleSmall: style(15, FontWeight.w500, 20),
-      bodyLarge: style(16, FontWeight.w400, 22),
-      bodyMedium: style(15, FontWeight.w400, 21),
-      bodySmall: style(13, FontWeight.w400, 18),
-      labelLarge: style(14, FontWeight.w500, 18),
-      labelMedium: style(13, FontWeight.w500, 17),
-      labelSmall: style(12, FontWeight.w600, 17),
+      displayLarge: style(DesignTokens.typographyDisplayLargeSize, DesignTokens.typographyDisplayLargeWeight, DesignTokens.typographyDisplayLargeLineHeight),
+      displayMedium: style(DesignTokens.typographyDisplayMediumSize, DesignTokens.typographyDisplayMediumWeight, DesignTokens.typographyDisplayMediumLineHeight),
+      displaySmall: style(DesignTokens.typographyDisplaySmallSize, DesignTokens.typographyDisplaySmallWeight, DesignTokens.typographyDisplaySmallLineHeight),
+      headlineLarge: style(DesignTokens.typographyHeadlineLargeSize, DesignTokens.typographyHeadlineLargeWeight, DesignTokens.typographyHeadlineLargeLineHeight),
+      headlineMedium: style(DesignTokens.typographyHeadlineMediumSize, DesignTokens.typographyHeadlineMediumWeight, DesignTokens.typographyHeadlineMediumLineHeight),
+      headlineSmall: style(DesignTokens.typographyHeadlineSmallSize, DesignTokens.typographyHeadlineSmallWeight, DesignTokens.typographyHeadlineSmallLineHeight),
+      titleLarge: style(DesignTokens.typographyTitleLargeSize, DesignTokens.typographyTitleLargeWeight, DesignTokens.typographyTitleLargeLineHeight),
+      titleMedium: style(DesignTokens.typographyTitleMediumSize, DesignTokens.typographyTitleMediumWeight, DesignTokens.typographyTitleMediumLineHeight),
+      titleSmall: style(DesignTokens.typographyTitleSmallSize, DesignTokens.typographyTitleSmallWeight, DesignTokens.typographyTitleSmallLineHeight),
+      bodyLarge: style(DesignTokens.typographyBodyLargeSize, DesignTokens.typographyBodyLargeWeight, DesignTokens.typographyBodyLargeLineHeight),
+      bodyMedium: style(DesignTokens.typographyBodyMediumSize, DesignTokens.typographyBodyMediumWeight, DesignTokens.typographyBodyMediumLineHeight),
+      bodySmall: style(DesignTokens.typographyBodySmallSize, DesignTokens.typographyBodySmallWeight, DesignTokens.typographyBodySmallLineHeight),
+      labelLarge: style(DesignTokens.typographyLabelLargeSize, DesignTokens.typographyLabelLargeWeight, DesignTokens.typographyLabelLargeLineHeight),
+      labelMedium: style(DesignTokens.typographyLabelMediumSize, DesignTokens.typographyLabelMediumWeight, DesignTokens.typographyLabelMediumLineHeight),
+      labelSmall: style(DesignTokens.typographyLabelSmallSize, DesignTokens.typographyLabelSmallWeight, DesignTokens.typographyLabelSmallLineHeight),
     );
   }
 }
@@ -231,32 +306,32 @@ class AppTheme {
 class XcagiShapeTokens {
   const XcagiShapeTokens._();
 
-  static const extraSmall = 4.0;
-  static const small = 8.0;
-  static const medium = 12.0;
-  static const large = 16.0;
-  static const extraLarge = 20.0;
+  static const extraSmall = DesignTokens.radiusExtraSmall;
+  static const small = DesignTokens.radiusSmall;
+  static const medium = DesignTokens.radiusMedium;
+  static const large = DesignTokens.radiusLarge;
+  static const extraLarge = DesignTokens.radiusExtraLarge;
 }
 
 class XcagiElevation {
   const XcagiElevation._();
 
-  static const none = 0.0;
-  static const level1 = 1.0;
-  static const level2 = 3.0;
-  static const level3 = 8.0;
+  static const none = DesignTokens.elevationNone;
+  static const level1 = DesignTokens.elevationLevel1;
+  static const level2 = DesignTokens.elevationLevel2;
+  static const level3 = DesignTokens.elevationLevel3;
 }
 
 class XcagiSpacing {
   const XcagiSpacing._();
 
-  static const xs = 4.0;
-  static const sm = 8.0;
-  static const md = 12.0;
-  static const lg = 16.0;
-  static const xl = 20.0;
-  static const xxl = 24.0;
-  static const xxxl = 32.0;
+  static const xs = DesignTokens.spacingXs;
+  static const sm = DesignTokens.spacingSm;
+  static const md = DesignTokens.spacingMd;
+  static const lg = DesignTokens.spacingLg;
+  static const xl = DesignTokens.spacingXl;
+  static const xxl = DesignTokens.spacingXxl;
+  static const xxxl = DesignTokens.spacingXxxl;
 }
 
 class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
@@ -293,7 +368,7 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
     danger: AppTheme.danger,
     success: AppTheme.success,
     warning: AppTheme.warning,
-    weChatGreen: Color(0xFF95EC69),
+    weChatGreen: DesignTokens.mobileColorsWechatGreenLight,
     weChatOnline: AppTheme.weChatOnline,
     weChatInputBg: AppTheme.page,
     weChatDivider: AppTheme.divider,
@@ -313,29 +388,29 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
   );
 
   static const dark = XcagiThemeColors(
-    brand: Color(0xFF818CF8),
-    brandContainer: Color(0xFF1A3A80),
-    brandGradientEnd: Color(0xFF3F6FD8),
+    brand: DesignTokens.colorsBrandPrimaryLight,
+    brandContainer: DesignTokens.mobileColorsDarkBrandContainer,
+    brandGradientEnd: DesignTokens.mobileColorsDarkBrandGradientEnd,
     danger: AppTheme.danger,
-    success: Color(0xFF34D399),
+    success: DesignTokens.colorsStatusSuccessLight,
     warning: AppTheme.warning,
-    weChatGreen: Color(0xFF6FAA4A),
-    weChatOnline: Color(0xFF34D399),
-    weChatInputBg: Color(0xFF2E2E2E),
-    weChatDivider: Color(0xFF383838),
-    chatUserBubble: Color(0xFF4F46E5),
-    chatUserBubbleText: Color(0xFFEEF0FF),
-    momentAccent: Color(0xFFA5B0FF),
-    momentChipBg: Color(0xFF2A2A3D),
-    replyBoxBg: Color(0xFF26262E),
-    page: Color(0xFF0E0F11),
-    surface: Color(0xFF161719),
-    surfaceHigh: Color(0xFF1F2124),
-    divider: Color(0xFF2A2C30),
-    textPrimary: Color(0xFFF2F3F5),
-    textSecondary: Color(0xFF9AA0A6),
-    textStrongSecondary: Color(0xFFB6BBC2),
-    textTertiary: Color(0xFF7A7F87),
+    weChatGreen: DesignTokens.mobileColorsWechatGreenDark,
+    weChatOnline: DesignTokens.colorsStatusSuccessLight,
+    weChatInputBg: DesignTokens.colorsNeutralDarkSurfaceVariant,
+    weChatDivider: DesignTokens.colorsNeutralDarkBorder,
+    chatUserBubble: DesignTokens.colorsBrandPrimaryDark,
+    chatUserBubbleText: DesignTokens.colorsChatUserTextDark,
+    momentAccent: DesignTokens.colorsMomentAccentDark,
+    momentChipBg: DesignTokens.colorsMomentChipBgDark,
+    replyBoxBg: DesignTokens.colorsMomentReplyBgDark,
+    page: DesignTokens.mobileColorsDarkPage,
+    surface: DesignTokens.mobileColorsDarkSurface,
+    surfaceHigh: DesignTokens.mobileColorsDarkSurfaceHigh,
+    divider: DesignTokens.mobileColorsDarkDivider,
+    textPrimary: DesignTokens.mobileColorsDarkTextPrimary,
+    textSecondary: DesignTokens.mobileColorsDarkTextSecondary,
+    textStrongSecondary: DesignTokens.mobileColorsDarkTextStrongSecondary,
+    textTertiary: DesignTokens.mobileColorsDarkTextTertiary,
   );
 
   final Color brand;

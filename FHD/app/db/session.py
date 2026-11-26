@@ -94,14 +94,13 @@ def timed_query(query_name: str):
     return decorator
 
 
-def _db_session_scope():
-    """共享的 DB 会话生命周期（提交/回滚/关闭）。
+def _unit_of_work(session_factory, *, label: str):
+    """One SQLAlchemy transaction boundary for host and Mod-aware sessions.
 
-    ``get_db`` 与 ``get_db_dependency`` 复用同一实现，避免逻辑重复漂移：
-    前者是 ``contextmanager``（``with get_db() as db:``），后者是 FastAPI
-    依赖用的裸生成器（``Depends(get_db_dependency)``）。
+    Business failures must raise to abort writes. A returned failure dictionary
+    cannot, by itself, mark a SQLAlchemy transaction for rollback.
     """
-    with closing(SessionLocal()) as db:
+    with closing(session_factory()) as db:
         completed = False
         try:
             yield db
@@ -110,11 +109,16 @@ def _db_session_scope():
         finally:
             if not completed:
                 transaction = db.get_transaction()
-                # SQLAlchemy 2.0's internal guard includes failed-flush DEACTIVE
-                # but excludes COMMITTED/CLOSED, preserving after_commit errors.
+                # Failed flushes are rollback-able; after_commit errors occur too
+                # late to undo a committed transaction. Preserve their error.
                 if transaction is None or transaction._rollback_can_be_called():
                     db.rollback()
-                    logger.error("数据库事务失败，已回滚")
+                    logger.error("%s事务失败，已回滚", label)
+
+
+def _db_session_scope():
+    """Mod-aware session lifecycle for get_db and FastAPI dependencies."""
+    yield from _unit_of_work(SessionLocal, label="数据库")
 
 
 get_db = contextmanager(_db_session_scope)
@@ -122,22 +126,10 @@ get_db = contextmanager(_db_session_scope)
 
 @contextmanager
 def get_host_db():
-    """宿主基库事务：users/sessions 等，不受 Active-Mod 分库影响。"""
+    """Host database session with the same commit/rollback semantics."""
     from app.db import HostSessionLocal
 
-    with closing(HostSessionLocal()) as db:
-        completed = False
-        try:
-            yield db
-            db.commit()
-            completed = True
-        finally:
-            if not completed:
-                transaction = db.get_transaction()
-                # Use the same SQLAlchemy 2.0 rollback-state guard as get_db.
-                if transaction is None or transaction._rollback_can_be_called():
-                    db.rollback()
-                    logger.error("宿主库事务失败，已回滚")
+    yield from _unit_of_work(HostSessionLocal, label="宿主库")
 
 
 def get_db_dependency():

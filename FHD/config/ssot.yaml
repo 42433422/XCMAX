@@ -90,6 +90,8 @@ domains:
     ssot: FHD/docs/SSOT_INDEX.md
     derived:
       - FHD/CHANGELOG.md
+      - specs/product-lines-3-plus-2.md
+      - README.md
       - FHD/docs/architecture/AIOPEN_FULL_SURFACE.md
       - FHD/docs/architecture/PROCESS_FLOW_SSOT.md
       - FHD/docs/architecture/PRODUCT_VERSION_SSOT.md
@@ -229,6 +231,7 @@ domains:
     ssot: FHD/alembic/versions/
     derived:
       - FHD/app/db/
+      - FHD/scripts/dev/verify_pg_history_upgrade.py
     mode: verify
     check: python ../scripts/guard_alembic_single_head.py
     sync: null
@@ -290,6 +293,7 @@ domains:
       - FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart
       - FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart
       - FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart
+      - FHD/mobile-flutter-poc/lib/src/theme/design_tokens.generated.dart
     mode: lint
     check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check
     sync: null

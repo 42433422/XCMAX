@@ -235,6 +235,8 @@ def seed_account_plans(factory):
 @pytest.mark.parametrize(
     "plan_id,amount,allowance",
     [
+        ("saas-permanent-standard", "3000.00", 0),
+        # Existing standard-license orders retain the locked amount after repricing.
         ("saas-permanent-standard", "6800.00", 0),
         # A previously authorized test/adjusted order keeps its recorded price.
         ("saas-permanent-growth", "0.01", 0),
@@ -298,7 +300,7 @@ def test_retired_license_rejected_for_new_checkout(database, suffix):
 
 
 @pytest.mark.parametrize(
-    "plan_id,price", [("saas-permanent-standard", 6800), ("saas-trial-30", 99)]
+    "plan_id,price", [("saas-permanent-standard", 3000), ("saas-trial-30", 99)]
 )
 def test_checkout_uses_server_catalog_price_not_client_test_amount(database, plan_id, price):
     seed_account_plans(database[2])

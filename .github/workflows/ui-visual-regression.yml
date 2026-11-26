@@ -1,0 +1,349 @@
+name: UI visual regression
+on:
+  pull_request:
+    branches: [main, develop, master]
+    paths:
+      - 'FHD/frontend/**'
+      - 'FHD/mobile-flutter-poc/**'
+      - 'FHD/desktop/**'
+      - 'FHD/config/*design*'
+      - 'FHD/config/visual_regression_approvals.json'
+      - 'FHD/scripts/design/**'
+      - 'FHD/scripts/dev/compare_visual_regression.py'
+      - '成都修茈科技有限公司/MODstore_deploy/market/**'
+      # The continuity job must rerun when its backend contract changes.
+      - 'FHD/app/application/chat_stream_replay.py'
+      - 'FHD/app/fastapi_routes/mobile_extensions/**'
+      - 'FHD/app/db/models/mobile_notification.py'
+      - 'FHD/app/domain/shared_services/mobile_push.py'
+      - 'FHD/tests/test_application/test_chat_stream_replay.py'
+      - 'FHD/tests/test_routes/test_mobile_native_task_workspace.py'
+      - 'FHD/tests/test_routes/test_mobile_notification_inbox.py'
+      - 'FHD/docs/cross_device_continuity_acceptance.md'
+      - '.github/workflows/ui-visual-regression.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  visual:
+    name: Visual regression (${{ matrix.surface }})
+    runs-on: ubuntu-24.04
+    # Keep the browser and its rendering libraries fixed across runner updates.
+    container:
+      image: ${{ matrix.surface != 'flutter' && 'mcr.microsoft.com/playwright:v1.65.1-noble@sha256:766137e2d9caad4744187e53cdc89320ba6f2eb57cff097374020944b44dd0a9' || '' }}
+      options: --ipc=host
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        surface: [desktop, market, flutter]
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      SURFACE: ${{ matrix.surface }}
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: candidate
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: baseline
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install pinned comparator and fonts
+        shell: bash
+        run: |
+          python -m pip install 'Pillow==12.3.0'
+          apt=(apt-get)
+          if (( EUID != 0 )); then apt=(sudo apt-get); fi
+          "${apt[@]}" update
+          "${apt[@]}" install -y fonts-noto-cjk=1:20230817+repack1-3
+          mkdir -p "$RUNNER_TEMP/visual/baseline" "$RUNNER_TEMP/visual/candidate"
+          test "$(git -C baseline rev-parse HEAD)" = "$BASE_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          printf 'base=%s\ncandidate=%s\n' "$BASE_SHA" "$CANDIDATE_SHA" > "$RUNNER_TEMP/visual/source-shas.txt"
+          python candidate/FHD/scripts/dev/compare_visual_regression.py --self-test
+      - uses: actions/setup-node@v7
+        if: matrix.surface != 'flutter'
+        with:
+          node-version: '22.22.2'
+      - name: Capture both browser revisions with identical tests
+        if: matrix.surface != 'flutter'
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SURFACE" in
+            desktop) app=FHD/frontend ;;
+            market) app='成都修茈科技有限公司/MODstore_deploy/market' ;;
+            *) exit 1 ;;
+          esac
+          cp "candidate/$app/playwright.visual.config.ts" "baseline/$app/"
+          mkdir -p "baseline/$app/visual-regression"
+          cp -R "candidate/$app/visual-regression/." "baseline/$app/visual-regression/"
+          if [[ "$SURFACE" == desktop ]]; then
+            cp "candidate/$app/e2e/startup-readiness-fixture.ts" "baseline/$app/e2e/"
+          fi
+          status=0
+          for side in baseline candidate; do
+            (
+              cd "$side/$app"
+              npm ci --no-audit --no-fund
+              npx playwright --version > "$RUNNER_TEMP/visual/$side/playwright-version.txt"
+              if [[ "$side" == candidate ]]; then
+                if [[ "$SURFACE" == desktop ]]; then
+                  npm run build:strict
+                  npm test -- \
+                    src/components/workflow/EmployeeWorkspaceScene.test.ts \
+                    src/stores/agentTaskCenter.test.ts \
+                    src/utils/chatSseStream.test.ts \
+                    src/utils/chatComposerDraft.test.ts \
+                    src/composables/useChatRuntimeContinuation.test.ts
+                else
+                  npm run typecheck:ci
+                  npm run build
+                  npx vitest run --config vitest.config.ts \
+                    src/components/floating-agent/XiaoCLife.test.ts \
+                    src/components/floating-agent/floating-agent-panel/PanelComposer.test.ts
+                fi
+              elif [[ "$SURFACE" == desktop ]]; then
+                npm run build
+              fi
+              VISUAL_CAPTURE_SIDE="$side" VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" \
+                npx playwright test --config playwright.visual.config.ts --trace retain-on-failure \
+                  --output "$RUNNER_TEMP/visual/$side/playwright-results"
+            ) || status=1
+          done
+          exit "$status"
+      - name: Read candidate Flutter SDK pin
+        if: matrix.surface == 'flutter'
+        id: flutter_sdk
+        run: echo "version=$(cat candidate/FHD/mobile-flutter-poc/.flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        if: matrix.surface == 'flutter'
+        with:
+          flutter-version: ${{ steps.flutter_sdk.outputs.version }}
+          cache: true
+      - name: Capture both Flutter revisions with identical tests
+        if: matrix.surface == 'flutter'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=FHD/mobile-flutter-poc
+          mkdir -p "baseline/$app/visual_regression"
+          cp -R "candidate/$app/visual_regression/." "baseline/$app/visual_regression/"
+          cp "candidate/$app/test/employee_workspace_fixture.dart" "baseline/$app/test/"
+          export VISUAL_FONT_PATH=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+          test -s "$VISUAL_FONT_PATH"
+          status=0
+          for side in baseline candidate; do
+            (
+              cd "$side/$app"
+              flutter pub get
+              flutter --version > "$RUNNER_TEMP/visual/$side/flutter-version.txt"
+              if [[ "$side" == candidate ]]; then
+                flutter analyze
+                flutter test --no-pub \
+                  test/task_list_screen_test.dart \
+                  test/offline_store_test.dart \
+                  test/approval_continuity_test.dart \
+                  test/im_realtime_test.dart \
+                  test/employee_workspace_screen_test.dart
+              fi
+              # Ephemeral capture only; no automatic baseline commits.
+              VISUAL_CAPTURE_SIDE="$side" flutter test --no-pub --update-goldens visual_regression/visual_test.dart
+              cp visual_regression/goldens/*.png "$RUNNER_TEMP/visual/$side/"
+            ) || status=1
+          done
+          exit "$status"
+      - name: Compare exact pixels against the checked-out base
+        if: always()
+        run: |
+          python candidate/FHD/scripts/dev/compare_visual_regression.py \
+            --root "$RUNNER_TEMP/visual" --surface "$SURFACE" \
+            --base-sha "$BASE_SHA" --candidate-sha "$CANDIDATE_SHA" \
+            --approvals candidate/FHD/config/visual_regression_approvals.json
+      - name: Upload synthetic baseline, candidate, differences and source report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-visual-${{ matrix.surface }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/visual/
+          if-no-files-found: error
+          retention-days: 14
+
+  continuity-backend:
+    name: Cross-device task and receipt continuity contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+      - name: Install locked service and test dependencies
+        working-directory: FHD
+        run: uv sync --frozen --extra server-api --extra dev
+      - name: Test source-pinned mobile task, stream replay and notification contracts
+        working-directory: FHD
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          uv run --no-sync pytest -q -o addopts= \
+            tests/test_routes/test_mobile_native_task_workspace.py \
+            tests/test_application/test_chat_stream_replay.py \
+            tests/test_routes/test_mobile_notification_inbox.py \
+            --junitxml=cross-device-continuity.xml
+      - name: Retain source-pinned cross-device test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-cross-device-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: FHD/cross-device-continuity.xml
+          if-no-files-found: error
+          retention-days: 14
+
+
+  desktop-native-build:
+    name: Electron native shell build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: FHD/desktop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.23.3'
+          cache: npm
+          cache-dependency-path: FHD/desktop/package-lock.json
+      - name: Install pinned Electron dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck, build and native shell regression
+        env:
+          XCAGI_DESKTOP_TEST: '1'
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          npm run typecheck
+          npm run build
+          npx vitest run app-shell.test.ts window-manager.test.ts window-state.test.ts session-security.test.ts
+
+  flutter-mobile-build:
+    name: Flutter candidate compile (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: android
+          - os: macos-26
+            target: ios
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    env:
+      TARGET: ${{ matrix.target }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        if: matrix.target == 'android'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Read pinned Flutter SDK
+        id: flutter_sdk
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.flutter_sdk.outputs.version }}
+          cache: true
+      - name: Resolve dependencies and compile source-pinned candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          flutter --version
+          flutter pub get
+          mkdir -p "$RUNNER_TEMP/mobile-$TARGET"
+          if [[ "$TARGET" == android ]]; then
+            flutter build apk --release
+            cp build/app/outputs/flutter-apk/*.apk "$RUNNER_TEMP/mobile-$TARGET/"
+          else
+            xcodebuild -version
+            flutter build ios --release --no-codesign
+            ditto -c -k --keepParent build/ios/iphoneos/Runner.app "$RUNNER_TEMP/mobile-$TARGET/Runner.app.zip"
+          fi
+          (
+            cd "$RUNNER_TEMP/mobile-$TARGET"
+            shasum -a 256 ./* > SHA256SUMS
+            printf 'source_sha=%s\ntarget=%s\n' "$CANDIDATE_SHA" "$TARGET" > provenance.txt
+          )
+      - name: Retain candidate package SHA256 and source identity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-flutter-candidate-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mobile-${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  candidate-ui-contract-gate:
+    name: Candidate visual + recovery contracts (not device acceptance)
+    needs: [visual, continuity-backend, desktop-native-build, flutter-mobile-build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      VISUAL_RESULT: ${{ needs.visual.result }}
+      CONTINUITY_RESULT: ${{ needs.continuity-backend.result }}
+      DESKTOP_RESULT: ${{ needs.desktop-native-build.result }}
+      MOBILE_RESULT: ${{ needs.flutter-mobile-build.result }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Reject any failed, skipped or unexecuted surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "Candidate: $CANDIDATE_SHA"
+            echo "Visual desktop + Market + Flutter matrix: $VISUAL_RESULT"
+            echo "Service task/stream/notification continuity: $CONTINUITY_RESULT"
+            echo "Native Windows/macOS Electron builds: $DESKTOP_RESULT"
+            echo "Flutter Android APK and iOS unsigned .app candidate builds: $MOBILE_RESULT"
+            echo "Signed installers, HarmonyOS HAP, real-device recovery and business receipts are separate required acceptance evidence."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$VISUAL_RESULT" != success || "$CONTINUITY_RESULT" != success || "$DESKTOP_RESULT" != success || "$MOBILE_RESULT" != success ]]; then
+            echo "::error::Full candidate UI contract requires all visual matrix surfaces and continuity contracts; skipped/queued/failed is not success."
+            exit 1
+          fi

@@ -3,12 +3,19 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const toggleMock = vi.fn()
+const refreshMock = vi.fn()
+const confirmed: Record<string, boolean> = {}
 const statusLineMock = vi.fn((row: { enabled: boolean; snapshot?: { progressPct?: number } }) => (row.enabled ? '运行中' : '已停止'))
 const isBusyMock = vi.fn((row: { snapshot?: { busy?: boolean } }) => Boolean(row.snapshot?.busy))
 
 vi.mock('@/stores/workflowAiEmployees', () => ({
   useWorkflowAiEmployeesStore: () => ({
-    toggle: toggleMock,
+    setEmployeeEnabledConfirmed: toggleMock,
+    refreshConfirmedPreferences: refreshMock,
+    get confirmedEnabled() { return confirmed },
+    prefsReady: true,
+    prefsSaving: '',
+    prefsError: '',
   }),
 }))
 
@@ -41,6 +48,7 @@ function makeRow(overrides: Partial<DeskRow> = {}): DeskRow {
 }
 
 function mountInspector(props: Record<string, unknown> = {}) {
+  for (const row of (props.desks as DeskRow[] | undefined) || []) confirmed[row.empId] = row.enabled
   return mount(WorkflowEmployeeInspector, {
     props: {
       desks: [],
@@ -98,6 +106,20 @@ describe('WorkflowEmployeeInspector', () => {
     expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(2)
   })
 
+  it.each([1000, 10000])('bounds mounted employee rows for %i records', async (count) => {
+    const desks = Array.from({ length: count }, (_, i) => makeRow({
+      empId: `id-${i}`, shortName: `员工 ${i}`, panelTitle: `任务 ${i}`,
+    }))
+    const wrapper = mountInspector({ desks })
+    expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(60)
+    await wrapper.get('.wfe-inspector-pagination button:last-child').trigger('click')
+    expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(60)
+    expect(wrapper.find('.wfe-inspector-short').text()).toBe('员工 60')
+    await wrapper.get('.wfe-inspector-search').setValue('员工 9999')
+    expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(count === 10000 ? 1 : 0)
+    wrapper.unmount()
+  })
+
   it('renders short name in row', () => {
     const wrapper = mountInspector({ desks: [makeRow({ shortName: '测试员工' })] })
     expect(wrapper.find('.wfe-inspector-short').text()).toBe('测试员工')
@@ -152,7 +174,7 @@ describe('WorkflowEmployeeInspector', () => {
   it('calls wfEmp.toggle when toggle button is clicked', async () => {
     const wrapper = mountInspector({ desks: [makeRow({ empId: 'e1' })] })
     await wrapper.find('.wfe-inspector-toggle').trigger('click')
-    expect(toggleMock).toHaveBeenCalledWith('e1')
+    expect(toggleMock).toHaveBeenCalledWith('e1', true)
   })
 
   it('marks toggle as on when row.enabled is true', () => {

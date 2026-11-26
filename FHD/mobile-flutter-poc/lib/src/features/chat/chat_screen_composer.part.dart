@@ -45,6 +45,7 @@ class _Composer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   _ComposerIconButton(
                     icon: AppIcons.mic,
@@ -54,7 +55,7 @@ class _Composer extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Container(
-                      height: 40,
+                      constraints: const BoxConstraints(minHeight: 44),
                       decoration: BoxDecoration(
                         color: colors.surface,
                         borderRadius: BorderRadius.circular(20),
@@ -63,7 +64,10 @@ class _Composer extends StatelessWidget {
                       alignment: Alignment.center,
                       child: TextField(
                         controller: controller,
-                        maxLines: 1,
+                        minLines: 1,
+                        maxLines: 4,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
                         style: textTheme.bodyMedium?.copyWith(
                           color: colors.textPrimary,
                           fontSize: 15,
@@ -78,6 +82,7 @@ class _Composer extends StatelessWidget {
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12,
+                            vertical: 8,
                           ),
                         ),
                       ),
@@ -135,8 +140,8 @@ class _ComposerIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     return SizedBox(
-      width: 38,
-      height: 38,
+      width: 44,
+      height: 44,
       child: IconButton(
         onPressed: onPressed,
         padding: EdgeInsets.zero,

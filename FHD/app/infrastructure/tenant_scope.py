@@ -16,29 +16,28 @@
 
 from __future__ import annotations
 
-import contextlib
-import contextvars
 import logging
 import os
 from collections.abc import Mapping
-from typing import Any, Iterator
+from typing import Any
 
 from sqlalchemy import false
 
+from app.domain.context.current_request import (
+    TenantScopeError,
+    current_tenant_id,
+    reset_current_tenant_id,
+    set_current_tenant_id,
+    tenant_scope,
+)
+from app.domain.context.current_request import (
+    owned_tenant_id as owned_tenant_id,
+)
+from app.domain.context.current_request import (
+    owned_tenant_scope as owned_tenant_scope,
+)
+
 logger = logging.getLogger(__name__)
-
-_current_tenant_id: contextvars.ContextVar[int | None] = contextvars.ContextVar(
-    "current_tenant_id", default=None
-)
-
-
-_owned_tenant_id: contextvars.ContextVar[int | None] = contextvars.ContextVar(
-    "owned_business_tenant", default=None
-)
-
-
-class TenantScopeError(RuntimeError):
-    """业务数据读写缺少租户上下文。"""
 
 
 def _is_test_double(value: Any) -> bool:
@@ -48,71 +47,6 @@ def _is_test_double(value: Any) -> bool:
 
 def _truthy_env(name: str) -> bool:
     return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
-
-
-def set_current_tenant_id(tenant_id: int | None) -> contextvars.Token:
-    """设置当前租户（返回 token 供 reset）。"""
-    value = int(tenant_id) if tenant_id is not None else None
-    return _current_tenant_id.set(value)
-
-
-def reset_current_tenant_id(token: contextvars.Token) -> None:
-    try:
-        _current_tenant_id.reset(token)
-    except (ValueError, LookupError):
-        pass
-
-
-def current_tenant_id() -> int | None:
-    """读取当前租户：优先 ContextVar，其次当前请求 ``request.state.tenant_id``。"""
-    owned = owned_tenant_id()
-    if owned is not None:
-        return owned
-    tid = _current_tenant_id.get()
-    if tid is not None:
-        return tid
-    try:
-        from app.infrastructure.request_context import get_current_request
-
-        request = get_current_request()
-        if request is not None:
-            value = getattr(request.state, "tenant_id", None)
-            return int(value) if value is not None else None
-    except (ImportError, ValueError, TypeError, AttributeError):
-        return None
-    return None
-
-
-@contextlib.contextmanager
-def tenant_scope(tenant_id: int | None) -> Iterator[None]:
-    """临时设定当前租户（后台任务 / 跨上下文调用）。"""
-    token = set_current_tenant_id(tenant_id)
-    try:
-        yield
-    finally:
-        reset_current_tenant_id(token)
-
-
-def owned_tenant_id() -> int | None:
-    """Internal scope, established only after server actor/permission validation."""
-    return _owned_tenant_id.get()
-
-
-@contextlib.contextmanager
-def owned_tenant_scope(tenant_id: int) -> Iterator[None]:
-    """Strict owned rows only; never exposes/adopts migration NULL rows.
-
-    This is not authorization. The caller must validate the authenticated actor.
-    ORM flush ownership is checked separately; arbitrary raw/bulk DML is not covered.
-    """
-    if type(tenant_id) is not int or tenant_id <= 0:
-        raise TenantScopeError("已授权企业范围无效")
-    token = _owned_tenant_id.set(tenant_id)
-    try:
-        with tenant_scope(tenant_id):
-            yield
-    finally:
-        _owned_tenant_id.reset(token)
 
 
 def tenant_strict_mode() -> bool:

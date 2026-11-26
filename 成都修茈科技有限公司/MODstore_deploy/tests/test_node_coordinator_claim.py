@@ -199,8 +199,14 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == [
-            "20261121_xiaoc_life"
+            "20261124_model_concurrency"
         ]
+        assert conn.exec_driver_sql(
+            "SELECT limit_value, min_limit, max_limit, success_streak "
+            "FROM llm_model_concurrency WHERE model_key = ?",
+            ("litellm/xcmax-xiaomi-fast",),
+        ).one() == (12, 1, 12, 0)
+        assert conn.exec_driver_sql("SELECT COUNT(*) FROM llm_model_concurrency").scalar_one() == 7
         expected_eta = (
             "2026-10-21 03:30:00"
             if starting_head.endswith("ticket_eta") or starting_head == "both"

@@ -1,4 +1,4 @@
-"""Real HTTP/auth/SQL bind owned uploads before Codex and independent review."""
+"""Real HTTP/auth/SQL bind owned uploads before Xiaox and independent review."""
 
 import io
 import json
@@ -9,14 +9,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_runtime import codex_runtime, gateway
+from app.application.agent_runtime import gateway, xiaox_runtime
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
             return None
 
         async def stream_turn(self, text):
-            bridge = state.servers[-1].state.codex_tool_bridge
+            bridge = state.servers[-1].state.xiaox_tool_bridge
             binding = bridge.store.authenticate(self.config.mcp_token)
             request = binding.run.metadata["runtime_goal_contract"]["request"]
             assert request["text"] == state.source
@@ -106,8 +106,8 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
                 }
 
     monkeypatch.setattr(openai, "OpenAI", client)
-    monkeypatch.setattr(gateway, "run_codex_agent", codex_runtime.run_codex_agent)
-    monkeypatch.setattr("app.infrastructure.codex.CodexTransport", Transport)
+    monkeypatch.setattr(gateway, "run_xiaox_agent", xiaox_runtime.run_xiaox_agent)
+    monkeypatch.setattr("app.infrastructure.xiaox.XiaoxTransport", Transport)
     monkeypatch.setattr(
         "app.application.agent_runtime.gateway.runtime_settings", lambda: state.settings
     )
@@ -169,7 +169,7 @@ def test_unusable_upload_waits_without_model_or_artifact(owned_runtime, invalid)
     assert state.client.post(f"/api/agent/runs/{run_id}/resume", json={}).status_code == 202
     waiting = state.drain(run_id)
     assert waiting.status == "waiting_user", waiting.to_dict()
-    assert "重新上传" in waiting.final_output["codex_result"]["output"]
+    assert "重新上传" in waiting.final_output["xiaox_result"]["output"]
     assert waiting.artifacts == [] and waiting.tool_calls == []
     assert state.model_requests == state.transports == []
 
@@ -193,7 +193,7 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
     run = state.drain(run_id).to_dict()
     assert run["run_id"] == run_id and run["status"] == "completed"
     _assert_owned_artifact(run["artifacts"], state)
-    _assert_owned_artifact(run["final_output"]["codex_result"]["artifacts"], state)
+    _assert_owned_artifact(run["final_output"]["xiaox_result"]["artifacts"], state)
     assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
     assert state.model_requests[0]["answers"] == []
     assert run["metadata"]["runtime_goal_verification"]["accepted"] is True
@@ -206,7 +206,7 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
     denied = state.drain(staged["run_id"])
     assert denied.run_id == staged["run_id"]
     assert denied.status == "waiting_user"
-    assert "重新上传" in denied.final_output["codex_result"]["output"]
+    assert "重新上传" in denied.final_output["xiaox_result"]["output"]
     assert not denied.artifacts
     assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
     with tenant_scope(state.actor.tenant_id), get_db() as db:
@@ -232,7 +232,7 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
     assert not final.tool_calls
     assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 2
     [answer] = state.model_requests[-1]["answers"]
-    assert answer["question"] == denied.final_output["codex_result"]["output"]
+    assert answer["question"] == denied.final_output["xiaox_result"]["output"]
     assert answer["answer"] == "已重新上传价格文件"
     assert answer["input_data"]["attachment_upload_ids"] == [replacement["upload_id"]]
     state.client.headers.pop("X-Session-ID")
@@ -252,19 +252,34 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     app = FastAPI()
     app.include_router(router, prefix="/api")
+
+    def chat_result(response):
+        if endpoint.endswith("/stream"):
+            for line in response.text.splitlines():
+                if line.startswith("data: "):
+                    event = json.loads(line[6:])
+                    if event.get("type") == "done":
+                        return event["result"]
+            pytest.fail("missing done event")
+        return response.json()
+
     with TestClient(app, headers=state.actor.headers) as client:
         payload = {"message": state.source, "context": state.context}
         response = client.post(endpoint, json=payload)
         assert response.status_code == 200, response.text
+        ack = chat_result(response)
+        assert ack["execution_state"] == "queued", ack
+        completed = finish_queued_chat(state, ack)
         assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
-        assert state.reply in response.text
-        assert "skip_dataset_ingest" in response.text
-        parent = state.repository.list_recent()[0]
+        assert state.reply in completed["response"]
+        assert "skip_dataset_ingest" in json.dumps(completed)
+        parent = state.repository.get(ack["run_id"])
         _assert_owned_artifact([artifact.to_dict() for artifact in parent.artifacts], state)
         assert parent.metadata["runtime_goal_verification"]["accepted"] is True
         assert not parent.tool_calls
         _transfer_upload(state)
         denied = client.post(endpoint, json=payload)
         assert denied.status_code == 200, denied.text
-        assert "重新上传" in denied.text
+        denial = finish_queued_chat(state, chat_result(denied))
+        assert "重新上传" in denial["response"]
         assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1

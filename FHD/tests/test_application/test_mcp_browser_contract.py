@@ -72,7 +72,7 @@ def test_browser_schema_reaches_canonical_catalog_and_rejects_invalid_action(mon
     assert not tool_spec.validate_tool_call(
         "mcp__browser", "browser_click", {"target": "button", "button": "middle"}
     ).ok
-    # Codex capability discovery uses the complete canonical schema, including
+    # Xiaox capability discovery uses the complete canonical schema, including
     # original minLength/enums/closed objects. No second planner compresses it.
     for name, original in schema["properties"].items():
         assert click.input_schema["properties"][name] == original

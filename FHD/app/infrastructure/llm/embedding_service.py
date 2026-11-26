@@ -1,14 +1,14 @@
 """真实 embedding 服务：支持本地 sentence-transformers 与远端 OpenAI 兼容 API。
 
 设计要点：
-- 未配置时用本地 hash 向量；显式 ``disabled`` 时 ``is_available`` 为 False。
-- 单例 + lazy load：模型在首次 ``embed`` 调用时才加载，避免启动慢。
+- 未配置时优先使用已缓存 FastEmbed 模型，失败时固定降级到 hash；显式 disabled 可关闭。
+- 单例：auto 模式在首次创建时选择固定向量空间，显式模型模式保持 lazy load。
 - 通过环境变量 ``FHD_EMBEDDING_MODE`` 切换 ``local`` / ``remote`` / ``disabled``。
 - 同时实现 ``EmbedderPort`` 协议（``embed_texts`` / ``embed_query``），可作为 Excel/
   UserMemory 等向量服务的 embedder 直接注入。
 
 环境变量：
-  FHD_EMBEDDING_MODE             local | remote | hash | disabled（未配置时为 hash）
+  FHD_EMBEDDING_MODE             auto | fastembed | local | remote | hash | disabled（默认 auto）
   FHD_EMBEDDING_LOCAL_MODEL      本地模型名（默认 sentence-transformers/all-MiniLM-L6-v2，
                                   中文可用 BAAI/bge-small-zh-v1.5）
   FHD_EMBEDDING_REMOTE_URL       远端 /v1/embeddings 端点
@@ -23,7 +23,9 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import threading
+from pathlib import Path
 from typing import Any, Literal
 
 from app.domain.ports.embedder import EmbedderPort
@@ -37,10 +39,11 @@ _DEFAULT_LOCAL_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 # fastembed（Apache-2.0，ONNX Runtime，不依赖 torch）：中文默认 bge-small-zh
 _DEFAULT_FASTEMBED_MODEL = "BAAI/bge-small-zh-v1.5"
 _HASH_EMBED_DIM = 192
+_CACHED_MODEL_LOAD_ERRORS = RECOVERABLE_ERRORS + (RuntimeError,)
 
 
-def _resolve_mode() -> EmbeddingMode:
-    """从环境变量解析 embedding 模式；未配置时用 hash，显式 disabled 才关闭。"""
+def _resolve_mode() -> EmbeddingMode | Literal["auto"]:
+    """未配置时优先 auto，保留显式关闭和非法配置的兼容行为。"""
     raw = (os.environ.get("FHD_EMBEDDING_MODE", "") or "").strip().lower()
     if raw in ("local", "sentence-transformers", "st"):
         return "local"
@@ -52,11 +55,60 @@ def _resolve_mode() -> EmbeddingMode:
         return "hash"
     if raw in ("disabled", "off", "none"):
         return "disabled"
-    # Unset mode: honor an explicit RAG off, otherwise hash on desktop and web.
+    # Unset mode: honor explicit RAG off, otherwise prefer cached semantic vectors.
     rag = (os.environ.get("XCAGI_RAG_ENABLED", "") or "").strip().lower()
     if rag in {"0", "false", "no", "off"}:
         return "disabled"
-    return "hash"
+    return "auto" if raw in {"", "auto"} else "hash"
+
+
+def _fastembed_cache_dir() -> Path | None:
+    explicit = (os.environ.get("FHD_EMBEDDING_FASTEMBED_CACHE_DIR") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
+    for relative in ("resources/models/fastembed", "assets/models/fastembed", "models/fastembed"):
+        candidate = root / relative
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _fastembed_artifact_revision(model_name: str) -> str:
+    cache = _fastembed_cache_dir()
+    if cache is None:
+        return ""
+    try:
+        manifest = json.loads((cache / "xcmax-model.json").read_text(encoding="utf-8"))
+        digest = manifest.get("sha256")
+        if manifest.get("model") == model_name and isinstance(digest, str) and len(digest) == 64:
+            return digest
+    except RECOVERABLE_ERRORS:
+        pass
+    return ""
+
+
+def _load_cached_fastembed(model_name: str) -> tuple[Any | None, int]:
+    """Select a locally provisioned semantic model before publishing its fingerprint.
+
+    Never download weights in a request or fall back to a different vector space
+    after the service has published its identity. Restart to re-probe availability.
+    """
+    try:
+        from fastembed import TextEmbedding
+
+        cache = _fastembed_cache_dir()
+        model = TextEmbedding(
+            model_name=model_name,
+            cache_dir=str(cache) if cache is not None else None,
+            local_files_only=True,
+        )
+        vectors = list(model.embed(["dimension_probe"]))
+        if len(vectors) == 1 and len(vectors[0]) > 0:
+            return model, len(vectors[0])
+    except _CACHED_MODEL_LOAD_ERRORS as exc:
+        logger.info("Cached FastEmbed unavailable; using hash: %s", type(exc).__name__)
+    return None, 0
 
 
 class EmbeddingService(EmbedderPort):
@@ -70,8 +122,16 @@ class EmbeddingService(EmbedderPort):
     _singleton: EmbeddingService | None = None
 
     def __init__(self, mode: EmbeddingMode | None = None) -> None:
-        # 不在 __init__ 加载模型；lazy load 在首次 embed 时触发。
-        self._mode: EmbeddingMode = mode if mode is not None else _resolve_mode()
+        configured = mode if mode is not None else _resolve_mode()
+        cached_model: Any | None = None
+        cached_dim = 0
+        if configured == "auto":
+            cached_model, cached_dim = _load_cached_fastembed(
+                os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL") or _DEFAULT_FASTEMBED_MODEL
+            )
+            self._mode: EmbeddingMode = "fastembed" if cached_model is not None else "hash"
+        else:
+            self._mode = configured
         self._model_name = {
             "local": os.environ.get("FHD_EMBEDDING_LOCAL_MODEL") or _DEFAULT_LOCAL_MODEL,
             "fastembed": os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL")
@@ -87,12 +147,14 @@ class EmbeddingService(EmbedderPort):
             "endpoint": self._remote_url if self._mode == "remote" else "",
             "revision": (os.environ.get("FHD_EMBEDDING_MODEL_REVISION") or "").strip(),
         }
+        if self._mode == "fastembed":
+            identity["artifact_revision"] = _fastembed_artifact_revision(self._model_name)
         self._embedding_fingerprint = hashlib.sha256(
             json.dumps(identity, sort_keys=True).encode("utf-8")
         ).hexdigest()
         self._model: Any | None = None  # SentenceTransformer 实例
-        self._fastembed_model: Any | None = None  # fastembed.TextEmbedding 实例
-        self._dim_cache: int | None = None
+        self._fastembed_model: Any | None = cached_model  # fastembed.TextEmbedding 实例
+        self._dim_cache: int | None = cached_dim or None
         self._load_lock = threading.Lock()
         self._load_attempted: bool = False  # 标记是否已尝试加载，避免重复尝试
 
@@ -285,7 +347,10 @@ class EmbeddingService(EmbedderPort):
             try:
                 from fastembed import TextEmbedding
 
-                self._fastembed_model = TextEmbedding(model_name=model_name)
+                cache = _fastembed_cache_dir()
+                self._fastembed_model = TextEmbedding(
+                    model_name=model_name, cache_dir=str(cache) if cache is not None else None
+                )
                 logger.info("EmbeddingService fastembed 模型加载完成: %s", model_name)
                 return self._fastembed_model
             except RECOVERABLE_ERRORS as e:

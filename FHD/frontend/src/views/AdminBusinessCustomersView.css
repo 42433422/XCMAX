@@ -2,89 +2,91 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 20px 24px 40px;
+  padding: var(--xc-token-spacing-xl) var(--xc-token-spacing-xxl) var(--xc-space-10);
 }
 
 .admin-business-customers-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--xc-token-spacing-md);
+  margin-bottom: var(--xc-token-spacing-md);
 }
 
 .admin-business-customers-head h2 {
-  margin: 0 0 6px;
+  margin: 0 0 var(--xc-token-spacing-sm);
 }
 
 .admin-business-customers-alert {
-  margin: 12px 0;
-  padding: 10px 12px;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  background: #fef2f2;
-  color: #991b1b;
+  margin: var(--xc-token-spacing-md) 0;
+  padding: var(--xc-token-spacing-sm) var(--xc-token-spacing-md);
+  border: 1px solid var(--xc-color-danger);
+  border-radius: var(--xc-token-radius-small);
+  background: var(--xc-color-surface);
+  color: var(--xc-color-text);
 }
 
 .admin-business-customers-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-  margin: 12px 0 14px;
+  gap: var(--xc-token-spacing-md);
+  margin: var(--xc-token-spacing-md) 0 var(--xc-token-spacing-md);
 }
 
 .admin-business-customers-summary article {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid #dce3eb;
-  border-radius: 8px;
-  background: #fff;
+  gap: var(--xc-token-spacing-xs);
+  padding: var(--xc-token-spacing-md) var(--xc-token-spacing-md);
+  border: 1px solid var(--xc-color-border);
+  border-radius: var(--xc-token-radius-small);
+  background: var(--xc-color-surface);
 }
 
 .admin-business-customers-summary span {
-  font-size: 12px;
-  color: #64748b;
+  font-size: var(--xc-token-typography-label-small-size);
+  color: var(--xc-color-muted);
 }
 
 .admin-business-customers-summary strong {
-  font-size: 20px;
-  color: #0f172a;
+  font-size: var(--xc-token-typography-headline-medium-size);
+  color: var(--xc-color-text);
 }
 
 .admin-business-customers-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin: 14px 0;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  gap: var(--xc-token-spacing-md);
+  margin: var(--xc-token-spacing-md) 0;
+  padding: var(--xc-token-spacing-md) var(--xc-token-spacing-md);
+  border: 1px solid var(--xc-color-border);
+  border-radius: var(--xc-token-radius-small);
+  background: var(--xc-color-surface);
 }
 
 .admin-business-customers-search {
   flex: 1;
   min-width: 220px;
-  padding: 8px 12px;
-  border: 1px solid #dce3eb;
-  border-radius: 8px;
-  background: #f8fafc;
-  font-size: 13px;
+  padding: var(--xc-token-spacing-sm) var(--xc-token-spacing-md);
+  border: 1px solid var(--xc-color-border);
+  border-radius: var(--xc-token-radius-small);
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text);
+  font-size: var(--xc-token-typography-body-small-size);
 }
 
 .admin-business-customers-search:focus {
-  outline: none;
-  border-color: #1e3a5f;
-  background: #fff;
+  outline: var(--xc-token-focus-ring-width) solid var(--xc-color-primary);
+  outline-offset: calc(var(--xc-token-spacing-xs) / 2);
+  border-color: var(--xc-color-primary);
+  background: var(--xc-color-surface);
 }
 
 .admin-business-customers-table-wrap {
   overflow: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--xc-color-border);
+  border-radius: var(--xc-token-radius-small);
+  background: var(--xc-color-surface);
 }
 
 .admin-business-customers-table {
@@ -95,17 +97,17 @@
 
 .admin-business-customers-table th,
 .admin-business-customers-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #edf2f7;
+  padding: var(--xc-token-spacing-sm) var(--xc-token-spacing-md);
+  border-bottom: 1px solid var(--xc-color-border);
   text-align: left;
-  font-size: 13px;
+  font-size: var(--xc-token-typography-body-small-size);
   vertical-align: top;
 }
 
 .admin-business-customers-table th {
-  background: #f8fafc;
-  color: #475569;
-  font-weight: 600;
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text-secondary);
+  font-weight: var(--xc-token-font-weights-semibold);
   white-space: nowrap;
 }
 
@@ -119,32 +121,51 @@
 }
 
 .admin-business-customers-table small {
-  margin-top: 2px;
-  color: #64748b;
+  margin-top: calc(var(--xc-token-spacing-xs) / 2);
+  color: var(--xc-color-muted);
 }
 
 .admin-business-source {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #eef2ff;
-  color: #3730a3;
-  font-size: 12px;
+  padding: var(--xc-token-spacing-xs) var(--xc-token-spacing-sm);
+  border-radius: var(--xc-radius-full);
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text);
+  border: 1px solid var(--xc-color-info);
+  font-size: var(--xc-token-typography-label-small-size);
   white-space: nowrap;
 }
 
 .admin-business-source--erp {
-  background: #ecfdf5;
-  color: #166534;
+  border-color: var(--xc-color-success);
 }
 
 .admin-business-customers-empty {
-  color: #64748b;
+  color: var(--xc-color-muted);
   text-align: center;
-  padding: 32px 12px;
+  padding: var(--xc-token-spacing-xxxl) var(--xc-token-spacing-md);
 }
 
 .muted {
-  color: #64748b;
+  color: var(--xc-color-muted);
 }
+
+.admin-business-customers-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--xc-token-spacing-md);
+  padding: var(--xc-token-spacing-lg);
+}
+.admin-business-customers-pagination button {
+  padding: var(--xc-token-spacing-sm) var(--xc-token-spacing-md);
+  border: 1px solid var(--xc-color-border);
+  border-radius: var(--xc-radius-sm);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.admin-business-customers-pagination button:disabled { opacity: .5; cursor: default; }
+.admin-business-customers-pagination button:focus-visible { outline: var(--xc-token-focus-ring-width) solid var(--xc-color-primary); outline-offset: calc(var(--xc-token-spacing-xs) / 2); }

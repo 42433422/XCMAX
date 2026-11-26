@@ -270,7 +270,7 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             "FHD/tests/test_application/test_approval_scope_binding.py",
             "FHD/tests/test_application/test_worker_claim_boundary.py",
             "FHD/tests/test_application/test_tool_process_streaming.py",
-            "FHD/tests/test_infrastructure/test_codex_transport_contract.py",
+            "FHD/tests/test_infrastructure/test_xiaox_transport_contract.py",
             "scripts/dev/change_classifier.py",
             "scripts/dev/test_change_classifier.py",
         ):

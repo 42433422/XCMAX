@@ -40,7 +40,7 @@ function persist(): void {
 }
 
 /**
- * 全局审批模式（Codex 风格）：开关 + 手动/自动两档。
+ * 全局审批模式（Xiaox 风格）：开关 + 手动/自动两档。
  * 审批记录仍由后端写入审批工作台，本层只控制前端是否自动确认。
  */
 export function useApprovalMode() {

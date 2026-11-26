@@ -31,6 +31,8 @@ class XcagiMobileEndpoints {
   static const syncConflicts = '$base/sync/conflicts';
   static const devicesRegister = '$base/devices/register';
   static const notificationsPending = '$base/notifications/pending';
+  static const notificationsInbox = '$base/notifications/inbox';
+  static String notificationRead(int id) => '$base/notifications/$id/read';
   static const authQrConfirm = '$base/auth/qr/confirm';
   static const pairingExchange = '$base/pairing/exchange';
   static const pairingLookup = '$base/pairing/lookup';

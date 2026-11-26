@@ -56,6 +56,7 @@ export type AgentRunEventType =
   | 'runtime.codex.started'
   | 'runtime.input_answered'
   | 'step.approved'
+  | 'step.auto_approved'
   | 'step.blocked'
   | 'step.clarification_answered'
   | 'step.clarification_required'

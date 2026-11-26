@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import type { ModInfo } from '@/types/modInfo'
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS, isApiFetchTimeoutError } from '@/utils/apiBase'
 import { fetchModRoutesPayloadShared } from '@/utils/modRoutesSharedFetch'
+import { captureAuthSession } from '@/utils/authSessionCache'
 import { fetchPlatformShellCapabilities } from '@/utils/platformShellApi'
 import { applyEditionPackPlatformShell } from '@/constants/platformShellMode'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -255,11 +256,17 @@ export const useModsStore = defineStore('mods', () => {
     return r
   }
 
-  async function fetchModRoutes(): Promise<void> {
+  /** A null result is an unconfirmed fetch, never an authoritative revocation. */
+  async function fetchModRoutes(): Promise<ModRoute[] | null> {
+    const current = captureAuthSession()
     const data = await fetchModRoutesPayloadShared()
-    if (data) {
-      modRoutes.value = data
+    if (!current() || data === null) {
+      // Retain no previous account's route listing if a new account is offline.
+      if (loadedAccountEpoch.value >= 0 && loadedAccountEpoch.value !== productReadAccountEpoch.value) modRoutes.value = []
+      return null
     }
+    modRoutes.value = data
+    return data
   }
 
   function setClientModsUiOff(off: boolean) {
@@ -339,11 +346,22 @@ export const useModsStore = defineStore('mods', () => {
         isLoaded.value = false
         resetModFacadeProbes()
       }
+      const sessionCurrent = captureAuthSession()
       const r = await fetchModsWithRetry()
-      await fetchModRoutes()
+      const authoritativeRoutes = await fetchModRoutes()
+      // Ignore a finished old account initialization after A -> B -> A switches.
+      if (!sessionCurrent()) return
       if (r.modsDisabled) {
         setActiveModId('')
         isLoaded.value = true
+        // A confirmed server-side disable must also revoke routes on the live router.
+        try {
+          const { registerModRoutes } = await import('@/router/registerModRoutes')
+          const router = (await import('@/router')).default
+          await registerModRoutes(router, [], { reconcileRuntime: true })
+        } catch (error) {
+          console.warn('[mods] revoke runtime routes after server disable failed:', error)
+        }
         return
       }
       const ok = r.ok
@@ -365,11 +383,18 @@ export const useModsStore = defineStore('mods', () => {
         }
       }
       try {
-        const { registerAllModRoutesFromGlob, registerModRoutes } = await import('@/router/registerModRoutes')
+        const { registerAllModRoutesFromGlob, registerModRoutes, retireStaleRuntimeRoutes } = await import('@/router/registerModRoutes')
         const router = (await import('@/router')).default
         await registerAllModRoutesFromGlob(router)
-        if (modRoutes.value.length > 0) {
-          await registerModRoutes(router, modRoutes.value)
+        if (!sessionCurrent()) {
+          retireStaleRuntimeRoutes(router)
+          return
+        }
+        if (authoritativeRoutes !== null) {
+          // Revocation requires the same account that issued the original GET.
+          await registerModRoutes(router, authoritativeRoutes, { reconcileRuntime: true, sessionCurrent })
+        } else {
+          retireStaleRuntimeRoutes(router)
         }
       } catch (e) {
         console.warn('[mods] registerModRoutes after initialize failed:', e)

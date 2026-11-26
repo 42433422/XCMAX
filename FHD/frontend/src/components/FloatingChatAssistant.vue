@@ -193,24 +193,33 @@
         </details>
       </div>
 
-      <div v-else ref="messageListRef" class="floating-chat-messages">
+      <div v-else ref="messageListRef" class="floating-chat-messages" @scroll.passive="onMessageScroll">
         <div v-for="(msg, idx) in visibleMessages" :key="`${idx}-${msg.time}`" class="floating-chat-message" :class="msg.role">
-          <div class="floating-chat-bubble" v-html="sanitizeChatBubbleHtml(msg.content)"></div>
+          <div class="floating-chat-bubble">
+            <MessageBody
+              v-if="msg.role === 'ai'"
+              :content="aiMarkdownSourceFromContent(msg.content)"
+              :streaming="isStreamingReply && idx === visibleMessages.length - 1"
+            />
+            <div v-else v-html="sanitizeChatBubbleHtml(msg.content)"></div>
+          </div>
           <div class="floating-chat-time">{{ msg.time }}</div>
         </div>
-        <div v-if="activeIsLoading && !isStreamingReply" class="floating-chat-message ai">
+        <div v-if="activeIsLoading && !isStreamingReply" class="floating-chat-message ai" role="status" aria-live="polite">
           <div class="floating-chat-bubble">{{ loadingProgressText }}</div>
         </div>
       </div>
 
       <form v-if="!callOpen" class="floating-chat-input-row" @submit.prevent="submitMessage">
         <textarea
-          v-model.trim="draft"
+          v-model="draft"
           class="floating-chat-input"
           rows="2"
           placeholder="输入消息..."
           :disabled="activeIsLoading"
-          @keydown.enter.exact.prevent="submitMessage"
+          @compositionstart="composerIme.compositionStart"
+          @compositionend="composerIme.compositionEnd"
+          @keydown.enter.exact="handleComposerEnter"
         ></textarea>
         <button class="floating-chat-send" type="submit" :disabled="!draft || activeIsLoading">发送</button>
       </form>
@@ -227,6 +236,9 @@ import { requestVoiceCallStart, voiceCallActive, voiceChatBridge } from '@/compo
 import { saveVoiceTurnSettings, voiceTurnSettings } from '@/composables/voiceTurnSettings'
 import { publicAssetUrl } from '@/utils/publicAssetUrl'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
+import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
+import { createChatComposerImeGuard } from '@/utils/chatComposerIme'
+import MessageBody from '@/components/chat/MessageBody.vue'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 
 const props = defineProps({
@@ -265,7 +277,9 @@ const desktop = props.desktopWindow ? window.xcagiDesktopAssistant : undefined
 const isOpen = ref(false)
 const externallyHidden = ref(false)
 const draft = ref('')
+const composerIme = createChatComposerImeGuard()
 const messageListRef = ref<HTMLElement | null>(null)
+const followingLatest = ref(true)
 const rootRef = ref<HTMLElement | null>(null)
 const rootLeft = ref(0)
 const rootTop = ref(0)
@@ -434,10 +448,22 @@ const ensurePanelInViewport = async () => {
   }
 }
 
-const scrollToBottom = async () => {
+const handleComposerEnter = (event: KeyboardEvent) => {
+  if (composerIme.shouldSuppressEnter(event)) return
+  event.preventDefault()
+  void submitMessage()
+}
+
+const onMessageScroll = () => {
+  const el = messageListRef.value
+  if (el) followingLatest.value = el.scrollHeight - el.scrollTop - el.clientHeight <= 48
+}
+
+const scrollToBottom = async (force = false) => {
+  if (force) followingLatest.value = true
   await nextTick()
   const el = messageListRef.value
-  if (!el) return
+  if (!el || !followingLatest.value) return
   el.scrollTop = el.scrollHeight
 }
 
@@ -461,7 +487,7 @@ const toggleOpen = async () => {
   if (callOpen.value && isOpen.value) return
   isOpen.value = !isOpen.value
   if (isOpen.value) {
-    await scrollToBottom()
+    await scrollToBottom(true)
     keepRootInViewport()
   }
 }
@@ -525,19 +551,22 @@ const onDragEnd = (event: PointerEvent) => {
 }
 
 const submitMessage = async () => {
+  if (composerIme.composing) return
   const text = draft.value.trim()
   if (!text || activeIsLoading.value) return
   draft.value = ''
+  followingLatest.value = true
   await sendVoiceMessage(text)
   await scrollToBottom()
 }
 
 watch(
-  () => activeMessages.value.length,
+  [() => activeMessages.value.length, () => activeMessages.value.at(-1)?.content, loadingProgressText, activeIsLoading, isStreamingReply],
   () => {
     if (isOpen.value) void scrollToBottom()
   },
 )
+watch(messageListRef, () => { if (isOpen.value) void scrollToBottom() })
 
 watch(
   () => props.visible,

@@ -5,9 +5,15 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_outcome_unknown,
+)
 
 
 class AgentRuntimeContractError(ValueError):
@@ -66,10 +72,10 @@ def build_goal_contract(
     """Persist the user's request; this contract neither plans nor authorizes actions."""
     if not isinstance(run.message, str) or not run.message.strip():
         raise AgentRuntimeContractError("invalid_goal", "原始任务不能为空")
-    historical = history if history is not None else run.metadata.get("_codex_history")
+    historical = history if history is not None else run.metadata.get("_xiaox_history")
     request = {
         "text": run.message,
-        "input_data": copy.deepcopy(run.metadata.get("_codex_input_data")),
+        "input_data": copy.deepcopy(run.metadata.get("_xiaox_input_data")),
         "attachments": copy.deepcopy(attachments or []),
         "context_evidence": copy.deepcopy(context_evidence or []),
         "history": [
@@ -167,7 +173,8 @@ def goal_evidence_snapshot(
         task = str(row.get("child_task_id") or "")
         operation = {key: copy.deepcopy(row.get(key)) for key in ("tool_id", "action", "params")}
         fingerprint = canonical_digest(operation)
-        receipt = copy.deepcopy(row.get("receipt") or {})
+        raw_receipt = row.get("receipt")
+        receipt = copy.deepcopy(raw_receipt) if isinstance(raw_receipt, dict) else {}
         item = {
             "evidence_id": child,
             "task_id": task,
@@ -181,9 +188,10 @@ def goal_evidence_snapshot(
         if (
             not child
             or not task
-            or row.get("fingerprint", fingerprint) != fingerprint
-            or receipt.get("run_id", child) != child
-            or receipt.get("task_id", task) != task
+            or not isinstance(raw_receipt, dict)
+            or row.get("fingerprint") != fingerprint
+            or receipt.get("run_id") != child
+            or receipt.get("task_id") != task
             or tasks.get(task, child) != child
             or (child in evidence and evidence[child] != item)
             or (not item["read_only"] and fingerprint in effects and effects[fingerprint] != child)
@@ -201,6 +209,44 @@ def goal_evidence_snapshot(
         "response_digest": canonical_digest(output),
     }
     return {**snapshot, "digest": canonical_digest(snapshot)}
+
+
+_FUTURE_SCOPE_RE = re.compile(
+    r"(?:接下来|后续|以后|之后|未来)(?:的)?(?:所有|全部|每一|每次|每个)?(?:对话|回复|回答|轮次|回合)"
+)
+_REPLY_STYLE_RE = re.compile(r"语气|口吻|风格|说话方式|措辞|称呼")
+_STYLE_NEGATION_RE = re.compile(r"不要|不得|禁止|请勿|勿再|停止|取消|别再")
+
+
+def is_deferred_reply_preference(request_text: str, goal: GoalAssessment) -> bool:
+    """Host-only: a future-turn tone preference cannot be proven by this turn's reply."""
+    if goal.kind != "constraint" or goal.status != "not_applicable" or goal.evidence_ids:
+        return False
+    source = goal.source
+    if source not in request_text or not source.strip():
+        return False
+    # 引用、转述或被括起来的要求不是在要求本轮执行。
+    start = request_text.index(source)
+    before = request_text[start - 1] if start else ""
+    after = request_text[start + len(source)] if start + len(source) < len(request_text) else ""
+    if (before and before in "“”\"'「」『』（(") or (after and after in "“”\"'「」『』）)"):
+        return False
+    if not (_FUTURE_SCOPE_RE.search(source) and _REPLY_STYLE_RE.search(source)):
+        return False
+    return not _STYLE_NEGATION_RE.search(source)
+
+
+def _batch_goal_capacity(row: dict[str, Any]) -> int:
+    """A verified employee batch can cover one goal per declared phase."""
+    params = row.get("params")
+    if (row.get("tool_id"), row.get("action")) != ("employee", "execute") or not isinstance(
+        params, dict
+    ):
+        return 1
+    payload = params.get("input") if isinstance(params.get("input"), dict) else params
+    plan = payload.get("plan") if isinstance(payload, dict) else None
+    phases = plan.get("phases") if isinstance(plan, dict) else None
+    return len(phases) if isinstance(phases, list) and phases else 1
 
 
 def validate_goal_review(
@@ -225,11 +271,14 @@ def validate_goal_review(
         and row["receipt"].get("status") == "completed"
         and row["receipt"].get("success") is True
         and row["receipt"].get("verified") is True
+        and not execution_result_outcome_unknown(row["receipt"], include_execution=True)
+        and not execution_result_error(row["receipt"])
     }
     errors = list(snapshot["conflicts"])
     seen: set[str] = set()
     used_writes: set[str] = set()
-    assigned: dict[str, str] = {}
+    assigned: dict[str, list[str]] = {}
+    deferred_preferences = 0
     for goal in review.goals:
         if goal.goal_id in seen or goal.source not in sources.get(goal.source_id, ""):
             errors.append(f"目标 {goal.goal_id} 缺少唯一标识或原始请求证据")
@@ -237,9 +286,15 @@ def validate_goal_review(
         selected = set(goal.evidence_ids)
         if len(selected) != len(goal.evidence_ids) or selected - evidence.keys() - {"response"}:
             errors.append(f"目标 {goal.goal_id} 引用了不存在的回执")
-        if goal.status == "unmet":
+        if is_deferred_reply_preference(contract["request"]["text"], goal):
+            # 跨轮回复偏好由宿主依据原文识别，本轮只记录待观察，不算已核验。
+            deferred_preferences += 1
             continue
-        if goal.kind == "reply":
+        if goal.status == "unmet":
+            errors.append(f"目标 {goal.goal_id} 尚未完成")
+            continue
+        # 只引用正文的约束只能约束回复本身，按正文目标核对，不要求业务回执。
+        if goal.kind == "reply" or (goal.kind == "constraint" and selected == {"response"}):
             if goal.status != "satisfied" or selected != {"response"} or not output.strip():
                 errors.append(f"回复目标 {goal.goal_id} 没有完整正文")
         elif goal.kind in {"read", "write"}:
@@ -258,13 +313,25 @@ def validate_goal_review(
                     errors.append(f"写入目标 {goal.goal_id} 不能用只读结果冒充完成")
                 used_writes.update(writes)
                 for key in writes:
-                    if key in assigned:
-                        errors.append(f"目标 {goal.goal_id} 重用了 {assigned[key]} 的同一写入回执")
-                    assigned[key] = goal.goal_id
+                    owners = assigned.get(key)
+                    if owners is None:
+                        assigned[key] = [goal.goal_id]
+                    elif len(owners) < _batch_goal_capacity(verified[key]):
+                        owners.append(goal.goal_id)
+                    else:
+                        errors.append(f"目标 {goal.goal_id} 重用了 {owners[0]} 的同一写入回执")
             elif any(not verified.get(key, {}).get("read_only", True) for key in selected):
                 errors.append(f"只读目标 {goal.goal_id} 包含额外写入")
         elif goal.status != "satisfied" or selected - verified.keys():
             errors.append(f"约束 {goal.goal_id} 的核验无效")
+    if deferred_preferences and not any(
+        goal.kind == "reply"
+        and goal.status == "satisfied"
+        and set(goal.evidence_ids) == {"response"}
+        for goal in review.goals
+    ):
+        # 跨轮偏好不能替代本轮实际交付。
+        errors.append("跨轮回复偏好未附带本轮已核验的回复目标")
     successful_writes = {
         key
         for key, row in evidence.items()
@@ -272,10 +339,20 @@ def validate_goal_review(
     }
     if successful_writes - used_writes:
         errors.append("存在未被原始目标覆盖的写入回执")
-    if constraints.get("objective") and not any(
-        goal.source_id == "objective" for goal in review.goals
-    ):
-        errors.append("未核对宿主绑定的经营目标")
+    bound = constraints.get("objective")
+    if bound:
+        bound_goals = [goal for goal in review.goals if goal.source_id == "objective"]
+        if not bound_goals:
+            errors.append("未核对宿主绑定的经营目标")
+        elif any(
+            goal.kind not in {"read", "write"}
+            or goal.status != "satisfied"
+            or not goal.evidence_ids
+            or not set(goal.evidence_ids) <= verified.keys()
+            for goal in bound_goals
+        ):
+            # 宿主已结构化的经营义务不能用回复或空证据降级为完成。
+            errors.append("宿主绑定的经营目标必须由独立核验的业务回执证明")
     return review.model_dump(), errors
 
 
@@ -313,7 +390,7 @@ def goal_report_coverage(
             and report.get("accepted") is True
             and all(g["status"] != "unmet" for g in goals),
             "required": len(goals),
-            "verified": sum(g["status"] != "unmet" for g in goals),
+            "verified": sum(g["status"] == "satisfied" for g in goals),
             "mode": mode,
             "errors": errors + review["violations"] + review["uncovered_sources"],
         }

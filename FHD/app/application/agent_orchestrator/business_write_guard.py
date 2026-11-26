@@ -8,6 +8,7 @@ from app.application.agent_orchestrator.worker_repository import (
     WorkerLeaseLost as WorkerLeaseLost,
 )
 from app.application.agent_orchestrator.worker_repository import lock_execution_claim
+from app.domain.task_lifecycle.write_authority import write_transaction_guard
 
 _claim = ContextVar("agent_business_write_claim", default=None)
 _elt_step = ContextVar("agent_elt_checkpoint_step", default="")
@@ -16,9 +17,11 @@ _elt_step = ContextVar("agent_elt_checkpoint_step", default="")
 @contextmanager
 def worker_claim_scope(repository, execution, owner_id):
     token = _claim.set((repository, copy.deepcopy(execution), owner_id))
+    guard_token = write_transaction_guard.set(worker_write_guard)
     try:
         yield
     finally:
+        write_transaction_guard.reset(guard_token)
         _claim.reset(token)
 
 
@@ -145,7 +148,7 @@ def capture_worker_claim():
 
 
 def worker_claim_owns_run(run_id):
-    """Accept a child only through the queued Codex parent's durable call binding."""
+    """Accept a child only through the queued Xiaox parent's durable call binding."""
     claim = _claim.get()
     if claim is None:
         return False
@@ -158,15 +161,15 @@ def worker_claim_owns_run(run_id):
     if parent is None or child is None:
         return False
     if (
-        parent.intent != "codex.runtime"
-        or parent.metadata.get("runtime_type") != "codex"
+        parent.intent != "xiaox.runtime"
+        or parent.metadata.get("runtime_type") != "xiaox"
         or child.user_id != parent.user_id
         or tenant_id_of_run(child) != tenant_id_of_run(parent)
         or mod_id_of_run(child) != mod_id_of_run(parent)
         or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != parent.run_id
     ):
         return False
-    calls = (parent.metadata.get("codex_runtime") or {}).get("calls") or {}
+    calls = (parent.metadata.get("xiaox_runtime") or {}).get("calls") or {}
     return any(
         isinstance(call, dict) and call.get("child_run_id") == child.run_id
         for call in calls.values()

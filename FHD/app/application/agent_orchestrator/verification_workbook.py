@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from uuid import uuid4
 
-from app.domain.workbook_write_contract import WORKBOOK_QC, WORKBOOK_WRITER
+from app.domain.workbook_write_contract import (
+    WORKBOOK_NATIVE_PHASES,
+    WORKBOOK_QC,
+    WORKBOOK_STRUCTURAL_PHASES,
+    WORKBOOK_WRITER,
+)
 
 
 def is_workbook_write(params: dict) -> bool:
@@ -57,10 +68,63 @@ def capture_template(params: dict, context: dict) -> dict:
         return {}
 
 
+class _QcSourceLoader(importlib.machinery.SourceFileLoader):
+    def get_code(self, fullname):
+        # Default SourceFileLoader can read stale pyc or write new files into a
+        # signed pack. Compile these trusted sources without either cache path.
+        source = self.get_filename(fullname)
+        return self.source_to_code(self.get_data(source), source)
+
+
+class _QcSourceFinder(importlib.abc.MetaPathFinder):
+    def __init__(self, name: str, package_path: Path):
+        self.name = name
+        self.package_path = package_path.resolve()
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == self.name:
+            module_path = self.package_path
+        elif fullname.startswith(self.name + "."):
+            parts = fullname[len(self.name) + 1 :].split(".")
+            if not all(part.isidentifier() for part in parts):
+                raise ModuleNotFoundError(fullname, name=fullname)
+            module_path = self.package_path.joinpath(*parts)
+        else:
+            return None
+        is_package = module_path.is_dir()
+        source = module_path / "__init__.py" if is_package else module_path.with_suffix(".py")
+        source = source.resolve()
+        if not source.is_relative_to(self.package_path) or not source.is_file():
+            # Do not let a later finder satisfy this namespace from a pyc file.
+            raise ModuleNotFoundError(fullname, name=fullname)
+        return importlib.util.spec_from_file_location(
+            fullname,
+            source,
+            loader=_QcSourceLoader(fullname, str(source)),
+            submodule_search_locations=[str(source.parent)] if is_package else None,
+        )
+
+
+@contextmanager
+def _qc_package(pack: Path):
+    """Load this trusted source package without sharing or writing bytecode caches."""
+    package_path = Path(pack).resolve() / "backend" / "vendor" / "excel_qc"
+    name = f"_xcagi_workbook_qc_{uuid4().hex}"
+    finder = _QcSourceFinder(name, package_path)
+    sys.meta_path.insert(0, finder)
+    try:
+        yield importlib.import_module(f"{name}.checks")
+    finally:
+        # No fixed package name or previous pack version can satisfy this load.
+        for loaded in tuple(sys.modules):
+            if loaded == name or loaded.startswith(name + "."):
+                sys.modules.pop(loaded, None)
+        sys.meta_path.remove(finder)
+
+
 def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict) -> dict:
     from app.application.agent_orchestrator.artifact_files import read_verified_run_file
     from app.application.agent_orchestrator.verification_readback import _files, _report
-    from app.application.employee_runtime.executor import _import_module_from_path
     from app.application.employee_runtime.loader import (
         resolve_pack_dir,
         verify_direct_python_pack_trust,
@@ -88,26 +152,44 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
     pack = resolve_pack_dir(WORKBOOK_QC)
     if pack is None or not verify_direct_python_pack_trust(pack)[0]:
         return _report("inconclusive", "result_workbook_qc_unavailable", "workbook_qc")
-    module = _import_module_from_path(
-        Path(pack) / "backend" / "vendor" / "excel_qc" / "checks.py", "_xcagi_workbook_qc"
-    )
-    if module is None or not callable(getattr(module, "run_qc", None)):
-        return _report("inconclusive", "result_workbook_qc_unavailable", "workbook_qc")
-    # Reopen the original owned input; a changed upload is not the preimage that
-    # was approved and frozen before the producing worker ran.
-    with _owned_template(payload["template_path"], context) as template:
-        if hashlib.sha256(template.read_bytes()).hexdigest() != original["sha256"]:
-            return _report("inconclusive", "result_workbook_template_changed", "workbook_qc")
-        with TemporaryDirectory(prefix="workbook-qc-", dir=_staging_root()) as directory:
-            filled = Path(directory) / ("result" + suffix)
-            filled.write_bytes(read_verified_run_file(run.run_id, artifacts[0]))
-            report = module.run_qc(filled, plan, template_path=template)
+    with _qc_package(Path(pack)) as module:
+        if not callable(getattr(module, "run_qc", None)):
+            return _report("inconclusive", "result_workbook_qc_unavailable", "workbook_qc")
+        # Reopen the original owned input; a changed upload is not the preimage that
+        # was approved and frozen before the producing worker ran.
+        with _owned_template(payload["template_path"], context) as template:
+            if hashlib.sha256(template.read_bytes()).hexdigest() != original["sha256"]:
+                return _report("inconclusive", "result_workbook_template_changed", "workbook_qc")
+            with TemporaryDirectory(prefix="workbook-qc-", dir=_staging_root()) as directory:
+                filled = Path(directory) / ("result" + suffix)
+                filled.write_bytes(read_verified_run_file(run.run_id, artifacts[0]))
+                report = module.run_qc(filled, plan, template_path=template)
     sections = report.get("sections") or {}
     checked = {name: item.get("status") for name, item in sections.items()}
+    native_count = sum(
+        isinstance(phase, dict) and phase.get("phase") in WORKBOOK_NATIVE_PHASES
+        for phase in plan.get("phases") or ()
+    )
+    style_count = sum(
+        isinstance(phase, dict) and phase.get("phase") == "cell_styles"
+        for phase in plan.get("phases") or ()
+    )
+    structural_count = sum(
+        isinstance(phase, dict) and phase.get("phase") in WORKBOOK_STRUCTURAL_PHASES
+        for phase in plan.get("phases") or ()
+    )
+    conformance_stats = (sections.get("conformance") or {}).get("stats") or {}
     valid = (
         report.get("verdict") == "PASS"
         and checked.get("conformance") == checked.get("formulas") == "pass"
         and (not plan.get("protected_ranges") or checked.get("protection") == "pass")
+        and (not native_count or conformance_stats.get("native_phases_checked") == native_count)
+        # 旧版 QC 不检查样式/结构操作时不能静默放行已声明的计划。
+        and (not style_count or int(conformance_stats.get("style_cells_checked") or 0) > 0)
+        and (
+            not structural_count
+            or conformance_stats.get("structural_phases_checked") == structural_count
+        )
     )
     status = (
         "verified" if valid else "failed" if report.get("verdict") == "FAIL" else "inconclusive"
@@ -116,7 +198,13 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
         status,
         "result_verified" if valid else "result_workbook_qc_unmet",
         "workbook_qc",
-        verification_scope="planned_cells_formulas_and_protected_ranges",
+        verification_scope=(
+            "planned_cells_formulas_protected_ranges_structural_and_native_objects"
+            if native_count
+            else "planned_cells_formulas_protected_ranges_and_structural_operations"
+            if structural_count
+            else "planned_cells_formulas_and_protected_ranges"
+        ),
         template_sha256=original["sha256"],
         artifact_sha256=artifacts[0]["metadata"]["sha256"],
         sections=checked,

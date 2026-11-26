@@ -1,4 +1,4 @@
-"""Lock lifetime under concurrent callers; Codex deadline coverage lives at its runtime boundary."""
+"""Lock lifetime under concurrent callers; Xiaox deadline coverage lives at its runtime boundary."""
 
 import time
 from concurrent.futures import ThreadPoolExecutor

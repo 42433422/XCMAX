@@ -29,14 +29,18 @@ def _assert_finance_run(repo: InMemoryAgentRunRepository, run_id: str, action: s
     # Dispatch-only service mocks do not provide an independent transaction receipt.
     assert run.status == "blocked"
     assert run.intent == f"ERP Agent 请求执行 finance.{action}"
-    assert run.tool_calls[0].tool_id == "finance"
-    assert run.tool_calls[0].action == action
-    assert run.tool_calls[0].permission == f"tool.finance.{action}"
-    assert run.tool_calls[0].cost_units == 2
-    assert len(run.tool_calls) == 1
-    assert run.tool_calls[0].output["success"] is True
-    report = run.tool_calls[0].metadata["verification"]
-    assert report["accepted"] is False and report["code"] == "result_verifier_unavailable"
+    (call,) = run.tool_calls
+    assert call.tool_id == "finance"
+    assert call.action == action
+    assert call.permission == f"tool.finance.{action}"
+    assert call.cost_units == 2
+    assert call.output["success"] is True
+    report = call.metadata["verification"]
+    assert report["accepted"] is False
+    if action == "create_transaction":
+        assert report["code"] == "result_source_unavailable"
+    else:
+        assert report["code"] == "result_verifier_unavailable"
     events = {event.event_type for event in run.events}
     assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
     assert not {"tool.completed", "run.completed"} & events

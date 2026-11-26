@@ -1,6 +1,6 @@
 """统计销售、库存和采购。"""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -21,12 +21,14 @@ from app.db.models import (
 from app.db.models.sales import inclusive_order_bound, sales_status_predicate
 from app.db.session import get_db
 from app.domain.shared_services.report_export import export_report_to_excel
+from app.domain.value_objects.date_range import reporting_date_bounds
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 REPORT_FILTERS = {
     "sales": (
         "start_date",
         "end_date",
+        "period",
         "group_by",
         "customer_id",
         "customer_name",
@@ -83,8 +85,8 @@ class ReportService(NeuroEventPublisherMixin):
 
     def get_sales_report(
         self,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
+        start_date: date | str | None = None,
+        end_date: date | str | None = None,
         group_by: str = "product",
         customer_id: int | None = None,
         source: str = "sales_order",
@@ -94,23 +96,23 @@ class ReportService(NeuroEventPublisherMixin):
         status: str | None = None,
         customer_name: str | None = None,
         order_no: str | None = None,
+        period: str | None = None,
     ) -> dict[str, Any]:
         """按订单汇总销售，兼容指定来源的历史发货报表。"""
+        start, end = reporting_date_bounds(period, start_date, end_date)
+        since = inclusive_order_bound(start, end=False)
+        until = inclusive_order_bound(end, end=True)
         if source == "shipment":
-            return self._get_sales_report_from_shipments(
-                start_date, end_date, group_by, customer_id
-            )
-        start_date = inclusive_order_bound(start_date, end=False)
-        end_date = inclusive_order_bound(end_date, end=True)
+            return self._get_sales_report_from_shipments(since, until, group_by, customer_id)
         with get_db() as db:
             query = db.query(SalesOrderItem, SalesOrder).join(
                 SalesOrder, SalesOrderItem.order_id == SalesOrder.id
             )
 
-            if start_date:
-                query = query.filter(SalesOrder.created_at >= start_date)
-            if end_date:
-                query = query.filter(SalesOrder.created_at <= end_date)
+            if since:
+                query = query.filter(SalesOrder.created_at >= since)
+            if until:
+                query = query.filter(SalesOrder.created_at <= until)
             if customer_id is not None:
                 query = query.filter(SalesOrder.customer_id == customer_id)
             if customer_name:

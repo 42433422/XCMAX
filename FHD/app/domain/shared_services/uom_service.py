@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from contextlib import nullcontext
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, DecimalException
 from typing import Any
 
 from app.db.models import Product, UomCategory, UomUnit
@@ -41,14 +41,15 @@ class UomService:
     # ------------------------------------------------------------------
     @staticmethod
     def _dec(value: Any) -> Decimal:
-        if isinstance(value, Decimal):
-            return value
-        if value is None:
-            raise UomConversionError("换算数量/系数不能为空")
+        if value is None or isinstance(value, bool):
+            raise UomConversionError("换算数量、系数或金额必须是有限十进制数")
         try:
-            return Decimal(str(value))
-        except (TypeError, ValueError) as exc:  # pragma: no cover - 防御
-            raise UomConversionError(f"无法解析为十进制: {value!r}") from exc
+            number = value if isinstance(value, Decimal) else Decimal(str(value))
+        except (DecimalException, TypeError, ValueError) as exc:
+            raise UomConversionError("无法解析为有限十进制数") from exc
+        if not number.is_finite():
+            raise UomConversionError("换算数量、系数或金额必须是有限十进制数")
+        return number
 
     def convert(self, quantity: Any, from_factor: Any, to_factor: Any) -> Decimal:
         """按系数换算：``quantity × from_factor ÷ to_factor``。
@@ -60,7 +61,10 @@ class UomService:
         tf = self._dec(to_factor)
         if ff <= 0 or tf <= 0:
             raise UomConversionError("换算系数必须大于 0")
-        return qty * ff / tf
+        try:
+            return self._dec(qty * ff / tf)
+        except DecimalException as exc:
+            raise UomConversionError("换算结果超出可表示精度") from exc
 
     # ------------------------------------------------------------------
     # 获取某产品/类别的单位系数表
@@ -79,26 +83,57 @@ class UomService:
         """
         units: dict[str, Decimal] = {}
         cat_code = category_code or (product.uom_category if product is not None else None)
+        if product is not None:
+            if tenant_id is not None and product.tenant_id != tenant_id:
+                raise UomConversionError("产品与计量单位企业归属不一致")
+            tenant_id = product.tenant_id
+            if category_code and category_code != product.uom_category:
+                raise UomConversionError("禁止跨产品量纲换算")
+        else:
+            from app.domain.context.current_request import current_tenant_id
+
+            scope = current_tenant_id()
+            if scope is not None and tenant_id not in (None, scope):
+                raise UomConversionError("计量单位企业归属不一致")
+            if tenant_id is None:
+                tenant_id = scope
 
         cm = nullcontext(self._db) if self._db is not None else get_db()
         with cm as db:
             if cat_code:
-                cat_q = db.query(UomCategory)
-                if tenant_id is not None:
-                    cat_q = cat_q.filter(UomCategory.tenant_id == tenant_id)
-                category = cat_q.filter(UomCategory.code == cat_code).first()
-                if category is not None:
-                    unit_q = db.query(UomUnit).filter(
-                        UomUnit.category_id == category.id, UomUnit.is_active == 1
+                categories = (
+                    db.query(UomCategory)
+                    .filter(
+                        UomCategory.tenant_id == tenant_id,
+                        UomCategory.code == cat_code,
+                        UomCategory.is_active == 1,
                     )
-                    if tenant_id is not None:
-                        unit_q = unit_q.filter(UomUnit.tenant_id == tenant_id)
-                    for u in unit_q.all():
-                        units[u.code] = self._dec(u.factor)
+                    .limit(2)
+                    .all()
+                )
+                if len(categories) > 1:
+                    raise UomConversionError("计量类别历史记录重复")
+                if categories:
+                    for u in (
+                        db.query(UomUnit)
+                        .filter(
+                            UomUnit.category_id == categories[0].id,
+                            UomUnit.tenant_id == tenant_id,
+                            UomUnit.is_active == 1,
+                        )
+                        .all()
+                    ):
+                        factor = self._dec(u.factor)
+                        if factor <= 0 or u.code in units:
+                            raise UomConversionError("计量单位重复或换算系数无效")
+                        units[u.code] = factor
 
         if product is not None and product.unit not in units:
             factor = product.uom_factor if product.uom_factor is not None else Decimal("1")
-            units[product.unit] = self._dec(factor)
+            factor = self._dec(factor)
+            if factor <= 0:
+                raise UomConversionError("产品默认单位换算系数无效")
+            units[product.unit] = factor
         return units
 
     def convert_quantity(
@@ -144,7 +179,13 @@ class UomService:
             quantity, from_unit, to_unit, product=product, units=units, tenant_id=tenant_id
         )
         price = self._dec(unit_price)
-        amount = (converted * price).quantize(Decimal("0.01"))
+        try:
+            if price < 0 or price != price.quantize(Decimal("0.0001")):
+                raise UomConversionError("单价必须是非负、最多四位小数")
+            # Match purchase and journal per-line currency rounding.
+            amount = (converted * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        except DecimalException as exc:
+            raise UomConversionError("换算金额超出可表示精度") from exc
         return {
             "quantity": converted,
             "unit": to_unit,

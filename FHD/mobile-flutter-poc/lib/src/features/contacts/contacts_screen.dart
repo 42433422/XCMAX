@@ -292,18 +292,30 @@ class _AiEmployeeIndexedListState extends State<_AiEmployeeIndexedList> {
       offset += entry.value.length * _aiEmployeeIndexRowHeight;
     }
 
+    String entryIdentity(Object entry) => entry is String
+        ? 'section:$entry'
+        : 'employee:${(entry as AiEmployeeProfile).key}';
+    final entryIndexes = <String, int>{
+      for (var index = 0; index < entries.length; index++)
+        entryIdentity(entries[index]): index,
+    };
     final list = ListView.builder(
       controller: _scrollController,
+      addAutomaticKeepAlives: false,
+      findChildIndexCallback: (key) =>
+          key is ValueKey<String> ? entryIndexes[key.value] : null,
       padding: EdgeInsets.only(right: widget.showIndex ? 24 : 0),
       itemCount: entries.length,
       itemBuilder: (context, index) {
         final entry = entries[index];
-        if (entry is String) {
-          return _AiEmployeeIndexSection(letter: entry);
-        }
-        return _AiEmployeeRow(
-          employee: entry as AiEmployeeProfile,
-          repository: widget.repository,
+        return KeyedSubtree(
+          key: ValueKey<String>(entryIdentity(entry)),
+          child: entry is String
+              ? _AiEmployeeIndexSection(letter: entry)
+              : _AiEmployeeRow(
+                  employee: entry as AiEmployeeProfile,
+                  repository: widget.repository,
+                ),
         );
       },
     );

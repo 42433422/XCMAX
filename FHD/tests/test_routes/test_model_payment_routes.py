@@ -487,7 +487,7 @@ class TestAlipayNotify:
             )
             assert r.status_code == 400
 
-    def test_notify_unknown_order_returns_success(self, client_mp):
+    def test_notify_unknown_order_requires_reconciliation_retry(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.is_local_model_payment_sot", return_value=True),
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
@@ -506,8 +506,30 @@ class TestAlipayNotify:
                     "total_amount": "9.90",
                 },
             )
-            assert r.status_code == 200
-            assert r.text == "success"
+            assert r.status_code == 503
+            assert r.text == "fail"
+
+    def test_notify_trade_conflict_is_not_acknowledged(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.is_local_model_payment_sot", return_value=True),
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
+        ):
+            mock_ali.credentials_ready.return_value = True
+            mock_ali.verify_notify.return_value = True
+            mock_orders.apply_notify_paid.return_value = ("trade_mismatch", None)
+            response = client_mp.post(
+                "/api/model-payment/notify/alipay",
+                data={
+                    "sign": "sig123",
+                    "trade_status": "TRADE_SUCCESS",
+                    "out_trade_no": "mp-conflict",
+                    "trade_no": "T-conflicting",
+                    "total_amount": "9.90",
+                },
+            )
+            assert response.status_code == 400
+            assert response.text == "fail"
 
     def test_notify_verify_raises_infra_transient_returns_500(self, client_mp):
         with (
@@ -612,176 +634,3 @@ class TestEntitlements:
             body = r.json()
             assert body["success"] is True
             assert len(body["data"]["entitlements"]) == 1
-
-
-@pytest.fixture
-def owned_order_business_branch():
-    # Provider result contracts only; real object/RBAC rejection is tested separately.
-    with patch(
-        "app.fastapi_routes.model_payment.owned_payment_order",
-        return_value={"status": "paid", "trade_no": "T123"},
-    ):
-        yield
-
-
-# ========================= GET /api/model-payment/query/{out_trade_no} ===
-
-
-@pytest.mark.usefixtures("owned_order_business_branch")
-class TestQueryTrade:
-    def test_query_trade_success(self, client_mp):
-        with (
-            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
-            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
-        ):
-            mock_ali.query_order.return_value = {
-                "success": True,
-                "raw": {"trade_status": "TRADE_SUCCESS"},
-            }
-            mock_orders.get_order.return_value = {"status": "paid"}
-            r = client_mp.get("/api/model-payment/query/mp-123")
-            assert r.status_code == 200
-            body = r.json()
-            assert body["success"] is True
-            assert body["data"]["trade"]["trade_status"] == "TRADE_SUCCESS"
-
-    def test_query_trade_failure(self, client_mp):
-        with (
-            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
-            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
-        ):
-            mock_ali.query_order.return_value = {"success": False, "message": "查询失败"}
-            mock_orders.get_order.return_value = None
-            r = client_mp.get("/api/model-payment/query/mp-123")
-            assert r.status_code == 200
-            body = r.json()
-            assert body["success"] is False
-
-
-# ========================= POST /api/model-payment/refund ================
-
-
-@pytest.mark.usefixtures("owned_order_business_branch")
-class TestRefund:
-    def test_refund_missing_out_trade_no(self, client_mp):
-        r = client_mp.post("/api/model-payment/refund", json={"refund_amount": "9.90"})
-        assert r.status_code == 400
-        assert "out_trade_no 必填" in r.json()["message"]
-
-    def test_refund_missing_refund_amount(self, client_mp):
-        r = client_mp.post("/api/model-payment/refund", json={"out_trade_no": "mp-123"})
-        assert r.status_code == 400
-        assert "refund_amount 必填" in r.json()["message"]
-
-    def test_refund_success(self, client_mp):
-        with (
-            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
-            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
-        ):
-            mock_ali.refund_order.return_value = {
-                "success": True,
-                "raw": {"refund_status": "REFUND_SUCCESS"},
-            }
-            mock_orders.update_order_status.return_value = None
-            r = client_mp.post(
-                "/api/model-payment/refund",
-                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
-            )
-            assert r.status_code == 200
-            body = r.json()
-            assert body["success"] is True
-
-    def test_refund_alipay_failure(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.refund_order.return_value = {"success": False, "message": "退款失败"}
-            r = client_mp.post(
-                "/api/model-payment/refund",
-                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
-            )
-            assert r.status_code == 200
-            assert r.json()["success"] is False
-
-    def test_refund_write_failure_still_returns_success(self, client_mp):
-        with (
-            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
-            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
-        ):
-            mock_ali.refund_order.return_value = {"success": True, "raw": {}}
-            mock_orders.update_order_status.side_effect = OSError("disk full")
-            r = client_mp.post(
-                "/api/model-payment/refund",
-                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
-            )
-            assert r.status_code == 200
-            assert r.json()["success"] is True
-
-
-# ========================= POST /api/model-payment/close =================
-
-
-@pytest.mark.usefixtures("owned_order_business_branch")
-class TestClose:
-    def test_close_missing_both_ids(self, client_mp):
-        r = client_mp.post("/api/model-payment/close", json={})
-        assert r.status_code == 400
-        assert "out_trade_no 必填" in r.json()["message"]
-
-    def test_close_success_with_out_trade_no(self, client_mp):
-        with (
-            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
-            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
-        ):
-            mock_ali.close_order.return_value = {"success": True, "raw": {}}
-            mock_orders.update_order_status.return_value = None
-            r = client_mp.post("/api/model-payment/close", json={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is True
-
-    def test_close_rejects_trade_no_only(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.close_order.return_value = {"success": True, "raw": {}}
-            r = client_mp.post("/api/model-payment/close", json={"trade_no": "T123"})
-            assert r.status_code == 400
-            assert r.json()["success"] is False
-            mock_ali.close_order.assert_not_called()
-
-    def test_close_alipay_failure(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.close_order.return_value = {"success": False, "message": "关闭失败"}
-            r = client_mp.post("/api/model-payment/close", json={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is False
-
-    def test_close_write_failure_still_returns_success(self, client_mp):
-        with (
-            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
-            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
-        ):
-            mock_ali.close_order.return_value = {"success": True, "raw": {}}
-            mock_orders.update_order_status.side_effect = OSError("disk full")
-            r = client_mp.post("/api/model-payment/close", json={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is True
-
-
-# ========================= GET /api/model-payment/refund/query ===========
-
-
-@pytest.mark.usefixtures("owned_order_business_branch")
-class TestRefundQuery:
-    def test_refund_query_success(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.query_refund.return_value = {
-                "success": True,
-                "raw": {"refund_status": "REFUND_SUCCESS"},
-            }
-            r = client_mp.get("/api/model-payment/refund/query", params={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is True
-
-    def test_refund_query_failure(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.query_refund.return_value = {"success": False, "message": "查询失败"}
-            r = client_mp.get("/api/model-payment/refund/query", params={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is False

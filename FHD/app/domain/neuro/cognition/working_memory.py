@@ -5,8 +5,8 @@
 
 设计原则（与 ``EmployeeMemoryManager`` 一致）：
 - best-effort：任何后端不可用都降级为空记忆，不阻断 Conscious 处理。
-- 短期优先：默认只召回当前 session 的最近 N 条消息（< 5ms）。
-- 长期可选：``enable_long_term=True`` 时追加向量召回（``UserMemoryRagApplicationService``）。
+- 短期优先：召回当前 session 的最近 N 条消息。
+- 长期默认启用，使用现有受治理向量召回；显式 False 可关闭。
 
 Phase 2 用途：为 ``AttentionSelector`` 提供候选上下文，供 LLM 生成时引用。
 """
@@ -71,14 +71,14 @@ class WorkingMemory:
     Args:
         session_id: 会话 ID（用于短期召回）。
         user_id: 用户 ID（用于长期向量召回的命名空间）。
-        enable_long_term: 是否启用长期向量记忆（默认关闭，保持 <10ms SLA）。
+        enable_long_term: 是否启用长期向量记忆（默认开启）。
     """
 
     def __init__(
         self,
         session_id: str = "",
         user_id: str = "",
-        enable_long_term: bool = False,
+        enable_long_term: bool = True,
     ) -> None:
         self._session_id = session_id
         self._user_id = user_id
@@ -214,11 +214,16 @@ _memory: WorkingMemory | None = None
 def get_working_memory(
     session_id: str = "",
     user_id: str = "",
-    enable_long_term: bool = False,
+    enable_long_term: bool = True,
 ) -> WorkingMemory:
     """获取全局 ``WorkingMemory`` 单例（按 session_id/user_id 初始化）。"""
     global _memory
-    if _memory is None or _memory._session_id != session_id or _memory._user_id != user_id:
+    if (
+        _memory is None
+        or _memory._session_id != session_id
+        or _memory._user_id != user_id
+        or _memory._enable_long_term != enable_long_term
+    ):
         _memory = WorkingMemory(
             session_id=session_id,
             user_id=user_id,

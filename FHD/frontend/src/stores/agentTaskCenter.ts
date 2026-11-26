@@ -65,6 +65,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let stream: AuthenticatedEventStream | null = null
   let reconnectTimer: number | null = null
   let fallbackTimer: number | null = null
+  let reconnectFailures = 0
   let started = false
   let authPaused = false
   let scopeVersion = 0
@@ -310,6 +311,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       if (!isCurrent()) return
       try {
         replaceTasks(JSON.parse((event as MessageEvent).data) as AgentTaskSummary[])
+        reconnectFailures = 0
         connected.value = true
         error.value = ''
         if (drawerOpen.value && selectedTaskId.value) void refreshDetail()
@@ -368,10 +370,29 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
 
   function scheduleReconnect(): void {
     if (!started || authPaused || reconnectTimer !== null || typeof window === 'undefined') return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+    // Only a valid task snapshot resets retry count, not a TCP handshake.
+    const delayMs = Math.min(60_000, 1500 * 2 ** Math.min(reconnectFailures++, 6))
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null
       connectStream()
-    }, 1500)
+    }, delayMs)
+  }
+
+  function onForeground(): void {
+    if (!started || authPaused || typeof document === 'undefined') return
+    if (document.visibilityState === 'hidden') {
+      stream?.close()
+      stream = null
+      connected.value = false
+      stale.value = true
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+      reconnectTimer = null
+      return
+    }
+    void refresh()
+    if (drawerOpen.value && selectedTaskId.value) void refreshDetail()
+    if (!stream) connectStream()
   }
 
   function resumeAfterLogin(): void {
@@ -383,14 +404,23 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (started || authPaused) return
     started = true
     void refresh()
-    connectStream()
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') connectStream()
     if (typeof window !== 'undefined') {
-      fallbackTimer = window.setInterval(() => void refresh(), 15000)
+      fallbackTimer = window.setInterval(() => {
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') void refresh()
+      }, 15000)
+      window.addEventListener('focus', onForeground)
+      document.addEventListener('visibilitychange', onForeground)
     }
   }
 
   function stop(): void {
     started = false
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', onForeground)
+      document.removeEventListener('visibilitychange', onForeground)
+    }
+    reconnectFailures = 0
     connected.value = false
     stale.value = true
     stream?.close()

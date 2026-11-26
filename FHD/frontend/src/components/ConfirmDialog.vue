@@ -81,97 +81,92 @@ useDialogFocus(panel, () => props.modelValue, handleCancel)
 <style scoped>
 .confirm-dialog-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  inset: 0;
   z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.5);
 }
-
 .confirm-dialog {
-  background: white;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 400px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: min(100%, 400px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  background: var(--xc-token-desktop-office-base-app-surface-strong, #ffffff);
+  color: var(--xc-token-desktop-enterprise-xc-color-text, #1a1f2e);
+  border-radius: var(--xc-token-desktop-office-base-app-radius-sm, 8px);
+  box-shadow: var(--xc-token-desktop-office-base-app-shadow-sm, 0 4px 20px rgba(0, 0, 0, 0.15));
 }
-
 .confirm-dialog-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--xc-token-desktop-enterprise-xc-color-border, #dde1e9);
 }
-
 .confirm-dialog-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #333;
+  color: var(--xc-token-desktop-enterprise-xc-color-text, #1a1f2e);
 }
-
 .confirm-dialog-body {
   padding: 20px;
+  overflow-wrap: anywhere;
 }
-
 .confirm-dialog-body p {
   margin: 0;
-  color: #666;
+  color: var(--xc-token-desktop-enterprise-xc-color-text-secondary, #374151);
   line-height: 1.5;
 }
-
 .confirm-dialog-footer {
   padding: 16px 20px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--xc-token-desktop-enterprise-xc-color-border, #dde1e9);
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
 }
-
 .btn {
+  min-width: 44px;
+  min-height: 44px;
   padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--xc-token-desktop-office-base-app-radius-sm, 8px);
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color var(--xc-token-motion-feedback-ms, 160ms) ease;
 }
-
+.btn:focus-visible {
+  outline: 3px solid var(--xc-token-desktop-enterprise-xc-color-primary, #0d47a1);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.btn:disabled { opacity: 0.65; cursor: not-allowed; }
 .btn-primary {
-  background-color: #3498db;
+  background-color: var(--xc-token-desktop-enterprise-xc-color-primary, #0d47a1);
   color: white;
 }
-
 .btn-primary:hover {
-  background-color: #2980b9;
+  background-color: var(--xc-token-desktop-enterprise-xc-color-primary-hover, #0a3880);
 }
-
 .btn-secondary {
-  background-color: #95a5a6;
+  background-color: var(--xc-token-desktop-enterprise-xc-color-text-secondary, #374151);
   color: white;
 }
-
 .btn-secondary:hover {
-  background-color: #7f8c8d;
+  background-color: var(--xc-token-desktop-enterprise-xc-color-text, #1a1f2e);
 }
-
 .btn-danger {
-  background-color: #e74c3c;
+  background-color: var(--xc-token-desktop-enterprise-xc-color-danger, #c0392b);
   color: white;
 }
-
-.btn-danger:hover {
-  background-color: #c0392b;
-}
-
+.btn-danger:hover { filter: brightness(0.90); }
 .btn-success {
-  background-color: #2ecc71;
+  background-color: var(--xc-token-desktop-enterprise-xc-color-success, #00875a);
   color: white;
 }
-
-.btn-success:hover {
-  background-color: #27ae60;
+.btn-success:hover { filter: brightness(0.90); }
+@media (prefers-reduced-motion: reduce) {
+  .btn { transition: none; }
 }
 </style>

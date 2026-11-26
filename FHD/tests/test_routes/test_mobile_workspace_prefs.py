@@ -78,3 +78,37 @@ def test_mobile_workspace_cannot_change_ownership_or_industry():
             MobileWorkspacePrefsPatch.model_validate(
                 {"workflow_ai_employees": {}, forbidden: "other"}
             )
+
+
+@pytest.mark.asyncio
+async def test_native_workspace_forwards_optional_revision_token(monkeypatch):
+    from app.fastapi_routes import workspace_prefs_routes as shared
+
+    save = AsyncMock(return_value={"success": True, "revision": 9})
+    monkeypatch.setattr(shared, "patch_workspace_prefs_endpoint", save)
+    routes, req = endpoints(), request()
+    result = await routes["PATCH"](
+        MobileWorkspacePrefsPatch(
+            workflow_ai_employees={"alpha": True},
+            expected_revision=8,
+            expected_owner_id="tenant:42",
+        ),
+        req,
+        user=object(),
+    )
+    assert result["revision"] == 9
+    body, passed_request = save.call_args.args
+    assert passed_request is req
+    assert body.model_dump(exclude_none=True) == {
+        "workflow_ai_employees": {"alpha": True},
+        "expected_revision": 8,
+        "expected_owner_id": "tenant:42",
+    }
+    with pytest.raises(ValidationError):
+        MobileWorkspacePrefsPatch.model_validate(
+            {"workflow_ai_employees": {}, "expected_revision": -1}
+        )
+    with pytest.raises(ValidationError):
+        MobileWorkspacePrefsPatch.model_validate(
+            {"workflow_ai_employees": {}, "expected_revision": True}
+        )

@@ -16,12 +16,12 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _project_registry(
-    *, include_aiopen: bool = False, tool_actions: set[tuple[str, str]] | None = None
+    *, include_aiopen: bool = False, specs: dict[tuple[str, str], ToolActionSpecV2] | None = None
 ) -> dict[str, Any]:
+    if specs is None:
+        specs = build_tool_specs_v2()
     result: dict[str, Any] = {}
-    for (tool_id, action), spec in sorted(build_tool_specs_v2().items()):
-        if tool_actions is not None and (tool_id, action) not in tool_actions:
-            continue
+    for (tool_id, action), spec in sorted(specs.items()):
         if tool_id in RETIRED_PLANNER_TOOLS or (
             spec.availability == "aiopen" and not include_aiopen
         ):
@@ -144,20 +144,22 @@ def authorized_tool_specs(
     context: dict[str, Any],
     *,
     include_aiopen: bool = False,
-    tool_actions: set[tuple[str, str]] | None = None,
+    specs: dict[tuple[str, str], ToolActionSpecV2] | None = None,
 ) -> dict[tuple[str, str], ToolActionSpecV2]:
     """Use the same live authority projection for Codex discovery and dispatch.
 
     Actor-dependent schema restrictions, such as readable business entities,
     are part of the described digest and are rechecked before every dispatch.
+    A worker passes the exact contract it validated for the current action.
     """
+    if specs is None:
+        specs = build_tool_specs_v2()
     try:
         registry = _authorized_registry(
-            _project_registry(include_aiopen=include_aiopen, tool_actions=tool_actions), context
+            _project_registry(include_aiopen=include_aiopen, specs=specs), context
         )
     except RECOVERABLE_ERRORS:
         return {}
-    specs = build_tool_specs_v2()
     return {
         (tool_id, action): replace(
             specs[(tool_id, action)], input_schema=deepcopy(metadata["input_schema"])

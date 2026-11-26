@@ -43,10 +43,12 @@ class TestSaveSelectedIndustryDeprecated:
         mock_patch.assert_not_called()
 
     def test_does_not_call_save_workspace_prefs(self):
-        """save_selected_industry 不应触发底层 _save_workspace_prefs。"""
+        """save_selected_industry 不应访问底层偏好存储。"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            with patch("app.application.tenant_workspace_prefs._save_workspace_prefs") as mock_save:
+            with patch(
+                "app.domain.shared_services.user_preference_service.get_user_preference_service"
+            ) as mock_save:
                 prefs.save_selected_industry("session:1", "餐饮")
         mock_save.assert_not_called()
 

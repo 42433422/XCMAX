@@ -158,12 +158,21 @@ def build_employee_gate(
     workspace_root: str | None,
 ):
     """构造员工工作空间 gate；无可强制项时返回 None（零开销）。"""
-    wp = _workspace_policy(manifest, config)
-    scope = _compile_globs(wp.get("scope_globs") or [])
-    forbidden = _compile_globs(wp.get("forbidden_globs") or [])
+    # An execution override can narrow, but never erase, the pack's policy.
+    policies = (_workspace_policy(manifest, {}), _workspace_policy({}, config))
+    scopes = [
+        compiled
+        for policy in policies
+        if (compiled := _compile_globs(policy.get("scope_globs") or []))
+    ]
+    forbidden = [
+        pattern
+        for policy in policies
+        for pattern in _compile_globs(policy.get("forbidden_globs") or [])
+    ]
     read_only = is_read_only(manifest, config)
 
-    if not scope and not forbidden and not read_only:
+    if not scopes and not forbidden and not read_only:
         return None
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -184,7 +193,7 @@ def build_employee_gate(
         if read_only and is_write:
             return {"ok": False, "reason": f"员工 {employee_id} 为只读，禁止写库工具 {name}"}
 
-        enforce_scope = bool(scope) and (is_write or name == "generate_office_document")
+        enforce_scope = bool(scopes) and (is_write or name == "generate_office_document")
         for raw_path, is_output in _extract_paths(args):
             rel = _normalize_rel(raw_path, workspace_root)
             if not rel:
@@ -193,11 +202,11 @@ def build_employee_gate(
                 return {"ok": False, "reason": f"路径 {raw_path} 命中 forbidden_globs（禁止访问）"}
             if (
                 (enforce_scope or is_output)
-                and scope
+                and scopes
                 and (
                     Path(rel).is_absolute()
                     or ".." in Path(rel).parts
-                    or not _matches_any(rel, scope)
+                    or not all(_matches_any(rel, scope) for scope in scopes)
                 )
             ):
                 return {

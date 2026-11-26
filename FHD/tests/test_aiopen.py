@@ -18,6 +18,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.aiopen import service as aiopen_service
 from app.application.aiopen.service import AIOPEN_STATE
 from app.fastapi_routes.ai_open import router as ai_open_router
+from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
 from app.infrastructure.auth.dependencies import require_admin_user
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
@@ -32,6 +33,7 @@ def client(monkeypatch, admin_actor):
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
     app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
         id=73,
         tier="admin",
@@ -482,6 +484,116 @@ def test_ui_tool_blocked_when_remote_control_off(client, monkeypatch):
         AIOPEN_STATE["remote_control_enabled"] = True
 
 
+def test_legacy_qclaw_urls_share_state(client):
+    panel = client.get("/api/ai/qclaw/panel").json()
+    assert panel["success"] is True
+
+    # 经旧 URL 改白名单 → 新面板可见
+    resp = client.post(
+        "/api/ai/qclaw/whitelist", json={"path": "/api/legacy/test", "enabled": True}
+    )
+    assert resp.json()["success"] is True
+    new_panel = client.get("/api/aiopen/panel").json()
+    assert {"path": "/api/legacy/test", "enabled": True} in new_panel["routes"]
+
+    # 经新 URL 改 openclaw_base → 旧面板可见
+    client.post("/api/aiopen/config", json={"base_url": "http://example.test:28789"})
+    legacy_panel = client.get("/api/ai/qclaw/panel").json()
+    assert legacy_panel["openclaw_base"] == "http://example.test:28789"
+
+    # 还原，避免污染其他测试
+    AIOPEN_STATE["whitelist"].pop("/api/legacy/test", None)
+    AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
+
+
+def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
+    app = FastAPI()
+
+    @app.get("/api/qclaw/smoke")
+    def qclaw_smoke():
+        return {"success": True, "source": "smoke"}
+
+    app.include_router(ai_open_router)
+    from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
+
+    app.include_router(ai_qclaw_router)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73,
+        tier="admin",
+        role="admin",
+    )
+    repo = InMemoryAgentRunRepository()
+
+    with (
+        TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"}) as local_client,
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        wechat = local_client.post("/api/ai/qclaw/wechat-gateway", json={"enabled": True}).json()
+        config = local_client.post(
+            "/api/ai/qclaw/openclaw/config",
+            json={"base_url": "http://qclaw-openclaw.test:28789"},
+        ).json()
+        whitelist = local_client.post(
+            "/api/ai/qclaw/whitelist",
+            json={"path": "/api/qclaw/smoke", "enabled": True},
+        ).json()
+        smoke = local_client.post(
+            "/api/ai/qclaw/test-route",
+            json={"path": "/api/qclaw/smoke", "method": "GET"},
+        ).json()
+
+    for payload, route, action in (
+        (wechat, "/api/ai/qclaw/wechat-gateway", "wechat_gateway_update"),
+        (config, "/api/ai/qclaw/openclaw/config", "openclaw_config_update"),
+        (whitelist, "/api/ai/qclaw/whitelist", "whitelist_update"),
+    ):
+        run_id = payload["run_id"]
+        assert payload["agent_run_id"] == run_id
+        run = repo.get(run_id)
+        assert run is not None
+        assert run.intent == "qclaw_control_update"
+        assert run.metadata["channel"] == "qclaw_control"
+        assert run.metadata["source"] == "qclaw"
+        assert run.metadata["runtime_context"]["route"] == route
+        assert run.metadata["runtime_context"]["action"] == action
+
+    smoke_run_id = smoke["run_id"]
+    assert smoke["agent_run_id"] == smoke_run_id
+    assert smoke["status_code"] == 200
+    smoke_run = repo.get(smoke_run_id)
+    assert smoke_run is not None
+    assert smoke_run.intent == "qclaw_route_smoke"
+    assert smoke_run.metadata["channel"] == "qclaw_route_smoke"
+    assert smoke_run.metadata["runtime_context"]["route"] == "/api/ai/qclaw/test-route"
+    assert smoke_run.metadata["runtime_context"]["request"]["path"] == "/api/qclaw/smoke"
+
+    AIOPEN_STATE["whitelist"].pop("/api/qclaw/smoke", None)
+    AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
+    AIOPEN_STATE["wechat_open"] = False
+
+
+@pytest.mark.parametrize("path", ["/api/aiopen/openclaw/chat", "/api/ai/qclaw/openclaw/chat"])
+def test_legacy_openclaw_chat_does_not_dispatch_or_create_receipt(client, path):
+    with (
+        patch("app.application.agent_runtime.gateway.run_runtime_task") as dispatch,
+        patch("app.application.agent_orchestrator.chat_trace.get_agent_run_repository") as repo,
+    ):
+        response = client.post(path, json={"message": "send", "user_id": "forged"})
+    assert response.status_code == 410
+    body = response.json()
+    assert body["success"] is False
+    assert body["error_code"] == "openclaw_legacy_route_retired"
+    assert body["execution_state"] == "not_started"
+    assert body["retryable"] is False
+    assert "run_id" not in body and "agent_run_id" not in body
+    dispatch.assert_not_called()
+    repo.assert_not_called()
+
+
 def test_screen_ws_command_roundtrip(client, monkeypatch):
     """A trusted authenticated screen is visible only to a matching bound key."""
     from app.application.aiopen.service import generate_api_key
@@ -570,5 +682,133 @@ def test_direct_aiopen_tools_require_key(monkeypatch):
             assert unauthenticated.post(path, json={"message": "test"}).status_code == 401
 
 
-def test_removed_external_chat_route_has_no_raw_proxy(client):
-    assert client.post("/api/aiopen/openclaw/chat", json={"message": "send"}).status_code == 404
+def test_issued_delegated_key_binds_request_scope_and_revocation(
+    trusted_actor, tmp_path, monkeypatch
+):
+    from fastapi import Depends
+
+    from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
+    from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
+    admin = trusted_actor(user_id=73, role="admin", tier="admin", tenant_id=7)
+    other = trusted_actor(user_id=74, tenant_id=8)
+    registry = ApiKeyRegistry(
+        RuntimeState({}),
+        lambda: "",
+        lambda _: "fixture",
+        lambda: 100.0,
+        lambda: tmp_path / "delegated-keys.json",
+    )
+    monkeypatch.setattr(aiopen_service, "_keys", registry)
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73, tenant_id=7, role="admin", tier="admin", is_active=True
+    )
+
+    @app.get("/scope", dependencies=[Depends(bind_aiopen_principal)])
+    def scope():
+        context = current_execution_context()
+        return {
+            "user_id": context.get("user_id"),
+            "request_id": context.get("idempotency_key"),
+            "delegated": "_credential_authorization" in context,
+        }
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/aiopen/keys",
+            headers=admin.headers,
+            json={"label": "delegated", "scopes": ["capability.customers.list"], "user_id": "74"},
+        )
+        assert created.status_code == 200, created.text
+        key = created.json()["key"]
+        original = registry.resolve_execution_context(key)
+        assert original is not None
+        assert original["user_id"] == "73"
+        assert registry.permits_execution(original, "customers", "list")
+        assert not registry.permits_execution(original, "customers", "create")
+        headers = {**other.headers, "X-AIOPEN-Key": key, "Idempotency-Key": "stable-request"}
+        assert client.get("/scope", headers=headers).json() == {
+            "user_id": "73",
+            "request_id": "stable-request",
+            "delegated": True,
+        }
+        assert current_execution_context() == {}
+        assert client.get("/scope", headers=other.headers).json()["user_id"] == "74"
+        revoked = client.request(
+            "DELETE", "/api/aiopen/keys", headers=admin.headers, json={"key": key}
+        )
+        assert revoked.status_code == 200 and revoked.json()["revoked"] is True
+        assert not registry.execution_context_current(original)
+        assert client.get("/scope", headers=headers).json() == {
+            "user_id": None,
+            "request_id": None,
+            "delegated": False,
+        }
+
+
+def test_aiopen_tool_trace_uses_bound_execution_identity(monkeypatch):
+    from app.fastapi_routes import ai_open
+    from app.infrastructure.aiopen.principal_context import execution_context_scope
+
+    captured = {}
+
+    def trace(**kwargs):
+        captured.update(kwargs)
+        return "trace-run"
+
+    monkeypatch.setattr(ai_open, "trace_tool_call", trace)
+    with execution_context_scope({"user_id": "73"}):
+        result = ai_open._trace_aiopen_tool_call(
+            route="/api/aiopen/invoke",
+            channel="aiopen_invoke",
+            tool="capability_loop",
+            args={"user_id": "74"},
+            result={"success": True},
+            user_id="aiopen-api-key",
+        )
+    assert result == "trace-run"
+    assert captured["user_id"] == "73"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_ok"),
+    [
+        ({"success": True}, True),
+        ({"success": False}, False),
+        ({}, False),
+        ({"success": "true"}, False),
+        ({"success": True, "reconciliation_required": True}, False),
+    ],
+)
+def test_aiopen_usage_preserves_business_outcome(client, monkeypatch, payload, expected_ok):
+    from app.fastapi_routes import ai_open
+
+    usage = []
+
+    async def invoke(*_args):
+        return payload
+
+    def record(_key, _tool, *, channel, ok, duration_ms):
+        usage.append((channel, ok))
+
+    monkeypatch.setattr(ai_open, "invoke_tool", invoke)
+    monkeypatch.setattr(ai_open, "record_api_key_use", record)
+    monkeypatch.setattr(ai_open, "_trace_aiopen_tool_call", lambda **_kwargs: "")
+    monkeypatch.setattr(ai_open, "format_tool_result_text", lambda *_args: "")
+    rest = client.post("/api/aiopen/invoke", json={"tool": "api_catalog", "args": {}})
+    assert rest.status_code == 200
+    mcp = client.post(
+        "/api/aiopen/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "api_catalog", "arguments": {}},
+        },
+    )
+    assert mcp.status_code == 200
+    assert mcp.json()["result"]["isError"] is (not expected_ok)
+    assert usage == [("rest", expected_ok), ("mcp", expected_ok)]

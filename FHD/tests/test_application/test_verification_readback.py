@@ -95,6 +95,30 @@ def verify(case, output=None):
     )
 
 
+def test_finance_creation_checks_committed_approved_transaction(trusted_actor):
+    from app.application.finance_app_service import FinanceAppService
+    from app.db.models import FinancialTransaction
+    from app.infrastructure.tenant_scope import owned_tenant_scope
+
+    actor = trusted_actor(role="finance", permissions=["tool.finance.ledger_query"])
+    params = {"transaction_type": "revenue", "amount": 1200.07, "counterparty_name": "Original"}
+    case = invocation(actor, "finance", "create_transaction", params)
+    with owned_tenant_scope(actor.tenant_id):
+        output = FinanceAppService().create_transaction(params)
+    assert output["success"] is True
+    assert verify(case, output)["status"] == "verified"
+
+    stale = invocation(actor, "finance", "create_transaction", params)
+    assert verify(stale, output)["code"] == "result_finance_effect_mismatch"
+    other = trusted_actor(role="finance", tenant_id=8)
+    assert verify(invocation(other, "finance", "create_transaction", params), output)["code"] == (
+        "result_finance_record_unavailable"
+    )
+    with owned_tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        db.get(FinancialTransaction, output["data"]["id"]).counterparty_name = "Changed"
+    assert verify(case, output)["status"] == "failed"
+
+
 @pytest.mark.parametrize("via_executor", [False, True])
 def test_customer_export_uses_original_owned_file_and_rejects_changed_receipts(
     owner, trusted_actor, tmp_path, monkeypatch, via_executor

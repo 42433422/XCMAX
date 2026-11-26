@@ -14,6 +14,9 @@ let resolver: ((ok: boolean) => void) | null = null
 
 export function confirmDanger(opts: DangerConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
+    // Only one dangerous decision may own the global dialog. Never strand an
+    // earlier caller or let a newer request accidentally approve its action.
+    resolver?.(false)
     resolver = resolve
     options.value = opts
     open.value = true

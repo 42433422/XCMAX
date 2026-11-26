@@ -102,11 +102,17 @@ beforeEach(() => {
     mocks.loggedIn = true
     return loginPayload
   })
+  let revision = 0
   mocks.transport.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === '/api/workspace/prefs') {
       if (init?.method === 'PATCH' && (!mocks.loggedIn || mocks.rejectBinding)) return respond({}, 401)
-      if (init?.method === 'PATCH') mocks.industry = JSON.parse(String(init.body)).selected_industry_id || mocks.industry
-      return respond({ success: true, owner_id: mocks.loggedIn ? 'tenant:10' : null, data: {} })
+      if (init?.method === 'PATCH') {
+        const payload = JSON.parse(String(init.body))
+        if (payload.expected_revision !== revision || payload.expected_owner_id !== 'tenant:10') return respond({}, 409)
+        mocks.industry = payload.selected_industry_id || mocks.industry
+        revision += 1
+      }
+      return respond({ success: true, owner_id: mocks.loggedIn ? 'tenant:10' : null, revision, data: {} })
     }
     if (url === '/api/platform-shell/onboarding-industries') return respond({ data: {
       owner_id: mocks.loggedIn ? 'tenant:10' : null,
@@ -150,7 +156,9 @@ it('starts at welcome, offers normal login, and resumes the chosen industry befo
   expect(router.currentRoute.value.query.redirect).toBe(returnPath)
   const patches = mocks.transport.mock.calls.filter(([, init]) => init?.method === 'PATCH')
   expect(patches).toHaveLength(1)
-  expect(JSON.parse(patches[0][1].body)).toMatchObject({ selected_industry_id: '涂料', industry_mod_id: 'coating-industry' })
+  expect(JSON.parse(patches[0][1].body)).toMatchObject({
+    selected_industry_id: '涂料', industry_mod_id: 'coating-industry', expected_owner_id: 'tenant:10', expected_revision: 0,
+  })
 })
 
 it('keeps a retry available when session validation is offline without attempting a binding', async () => {

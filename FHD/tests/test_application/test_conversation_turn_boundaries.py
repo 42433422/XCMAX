@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -17,9 +18,9 @@ from app.db.models import AIConversation, AIConversationSession
 from app.domain.shared_services.conversation_service import ConversationRevisionError
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.fixture
@@ -59,7 +60,7 @@ def runtime(dynamic_chat_runtime, monkeypatch, tmp_path):
     )
     for name in ("neuro_notify_chat_received", "neuro_notify_chat_completed"):
         monkeypatch.setattr(f"app.neuro_bus.application_neuro_bridge.{name}", lambda *a: None)
-    trace = lambda payload, **kw: {**payload, "run_id": "boundary-run"}
+    trace = lambda payload, **kw: {"run_id": "boundary-run", **payload}
     monkeypatch.setattr(
         "app.application.agent_orchestrator.chat_trace.attach_chat_trace_run", trace
     )
@@ -201,7 +202,17 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
         contexts.append(dict(context))
         assert context["_conversation_revision"] == 0
         if withdraw:
-            _withdraw_anchor()
+            if mode == "online":
+                assert (
+                    store.delete_messages_from(
+                        session_id="boundary-session",
+                        user_id=1,
+                        message_id=payload["history_persistence"]["message_ids"][0],
+                    )
+                    >= 1
+                )
+            else:
+                _withdraw_anchor()
         return {"success": True, "response": "reply", "run_id": "boundary-run"}
 
     monkeypatch.setattr(
@@ -210,6 +221,8 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
     persist = Mock(wraps=runtime.service._persist_chat_turn)
     runtime.service._persist_chat_turn = persist
     body = _body(mode=mode)
+    if mode == "offline":
+        body = body.model_copy(update={"message": "查询今天的考勤"})
     _script_reply(runtime, body.message, "reply")
     runtime.compiled.on_turn = lambda binding: execute(binding.run.message, binding.context)
     if streaming:
@@ -224,11 +237,22 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
         payload = next(item["result"] for item in events if item.get("type") == "done")
     else:
         payload = await compat.execute_compat_chat(runtime.actor.request, body)
+    if mode == "online":
+        assert payload["execution_state"] == "queued", payload
+        assert payload["history_persistence"]["status"] == "saved"
+        terminal = await asyncio.to_thread(finish_queued_chat, runtime.compiled, payload)
+        if withdraw:
+            assert terminal["response"] != "reply", terminal
+        else:
+            assert terminal["response"] == "reply", terminal
+    else:
+        assert payload["history_persistence"]["status"] == ("invalidated" if withdraw else "saved")
     assert len(contexts) == 1 and persist.call_count == 1
     assert len(runtime.compiled.transports) == (1 if mode == "online" else 0)
     assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
-    assert payload["history_persistence"]["status"] == ("invalidated" if withdraw else "saved")
-    assert _rows(runtime) == ([] if withdraw else [("user", body.message), ("assistant", "reply")])
+    assert _rows(runtime) == (
+        [] if withdraw else [("user", body.message), ("assistant", payload["response"])]
+    )
     with runtime.actor.factory() as db:
         assert db.query(AIConversationSession).one().revision == int(withdraw)
 
@@ -328,15 +352,18 @@ async def test_attachment_context_keeps_full_evidence_and_original_turn_identity
     else:
         payload = await compat.execute_compat_chat(runtime.actor.request, original)
     assert payload["history_persistence"]["status"] == "saved"
+    assert payload["execution_state"] == "queued", payload
+    terminal = await asyncio.to_thread(finish_queued_chat, runtime.compiled, payload)
     assert len(observed) == 1 and collect.await_args.kwargs["user_id"] == "1"
     assert len(runtime.compiled.model_requests) == 1
     assert all(
         "FINAL-EVIDENCE-MARKER" in json.dumps(prompt) for prompt in runtime.compiled.model_requests
     )
     assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
-    assert _rows(runtime) == [("user", original.message), ("assistant", "attachment reply")]
+    assert terminal["response"] == "attachment reply", terminal
+    assert _rows(runtime) == [("user", original.message), ("assistant", payload["response"])]
     replay = memory.prepare_chat_turn(original.message, observed[0])
-    assert replay["data"]["replay"] and replay["response"] == "attachment reply"
+    assert replay["data"]["replay"] and replay["run_id"] == payload["run_id"]
 
 
 @pytest.mark.asyncio

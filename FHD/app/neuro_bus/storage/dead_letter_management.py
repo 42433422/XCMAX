@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from .dead_letter_repository import DeadLetterRepository
+from .dead_letter_repository import DeadLetterRepository, record_audit
 from .sqlite import fetch_rows
 
 
@@ -39,6 +39,15 @@ class DeadLetterManagement:
                         "UPDATE neuro_dead_letters SET is_resolved = 1, metadata = ? WHERE entry_id = ?",
                         (json.dumps(entry.metadata, ensure_ascii=False), entry_id),
                     ).close()
+                    record_audit(
+                        connection,
+                        entry_id,
+                        "manually_resolved",
+                        json.dumps(
+                            {"resolution": resolution, "resolved_by": resolved_by},
+                            ensure_ascii=False,
+                        ),
+                    )
                     connection.execute(
                         "DELETE FROM neuro_dead_letters WHERE entry_id = ?", (entry_id,)
                     ).close()
@@ -60,8 +69,17 @@ class DeadLetterManagement:
                 if connection is not None:
                     clock = repository.runtime.clock()
                     cutoff = clock.fromtimestamp(clock.now().timestamp() - self.retention_seconds)
+                    connection.execute(
+                        """INSERT INTO neuro_dlq_audit
+                           (entry_id, action, recorded_at, event_type, reason, retry_count)
+                           SELECT entry_id, 'archived_expired', strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                                  event_type, reason, retry_count
+                           FROM neuro_dead_letters WHERE is_resolved = 0 AND first_failure_time < ?""",
+                        (cutoff.isoformat(),),
+                    ).close()
                     cursor = connection.execute(
-                        "DELETE FROM neuro_dead_letters WHERE first_failure_time < ?",
+                        "UPDATE neuro_dead_letters SET is_resolved = 2 "
+                        "WHERE is_resolved = 0 AND first_failure_time < ?",
                         (cutoff.isoformat(),),
                     )
                     count = cursor.rowcount
@@ -102,6 +120,7 @@ class DeadLetterManagement:
                     "UPDATE neuro_dead_letters SET retry_count = ?, last_failure_time = ? WHERE entry_id = ?",
                     (retry_count, now.isoformat(), entry_id),
                 ).close()
+                record_audit(connection, entry_id, "retry_scheduled", str(delay))
             else:
                 entry.retry_count = retry_count
                 entry.last_failure_time = now
@@ -118,7 +137,7 @@ class DeadLetterManagement:
         with repository.storage.lock:
             if repository.storage.connection is not None:
                 aggregate = repository.storage.rows(
-                    "SELECT COUNT(*), MIN(first_failure_time) FROM neuro_dead_letters"
+                    "SELECT COUNT(*), MIN(first_failure_time) FROM neuro_dead_letters WHERE is_resolved = 0"
                 )[0]
                 current_size = int(aggregate[0])
                 oldest = aggregate[1]
@@ -131,10 +150,17 @@ class DeadLetterManagement:
                 by_reason = {
                     row["reason"]: row["cnt"]
                     for row in repository.storage.rows(
-                        "SELECT reason, COUNT(*) AS cnt FROM neuro_dead_letters GROUP BY reason"
+                        "SELECT reason, COUNT(*) AS cnt FROM neuro_dead_letters "
+                        "WHERE is_resolved = 0 GROUP BY reason"
                     )
                 }
+                archived_size = int(
+                    repository.storage.rows(
+                        "SELECT COUNT(*) FROM neuro_dead_letters WHERE is_resolved = 2"
+                    )[0][0]
+                )
             else:
+                archived_size = 0
                 entries = repository.state.entries
                 current_size = len(entries)
                 by_reason = {}
@@ -146,6 +172,7 @@ class DeadLetterManagement:
                 )
             return {
                 "current_size": current_size,
+                "archived_size": archived_size,
                 "max_size": repository.max_size,
                 **repository.state.stats,
                 "by_reason": by_reason,
@@ -169,7 +196,7 @@ class DeadLetterManagement:
                     (row["entry_id"], repository.reason_type(row["reason"]).value)
                     for row in fetch_rows(
                         repository.storage.connection,
-                        "SELECT entry_id, reason FROM neuro_dead_letters",
+                        "SELECT entry_id, reason FROM neuro_dead_letters WHERE is_resolved = 0",
                     )
                 ]
             else:

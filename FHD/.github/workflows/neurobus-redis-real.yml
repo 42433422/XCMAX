@@ -1,0 +1,98 @@
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: NeuroBus Redis real integration
+
+on:
+  pull_request:
+    paths:
+      - "app/neuro_bus/**"
+      - "tests/test_neurobus_streams_lifecycle.py"
+      - "tests/test_neuro_bus/test_redis_streams*.py"
+      - "tests/test_neuro_bus/test_durable_admission*.py"
+      - "tests/test_neuro_bus/test_delivery_outcomes.py"
+      - "tests/test_neuro_bus/test_retry_budget_contract.py"
+      - "tests/test_neuro_bus/test_dead_letter*.py"
+      - ".github/workflows/neurobus-redis-real.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-redis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      XCAGI_NEUROBUS_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      - name: Install pinned FHD runtime and test tools
+        run: |
+          set -euo pipefail
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}"
+          uv pip check --system --python "$(command -v python)"
+      - name: Prove actual Redis server and version
+        run: |
+          python - <<'PY'
+          import os
+          import redis
+          client = redis.Redis.from_url(os.environ["XCAGI_NEUROBUS_TEST_REDIS_URL"])
+          assert client.ping(), "Redis not reachable"
+          version = client.info("server")["redis_version"]
+          major, minor, *_ = map(int, version.split("."))
+          assert (major, minor) >= (6, 2), version
+          print("Redis server version:", version)
+          client.close()
+          PY
+      - name: Exercise combined Redis/SQLite/metrics/retry/DLQ contracts (no skips)
+        run: |
+          set -euo pipefail
+          echo "Tested commit: $(git rev-parse HEAD)"
+          python -m pytest \
+            tests/test_neurobus_streams_lifecycle.py \
+            tests/test_neuro_bus/test_redis_streams.py \
+            tests/test_neuro_bus/test_redis_streams_multiprocess.py \
+            tests/test_neuro_bus/test_durable_admission.py \
+            tests/test_neuro_bus/test_durable_admission_process_exit.py \
+            tests/test_neuro_bus/test_delivery_outcomes.py \
+            tests/test_neuro_bus/test_retry_budget_contract.py \
+            tests/test_neuro_bus/test_dead_letter_durable_storage.py \
+            tests/test_neuro_bus/test_dead_letter_replay_publish_contract.py \
+            tests/test_neuro_bus/test_dead_letter_queue_cov.py \
+            tests/test_neuro_bus/test_dead_letter_queue_maintenance.py \
+            tests/test_neuro_bus/test_dead_letter_queue_coverage.py \
+            -q -o addopts= --junitxml=neurobus-redis-results.xml
+          python - <<'PY'
+          from xml.etree import ElementTree
+          root = ElementTree.parse("neurobus-redis-results.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+          total = sum(int(s.get("tests", "0")) for s in suites)
+          skipped = sum(int(s.get("skipped", "0")) for s in suites)
+          failures = sum(int(s.get("failures", "0")) for s in suites)
+          errors = sum(int(s.get("errors", "0")) for s in suites)
+          assert total >= 25, f"Combined tests did not collect: {total}"
+          assert not (skipped or failures or errors), (skipped, failures, errors)
+          print(f"Real Redis tests: {total}; skipped=0")
+          PY
+      - name: Upload evidence for exact tested SHA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neurobus-redis-real-results
+          path: FHD/neurobus-redis-results.xml
+          if-no-files-found: warn

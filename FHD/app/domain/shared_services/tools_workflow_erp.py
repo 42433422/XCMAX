@@ -139,9 +139,18 @@ def _registered_router_customers(
         collected: list[int] = []
         page = 1
         while True:
-            listed = svc.get_all(keyword=None, page=page, per_page=500) or {}
-            rows = listed.get("data") if isinstance(listed, dict) else None
-            if not isinstance(rows, list) or not rows:
+            listed = svc.get_all(keyword=None, page=page, per_page=100)
+            if not isinstance(listed, dict) or listed.get("success") is not True:
+                return {
+                    **(listed if isinstance(listed, dict) else {}),
+                    "success": False,
+                    "message": (listed.get("message") if isinstance(listed, dict) else None)
+                    or "读取客户列表失败，未执行清理",
+                }
+            rows = listed.get("data")
+            if not isinstance(rows, list):
+                return {"success": False, "message": "客户列表响应无效，未执行清理"}
+            if not rows:
                 break
             for row in rows:
                 if not isinstance(row, dict):
@@ -153,7 +162,7 @@ def _registered_router_customers(
             total = listed.get("total")
             if isinstance(total, int) and len(collected) >= total:
                 break
-            if len(rows) < 500:
+            if len(rows) < 100:
                 break
             page += 1
         collected = [item for item in collected if item > 0]
@@ -316,6 +325,8 @@ def _registered_router_inventory(
             operator=params.get("operator"),
             remark=params.get("remark"),
             confirmed=bool(params.get("confirmed", False)),
+            expected_book_quantity=params.get("expected_book_quantity"),
+            expected_baseline_version=params.get("expected_baseline_version"),
         )
     if action == "query_transactions":
         from app.domain.shared_services.inventory_service import InventoryService
@@ -404,6 +415,10 @@ def _registered_router_purchase(
         return cast("dict[Any, Any]", svc.cancel_purchase_order(int(params.get("order_id") or 0)))
     if action == "create_inbound":
         return cast("dict[Any, Any]", svc.create_purchase_inbound(dict(params or {})))
+    if action == "post_return":
+        # Use the same ToolSpecV2/approval/tenant execution path. The posting
+        # service independently checks the original approval and frozen inputs.
+        return cast("dict[Any, Any]", svc.post_purchase_return(dict(params or {})))
     return {"success": False, "message": f"未注册的 purchase 动作: {action}"}
 
 

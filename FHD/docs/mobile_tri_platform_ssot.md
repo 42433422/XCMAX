@@ -12,7 +12,7 @@
 - **OpenAPI 统一前后端契约**：`FHD/assets/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
 - **FastAPI 统一后端业务**：账号、权限、员工系统、聊天、SSE/WebSocket、支付、审批、同步、移动 relay、行业选择和数据写入都归 FastAPI 服务端实现；Flutter 只承载交互、展示、本地缓存和必要的端侧适配。
 - **KMM 暂停作为主线**：Flutter 已解决 Android 前端交付问题，不再规划 `mobile-shared` KMM 作为默认方向。
-- **设计 token 统一**：`FHD/config/mobile_design_tokens.json` 是移动 token 的机器可读口径；Flutter 是唯一消费主线。
+- **设计 token 统一**：`FHD/config/mobile_design_tokens.json` 是桌面与移动共享的机器可读口径（保留历史文件名）；Vue/Electron 与 Flutter 使用同一生成契约。
 - **性能监控统一指标名**：Flutter Android/iOS 复用本文第 6 节指标名。
 
 ## 1. 权威入口
@@ -26,7 +26,7 @@
 | 入口文档 | [`guides/MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md) | 日常开发与发版说明 |
 | 前后端契约 | `FHD/assets/contracts/openapi.json` | Flutter `lib/src/api/*` |
 | 后端业务实现 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` 与 `/api/mobile/v1/*` | OpenAPI 导出、移动端 API client |
-| 设计 token | `FHD/config/mobile_design_tokens.json` | Flutter `lib/src/theme/*` |
+| 设计 token | `FHD/config/mobile_design_tokens.json` | Vue `src/styles/design-tokens.generated.css`、Flutter `lib/src/theme/design_tokens.generated.dart` |
 | 端侧性能指标 | 本文第 6 节指标名 | Flutter 埋点 |
 
 ## 2. Flutter 前端边界
@@ -73,7 +73,7 @@ Flutter 只能缓存和展示服务端状态。出现端侧与服务端冲突时
 
 ## 5. 设计 Token
 
-`mobile_design_tokens.json` 必须覆盖四类 token：
+`mobile_design_tokens.json` 是跨端唯一设计 Token 源，见 [跨端设计契约](design_tokens.md)。基础 token 覆盖：
 
 - `colors`：品牌色、功能色、聊天气泡、交流圈、浅深色中性色。
 - `spacing`：4px 栅格，Flutter 使用同数值 logical pixels。
@@ -83,7 +83,7 @@ Flutter 只能缓存和展示服务端状态。出现端侧与服务端冲突时
 变更规则：
 
 1. 先改 `mobile_design_tokens.json`。
-2. 同次提交同步 Flutter `lib/src/theme/*`。
+2. 运行 `node FHD/scripts/design/generate-design-tokens.mjs`，同次提交 CSS/Dart 生成物；校验使用 `--check`。
 3. 禁止在 Flutter 新增未登记的品牌色、间距、字号常量；确需平台差异时，在 token JSON 的 `platform_overrides` 登记。
 
 ## 6. 性能监控

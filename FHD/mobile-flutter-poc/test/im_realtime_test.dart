@@ -144,6 +144,32 @@ void main() {
       expect(client.state, ImWsConnectionState.disconnected);
     });
 
+    test('same-session connect reuses the socket rather than resetting recovery',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final sockets = <WebSocket>[];
+      server.listen((request) async {
+        sockets.add(await WebSocketTransformer.upgrade(request));
+      });
+      final client = ImWebSocketClient();
+      addTearDown(() async {
+        client.dispose();
+        for (final socket in sockets) {
+          await socket.close();
+        }
+        await server.close(force: true);
+      });
+      final url = 'ws://127.0.0.1:${server.port}/ws/im?session_id=s';
+      client.connect(sessionId: 's', url: url);
+      await _waitFor(client, ImWsConnectionState.connected);
+      client.connect(sessionId: 's', url: url);
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+      expect(sockets.length, 1);
+      expect(client.connected, isTrue);
+      client.disconnect();
+      expect(client.connected, isFalse);
+    });
+
     test('unreachable host never reports connected', () async {
       final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       final port = probe.port;

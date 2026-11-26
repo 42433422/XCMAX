@@ -27,6 +27,7 @@ from app.application.agent_orchestrator.runtime_context import (
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.task_execution_models import _task_id_of
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.domain.task_lifecycle.agent_runtime_results import model_unsettled
 from app.domain.task_lifecycle.results import (
     execution_result_error,
     execution_result_requires_reconciliation,
@@ -199,7 +200,6 @@ def _can_settle_queue(
     """Every open effect must name a verified original step, never a guessed dispatch."""
     from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
 
-    model = run.metadata.get("codex_runtime") or {}
     return bool(
         (
             (
@@ -210,10 +210,9 @@ def _can_settle_queue(
         )
         and run.steps
         and not run.metadata.get("reserved_cost_units")
-        and not model.get("model_reconciliation_required")
         and not any(
-            request.get("state") in {"reserved", "unknown"}
-            for request in (model.get("model_requests") or {}).values()
+            model_unsettled(run.metadata.get(key) or {})
+            for key in ("xiaox_runtime", "codex_runtime")
         )
         and verification_report(run).get("accepted") is True
         and all(step.status in {"completed", "skipped"} for step in run.steps)

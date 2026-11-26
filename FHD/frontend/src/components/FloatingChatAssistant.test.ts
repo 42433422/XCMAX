@@ -25,10 +25,6 @@ vi.mock('@/composables/useChatView', () => ({
   },
 }))
 
-vi.mock('@/utils/sanitizeHtml', () => ({
-  sanitizeChatBubbleHtml: vi.fn((html: string) => html),
-}))
-
 vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
   ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   readAiSessionIdFromStorage: vi.fn(() => 'test-session-id'),
@@ -229,6 +225,36 @@ describe('FloatingChatAssistant', () => {
     expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
+  it('keeps the draft when Enter confirms an IME candidate or Shift+Enter inserts a line', async () => {
+    const wrapper = await openAssistant()
+    const input = wrapper.get('.floating-chat-input')
+    await input.setValue('中文草稿')
+    for (const init of [{ isComposing: true }, { keyCode: 229 }, { shiftKey: true }]) {
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+      if ('keyCode' in init) Object.defineProperty(event, 'keyCode', { configurable: true, value: 229 })
+      input.element.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+    }
+    expect(sendMessageMock).not.toHaveBeenCalled()
+    expect((input.element as HTMLTextAreaElement).value).toBe('中文草稿')
+  })
+
+  it('does not submit the IME candidate Enter immediately after compositionend', async () => {
+    const wrapper = await openAssistant()
+    const input = wrapper.get('.floating-chat-input')
+    await input.setValue('已确认的拼音')
+    input.element.dispatchEvent(new Event('compositionstart', { bubbles: true }))
+    const composingEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(composingEnter)
+    expect(composingEnter.defaultPrevented).toBe(false)
+    input.element.dispatchEvent(new Event('compositionend', { bubbles: true }))
+    const committedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(committedEnter)
+    expect(committedEnter.defaultPrevented).toBe(true)
+    expect(sendMessageMock).not.toHaveBeenCalled()
+    expect((input.element as HTMLTextAreaElement).value).toBe('已确认的拼音')
+  })
+
   it('Enter key submits message', async () => {
     sendMessageMock.mockResolvedValue(undefined)
     const wrapper = await openAssistant()
@@ -247,6 +273,36 @@ describe('FloatingChatAssistant', () => {
     expect(msgs).toHaveLength(2)
     expect(msgs[0].classes()).toContain('user')
     expect(msgs[1].classes()).toContain('ai')
+  })
+
+  it('follows streamed text only while the reader remains near the latest message', async () => {
+    messagesMock.value = [{ role: 'ai', content: '第一段', time: '10:01' }]
+    const wrapper = await openAssistant()
+    await flushPromises()
+    const host = wrapper.get('.floating-chat-messages')
+    const element = host.element as HTMLElement
+    let height = 600
+    Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => height })
+    Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => 200 })
+    element.scrollTop = 80
+    await host.trigger('scroll')
+    height = 700
+    messagesMock.value = [{ role: 'ai', content: '第一段 第二段', time: '10:01' }]
+    await flushPromises()
+    expect(element.scrollTop).toBe(80)
+    element.scrollTop = 500
+    await host.trigger('scroll')
+    height = 800
+    messagesMock.value = [{ role: 'ai', content: '第一段 第二段 第三段', time: '10:01' }]
+    await flushPromises()
+    expect(element.scrollTop).toBe(800)
+  })
+
+  it('renders assistant Markdown with shared MessageBody instead of a raw HTML bubble', async () => {
+    messagesMock.value = [{ role: 'ai', content: '**核对完成**', time: '10:01' }]
+    const wrapper = await openAssistant()
+    await flushPromises()
+    expect(wrapper.get('.floating-chat-bubble .msg-body strong').text()).toBe('核对完成')
   })
 
   it('shows loading message when isLoading and not streaming', async () => {

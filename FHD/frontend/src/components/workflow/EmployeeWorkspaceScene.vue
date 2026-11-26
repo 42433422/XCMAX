@@ -33,8 +33,10 @@ const zones = computed<OfficeZone[]>(() => {
     .filter(row => resolveEnterpriseOrgLayer(row.empId, row.shortName, row.panelTitle, row.enterpriseLayer) === zone.id).map(row => row.empId) }))
 })
 const working = computed(() => workspaceDesks.value.filter(isBusy).length)
-const waiting = computed(() => workspaceDesks.value.filter(row => row.snapshot?.officeState === 'waiting').length)
-const attention = computed(() => workspaceDesks.value.filter(row => row.snapshot?.officeState === 'error').length)
+const waitingStates = new Set(['queued', 'pending', 'accepted', 'waiting_user', 'waiting_approval', 'awaiting_approval', 'paused'])
+const attentionStates = new Set(['failed', 'blocked', 'unknown', 'rejected', 'timed_out'])
+const waiting = computed(() => workspaceDesks.value.filter(row => row.snapshot?.officeState === 'waiting' || row.tasks?.some(task => waitingStates.has(employeeStatusOfTask(task, row.empId)))).length)
+const attention = computed(() => workspaceDesks.value.filter(row => row.snapshot?.officeState === 'error' || row.tasks?.some(task => attentionStates.has(employeeStatusOfTask(task, row.empId)))).length)
 const completed = computed(() => new Set(workspaceDesks.value.flatMap(row => (row.tasks || [])
   .filter(task => task.status === 'completed' && employeeStatusOfTask(task, row.empId) === 'completed')
   .map(task => task.task_id))).size)
@@ -61,11 +63,12 @@ onMounted(() => { if (isAdminConsole) void ensureLoaded() })
     </header>
     <div class="ews-stats" aria-label="员工任务概况">
       <div><span>{{ isAdminConsole ? '平台员工' : '企业员工' }}</span><strong>{{ workspaceDesks.length }}</strong></div>
-      <div><span>正在工作</span><strong class="ews-stat--working">{{ working }}</strong></div>
-      <div><span>等待处理</span><strong class="ews-stat--waiting">{{ waiting }}</strong></div>
-      <div><span>需要关注</span><strong class="ews-stat--attention">{{ attention }}</strong></div>
-      <div><span>近期完成任务</span><strong>{{ completed }}</strong></div>
+      <div><span>正在工作</span><strong class="ews-stat--working">{{ syncState.stale ? '—' : working }}</strong></div>
+      <div><span>等待处理</span><strong class="ews-stat--waiting">{{ syncState.stale ? '—' : waiting }}</strong></div>
+      <div><span>需要关注</span><strong class="ews-stat--attention">{{ syncState.stale ? '—' : attention }}</strong></div>
+      <div><span>近期完成任务</span><strong>{{ syncState.stale ? '—' : completed }}</strong></div>
     </div>
+    <p class="ews-coverage">任务统计基于最近最多 200 条可见记录，并非全历史总量。等待与需关注人数可重叠。</p>
     <p v-if="syncState.error" class="ews-notice" role="alert">{{ syncState.error }}；恢复连接后将重新核对任务状态。</p>
     <p v-if="registryError" class="ews-notice" role="alert">员工目录同步失败：{{ registryError }} <button type="button" @click="refreshRegistry">重新同步目录</button></p>
     <p v-if="rosterError && isAdminConsole" class="ews-notice" role="alert">部门编制加载失败：{{ rosterError.message }}</p>

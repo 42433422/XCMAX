@@ -1,7 +1,7 @@
 """语义层多轮闭环的确定性验收（不依赖真实模型）。
 
 覆盖真实模型验收里不稳定复现的三条路径：
-- S1 追问继承：上一轮用户原话与助手回复必须进入Codex 请求的只读历史区。
+- S1 追问继承：上一轮用户原话与助手回复必须进入Xiaox 请求的只读历史区。
 - S2 候选澄清：「就第二个」必须解析到第二个候选并推进到执行/审批，而不是重复追问。
 - S3 参数补充：补齐 missing_required 后原计划续跑，澄清步骤完成、参数落到目标节点。
 - S4 审批执行：审批通过（approved_step_id）后真正写库，并完成数据库回查核验。
@@ -68,7 +68,9 @@ def test_s2_candidate_reply_resolves_second_target_and_reaches_approval(
     actor = trusted_actor(role="admin")
     with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         first = Product(tenant_id=actor.tenant_id, name="甲型涂料", model_number="A1", price=10)
-        second = Product(tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20)
+        second = Product(
+            tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20, unit="箱"
+        )
         db.add_all([first, second])
         db.flush()
         candidates = [
@@ -181,7 +183,9 @@ def test_s4_approved_step_writes_database_and_verifies_readback(
     actor = trusted_actor(role="admin")
     with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         first = Product(tenant_id=actor.tenant_id, name="甲型涂料", model_number="A1", price=10)
-        second = Product(tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20)
+        second = Product(
+            tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20, unit="箱"
+        )
         db.add_all([first, second])
         db.flush()
         expected_id = int(second.id)
@@ -244,8 +248,8 @@ def test_s4_approved_step_writes_database_and_verifies_readback(
             assert int(other.price) == 10, "未选中的候选不应被修改"
 
 
-def test_s1_actual_recent_turns_reach_codex_input(monkeypatch, tmp_path, dialogue_db) -> None:
-    from app.application.agent_runtime.codex_runtime import _input_text
+def test_s1_actual_recent_turns_reach_xiaox_input(monkeypatch, tmp_path, dialogue_db) -> None:
+    from app.application.agent_runtime.xiaox_runtime import _input_text
     from app.application.ai_chat.dialogue_memory import (
         prepare_chat_turn,
         recent_conversation_messages,

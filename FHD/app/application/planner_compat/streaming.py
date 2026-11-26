@@ -60,13 +60,18 @@ class CompatStream:
 
         if is_offline(body.mode):
             turn = ChatTurn(body, body.message, context, "compat_chat_offline")
-            from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+            # Never replay a cached result before the current request's read gate.
+            admitted = self.admission.check(request, turn)
+            if admitted.payload is None:
+                from app.application.ai_chat.dialogue_memory import prepare_chat_turn
 
-            prepared = prepare_chat_turn(body.message, context)
-            if prepared is not None:
-                yield self.encode_event({"type": "done", "result": prepared})
-                return
-            payload = offline_turn(request, turn, self.admission, self.fast_paths.business)
+                prepared = prepare_chat_turn(body.message, context)
+                if prepared is not None:
+                    yield self.encode_event({"type": "done", "result": prepared})
+                    return
+            payload = offline_turn(
+                request, turn, self.admission, self.fast_paths.business, admitted=admitted
+            )
             reply = str(payload.get("response") or payload.get("message") or "")
             if reply:
                 yield self.encode_event({"type": "token", "text": reply})
@@ -106,7 +111,7 @@ class CompatStream:
         await self.persona.enrich(request, body)
         tier = ai_tier or self.resolve_tier(request)
         self.logger.info(
-            "chat dispatch decision: dispatch_path=codex channel=compat_chat_stream_codex tier=%s",
+            "chat dispatch decision: dispatch_path=xiaox channel=compat_chat_stream_xiaox tier=%s",
             tier,
         )
         async with aclosing(self.backend(request, body, ai_tier=tier)) as stream:

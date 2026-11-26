@@ -22,6 +22,45 @@ describe('ExcelPreview', () => {
     setActivePinia(createPinia())
   })
 
+  it.each([1000, 10000])('pages %i sample rows without mounting an entire workbook', async count => {
+    const sampleRows = Array.from({ length: count }, (_, index) => ({ Name: '客户 ' + index }))
+    const wrapper = mountExcel({ sampleRows, fields: [{ label: 'Name' }], rows: 2, columns: 1 })
+    expect(wrapper.findAll('.excel-row')).toHaveLength(100)
+    expect(wrapper.text()).toContain('客户 0')
+    await wrapper.get('nav[aria-label="Excel 行分页"] button:last-child').trigger('click')
+    expect(wrapper.findAll('.excel-row')).toHaveLength(100)
+    expect(wrapper.find('.row-num').text()).toBe('101')
+    expect(wrapper.text()).toContain('客户 100')
+    expect(wrapper.text()).not.toContain('客户 0')
+    wrapper.unmount()
+  })
+
+  it('keeps a merged rowspan inside a single paginated Excel grid', async () => {
+    const rows = Array.from({ length: 220 }, (_, index) => [{
+      col: 0, text: '行 ' + index, rowspan: index === 99 ? 4 : 1, colspan: 1,
+    }])
+    const wrapper = mountExcel({ gridData: { rows } })
+    expect(wrapper.findAll('.real-row-num')).toHaveLength(103)
+    expect(wrapper.vm.gridPageBounds.slice(0, 3)).toEqual([0, 103, 203])
+    await wrapper.get('nav[aria-label="Excel 行分页"] button:last-child').trigger('click')
+    expect(wrapper.find('.real-row-num').text()).toBe('104')
+    expect(wrapper.findAll('.real-row-num')).toHaveLength(100)
+    wrapper.unmount()
+  })
+
+  it('pages wide previews without dropping their actual column values', async () => {
+    const fields = Array.from({ length: 100 }, (_, index) => ({ label: '字段' + index }))
+    const sampleRows = [Object.fromEntries(fields.map((f, index) => [f.label, '值' + index]))]
+    const wrapper = mountExcel({ fields, sampleRows, rows: 1, columns: 100 })
+    expect(wrapper.findAll('.col-header')).toHaveLength(24)
+    expect(wrapper.find('.col-header').text()).toBe('字段0')
+    await wrapper.get('nav[aria-label="Excel 列分页"] button:last-child').trigger('click')
+    expect(wrapper.findAll('.col-header')).toHaveLength(24)
+    expect(wrapper.find('.col-header').text()).toBe('字段24')
+    expect(wrapper.find('.excel-cell .cell-text').text()).toBe('值24')
+    wrapper.unmount()
+  })
+
   it('renders excel-preview container', () => {
     const wrapper = mountExcel()
     expect(wrapper.find('.excel-preview').exists()).toBe(true)

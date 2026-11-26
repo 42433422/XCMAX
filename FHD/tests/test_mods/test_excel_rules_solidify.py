@@ -8,13 +8,13 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from openpyxl import Workbook
+
+from tests.test_mods._excel_runtime import load_module as _load_module
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,14 +31,6 @@ SUNBIRD_DIR = FHD_ROOT / "tests/fixtures/synthetic_attendance"
 SUNBIRD_TEMPLATE = SUNBIRD_DIR / "synthetic-attendance-template.xlsx"
 SUNBIRD_SOURCE = SUNBIRD_DIR / "synthetic-dingtalk-source.xlsx"
 SUNBIRD_VENDOR = FHD_ROOT / "XCAGI/mods/attendance-industry/backend"
-
-
-def _load_module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _load_pkg():

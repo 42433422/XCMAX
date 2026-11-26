@@ -89,32 +89,35 @@ def test_order_store_path_default_when_env_blank(monkeypatch: pytest.MonkeyPatch
 def test_load_returns_empty_state_when_file_missing(isolated_order_store: Path) -> None:
     assert not isolated_order_store.is_file()
     data = order_store._load()
-    assert data == {"orders": {}, "entitlements": {}}
+    assert data == {"orders": {}, "entitlements": {}, "unmatched_notifications": {}}
+    assert not isolated_order_store.is_file()
 
 
-def test_load_returns_empty_state_when_json_not_dict(isolated_order_store: Path) -> None:
+def test_load_rejects_non_mapping_without_overwriting(isolated_order_store: Path) -> None:
     isolated_order_store.parent.mkdir(parents=True, exist_ok=True)
-    isolated_order_store.write_text('["not", "a", "dict"]', encoding="utf-8")
-    data = order_store._load()
-    assert data == {"orders": {}, "entitlements": {}}
+    original = '["not", "a", "dict"]'
+    isolated_order_store.write_text(original, encoding="utf-8")
+    with pytest.raises(ValueError, match="payment ledger root must be a mapping"):
+        order_store._load()
+    assert isolated_order_store.read_text(encoding="utf-8") == original
 
 
-def test_load_returns_empty_state_when_json_invalid(isolated_order_store: Path) -> None:
+def test_load_rejects_invalid_json_without_overwriting(isolated_order_store: Path) -> None:
     isolated_order_store.parent.mkdir(parents=True, exist_ok=True)
-    isolated_order_store.write_text("{not valid json", encoding="utf-8")
-    data = order_store._load()
-    assert data == {"orders": {}, "entitlements": {}}
+    original = "{not valid json"
+    isolated_order_store.write_text(original, encoding="utf-8")
+    with pytest.raises(json.JSONDecodeError):
+        order_store._load()
+    assert isolated_order_store.read_text(encoding="utf-8") == original
 
 
-def test_load_repairs_missing_or_bad_subkeys(isolated_order_store: Path) -> None:
+def test_load_rejects_bad_subkeys_without_overwriting(isolated_order_store: Path) -> None:
     isolated_order_store.parent.mkdir(parents=True, exist_ok=True)
-    isolated_order_store.write_text(
-        json.dumps({"orders": "bad", "entitlements": "bad"}),
-        encoding="utf-8",
-    )
-    data = order_store._load()
-    assert data["orders"] == {}
-    assert data["entitlements"] == {}
+    original = json.dumps({"orders": "bad", "entitlements": "bad"})
+    isolated_order_store.write_text(original, encoding="utf-8")
+    with pytest.raises(ValueError, match="payment orders must be a mapping"):
+        order_store._load()
+    assert isolated_order_store.read_text(encoding="utf-8") == original
 
 
 def test_atomic_write_creates_file_and_parents(tmp_path: Path) -> None:
@@ -590,13 +593,13 @@ def test_count_orders_counts_orders(isolated_order_store: Path) -> None:
     assert order_store.count_orders() == 3
 
 
-def test_count_orders_handles_bad_orders_field(isolated_order_store: Path) -> None:
+def test_count_orders_rejects_bad_orders_field(isolated_order_store: Path) -> None:
     isolated_order_store.parent.mkdir(parents=True, exist_ok=True)
-    isolated_order_store.write_text(
-        json.dumps({"orders": "not-a-dict", "entitlements": {}}),
-        encoding="utf-8",
-    )
-    assert order_store.count_orders() == 0
+    original = json.dumps({"orders": "not-a-dict", "entitlements": {}})
+    isolated_order_store.write_text(original, encoding="utf-8")
+    with pytest.raises(ValueError, match="payment orders must be a mapping"):
+        order_store.count_orders()
+    assert isolated_order_store.read_text(encoding="utf-8") == original
 
 
 def test_json_store_has_unmigrated_orders_false_when_no_file(

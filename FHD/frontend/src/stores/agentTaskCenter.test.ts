@@ -470,6 +470,9 @@ describe('agent task center store', () => {
 
     FakeEventSource.instances[1].onerror?.()
     await vi.advanceTimersByTimeAsync(1500)
+    // A failed reconnect without a new authoritative snapshot doubles backoff.
+    expect(FakeEventSource.instances).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(1500)
     expect(FakeEventSource.instances).toHaveLength(3)
     store.stop()
     vi.useRealTimers()

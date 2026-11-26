@@ -209,3 +209,25 @@ class TestBuildEmployeeGate:
         gate = wg.build_employee_gate("e", {}, config, None)
         verdict = gate("excel_analysis", {"file_path": "   "})
         assert verdict["ok"] is True
+
+
+def test_runtime_workspace_override_cannot_widen_pack_policy(tmp_path):
+    manifest = {
+        "employee_config_v2": {
+            "workspace_policy": {
+                "scope_globs": ["outputs/**"],
+                "forbidden_globs": ["*.key"],
+            }
+        }
+    }
+    config = {
+        "workspace_policy": {
+            "scope_globs": ["**"],
+            "forbidden_globs": ["*.secret"],
+        }
+    }
+    gate = wg.build_employee_gate("e", manifest, config, str(tmp_path))
+    assert gate("write_file", {"path": "outputs/result.txt"})["ok"] is True
+    assert gate("write_file", {"path": "outside/result.txt"})["ok"] is False
+    assert gate("write_file", {"path": "outputs/private.key"})["ok"] is False
+    assert gate("write_file", {"path": "outputs/private.secret"})["ok"] is False

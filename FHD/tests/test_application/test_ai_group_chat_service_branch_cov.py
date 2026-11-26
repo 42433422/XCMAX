@@ -2389,8 +2389,8 @@ class TestRouteAfterDiscussion:
             discussion_turns=[],
             mentions=None,
         )
-        assert len(selected) == 2
-        assert "明确点名" in rationale
+        assert selected == candidates
+        assert "明确广播" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_explicit_mention_returns_candidates(self, tmp_path: Path):
@@ -2403,8 +2403,8 @@ class TestRouteAfterDiscussion:
             discussion_turns=[],
             mentions=["e1"],
         )
-        assert len(selected) == 2
-        assert "明确点名" in rationale
+        assert selected == candidates[:1]
+        assert "点名派工" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_llm_returns_valid_json(self, tmp_path: Path):
@@ -2990,7 +2990,7 @@ class TestCreateSuperEmployeeRelayTask:
         )
         assert result is None
 
-    def test_create_relay_task_returns_none_when_result_not_dict(self, tmp_path: Path):
+    def test_create_relay_task_returns_unknown_when_result_not_dict(self, tmp_path: Path):
         class FakeRelay:
             def list_desktops(self, *, user_id):
                 return [{"relay_id": "r1", "status": "paired", "last_seen_at": "2026-01-01"}]
@@ -3006,9 +3006,11 @@ class TestCreateSuperEmployeeRelayTask:
             input_data={},
             user_id=1,
         )
-        assert result is None
+        assert result is not None
+        assert result["status"] == "unknown"
+        assert result["reconciliation_required"] is True
 
-    def test_create_relay_task_returns_none_when_no_task_id(self, tmp_path: Path):
+    def test_create_relay_task_returns_unknown_when_no_task_id(self, tmp_path: Path):
         class FakeRelay:
             def list_desktops(self, *, user_id):
                 return [{"relay_id": "r1", "status": "paired", "last_seen_at": "2026-01-01"}]
@@ -3024,7 +3026,9 @@ class TestCreateSuperEmployeeRelayTask:
             input_data={},
             user_id=1,
         )
-        assert result is None
+        assert result is not None
+        assert result["status"] == "unknown"
+        assert result["reconciliation_required"] is True
 
     def test_create_relay_task_success(self, tmp_path: Path):
         class FakeRelay:

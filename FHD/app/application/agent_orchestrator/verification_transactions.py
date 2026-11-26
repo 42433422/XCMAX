@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -19,6 +20,7 @@ from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
 from app.db.models import (
     Customer,
+    FinancialTransaction,
     InventoryTransaction,
     JournalEntry,
     PurchaseInbound,
@@ -81,6 +83,50 @@ def sales_read_scope(context: dict[str, Any], action: str):
 
 def _order(db, tenant: int, order_id: Any, model):
     return db.scalar(select(model).where(model.tenant_id == tenant, model.id == int(order_id)))
+
+
+def verify_finance_creation(
+    step: AgentStep, call: ToolCall, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Read back the exact approved transaction from the original tenant."""
+    from app.application.finance_app_service import _parse_dt, _valid_finance_amount
+
+    source = "finance_sql"
+    data = output.get("data")
+    if not isinstance(data, dict) or type(data.get("id")) is not int or data["id"] <= 0:
+        return _report("inconclusive", "result_finance_identity_missing", source)
+    expected = {"currency": "CNY", **step.params}
+    amount = _valid_finance_amount(expected.pop("amount", None))
+    for field in ("transaction_date", "due_date"):
+        if field in expected:
+            parsed = _parse_dt(expected[field])
+            if parsed is None:
+                return _report("failed", "result_finance_effect_mismatch", source)
+            expected[field] = parsed.replace(tzinfo=None).isoformat()
+    reference = str(expected.get("reference_id") or "")
+    if reference.isdecimal():
+        expected["reference_id"] = int(reference)
+
+    with _transaction_read_scope(context, {"tool.finance.ledger_query"}, source) as (db, tenant):
+        row = _order(db, tenant, data["id"], FinancialTransaction)
+        if row is None:
+            return _report("inconclusive", "result_finance_record_unavailable", source)
+        started = datetime.fromisoformat(call.started_at).astimezone(UTC).replace(tzinfo=None)
+        historical = row.created_at < started
+        if historical and not (expected.get("reference_type") and reference):
+            return _report("failed", "result_finance_effect_mismatch", source)
+        if not historical:
+            expected.setdefault("status", "pending")
+        snapshot = row.to_dict()
+        if (
+            row.amount != amount
+            or data != snapshot
+            or any(snapshot.get(key) != value for key, value in expected.items())
+        ):
+            return _report("failed", "result_finance_effect_mismatch", source)
+        return _report(
+            "verified", "result_verified", source, transaction_id=row.id, historical=historical
+        )
 
 
 def capture_sales_baseline(step, context: dict[str, Any]) -> dict[str, Any]:

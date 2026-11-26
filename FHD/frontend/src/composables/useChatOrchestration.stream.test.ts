@@ -24,7 +24,7 @@ const {
   attachApprovalCardToLastAiMessage,
   attachBusinessResultToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
-  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
+  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, listEvents, continueRun, cancelRun, streamMode, modState,
   approvalGetMyRequests, approvalApprove,
 } = vi.hoisted(() => ({
   applyPlainTextToMessageIndex: vi.fn(),
@@ -43,7 +43,7 @@ const {
   attachAgentRunTraceToLastAiMessage: vi.fn(),
   queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
-  getRun: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
+  getRun: vi.fn(), listEvents: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
   approvalGetMyRequests: vi.fn(), approvalApprove: vi.fn(),
 }))
 
@@ -217,7 +217,7 @@ vi.mock('@/api/chat', () => ({
 }))
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
-vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, continueRun, cancelRun } }))
+vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, listEvents, continueRun, cancelRun } }))
 vi.mock('@/api/approval', () => ({
   approvalApi: { getMyRequests: approvalGetMyRequests, approve: approvalApprove },
 }))
@@ -275,9 +275,53 @@ describe('useChatOrchestration stream', () => {
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
-  it('renders a Codex input wait as waiting despite success=false and keeps its continuation', async () => {
+  it('follows the original queued run and renders its persisted reply once without resubmitting', async () => {
+    listEvents.mockResolvedValueOnce({ data: [{ event_id: 'terminal-event' }] })
+    getRun.mockResolvedValueOnce({ data: {
+      run_id: 'queued-original', status: 'completed', final_output: { xiaox_result: {
+        ok: true, output: '任务已完成并保存回执', execution_state: 'completed', verified_operations: true,
+      } },
+    } })
     readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
-      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'codex',
+      onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox',
+        run_id: 'queued-original', execution_state: 'queued' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('queued-session') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('整理订单')
+    await vi.waitFor(() => expect(saveMessage).toHaveBeenCalledOnce())
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '任务已完成并保存回执', expect.anything())
+    expect(saveMessage).toHaveBeenCalledWith('ai', '任务已完成并保存回执', 'queued-session', expect.anything())
+    expect(listEvents).toHaveBeenCalledExactlyOnceWith('queued-original', {})
+    expect(getRun).toHaveBeenCalledExactlyOnceWith('queued-original')
+    expect(sendChatStream).toHaveBeenCalledOnce()
+    expect(continueRun).not.toHaveBeenCalled()
+    expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('does not publish a queued reply that returns after the account switches', async () => {
+    listEvents.mockResolvedValueOnce({ data: [{ event_id: 'terminal-event' }] })
+    getRun.mockImplementationOnce(async () => {
+      productReadAccountEpoch.value++
+      return { data: { run_id: 'old-run', status: 'completed', final_output: { xiaox_result: {
+        ok: true, output: '旧账号结果', execution_state: 'completed',
+      } } } }
+    })
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox',
+        run_id: 'old-run', execution_state: 'queued' } })
+    })
+    await useChatOrchestration({ sessionId: ref('old-session') }).sendMessage('整理订单')
+    await vi.waitFor(() => expect(getRun).toHaveBeenCalledExactlyOnceWith('old-run'))
+    await nextTick()
+    expect(saveMessage).not.toHaveBeenCalled()
+    expect(addMessage.mock.calls.some(([text]) => text === '旧账号结果')).toBe(false)
+    expect(continueRun).not.toHaveBeenCalled()
+  })
+
+  it('renders a Xiaox input wait as waiting despite success=false and keeps its continuation', async () => {
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'xiaox',
         execution_state: 'waiting_user', needs_user_input: true,
         runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' } } })
     })
@@ -591,7 +635,7 @@ describe('useChatOrchestration stream', () => {
     expect(lastChatModelRoute('route-receipt')).toEqual(route)
   })
 
-  it('keeps selected identity unconfirmed after meta then stop and preserves it in the local interruption message', async () => {
+  it('keeps the selected model unconfirmed and shows stop on the original turn', async () => {
     const selected = { provider: 'xiaomi', model: 'request-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'selected' }
     let finish!: () => void
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
@@ -602,7 +646,8 @@ describe('useChatOrchestration stream', () => {
     const pending = api.sendMessage('hello')
     await vi.waitFor(() => expect(lastChatModelRoute('selected-stop')).toEqual(selected))
     api.stopReply()
-    expect(addMessage.mock.calls.find(call => String(call[0]).includes('已停止接收'))?.[2]).toEqual({ routeMetadata: selected })
+    expect(api.stoppedTurnId.value).toBe(addMessage.mock.calls[0][2].turnId)
+    expect(addMessage.mock.calls.every(call => call[1] === 'user')).toBe(true)
     finish(); await pending
     expect(lastChatModelRoute('selected-stop')).toEqual(selected)
   })
@@ -1006,7 +1051,8 @@ describe('useChatOrchestration stream', () => {
       await vi.waitFor(() => expect(callbacks).toHaveLength(2))
     }
     expect(oldSignal.aborted).toBe(true)
-    expect(addMessage.mock.calls.some(call => String(call[0]).includes('已停止接收'))).toBe(action === 'stop')
+    expect(Boolean(api.stoppedTurnId.value)).toBe(action === 'stop')
+    if (action === 'stop') expect(api.stoppedTurnId.value).toBe(addMessage.mock.calls[0][2].turnId)
     callbacks[0]({ type: 'route_metadata', route_metadata: { provider: 'old', model: 'stale', route_source: 'preference', key_source: 'user_override', config_revision: 'old' } })
     callbacks[0]({ type: 'token', text: 'late old answer' })
     callbacks[0]({ type: 'requires_token', token_name: 'DB_WRITE' })

@@ -567,6 +567,46 @@ describe('ChatView interactions', () => {
     localStorage.clear()
   })
 
+  it('桌面快捷命令复用当前对话的新建和历史会话控制器，忙碌时不打断', async () => {
+    const wrapper = await mountChatView()
+    window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
+    expect(mockChatViewApi.showHistoryPanel).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    isLoadingRef.value = true
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    expect(showAppToast).toHaveBeenCalledWith(expect.stringContaining('当前对话'), 'warning')
+    wrapper.unmount()
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+  })
+
+  it('新建任务草稿不直接执行 Agent，也不丢弃未发送消息', async () => {
+    const wrapper = await mountChatView()
+    window.dispatchEvent(new Event('xcagi:workspace-new-task'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    expect(showAppToast).toHaveBeenCalledWith(expect.stringContaining('原授权与审批'), 'info')
+    await wrapper.get('#messageInput').setValue('尚未发送的任务目标')
+    window.dispatchEvent(new Event('xcagi:workspace-new-task'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    expect(showAppToast).toHaveBeenCalledWith(expect.stringContaining('草稿'), 'warning')
+  })
+
+  it('独立任务工作区不响应主对话的新建及历史会话快捷命令', async () => {
+    await mountChatView({ workspaceTaskId: 'task-1', workspaceConversationId: 'conv-1' })
+    window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    window.dispatchEvent(new Event('xcagi:workspace-new-task'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).not.toHaveBeenCalled()
+    expect(mockChatViewApi.showHistoryPanel).not.toHaveBeenCalled()
+  })
+
   it('语音通话入口只发起点话且不展开悬浮面板', async () => {
     const wrapper = await mountChatView()
     const listener = vi.fn()
@@ -1160,6 +1200,38 @@ describe('ChatView interactions', () => {
     window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail: { title: '任务完成', description: '发货单已生成' } }))
     await nextTick()
     expect(latestAssistantPushRef.value).toEqual({ title: '任务完成', description: '发货单已生成' })
+  })
+
+  it('输入法确认与 Shift+Enter 不触发发送或阻止默认行为', async () => {
+    const wrapper = await mountChatView()
+    const input = wrapper.get('#messageInput')
+    await input.setValue('正在输入中文')
+    for (const init of [{ isComposing: true }, { keyCode: 229 }, { shiftKey: true }]) {
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+      if ('keyCode' in init) Object.defineProperty(event, 'keyCode', { configurable: true, value: 229 })
+      input.element.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+    }
+    await flushPromises()
+    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).messageInput).toBe('正在输入中文')
+  })
+
+  it('输入法结束组合输入后紧随的回车仍不会误发送', async () => {
+    const wrapper = await mountChatView()
+    const input = wrapper.get('#messageInput')
+    await input.setValue('候选词已确认')
+    input.element.dispatchEvent(new Event('compositionstart', { bubbles: true }))
+    const candidate = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(candidate)
+    expect(candidate.defaultPrevented).toBe(false)
+    input.element.dispatchEvent(new Event('compositionend', { bubbles: true }))
+    const delayedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(delayedEnter)
+    expect(delayedEnter.defaultPrevented).toBe(true)
+    await flushPromises()
+    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).messageInput).toBe('候选词已确认')
   })
 
   it('回车发送与输入内容联动', async () => {

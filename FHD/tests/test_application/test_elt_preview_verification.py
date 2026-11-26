@@ -71,11 +71,8 @@ def test_review_existing_is_bound_to_the_requested_native_run(
 @pytest.mark.parametrize("change", [None, "missing", "duplicate", "summary", "scope"])
 def test_batch_requires_every_original_owned_preview(trusted_actor, native_preview, change):
     actor = trusted_actor(role="admin")
-    paths = ["@uploads/first.xlsx", "@uploads/second.xlsx"]
-    items = [
-        {"file_path": path, **native_preview(actor, file_name=path.rsplit("/", 1)[1])}
-        for path in paths
-    ]
+    paths = ["first.xlsx", "second.xlsx"]
+    items = [{"file_path": path, **native_preview(actor, file_name=path)} for path in paths]
     output = {
         "success": True,
         "batch": True,
@@ -106,7 +103,8 @@ def test_batch_requires_every_original_owned_preview(trusted_actor, native_previ
         output["data"]["executable"] = True
     elif change == "scope":
         items[1]["file_path"] = "@uploads/unapproved.xlsx"
-    assert verify(actor, {"file_paths": paths}, output)["accepted"] is (change is None)
+    report = verify(actor, {"file_paths": paths}, output)
+    assert report["accepted"] is (change is None), report
 
 
 @pytest.mark.parametrize("changed_child", [False, True])
@@ -134,6 +132,5 @@ def test_linked_companion_has_its_own_owned_manifest(trusted_actor, native_previ
         )
         if changed_child:
             child.owner_user_id = 999999
-    assert verify(actor, {"file_path": "@uploads/宗南.xlsx"}, receipt)["accepted"] is (
-        not changed_child
-    )
+    report = verify(actor, {"file_path": "宗南.xlsx"}, receipt)
+    assert report["accepted"] is (not changed_child), report

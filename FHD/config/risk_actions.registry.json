@@ -579,6 +579,18 @@
       "availability": "shared",
       "actions": {
         "query": {
+          "description": "客户查询与联系方式。按单位名称或关键词查询企业客户档案、联系人和联系电话。",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "keyword": {"type": ["string", "null"], "description": "指定客户时填写其完整名称"},
+              "customer_id": {"type": ["integer", "string"], "description": "已知档案 ID 时按 ID 查找"}
+            }
+          },
+          "contract_samples": [
+            {"name": "customers.query.contract", "input": {}, "output": {"success": true, "data": []}},
+            {"name": "customers.query.by_name", "input": {"keyword": "示例客户"}, "output": {"success": true, "data": []}}
+          ],
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -791,6 +803,17 @@
       "availability": "shared",
       "actions": {
         "query": {
+          "description": "按产品型号查询档案，确认该型号是否建档。也支持按名称搜索，返回当前企业的产品、单价和规格。",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "model_number": {"type": ["string", "null"], "description": "按型号查找时填写原型号"},
+              "keyword": {"type": ["string", "null"], "description": "按名称搜索时填写产品名称"}
+            }
+          },
+          "contract_samples": [
+            {"name": "products.query.by_model", "input": {"model_number": "EXAMPLE-1"}, "output": {"success": true, "data": []}}
+          ],
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -1253,6 +1276,19 @@
           "required_params": [],
           "availability": "shared"
         },
+        "post_return": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": [
+            "return_no",
+            "inbound_id",
+            "approval_request_id",
+            "items"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write",
+          "requires_write_approval": true
+        },
         "query_suppliers": {
           "risk": "low",
           "read_only": true,
@@ -1399,6 +1435,10 @@
       "availability": "shared",
       "actions": {
         "sales_summary": {
+          "description": "汇总销售额及产品明细。查询本月时传 period=this_month，由宿主按完整自然月汇总。",
+          "contract_samples": [
+            {"name": "reports.sales_summary.calendar_month", "input": {"period": "this_month"}, "output": {"success": true, "data": []}}
+          ],
           "risk": "low",
           "idempotent": true,
           "read_only": true,
@@ -1406,6 +1446,7 @@
           "availability": "shared"
         },
         "inventory_summary": {
+          "description": "按仓库或产品汇总库存数量和可用余量，适用于明确的库存和现货查询。确认产品型号是否建档时使用产品档案查询。",
           "risk": "low",
           "idempotent": true,
           "read_only": true,
@@ -1439,6 +1480,7 @@
       "availability": "shared",
       "actions": {
         "create_transaction": {
+          "description": "登记收入、支出等财务交易。只传用户指定的交易日期。缺省由宿主取当前日期。",
           "risk": "high",
           "idempotent": false,
           "required_params": [
@@ -1464,6 +1506,10 @@
           "availability": "shared"
         },
         "ledger_query": {
+          "description": "查询财务账本记录、会计台账和记账凭证。查询本月时传 period=this_month。",
+          "contract_samples": [
+            {"name": "finance.ledger_query.calendar_month", "input": {"period": "this_month"}, "output": {"success": true, "data": []}}
+          ],
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -1737,6 +1783,7 @@
       "availability": "shared",
       "actions": {
         "generate": {
+          "description": "生成发货单。按编号发货时明细用 model_number，已给每桶规格用 tin_spec，桶数用 quantity_tins。未给品名时传空 name，由宿主按产品规格和客户价格回读。",
           "risk": "high",
           "idempotent": false,
           "required_params": [
@@ -2098,12 +2145,14 @@
         "list": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "query": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },

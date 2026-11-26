@@ -3,15 +3,17 @@
 part of 'mobile_models.dart';
 
 class PendingNotificationsData {
-  const PendingNotificationsData({required this.notifications});
+  const PendingNotificationsData({required this.notifications, this.nextBeforeId});
 
   final List<PendingNotification> notifications;
+  final int? nextBeforeId;
 
   factory PendingNotificationsData.fromJson(Map<String, Object?> json) {
     return PendingNotificationsData(
       notifications: _readList(
         json['notifications'] ?? json['items'],
       ).map(PendingNotification.fromJson).toList(growable: false),
+      nextBeforeId: _readIntOrNull(json, const ['next_before_id']),
     );
   }
 }
@@ -23,6 +25,8 @@ class PendingNotification {
     required this.body,
     required this.route,
     required this.channel,
+    this.isRead = false,
+    this.createdAt = '',
   });
 
   final int id;
@@ -30,6 +34,8 @@ class PendingNotification {
   final String body;
   final String route;
   final String channel;
+  final bool isRead;
+  final String createdAt;
 
   factory PendingNotification.fromJson(Map<String, Object?> json) {
     return PendingNotification(
@@ -38,6 +44,8 @@ class PendingNotification {
       body: _readString(json, const ['body', 'content', 'message']),
       route: _readString(json, const ['route']),
       channel: _readString(json, const ['channel', 'type']),
+      isRead: json['is_read'] == true,
+      createdAt: _readString(json, const ['created_at']),
     );
   }
 }

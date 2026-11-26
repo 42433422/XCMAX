@@ -17,8 +17,8 @@ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.enterprise_goal import EnterpriseGoalBinding
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 from tests.test_application.test_enterprise_goals import Projections, definition
 
 MESSAGE = "为订单 42 安排剩余数量出库，先审批"
@@ -54,7 +54,7 @@ def pending_write(execution_env):
     ]
     state.drain(parent.run_id)
     parent = repo.get(parent.run_id)
-    rows = parent.metadata["codex_runtime"]["calls"]
+    rows = parent.metadata["xiaox_runtime"]["calls"]
     child = repo.get(rows["deliver"]["child_run_id"])
     assert child.status == "waiting_user" and not child.tool_calls
     return child
@@ -391,14 +391,14 @@ def test_unreachable_goal_stays_unknown_in_world_scenario(execution_env):
     assert not parent.tool_calls
 
 
-def test_evidence_bound_world_scenario_reaches_codex_model_input(execution_env):
-    from app.application.agent_runtime.codex_runtime import _input_text
+def test_evidence_bound_world_scenario_reaches_xiaox_model_input(execution_env):
+    from app.application.agent_runtime.xiaox_runtime import _input_text
 
     service, _goals, _projections, _repo, _state, _factory = execution_env
     run = submit(service, request_id="world-model-input-evidence")
     binding = run.metadata["runtime_context"]["enterprise_cognition"]
     scenario = binding["world_scenario"]
-    payload = run.metadata["_codex_input_data"]
+    payload = run.metadata["_xiaox_input_data"]
     assert payload["world_scenario"] == scenario
     assert payload["baseline"]["source_version"] == scenario["baseline_source_version"]
     model_input = _input_text(run.message, [], payload)

@@ -94,6 +94,82 @@ def test_ai_review_keeps_pr_and_manual_run_groups_separate(published):
     assert doc["permissions"] == {"contents": "read", "pull-requests": "write"}
 
 
+@pytest.mark.parametrize("published", [False, True])
+def test_real_model_secrets_require_an_exact_protected_main_revision(published):
+    source = "FHD/.github/workflows/task-holdout-real-model.yml"
+    name, doc = workflow(source, published)
+    if published:
+        assert (ROOT / ".github/workflows" / name).read_text() == publisher._render_fhd(
+            ROOT / source
+        )[1]
+    assert set(doc["on"]) == {"push", "workflow_dispatch"}
+    assert doc["on"]["push"] == {"branches": ["main"]}
+    inputs = doc["on"]["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"holdout_route"}
+    assert inputs["holdout_route"]["type"] == "choice"
+    assert inputs["holdout_route"]["options"] == ["mimo", "existing"]
+    assert inputs["holdout_route"]["default"] == "mimo"
+    assert doc["permissions"] == {"contents": "read"}
+    assert set(doc["jobs"]) == {"original-model-holdout"}
+    job = doc["jobs"]["original-model-holdout"]
+    # The explicit conjunction rejects PRs, forks, candidate refs, and main
+    # without server-side branch protection before the environment is entered.
+    assert job["if"] == (
+        "github.repository == 'xcagi/XCMAX' && "
+        "github.ref == 'refs/heads/main' && github.ref_protected && "
+        "(github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
+    )
+    assert job["environment"] == (
+        "${{ inputs.holdout_route == 'existing' && 'xcmax-model-holdout' || "
+        "'xcmax-integration-holdout-3680' }}"
+    )
+    checkout = job["steps"][0]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": "false"}
+    assert 'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"' in job["steps"][1]["run"]
+    secret_steps = {
+        step["name"]: step
+        for step in job["steps"]
+        if any("secrets." in value for value in step.get("env", {}).values())
+    }
+    assert set(secret_steps) == {
+        "Bind the existing holdout route",
+        "Start the isolated MiMo Token Plan holdout gateway",
+    }
+    assert secret_steps["Bind the existing holdout route"]["if"] == (
+        "inputs.holdout_route == 'existing'"
+    )
+    assert secret_steps["Start the isolated MiMo Token Plan holdout gateway"]["if"] == (
+        "inputs.holdout_route != 'existing'"
+    )
+
+
+@pytest.mark.parametrize("published", [False, True])
+def test_protected_real_model_workflow_keeps_the_original_holdout_gate(published):
+    _, doc = workflow("FHD/.github/workflows/task-holdout-real-model.yml", published)
+    job = doc["jobs"]["original-model-holdout"]
+    assert job["timeout-minutes"] == "140"
+    assert {key: value for key, value in job["env"].items() if key.startswith("TASK_")} == {
+        "TASK_BENCHMARK_RUN": "1",
+        "TASK_BENCHMARK_SET": "holdout",
+        "TASK_BENCHMARK_TRIALS": "3",
+        "TASK_BENCHMARK_MODE": "gate",
+        "TASK_BENCHMARK_HOLDOUT_MIN_PASS": "0.4",
+    }
+    steps = {step["name"]: step for step in job["steps"]}
+    run = steps["Run isolated 13-task x 3-trial original holdout"]["run"]
+    assert "tests/benchmarks/test_task_success.py" in run
+    verifier = steps["Verify original raw trials, same SHA and hard gate"]["run"]
+    assert "verify_task_benchmark_evidence.py --set holdout --minimum 0.4" in verifier
+    assert 'assert report["source_sha"] == __import__("os").environ["GITHUB_SHA"]' in verifier
+    assert 'assert report["total_tasks"] == 13 and report["trials"] == 3' in verifier
+    assert 'assert report["model_responses"] > 0' in verifier
+    assert 'assert report["execution_mode"] == "model_workflow"' in verifier
+    assert 'assert not report["startup_blocked_tasks"]' in verifier
+    assert 'assert report["gate_passed"] is True' in verifier
+    assert steps["Upload raw receipts even on failures"]["if"] == "always()"
+
+
 def test_global_secret_gate_and_scheduled_mobile_acceptance_remain():
     _, secrets = workflow(".github/workflows/gitleaks.yml")
     assert "paths" not in secrets["on"]["pull_request"]

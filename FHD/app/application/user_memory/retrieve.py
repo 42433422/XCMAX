@@ -8,6 +8,7 @@ from typing import Any
 from app.application.user_memory.relation_retrieval import relation_paths, select_effective_records
 from app.application.user_memory.write import MemoryFactsStore, default_memory_store
 from app.domain.user_memory.policy import (
+    is_erp_bound_memory,
     is_scoped_memory_owner,
     memory_statement,
 )
@@ -43,6 +44,10 @@ def search(
     hits = []
     eligible, _, _ = select_effective_records(records)
     for record in eligible:
+        # Owner hashes do not identify a trusted actor with current ERP RBAC.
+        # ERP-backed memories can only be read through the scoped Persy path.
+        if is_erp_bound_memory(record):
+            continue
         text = memory_statement(record)
         score = score_memory(query, {"text": text})
         if score <= 0 or score < float(min_score):
@@ -94,7 +99,11 @@ def filter_recalled_memories(
     eligible, _, _ = select_effective_records(
         memory_service.list_memories(user_id, status="active")
     )
-    current = {str(record.get("memory_id") or ""): record for record in eligible}
+    current = {
+        str(record.get("memory_id") or ""): record
+        for record in eligible
+        if not is_erp_bound_memory(record)
+    }
     accepted: list[dict[str, Any]] = []
     for hit in hits:
         if not isinstance(hit, dict):
@@ -164,6 +173,8 @@ def recall_authoritative_memories(user_id: str, query: str, limit: int = 5) -> l
     hits: list[dict[str, Any]] = []
     eligible, _, _ = select_effective_records(authority.list_memories(user_id, status="active"))
     for record in eligible:
+        if is_erp_bound_memory(record):
+            continue
         text = memory_statement(record)
         score = _lexical_score(query, tokens, text)
         if score <= 0:
@@ -201,7 +212,11 @@ def relation_recall_hits(
     if not isinstance(raw, list):
         return []
     eligible, _, _ = select_effective_records(raw)
-    rows = [{**row, "scope": "owner", "statement": memory_statement(row)} for row in eligible]
+    rows = [
+        {**row, "scope": "owner", "statement": memory_statement(row)}
+        for row in eligible
+        if not is_erp_bound_memory(row)
+    ]
     paths, _ = relation_paths(query, rows, max_hops=2)
     hits = []
     for row in rows:

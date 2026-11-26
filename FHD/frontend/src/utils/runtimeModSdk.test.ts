@@ -27,3 +27,16 @@ describe('verified local Mod SDK', () => {
     for (const path of ['/chat', '/mod/independent-ui/../../chat', '/mod/independent-ui/%2e%2e/chat']) expect(() => sdk.navigate(path)).toThrow()
   })
 })
+
+
+it('rejects all SDK operations after the host retires the extension', () => {
+  vi.clearAllMocks()
+  const controller = new AbortController()
+  const navigate = vi.fn()
+  const sdk = createRuntimeModSdk(metadata(), { path: '/mod/independent-ui/home', query: {} }, controller.signal, navigate)
+  controller.abort()
+  expect(() => sdk.request('/records')).toThrow(/失效/)
+  expect(() => sdk.navigate('/mod/independent-ui/detail')).toThrow(/失效/)
+  expect(apiFetch).not.toHaveBeenCalled()
+  expect(navigate).not.toHaveBeenCalled()
+})

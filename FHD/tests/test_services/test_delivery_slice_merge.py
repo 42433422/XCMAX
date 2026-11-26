@@ -38,13 +38,13 @@ def _run_rows_table(engine) -> str:
     raise AssertionError("run-rows table missing after upgrade")
 
 
-def _from_history(url, prior):
+def _from_history(url, prior, revision="head"):
     engine, original = _legacy_database(url, already_sliced=True)
     Base.metadata.create_all(engine)
     config = _alembic_config()
     command.upgrade(config, prior)
-    command.upgrade(config, "head")
-    _assert_revision_heads(engine, {_current_head(config)})
+    command.upgrade(config, revision)
+    _assert_revision_heads(engine, {_current_head(config) if revision == "head" else revision})
     return engine, config, original
 
 
@@ -114,7 +114,7 @@ def test_combined_downgrade_guards_legal_splits_before_either_branch(_db_url, pr
 
 @pytest.mark.parametrize("prior", _PRIORS)
 def test_zero_slice_roundtrip_preserves_history_from_both_parents(_db_url, prior):
-    engine, config, original = _from_history(_db_url, prior)
+    engine, config, original = _from_history(_db_url, prior, "2026_11_15_delivery_slices_merge")
     try:
         command.downgrade(config, "2026_11_11_agent_permissions")
         command.upgrade(config, "head")

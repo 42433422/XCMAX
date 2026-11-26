@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -108,3 +110,131 @@ def test_append_event_concurrent_safe(tmp_ledger):
         t.join()
     lines = tmp_ledger.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 100
+
+
+def test_audit_keeps_original_jsonl_immutable_and_tracks_revisions(tmp_ledger):
+    original = append_event({"event_type": "pack_listed", "pack_id": "unchanged"})
+    before = tmp_ledger.read_bytes()
+    assert mark_audited(original["event_id"], "approved") is True
+    first = tmp_ledger.read_bytes()
+    assert first.startswith(before)
+    rows = [json.loads(line) for line in first.splitlines()]
+    assert len(rows) == 2
+    assert rows[0]["owner_audit"]["audited"] is False
+    assert rows[1]["event_type"] == "owner_audit_recorded"
+    assert rows[1]["audit_target_event_id"] == original["event_id"]
+    assert list_events()[0]["owner_audit"]["verdict"] == "approved"
+
+    assert mark_audited(original["event_id"], "approved") is True
+    assert tmp_ledger.read_bytes() == first
+    assert mark_audited(original["event_id"], "rejected") is True
+    amended = tmp_ledger.read_bytes()
+    assert amended.startswith(first)
+    rows = [json.loads(line) for line in amended.splitlines()]
+    assert len(rows) == 3
+    assert rows[2]["previous_audit_event_id"] == rows[1]["event_id"]
+    assert list_events()[0]["owner_audit"]["verdict"] == "rejected"
+    assert len(list_events(event_type="pack_listed")) == 1
+
+
+def test_proposer_cannot_spoof_journal_identity_or_owner_audit(tmp_ledger):
+    forged = {
+        "event_type": "signal_detected",
+        "event_id": "forged-id",
+        "recorded_at": "2000-01-01T00:00:00+00:00",
+        "owner_audit": {"audited": True, "verdict": "approved"},
+    }
+    recorded = append_event(forged)
+    assert recorded["event_id"] != "forged-id"
+    assert recorded["recorded_at"] != forged["recorded_at"]
+    assert recorded["owner_audit"]["audited"] is False
+    assert list_events()[0]["owner_audit"]["verdict"] is None
+    with pytest.raises(ValueError, match="invalid_evolution_event"):
+        append_event({"event_type": "owner_audit_recorded", "audit_verdict": "approved"})
+
+
+def test_audit_missing_event_and_invalid_verdict_fail_closed(tmp_ledger):
+    original = append_event({"event_type": "signal_detected"})
+    before = tmp_ledger.read_bytes()
+    assert mark_audited("not-present", "approved") is False
+    assert tmp_ledger.read_bytes() == before
+    with pytest.raises(ValueError, match="invalid_evolution_audit_verdict"):
+        mark_audited(original["event_id"], "self-approved")
+    assert tmp_ledger.read_bytes() == before
+
+
+def test_same_audit_is_idempotent_across_processes(tmp_ledger):
+    original = append_event({"event_type": "signal_detected"})
+    before = tmp_ledger.read_bytes()
+    # Fresh interpreters import only the production module, not pytest's
+    # importlib-loaded test module, which spawn cannot reliably import.
+    script = (
+        "import sys\n"
+        "from modstore_server.evolution_ledger import mark_audited\n"
+        "if sys.stdin.read(1) != '1' or not mark_audited(sys.argv[1], 'approved'):\n"
+        "    raise SystemExit(1)\n"
+    )
+    workers = []
+    try:
+        for _ in range(4):
+            workers.append(
+                subprocess.Popen(
+                    [sys.executable, "-c", script, original["event_id"]],
+                    stdin=subprocess.PIPE,
+                    text=True,
+                )
+            )
+        for worker in workers:
+            assert worker.stdin is not None
+            worker.stdin.write("1")
+            worker.stdin.close()
+        for worker in workers:
+            assert worker.wait(timeout=45) == 0
+    finally:
+        for worker in workers:
+            if worker.poll() is None:
+                worker.kill()
+                worker.wait(timeout=10)
+    after = tmp_ledger.read_bytes()
+    assert after.startswith(before)
+    rows = [json.loads(line) for line in after.splitlines()]
+    assert len(rows) == 2
+    assert rows[1]["event_type"] == "owner_audit_recorded"
+    assert rows[1]["audit_target_event_id"] == original["event_id"]
+    assert list_events()[0]["owner_audit"]["verdict"] == "approved"
+
+
+def test_list_events_handles_legacy_invalid_event_ids(tmp_ledger):
+    valid = append_event({"event_type": "signal_detected"})
+    assert mark_audited(valid["event_id"], "approved") is True
+    with tmp_ledger.open("a", encoding="utf-8") as fh:
+        for event_id in (None, [], {"id": "invalid"}):
+            fh.write(json.dumps({"event_type": "legacy", "event_id": event_id}) + "\n")
+
+    events = list_events()
+    assert events[0]["owner_audit"]["verdict"] == "approved"
+    assert [event["event_id"] for event in events[1:]] == [None, [], {"id": "invalid"}]
+    assert all("owner_audit" not in event for event in events[1:])
+
+
+@pytest.mark.parametrize("verdict", [None, [], {"invalid": True}])
+def test_invalid_audit_verdict_does_not_break_projection(tmp_ledger, verdict):
+    original = append_event({"event_type": "signal_detected"})
+    # A legacy or damaged audit line must not create approval or break reads.
+    with tmp_ledger.open("a", encoding="utf-8") as fh:
+        fh.write(
+            json.dumps(
+                {
+                    "event_type": "owner_audit_recorded",
+                    "audit_target_event_id": original["event_id"],
+                    "audit_verdict": verdict,
+                    "audited_at": original["recorded_at"],
+                }
+            )
+            + "\n"
+        )
+    before = tmp_ledger.read_bytes()
+    assert list_events()[0]["owner_audit"]["audited"] is False
+    with pytest.raises(ValueError, match="invalid_evolution_audit_verdict"):
+        mark_audited(original["event_id"], verdict)
+    assert tmp_ledger.read_bytes() == before

@@ -166,6 +166,7 @@ vi.mock('@/stores/industry', () => ({
 vi.mock('@/router/registerModRoutes', () => ({
   registerAllModRoutesFromGlob: vi.fn(async () => {}),
   registerModRoutes: vi.fn(async () => {}),
+  retireStaleRuntimeRoutes: vi.fn(),
 }))
 
 vi.mock('@/router', () => ({
@@ -669,6 +670,40 @@ describe('mods store – fetchModRoutes', () => {
     mockFetch.mockResolvedValueOnce(null)
     await store.fetchModRoutes()
     expect(store.modRoutes).toHaveLength(1)
+  })
+
+  it('treats the server empty list as a revocation, not a failed fetch', async () => {
+    const { fetchModRoutesPayloadShared } = await import('@/utils/modRoutesSharedFetch')
+    const { registerModRoutes } = await import('@/router/registerModRoutes')
+    const mockFetch = vi.mocked(fetchModRoutesPayloadShared)
+    const register = vi.mocked(registerModRoutes)
+    register.mockClear()
+    mockApiFetch.mockReset()
+    mockFetch.mockResolvedValueOnce([])
+    mockApiFetch.mockResolvedValueOnce(makeModsResponse(sampleMods))
+    const store = useModsStore()
+    await store.initialize()
+    expect(register).toHaveBeenCalledWith(
+      expect.anything(), [], expect.objectContaining({
+        reconcileRuntime: true,
+        sessionCurrent: expect.any(Function),
+      }),
+    )
+    expect(store.modRoutes).toEqual([])
+  })
+
+  it('does not revoke runtime routes after an unconfirmed network failure', async () => {
+    const { fetchModRoutesPayloadShared } = await import('@/utils/modRoutesSharedFetch')
+    const { registerModRoutes } = await import('@/router/registerModRoutes')
+    const mockFetch = vi.mocked(fetchModRoutesPayloadShared)
+    const register = vi.mocked(registerModRoutes)
+    register.mockClear()
+    mockApiFetch.mockReset()
+    mockFetch.mockResolvedValueOnce(null)
+    mockApiFetch.mockResolvedValueOnce(makeModsResponse(sampleMods))
+    const store = useModsStore()
+    await store.initialize()
+    expect(register).not.toHaveBeenCalled()
   })
 })
 

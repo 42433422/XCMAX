@@ -156,6 +156,84 @@ def _goal_gap(
     }
 
 
+def make_fact_reference(snapshot: dict[str, Any]) -> dict[str, str] | None:
+    """Opaque, content-bound identity for the original scoped ERP record."""
+    fields = ("tenant_id", "mod_id", "source", "entity_type", "entity_id", "source_version")
+    if snapshot.get("knowledge_kind") != "fact" or any(snapshot.get(key) is None for key in fields):
+        return None
+    version = snapshot["source_version"]
+    if (
+        not isinstance(version, str)
+        or len(version) != 71
+        or not version.startswith("sha256:")
+        or any(char not in "0123456789abcdef" for char in version[7:])
+    ):
+        return None
+    values = [str(snapshot[key]) for key in fields]
+    return {
+        **{key: str(snapshot[key]) for key in fields},
+        "fact_token": "erp:" + canonical_hash(values),
+    }
+
+
+def verify_source_reference(
+    snapshot: dict[str, Any], expected_version: str, expected_token: str
+) -> dict[str, Any]:
+    """Reconcile a memory/world reference against a fresh, authorized ERP SELECT.
+
+    This is a read-only freshness fence, not authorization to execute an ERP
+    write. An unavailable source cannot validate a remembered version.
+    """
+    reference = make_fact_reference(snapshot)
+    authoritative = (
+        snapshot.get("freshness") == "fresh"
+        and snapshot.get("retrieved_from") == "authority"
+        and bool(snapshot.get("evidence"))
+        and reference is not None
+    )
+    if not authoritative:
+        return {
+            "status": "unknown",
+            "knowledge_kind": "unknown",
+            "reason_code": snapshot.get("reason_code") or "fresh_authority_not_verified",
+            "expected_source_version": expected_version,
+            "expected_fact_token": expected_token,
+            "current_source_version": None,
+            "current_fact_token": None,
+            "memory_reuse_allowed": False,
+            "requires_reconciliation": True,
+            "business_data_written": False,
+        }
+    assert reference is not None
+    current_version = snapshot["source_version"]
+    matches = current_version == expected_version and reference["fact_token"] == expected_token
+    return {
+        "status": "current" if matches else "superseded",
+        "knowledge_kind": "fact" if matches else "unknown",
+        "reason_code": (
+            None
+            if matches
+            else (
+                "fact_reference_scope_or_entity_mismatch"
+                if current_version == expected_version
+                else "erp_source_version_changed"
+            )
+        ),
+        "expected_source_version": expected_version,
+        "expected_fact_token": expected_token,
+        "current_source_version": current_version,
+        "current_fact_token": reference["fact_token"],
+        "source": snapshot["source"],
+        "entity_type": snapshot["entity_type"],
+        "entity_id": snapshot["entity_id"],
+        "checked_at": snapshot["observed_at"],
+        "evidence": snapshot["evidence"],
+        "memory_reuse_allowed": matches,
+        "requires_reconciliation": not matches,
+        "business_data_written": False,
+    }
+
+
 class EnterpriseCognitionService:
     def __init__(self, *, projections=None, goals=None, execution=None, outcomes=None):
         self._projections = projections
@@ -181,6 +259,8 @@ class EnterpriseCognitionService:
 
     def query(self, params: dict, **scope) -> dict[str, Any]:
         entity_type, entity_id = params["entity_type"], params.get("entity_id")
+        expected_version = params.get("expected_source_version")
+        expected_token = params.get("expected_fact_token")
         if params.get("as_of") is not None:
             observation = self.projections.get(
                 entity_type, entity_id, as_of=params["as_of"], **scope
@@ -200,22 +280,44 @@ class EnterpriseCognitionService:
             self.projections.get(
                 entity_type,
                 ref["entity_id"],
-                force_refresh=params["force_refresh"],
+                force_refresh=params["force_refresh"] or expected_version is not None,
+                verify_only=expected_version is not None,
                 **scope,
             )
             for ref in references["refs"]
+        ]
+        fact_verification = (
+            verify_source_reference(snapshots[0], expected_version, expected_token or "")
+            if expected_version is not None and snapshots
+            else None
+        )
+        fact_references = [
+            reference
+            for snapshot in snapshots
+            if (reference := make_fact_reference(snapshot)) is not None
         ]
         ids = {snapshot["entity_id"] for snapshot in snapshots}
         goals = self.goals.list(entity_type=entity_type, entity_ids=ids, **scope) if ids else []
         states = {row["entity_id"]: row for row in snapshots}
         progress = [_goal_progress(goal, states[goal["entity_id"]]) for goal in goals]
-        gaps = [
-            candidate
-            for goal, measured in zip(goals, progress, strict=True)
-            if (candidate := _goal_gap(goal, states[goal["entity_id"]], measured)) is not None
-        ]
+        # A superseded/unknown remembered version must not emit a reviewable
+        # action candidate derived from that particular verification request.
+        gaps = (
+            []
+            if fact_verification is not None and fact_verification["status"] != "current"
+            else [
+                candidate
+                for goal, measured in zip(goals, progress, strict=True)
+                if (candidate := _goal_gap(goal, states[goal["entity_id"]], measured)) is not None
+            ]
+        )
         return {
             "snapshots": snapshots,
+            "fact_references": fact_references,
+            "fact_verification": fact_verification,
+            "remembered_fact_current": (
+                fact_verification["status"] == "current" if fact_verification is not None else None
+            ),
             "relationships": [
                 {"source_entity_id": row["entity_id"], **relation}
                 for row in snapshots
@@ -297,6 +399,17 @@ class EnterpriseCognitionService:
                 }
             if action == "query":
                 return self.query(parsed, **scope)
+            if action == "perceive":
+                from app.application.enterprise_cognition.perception import observe_enterprise
+
+                return observe_enterprise(
+                    self.projections,
+                    tenant_id=scope["tenant_id"],
+                    actor_id=scope["actor_id"],
+                    mod_id=scope["mod_id"],
+                    limit_per_source=parsed["limit_per_source"],
+                    force_refresh=parsed["force_refresh"],
+                )
             if action == "goals":
                 return (
                     self.goals.get(parsed["goal_id"], **scope)
@@ -331,8 +444,13 @@ def cognition_result_verified(action: str, params: dict, result: dict) -> bool:
     """HTTP and model tools share the same epistemic success semantics."""
     if action == "evaluate":
         return result.get("observation_verified") is True
+    if action == "perceive":
+        # A successful diagnostic is not proof of complete enterprise perception.
+        return result.get("source_checks_completed") is True
     if action != "query":
         return True
+    if params.get("expected_source_version") is not None:
+        return (result.get("fact_verification") or {}).get("status") == "current"
     if params.get("as_of") is not None:
         return result.get("historical_observation_verified") is True
     if params.get("scenario_delivery_quantity") is not None:

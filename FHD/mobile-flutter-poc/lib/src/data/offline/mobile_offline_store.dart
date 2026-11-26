@@ -13,14 +13,23 @@ import '../../models/conversation.dart';
 /// 这些数据此前混在会话 JSON 文件里，导致每次会话写入都要重写整份聊天记录。
 /// 这里使用 drift（成熟 SQLite 封装）单独建库，会话文件只保留凭证与偏好。
 class MobileOfflineStore {
-  MobileOfflineStore._(this._db, [this._namespace]);
+  MobileOfflineStore._(this._db, [this._namespace, DateTime Function()? clock])
+      : _clock = clock ?? DateTime.now;
 
   final String? _namespace;
+  final DateTime Function() _clock;
+  // Display cache freshness uses acquisition time, not business event time.
+  static const displayCacheLifetime = Duration(hours: 24);
+  int get _nowMs => _clock().millisecondsSinceEpoch;
+  int _cacheCutoff(int now) => now - displayCacheLifetime.inMilliseconds;
   static final _scoped = <String, Future<MobileOfflineStore>>{};
 
   static const _databaseName = 'xcagi_mobile_cache';
   static const _maxMessagesPerConversation = 80;
   static const _maxQueuedAttempts = 5;
+  // A display-cache TTL may never evict a non-terminal local turn.
+  static const _unresolvedStatuses =
+      "('pending', 'queued', 'sending', 'unknown', 'failed')";
 
   static MobileOfflineStore? _shared;
 
@@ -49,8 +58,9 @@ class MobileOfflineStore {
   }
 
   /// 测试或自定义执行器入口（例如 NativeDatabase.memory()）。
-  static MobileOfflineStore forExecutor(QueryExecutor executor) =>
-      MobileOfflineStore._(_MobileOfflineDatabase(executor));
+  static MobileOfflineStore forExecutor(QueryExecutor executor,
+          {DateTime Function()? clock}) =>
+      MobileOfflineStore._(_MobileOfflineDatabase(executor), null, clock);
 
   /// 单元测试注入内存库，避免依赖 path_provider 平台通道。
   static void installSharedForTest(MobileOfflineStore store) {
@@ -73,10 +83,14 @@ class MobileOfflineStore {
 
   Future<List<Map<String, Object?>>> cachedMessages(
       String conversationId) async {
+    final now = _nowMs;
+    // Keep unresolved local turns for reconciliation even after history expires.
     final rows = await _db.customSelect(
-      'SELECT * FROM chat_messages WHERE conversation_id = ? '
+      'SELECT message_id, conversation_id, role, body, time_text, ts, '
+      'has_employee_profile, status, turn_id FROM chat_messages WHERE conversation_id = ? AND '
+      '((cached_at > ? AND cached_at <= ?) OR status IN $_unresolvedStatuses) '
       'ORDER BY ts ASC, message_id ASC',
-      variables: [Variable<String>(conversationId)],
+      variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
     ).get();
     return rows.map(_messageRow).toList(growable: false);
   }
@@ -87,8 +101,8 @@ class MobileOfflineStore {
   ) async {
     await _db.customUpdate(
       'INSERT OR REPLACE INTO chat_messages '
-      '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status, turn_id) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status, turn_id, cached_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       variables: [
         Variable<String>(conversationId),
         Variable<String>('${row['id'] ?? ''}'),
@@ -99,6 +113,7 @@ class MobileOfflineStore {
         Variable<int>(row['has_employee_profile'] == true ? 1 : 0),
         Variable<String>('${row['status'] ?? ChatDeliveryStatus.sent.name}'),
         Variable<String>('${row['turn_id'] ?? ''}'),
+        Variable<int>(_nowMs),
       ],
     );
     await _trimMessages(conversationId);
@@ -108,22 +123,38 @@ class MobileOfflineStore {
     String conversationId,
     List<Map<String, Object?>> rows,
   ) async {
-    await _db.customUpdate(
-      'DELETE FROM chat_messages WHERE conversation_id = ?',
-      variables: [Variable<String>(conversationId)],
-    );
-    final tail = rows.length > _maxMessagesPerConversation
-        ? rows.sublist(rows.length - _maxMessagesPerConversation)
-        : rows;
-    for (final row in tail) {
-      await appendMessage(conversationId, row);
-    }
+    await _db.transaction(() async {
+      final protected = await _db.customSelect(
+        'SELECT message_id FROM chat_messages WHERE conversation_id = ? '
+        'AND status IN $_unresolvedStatuses',
+        variables: [Variable<String>(conversationId)],
+      ).get();
+      final protectedIds = protected
+          .map((row) => row.data['message_id'] as String? ?? '')
+          .toSet();
+      await _db.customUpdate(
+        'DELETE FROM chat_messages WHERE conversation_id = ? '
+        'AND status NOT IN $_unresolvedStatuses',
+        variables: [Variable<String>(conversationId)],
+      );
+      final tail = rows.length > _maxMessagesPerConversation
+          ? rows.sublist(rows.length - _maxMessagesPerConversation)
+          : rows;
+      for (final row in tail) {
+        // Only a verified receipt may supersede an unresolved local identity.
+        if (protectedIds.contains('${row['id'] ?? ''}')) continue;
+        await appendMessage(conversationId, row);
+      }
+      await _trimMessages(conversationId);
+    });
   }
 
   Future<void> _trimMessages(String conversationId) async {
     await _db.customUpdate(
-      'DELETE FROM chat_messages WHERE conversation_id = ? AND message_id NOT IN ('
+      'DELETE FROM chat_messages WHERE conversation_id = ? '
+      'AND status NOT IN $_unresolvedStatuses AND message_id NOT IN ('
       'SELECT message_id FROM chat_messages WHERE conversation_id = ? '
+      'AND status NOT IN $_unresolvedStatuses '
       'ORDER BY ts DESC, message_id DESC LIMIT $_maxMessagesPerConversation)',
       variables: [
         Variable<String>(conversationId),
@@ -137,7 +168,8 @@ class MobileOfflineStore {
     int timestampMs,
   ) async {
     await _db.customUpdate(
-      'DELETE FROM chat_messages WHERE conversation_id = ? AND ts = ?',
+      'DELETE FROM chat_messages WHERE conversation_id = ? AND ts = ? '
+      'AND status NOT IN $_unresolvedStatuses',
       variables: [Variable<String>(conversationId), Variable<int>(timestampMs)],
     );
   }
@@ -145,9 +177,11 @@ class MobileOfflineStore {
   // ── 会话列表状态 ────────────────────────────────────────────
 
   Future<Map<String, Object?>?> conversationState(String conversationId) async {
+    final now = _nowMs;
     final rows = await _db.customSelect(
-      'SELECT preview, timestamp_ms FROM conversation_states WHERE conversation_id = ?',
-      variables: [Variable<String>(conversationId)],
+      'SELECT preview, timestamp_ms FROM conversation_states WHERE conversation_id = ? '
+      'AND updated_at > ? AND updated_at <= ?',
+      variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
     ).get();
     if (rows.isEmpty) return null;
     final data = rows.first.data;
@@ -159,12 +193,15 @@ class MobileOfflineStore {
 
   /// 一次读取全部会话的最近消息，供消息列表显示预览与时间。
   Future<Map<String, Map<String, Object?>>> latestMessagePreviews() async {
-    final rows = await _db
-        .customSelect(
-          'SELECT conversation_id, body, role, MAX(ts) AS ts FROM chat_messages '
-          'GROUP BY conversation_id',
-        )
-        .get();
+    final now = _nowMs;
+    final rows = await _db.customSelect(
+      'WITH fresh AS (SELECT conversation_id, message_id, body, role, ts '
+      'FROM chat_messages WHERE cached_at > ? AND cached_at <= ?) '
+      'SELECT f.conversation_id, f.body, f.role, f.ts FROM fresh f '
+      'WHERE NOT EXISTS (SELECT 1 FROM fresh n WHERE n.conversation_id = f.conversation_id '
+      'AND (n.ts > f.ts OR (n.ts = f.ts AND n.message_id > f.message_id)))',
+      variables: [Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
+    ).get();
     return {
       for (final row in rows)
         if ((row.data['conversation_id'] as String? ?? '').trim().isNotEmpty)
@@ -188,18 +225,132 @@ class MobileOfflineStore {
         Variable<String>(conversationId),
         Variable<String>(preview),
         Variable<int>(timestampMs),
-        Variable<int>(DateTime.now().millisecondsSinceEpoch),
+        Variable<int>(_nowMs),
       ],
+    );
+  }
+
+  // ── Scoped chat composer restoration ───────────────────────────
+  // Draft text is local to this account/server database. Uploaded bytes and
+  // reusable upload IDs are deliberately excluded: the remote upload receipt
+  // can expire or be revoked while the app is closed.
+  static const _draftLifetimeMs = 7 * 24 * 60 * 60 * 1000;
+  static const _maxDraftChars = 16000;
+
+  String _draftKey(String conversationId) =>
+      'chat-draft:${jsonEncode(conversationId)}';
+
+  Future<void> saveChatDraft(String conversationId, String text,
+      {List<String> attachmentNames = const []}) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    final safeNames = attachmentNames
+        .where((name) => name.trim().isNotEmpty)
+        .take(4)
+        .map((name) => name.length > 180 ? name.substring(0, 180) : name)
+        .toList(growable: false);
+    final safeText = text.length > _maxDraftChars
+        ? text.substring(0, _maxDraftChars) : text;
+    if (safeText.isEmpty && safeNames.isEmpty) {
+      await clearChatDraft(id);
+      return;
+    }
+    final data = jsonEncode({
+      'text': safeText,
+      'attachment_names': safeNames,
+      'expires_at': DateTime.now().millisecondsSinceEpoch + _draftLifetimeMs,
+    });
+    await _db.customUpdate(
+      'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+      variables: [Variable<String>(_draftKey(id)), Variable<String>(data)],
+    );
+  }
+
+  Future<Map<String, Object?>> readChatDraft(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return const {};
+    final rows = await _db.customSelect(
+      'SELECT value FROM meta WHERE key = ?',
+      variables: [Variable<String>(_draftKey(id))],
+    ).get();
+    if (rows.isEmpty) return const {};
+    try {
+      final raw = jsonDecode('${rows.single.data['value']}');
+      if (raw is! Map) throw const FormatException('draft not an object');
+      final expiresAt = raw['expires_at'];
+      if (expiresAt is! int || expiresAt <= DateTime.now().millisecondsSinceEpoch) {
+        await clearChatDraft(id);
+        return const {};
+      }
+      final text = raw['text'];
+      final names = raw['attachment_names'];
+      return {
+        'text': text is String ? text : '',
+        'attachment_names': names is List
+            ? names.whereType<String>().take(4).toList(growable: false)
+            : const <String>[],
+      };
+    } catch (_) {
+      await clearChatDraft(id);
+      return const {};
+    }
+  }
+
+  Future<void> clearChatDraft(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    await _db.customUpdate(
+      'DELETE FROM meta WHERE key = ?',
+      variables: [Variable<String>(_draftKey(id))],
+    );
+  }
+
+  // Unknown approval outcomes survive process restarts and credential
+  // refresh. Never expire them by elapsed time: only the authenticated
+  // server's terminal approval state can release a blocked decision.
+  String _approvalOutcomeKey(int approvalId) => 'approval-outcome:$approvalId';
+
+  Future<bool> markUnknownApprovalOutcome(int approvalId) async {
+    if (approvalId <= 0) throw ArgumentError.value(approvalId, 'approvalId');
+    // A second screen/process must not acquire an already claimed approval.
+    final inserted = await _db.customUpdate(
+      'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)',
+      variables: [
+        Variable<String>(_approvalOutcomeKey(approvalId)),
+        const Variable<String>('unknown'),
+      ],
+    );
+    return inserted == 1;
+  }
+
+  Future<bool> hasUnknownApprovalOutcome(int approvalId) async {
+    if (approvalId <= 0) return true;
+    final rows = await _db.customSelect(
+      'SELECT value FROM meta WHERE key = ?',
+      variables: [Variable<String>(_approvalOutcomeKey(approvalId))],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  Future<void> clearUnknownApprovalOutcome(int approvalId) async {
+    if (approvalId <= 0) return;
+    await _db.customUpdate(
+      'DELETE FROM meta WHERE key = ?',
+      variables: [Variable<String>(_approvalOutcomeKey(approvalId))],
     );
   }
 
   // ── 进行中的中继任务 ────────────────────────────────────────
 
-  Future<void> saveTurnDispatch(String conversationId, String turnId,
+  // The first durable claim owns the dispatch channel for this turn.
+  // Replacing it could send a possibly accepted LAN POST through Relay.
+  Future<bool> saveTurnDispatch(String conversationId, String turnId,
       Map<String, Object?> dispatch) async {
-    await _db.customUpdate('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+    final inserted = await _db.customUpdate(
+        'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)',
         variables: [Variable<String>('turn-dispatch:${jsonEncode([conversationId, turnId])}'),
           Variable<String>(jsonEncode(dispatch))]);
+    return inserted == 1;
   }
 
   Future<Map<String, Object?>> turnDispatch(String conversationId, String turnId) async {
@@ -247,43 +398,67 @@ class MobileOfflineStore {
     required String body,
     required int authGeneration,
     String idempotencyKey = '',
+    bool requiresReconciliation = false,
   }) async {
     final text = body.trim();
     if (text.isEmpty) return 0;
     final key = idempotencyKey.trim();
-    final existing = await _db.customSelect(
-      'SELECT id FROM outbox_messages WHERE conversation_id = ? AND ${key.isEmpty ? 'body' : 'idempotency_key'} = ? '
-      "AND status IN ('pending', 'sending', 'unknown') LIMIT 1",
-      variables: [Variable<String>(conversationId), Variable<String>(key.isEmpty ? text : key)],
-    ).get();
-    if (existing.isNotEmpty) {
-      return _asInt(existing.first.data['id']);
-    }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return _db.customInsert(
-      'INSERT INTO outbox_messages '
-      '(conversation_id, conversation_type, title, body, auth_generation, idempotency_key, status, attempts, '
-      'last_error, created_at, updated_at) '
-      "VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, '', ?, ?)",
-      variables: [
-        Variable<String>(conversationId),
-        Variable<String>(conversationType.name),
-        Variable<String>(title),
-        Variable<String>(text),
-        Variable<int>(authGeneration),
-        Variable<String>(idempotencyKey.trim().isEmpty
-            ? 'mobile-outbox-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
-            : idempotencyKey.trim()),
-        Variable<int>(now),
-        Variable<int>(now),
-      ],
-    );
+    // Serialize deduplication with insertion across concurrent reconnects.
+    return _db.transaction(() async {
+      final existing = await _db.customSelect(
+        'SELECT id FROM outbox_messages WHERE conversation_id = ? AND ${key.isEmpty ? 'body' : 'idempotency_key'} = ? '
+        "AND status IN ('pending', 'sending', 'unknown') LIMIT 1",
+        variables: [Variable<String>(conversationId), Variable<String>(key.isEmpty ? text : key)],
+      ).get();
+      if (existing.isNotEmpty) {
+        final id = _asInt(existing.first.data['id']);
+        if (requiresReconciliation) {
+          // The request might have executed before its response was lost.
+          await _db.customUpdate(
+            "UPDATE outbox_messages SET status = 'unknown' WHERE id = ? AND status = 'pending'",
+            variables: [Variable<int>(id)],
+          );
+        }
+        return id;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      return _db.customInsert(
+        'INSERT INTO outbox_messages '
+        '(conversation_id, conversation_type, title, body, auth_generation, idempotency_key, status, attempts, '
+        'last_error, created_at, updated_at) '
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?)",
+        variables: [
+          Variable<String>(conversationId),
+          Variable<String>(conversationType.name),
+          Variable<String>(title),
+          Variable<String>(text),
+          Variable<int>(authGeneration),
+          Variable<String>(idempotencyKey.trim().isEmpty
+              ? 'mobile-outbox-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
+              : idempotencyKey.trim()),
+          Variable<String>(requiresReconciliation ? 'unknown' : 'pending'),
+          Variable<int>(now),
+          Variable<int>(now),
+        ],
+      );
+    });
   }
 
-  Future<List<PendingOutboxMessage>> pendingMessages({int limit = 5}) async {
+  Future<List<PendingOutboxMessage>> pendingMessages({
+    int limit = 5,
+    int? authGeneration,
+  }) async {
+    // Unknown rows from an older credential generation must stay durable,
+    // but must not consume the bounded reconciliation batch for this account.
+    final scoped = authGeneration != null;
     final rows = await _db.customSelect(
-      "SELECT * FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown') ORDER BY updated_at ASC, id ASC LIMIT ?",
-      variables: [Variable<int>(limit)],
+      "SELECT * FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown') "
+      "${scoped ? 'AND auth_generation = ? ' : ''}"
+      'ORDER BY updated_at ASC, id ASC LIMIT ?',
+      variables: [
+        if (authGeneration != null) Variable<int>(authGeneration),
+        Variable<int>(limit),
+      ],
     ).get();
     return rows.map((row) {
       final data = row.data;
@@ -310,7 +485,22 @@ class MobileOfflineStore {
     return _asInt(rows.first.data['total']);
   }
 
-  Future<void> markSending(int id) => _updateOutbox(id, "status = 'sending'");
+  Future<void> markSending(int id) async {
+    await _db.customUpdate(
+      "UPDATE outbox_messages SET status = 'sending', updated_at = ? "
+      "WHERE id = ? AND status = 'pending'",
+      variables: [Variable<int>(_nowMs), Variable<int>(id)],
+    );
+  }
+
+  /// Read-only reconciliation is not a new dispatch attempt.
+  Future<void> markReconciliationRequired(int id) async {
+    await _db.customUpdate(
+      "UPDATE outbox_messages SET status = 'unknown', updated_at = ? "
+      "WHERE id = ? AND status IN ('pending', 'sending', 'unknown')",
+      variables: [Variable<int>(_nowMs), Variable<int>(id)],
+    );
+  }
 
   Future<void> markSent(int id) async {
     await _db.customUpdate(
@@ -322,7 +512,7 @@ class MobileOfflineStore {
   Future<void> markFailed(int id, String error, {bool requiresReconciliation = false, bool terminal = false}) async {
     await _db.customUpdate(
       'UPDATE outbox_messages SET attempts = attempts + 1, '
-      "status = CASE WHEN ? = 1 THEN 'failed' WHEN ? = 1 THEN 'unknown' WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
+      "status = CASE WHEN ? = 1 THEN 'failed' WHEN ? = 1 OR status IN ('sending', 'unknown') THEN 'unknown' WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
       'last_error = ?, updated_at = ? WHERE id = ?',
       variables: [
         Variable<int>(terminal ? 1 : 0),
@@ -336,7 +526,7 @@ class MobileOfflineStore {
 
   Future<void> removePendingByBody(String conversationId, String body) async {
     await _db.customUpdate(
-      "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status IN ('pending', 'sending', 'unknown')",
+      "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status = 'pending' AND attempts = 0",
       variables: [
         Variable<String>(conversationId),
         Variable<String>(body.trim())
@@ -348,16 +538,6 @@ class MobileOfflineStore {
     if (turnId.isEmpty) return;
     await _db.customUpdate('DELETE FROM outbox_messages WHERE conversation_id = ? AND idempotency_key = ?',
         variables: [Variable<String>(conversationId), Variable<String>(turnId)]);
-  }
-
-  Future<void> _updateOutbox(int id, String assignment) async {
-    await _db.customUpdate(
-      'UPDATE outbox_messages SET $assignment, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable<int>(DateTime.now().millisecondsSinceEpoch),
-        Variable<int>(id)
-      ],
-    );
   }
 
   // ── 映射与类型转换 ──────────────────────────────────────────
@@ -423,7 +603,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, dynamic>> get allTables => const [];
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -439,6 +619,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
             'has_employee_profile INTEGER NOT NULL DEFAULT 0, '
             'status TEXT NOT NULL, '
             "turn_id TEXT NOT NULL DEFAULT '', "
+            'cached_at INTEGER NOT NULL DEFAULT 0, '
             'PRIMARY KEY (conversation_id, message_id))',
           );
           await m.database.customStatement(
@@ -482,16 +663,31 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
           );
         },
         onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.database.customStatement(
-                "ALTER TABLE chat_messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
-            await m.database.customStatement(
-                "ALTER TABLE outbox_messages ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''");
-            await m.database.customStatement(
-                "UPDATE outbox_messages SET idempotency_key = 'mobile-legacy-' || lower(hex(randomblob(16))) WHERE idempotency_key = ''");
-            await m.database.customStatement(
-                "UPDATE outbox_messages SET status = 'unknown' WHERE status = 'sending' OR (status = 'pending' AND attempts > 0)");
-          }
+          // SQLite DDL is transactional. A partial previous attempt with the
+          // same user_version also remains recoverable by checking the column.
+          await m.database.transaction(() async {
+            if (from < 2) {
+              await m.database.customStatement(
+                  "ALTER TABLE chat_messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
+              await m.database.customStatement(
+                  "ALTER TABLE outbox_messages ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''");
+              await m.database.customStatement(
+                  "UPDATE outbox_messages SET idempotency_key = 'mobile-legacy-' || lower(hex(randomblob(16))) WHERE idempotency_key = ''");
+            }
+            if (from < 3) {
+              final columns = await m.database
+                  .customSelect('PRAGMA table_info(chat_messages)').get();
+              if (!columns.any((row) => row.data['name'] == 'cached_at')) {
+                await m.database.customStatement(
+                    'ALTER TABLE chat_messages ADD COLUMN cached_at INTEGER NOT NULL DEFAULT 0');
+              }
+              // v2 may be killed while sending. No transport error proves
+              // whether its business side effects were committed.
+              await m.database.customStatement(
+                  "UPDATE outbox_messages SET status = 'unknown' "
+                  "WHERE status = 'sending' OR (status = 'pending' AND attempts > 0)");
+            }
+          });
         },
       );
 

@@ -1,4 +1,4 @@
-"""Browser actions share Codex's durable model budget and conversation authority."""
+"""Browser actions share Xiaox's durable model budget and conversation authority."""
 
 from __future__ import annotations
 
@@ -21,10 +21,10 @@ from app.db.models import AIConversationSession
 from app.domain.shared_services.conversation_service import lock_conversation_session
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
 from app.infrastructure.billing import model_usage as ledger
-from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
-from app.infrastructure.codex.model_gateway import MODEL_PATH, router
-from app.infrastructure.codex.policy import ModelRoute
-from app.infrastructure.codex.tools import CodexToolBridge
+from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.model_gateway import MODEL_PATH, router
+from app.infrastructure.xiaox.policy import ModelRoute
+from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -75,7 +75,7 @@ def browser_model(trusted_actor, monkeypatch, tmp_path, request):
         )
     parent = AgentRun(str(actor.user_id), "读取页面结果", status="running")
     parent.metadata.update(
-        runtime_type="codex",
+        runtime_type="xiaox",
         runtime_context={
             **context,
             "conversation_id": "browser-budget-chat",
@@ -96,7 +96,7 @@ def browser_model(trusted_actor, monkeypatch, tmp_path, request):
         context_window=32000,
         max_output_tokens=2048,
     )
-    store = CodexBindingStore(repository)
+    store = XiaoxBindingStore(repository)
     grant = store.create(parent.run_id, runtime_config=route.runtime_identity())
     store.update(
         parent.run_id, lambda _run, metadata: metadata.update(deadline_at=time.time() + 60)
@@ -139,7 +139,7 @@ def browser_model(trusted_actor, monkeypatch, tmp_path, request):
 
     # Only external I/O is synthetic; principal, schema, SQL claims and billing are real.
     monkeypatch.setattr("app.infrastructure.browser.runtime.execute_browser_plan", browser)
-    bridge = CodexToolBridge(
+    bridge = XiaoxToolBridge(
         store,
         AgentOrchestrator(
             repository=repository,
@@ -164,10 +164,10 @@ def browser_model(trusted_actor, monkeypatch, tmp_path, request):
         )
 
     app = FastAPI()
-    app.state.codex_binding_store = store
-    app.state.codex_model_route = route
-    app.state.codex_run_id = parent.run_id
-    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+    app.state.xiaox_binding_store = store
+    app.state.xiaox_model_route = route
+    app.state.xiaox_run_id = parent.run_id
+    app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
         transport=httpx.MockTransport(model), **kwargs
     )
     app.include_router(router)
@@ -252,13 +252,13 @@ def test_unknown_model_usage_keeps_reservation_and_blocks_browser_continuation(b
     assert ledger.get_model_wallet(saved.run.user_id)["balance_units"] == 68
     assert state.post().status_code == 409
     assert len(state.model_requests) == 1
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         state.observe()
     assert error.value.code == "reconciliation_required"
     assert state.browser_requests == []
     assert state.store.get(state.parent.run_id).metadata["calls"] == {}
     state.store.close(state.parent.run_id, "waiting_user")
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         state.store.create(state.parent.run_id, runtime_config=state.route.runtime_identity())
     assert error.value.code == "reconciliation_required"
 
@@ -267,7 +267,7 @@ def test_inflight_model_request_blocks_new_browser_action_until_usage_settles(br
     state = browser_model
 
     def try_while_reserved():
-        with pytest.raises(CodexBindingError) as error:
+        with pytest.raises(XiaoxBindingError) as error:
             state.observe()
         assert error.value.code == "call_in_progress"
         assert state.browser_requests == []
@@ -291,7 +291,7 @@ def test_unknown_model_usage_still_allows_original_browser_receipt_without_repla
     assert repeated["run_id"] == original["run_id"]
     assert repeated["tool_calls"] == original["tool_calls"]
     assert repeated["verified"] is True and len(state.browser_requests) == 1
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         state.observe("new-browser-action")
     assert error.value.code == "reconciliation_required"
     assert state.store.get(state.parent.run_id).run.metadata["reserved_cost_units"] == held == 32
@@ -318,7 +318,7 @@ def test_browser_rejects_conversation_revision_changed_across_model_io(browser_m
     assert ledger.get_model_wallet(state.parent.user_id)["balance_units"] == (
         100 if during == "before_request" else 98
     )
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         state.observe()
     assert error.value.code == "conversation_changed"
     assert state.browser_requests == []

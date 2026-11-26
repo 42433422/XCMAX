@@ -65,10 +65,10 @@ describe('product read ownership', () => {
     const old = deferred<ReturnType<typeof result>>()
     api.getProducts.mockReturnValueOnce(old.promise).mockResolvedValueOnce(result(109))
     api.updateProduct.mockResolvedValue({ success: true })
-    const store = useProductsStore(); const pending = store.fetchProducts({ keyword: 'PM90', unit: '客户甲' })
+    const store = useProductsStore(); const pending = store.fetchProducts({ keyword: 'PM90', unit: '客户甲', page: 2 })
     expect(await store.updateProduct(1, { price: 109 })).toEqual({ success: true })
     old.resolve(result(99)); await pending
-    expect(api.getProducts).toHaveBeenLastCalledWith({ keyword: 'PM90', unit: '客户甲' })
+    expect(api.getProducts).toHaveBeenLastCalledWith({ keyword: 'PM90', unit: '客户甲', page: 1 })
     expect(store.products[0].price).toBe(109); expect(store.canEditProducts).toBe(true)
   })
 

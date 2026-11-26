@@ -20,6 +20,7 @@ from modstore_server.xiaoc_goal_management import (
     discover_goal_candidate,
     portfolio_goal_closed,
     project_goal_steps,
+    resumable_operating_candidate,
 )
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
@@ -59,6 +60,7 @@ BLOCKED_SUMMARIES = {
     "research_returned_no_sources": "本轮研究没有返回可用来源，未据此生成新结论。",
     "no_observed_context": "本轮没有可用的企业观察来源，未调用模型。",
     "model_returned_no_usable_result": "模型未返回可用结果，已保存实际调用用量。",
+    "experience_reuse_scope_unverified": "历史经验的指标、阈值、方向或观察窗与当前提案不同，禁止把经验作为新方案依据。",
 }
 
 
@@ -321,9 +323,14 @@ class CyclePorts:
 
         context = await self.write_in_thread(collect_context)
         if self.domain == "enterprise":
-            candidate = discover_goal_candidate(
-                context, self.state, self.claim["owner_user_id"], now=datetime.now(UTC)
+            now = datetime.now(UTC)
+            candidate = resumable_operating_candidate(
+                context, self.state, self.claim["owner_user_id"], now=now
             )
+            if candidate is None:
+                candidate = discover_goal_candidate(
+                    context, self.state, self.claim["owner_user_id"], now=now
+                )
             if candidate is not None:
                 goal, fact = candidate
                 self.evidence = [fact["ref"]]
@@ -604,6 +611,39 @@ class CyclePorts:
             level=self.state["level"],
             domain=self.domain,
         )
+        # Reusing a human-confirmed case is a scoped citation in a NEW proposal,
+        # not a task approval, a causal result or an executable strategy.
+        if decision.goal is not None:
+            from modstore_server.xiaoc_life_experience_review import (
+                experience_scope_matches,
+            )
+
+            cited = set(decision.goal.evidence_refs)
+            prior_cases = [
+                row
+                for row in state["facts"]
+                if row.get("ref") in cited
+                and isinstance(row.get("reviewed_experience"), dict)
+                and isinstance(row.get("learning_assessment"), dict)
+            ]
+            if prior_cases:
+                hypothesis = decision.hypothesis.model_dump() if decision.hypothesis else {}
+                if not hypothesis or any(
+                    not experience_scope_matches(
+                        row["learning_assessment"].get("scope") or {},
+                        hypothesis,
+                        self.claim["owner_user_id"],
+                    )
+                    for row in prior_cases
+                ):
+                    raise LifeBlocked("experience_reuse_scope_unverified")
+                self.details["experience_reuse"] = {
+                    "status": "advisory_citation_in_unapproved_proposal",
+                    "review_refs": sorted(row["ref"] for row in prior_cases),
+                    "original_candidate_refs": sorted(row["candidate_ref"] for row in prior_cases),
+                    "measurement": hypothesis,
+                    "effect": "unknown_requires_independent_outcome_comparison",
+                }
         self.evidence = sorted(refs)
         self.details["model_note"] = decision.summary
         self.details["model_note_status"] = "unverified_suggestion"
@@ -639,16 +679,131 @@ class CyclePorts:
                 "summary": "已将原改进批准接入公司工程预算提案，等待原审批。",
             }
         if state.get("discovered_goals"):
+            goal = dict(state["discovered_goals"][0])
+            policy = self.state.get("policy", {})
+            limits = policy.get("portfolio_limits")
+            employee = policy.get("employee_id")
+            if not limits or not employee:
+                goal["blocked_reason"] = "awaiting_existing_portfolio_policy"
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "已创建有来源的经营候选；等待原企业预算及员工授权。",
+                }
+            from modstore_server.strategic_portfolio import (
+                PortfolioError,
+                create_portfolio_proposal,
+                digest,
+            )
+            from modstore_server.strategy_business_context import customer_value_context
+            from modstore_server.xiaoc_goal_management import (
+                ORIGIN,
+                compile_autonomous_review_plan,
+            )
+            from modstore_server.xiaoc_life_policy import LifePolicyError
+            from modstore_server.xiaoc_self_model import employee_preflight
+
+            current_value = await self.write_in_thread(customer_value_context)
+            self.active()
+            try:
+                opportunities, bindings = compile_autonomous_review_plan(
+                    goal,
+                    owner=self.claim["owner_user_id"],
+                    policy=policy,
+                    goals=[*self.state.get("goals", []), goal],
+                    current_value=current_value,
+                    now=datetime.now(UTC),
+                )
+            except LifePolicyError as exc:
+                goal["blocked_reason"] = str(exc)
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "经营候选已记录，但原调查授权或实时来源不满足条件。",
+                }
+            preflight = await self.write_in_thread(
+                employee_preflight, employee, self.claim["owner_user_id"]
+            )
+            self.active()
+            self.details["operating_employee_preflight"] = preflight
+            if preflight["status"] != "registered_unverified":
+                goal["blocked_reason"] = preflight["reason"]
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "经营候选已记录，但尚无符合原执行入口的员工。",
+                }
+            try:
+                proposal = await self.write_in_thread(
+                    create_portfolio_proposal,
+                    owner_user_id=self.claim["owner_user_id"],
+                    goal=goal["title"],
+                    period="xiaoc-life:" + goal["id"][:45],
+                    limits=limits,
+                    opportunities=opportunities,
+                    idempotency_key="xiaoc-life:" + digest([goal["id"], ORIGIN]),
+                )
+            except PortfolioError as exc:
+                goal["blocked_reason"] = str(exc)
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "原预算优化或提案约束不满足；保留未授权经营候选。",
+                }
+            self.active()
+            if not proposal.get("decision"):
+                goal["blocked_reason"] = "awaiting_feasible_review_option"
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "原资源约束没有可行的调查提案；未获得执行授权。",
+                }
+            goal.update(
+                status="awaiting_approval",
+                decision_id=proposal["decision"]["decision_id"],
+                step_bindings=bindings,
+                subgoals_status="bound_to_original_portfolio",
+            )
+            self.details.setdefault("created_proposals", []).append(
+                {"goal_id": goal["id"], "decision_id": goal["decision_id"]}
+            )
             return {
-                "goals": state["discovered_goals"],
+                "goals": [goal],
                 "status": "completed",
-                "summary": "已从原客户价值账本形成待审核经营候选，未生成或执行员工任务。",
+                "summary": "已自动创建两步经营调查提案，仍待原预算审批；没有派工或业务写入。",
             }
         decision = state["decision"]
         if decision["action"] == "wait":
             return {
                 "status": "completed",
                 "summary": "已核对当前观察，本轮没有新增行动。",
+            }
+        if decision["action"] in {"ask_human", "refuse"}:
+            route = decision["action"]
+            # This is a model decision, not an authorization finding or a
+            # human notification. No new task, budget or execution is created.
+            self.details["metacognitive_route"] = {
+                "action": route,
+                "status": "model_suggestion_not_authority",
+                "handoff_status": "not_dispatched" if route == "ask_human" else "not_requested",
+                "evidence_refs": decision["evidence_refs"][:8],
+            }
+            self.details["blocked_reason"] = (
+                "model_requested_human_help"
+                if route == "ask_human"
+                else "model_refused_unverified_action"
+            )
+            return {
+                "status": "blocked",
+                "summary": (
+                    "本轮请求人工判断，尚未创建人工交接或执行任务。"
+                    if route == "ask_human"
+                    else "本轮拒绝自动提案或执行，未改变授权策略。"
+                ),
             }
         goals = []
         suggestion = decision.get("goal") or (
@@ -1077,6 +1232,17 @@ class CyclePorts:
         return state
 
     def finish(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        # Preserve the actual lineage from original reviewed evidence to a NEW
+        # pending goal/decision. A citation is not a proven causal improvement.
+        reuse = self.details.get("experience_reuse")
+        if isinstance(reuse, dict):
+            cited = set(reuse.get("review_refs", []))
+            for goal in result.get("goals") or []:
+                if isinstance(goal, dict) and cited.intersection(goal.get("evidence_refs", [])):
+                    reuse["new_goal_id"] = goal.get("id")
+                    reuse["new_decision_id"] = goal.get("decision_id")
+                    reuse["new_goal_status"] = goal.get("status")
+                    break
         if result.get("status") == "awaiting_worker" and self.details.get("awaiting_worker"):
             return dict(
                 _store().defer_cycle(

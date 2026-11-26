@@ -224,6 +224,27 @@ def _event_dict(row: XiaoCLifeEvent) -> dict[str, Any]:
     }
 
 
+def _audit_admission_denial(data: dict[str, Any], session: Session, reasons: list[str]) -> None:
+    """Journal the first observed denial; identical retries do not churn CAS."""
+    snapshot = {
+        "revision": data["revision"],
+        "budget_date": _day(),
+        "reasons": sorted(set(reasons)),
+    }
+    if data.get("admission_denial") == snapshot:
+        return
+    data["admission_denial"] = snapshot
+    _event(
+        session,
+        f"life:denied:{uuid.uuid4().hex}",
+        kind="life_transition",
+        status="blocked",
+        summary="当前生命周期准入条件不足，未发起新的自主执行。",
+        evidence_refs=[f"policy:{data['revision']}"],
+        details={"from": "admission", "to": "blocked", **snapshot},
+    )
+
+
 def read_state() -> dict[str, Any]:
     _ensure()
     with get_session_factory()() as session:
@@ -274,13 +295,30 @@ def read_state() -> dict[str, Any]:
                 .limit(20)
             )
         ]
+        # Keep execution telemetry out of the cognition/experience event feed.
+        # The immutable transitions remain independently queryable by SQL and API.
         data["events"] = [
             _event_dict(event)
             for event in session.scalars(
                 select(XiaoCLifeEvent)
-                .where(XiaoCLifeEvent.identity_id == IDENTITY_ID)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind != "life_transition",
+                )
                 .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
                 .limit(20)
+            )
+        ]
+        data["lifecycle_events"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "life_transition",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(40)
             )
         ]
         from modstore_server.xiaoc_life_experience_review import review_facts
@@ -342,6 +380,9 @@ def read_state() -> dict[str, Any]:
             else None
         )
         data["blockers"] = blockers
+        from modstore_server.xiaoc_goal_governance import project_goal_governance
+
+        data["goal_governance"] = project_goal_governance(data, now=utcnow())
         data["state_version"] = row.version
         data["updated_at"] = row.updated_at.replace(tzinfo=UTC).isoformat()
         if data["budget"]["date"] != _day() and not active and not data.get("unknown_usage"):
@@ -459,10 +500,21 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                 reflection_template(policy.retort_template_id, actor_user_id)
             data["policy"] = policy.model_dump()
             data["owner_user_id"] = actor_user_id
-        if body.stopped is not None:
-            data["stopped"] = body.stopped
-        if data.get("stopped") and body.paused is False:
+        was_stopped, was_paused = data.get("stopped", False), data["paused"]
+        stopped = was_stopped if body.stopped is None else body.stopped
+        if stopped and body.paused is False:
             raise LifePolicyError("已停止的自主活动须由管理员明确启动")
+        paused = stopped or (was_paused if body.paused is None else body.paused)
+        if (
+            (body.stopped is not None or body.paused is not None)
+            and (stopped, paused) == (was_stopped, was_paused)
+            and body.level is None
+            and body.mission is None
+            and body.policy is None
+        ):
+            return
+        if body.stopped is not None:
+            data["stopped"] = stopped
         for name in ("level", "paused", "mission"):
             if (value := getattr(body, name)) is not None:
                 data[name] = value.strip() if isinstance(value, str) else value
@@ -488,12 +540,122 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
             details={
                 "previous_owner_user_id": previous_owner,
                 "owner_user_id": data["owner_user_id"],
+                "before_stopped": was_stopped,
+                "before_paused": was_paused,
                 "stopped": data.get("stopped", False),
                 "paused": data["paused"],
             },
         )
 
     _mutate(change)
+    return read_state()
+
+
+def manage_operating_goal(
+    goal_id: str,
+    *,
+    action: str,
+    expected_revision: int,
+    actor_user_id: int,
+    reason: str,
+    review_note: str | None = None,
+    review_deadline: str | None = None,
+) -> dict[str, Any]:
+    """CAS + immutable events for UNBOUND review candidates.
+
+    Bound tasks must be stopped through the original portfolio stop/approval API;
+    changing only the life-side status cannot cancel their business effects.
+    """
+    from modstore_server.xiaoc_goal_governance import governance_gate, review_milestones
+    from modstore_server.xiaoc_goal_management import ORIGIN, candidate_gate
+
+    if action not in {"pause", "resume", "cancel", "adjust"}:
+        raise LifePolicyError("未知目标管理操作")
+    if not reason.strip() or len(reason) > 500:
+        raise LifePolicyError("目标调整必须提供有效原因")
+
+    def apply(data: dict[str, Any], session: Session) -> None:
+        now = utcnow()
+        if not _active_principal(session, actor_user_id):
+            raise LifePolicyError("需要有效管理员身份")
+        if data["revision"] != expected_revision or data.get("owner_user_id") != actor_user_id:
+            raise LifePolicyError("原目标或企业授权已变动，请重新读取")
+        goal = next((row for row in data.get("goals", []) if row.get("id") == goal_id), None)
+        if goal is None or goal.get("candidate_origin") != ORIGIN:
+            raise LifePolicyError("仅允许管理原客户价值缺口候选")
+        if goal.get("candidate_owner_user_id") != actor_user_id:
+            raise LifePolicyError("目标归属与管理员不一致")
+        if goal.get("decision_id") or goal.get("step_bindings") or goal.get("retort_request_id"):
+            raise LifePolicyError("目标已关联原审批/执行组合，请通过原组合流程停止或变更")
+        previous = {
+            "status": goal.get("status"),
+            "review_note": goal.get("review_note"),
+            "review_deadline": goal.get("review_deadline"),
+        }
+        if action == "pause":
+            if goal.get("status") != "proposed":
+                raise LifePolicyError("仅待审目标允许暂停")
+            goal["status"] = "paused"
+        elif action == "resume":
+            if goal.get("status") != "paused":
+                raise LifePolicyError("仅暂停目标允许恢复")
+            from modstore_server.strategy_business_context import customer_value_context
+
+            observation = customer_value_context()
+            if candidate_gate(goal, actor_user_id, observation, now=now)["status"] != "eligible":
+                raise LifePolicyError("当前来源、期限或经营缺口未重新验证")
+            if governance_gate(goal, data["goals"], now=now)["status"] != "reviewable":
+                raise LifePolicyError("目标存在冲突或前置目标未完成")
+            goal["status"] = "proposed"
+        elif action == "cancel":
+            if goal.get("status") not in {"proposed", "paused"}:
+                raise LifePolicyError("原目标已终止或进入审批，不能仅更改候选状态")
+            goal["status"] = "cancelled"
+        elif action == "adjust":
+            if goal.get("status") not in {"proposed", "paused"}:
+                raise LifePolicyError("仅未绑定候选可以调整复核说明或缩短期限")
+            if review_note is None and review_deadline is None:
+                raise LifePolicyError("没有可审计的目标调整")
+            if review_note is not None:
+                goal["review_note"] = review_note.strip()
+            if review_deadline is not None:
+                try:
+                    changed = parse_time(review_deadline)
+                    original = parse_time(goal["review_deadline"])
+                except (TypeError, ValueError, AttributeError) as exc:
+                    raise LifePolicyError("复核期限需要包含时区") from exc
+                if not now < changed <= original:
+                    raise LifePolicyError("只能缩短期限，不能延长原证据的有效期")
+                goal["review_deadline"] = changed.isoformat()
+                goal["milestones"] = review_milestones(now=now, deadline=changed)
+        data["revision"] += 1
+        data["next_wake_at"] = now.isoformat()
+        _event(
+            session,
+            f"goal-manage:{goal_id}:{data['revision']}",
+            kind="goal_management",
+            status=action,
+            summary=f"经营目标 {goal_id} 已进行 {action} 管理",
+            evidence_refs=[
+                *goal.get("evidence_refs", [])[:29],
+                f"admin:{actor_user_id}",
+                f"goal:{goal_id}",
+            ],
+            details={
+                "actor_user_id": actor_user_id,
+                "goal_id": goal_id,
+                "reason": reason.strip(),
+                "previous": previous,
+                "current": {
+                    "status": goal.get("status"),
+                    "review_note": goal.get("review_note"),
+                    "review_deadline": goal.get("review_deadline"),
+                },
+                "revision": data["revision"],
+            },
+        )
+
+    _mutate(apply)
     return read_state()
 
 
@@ -519,14 +681,24 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
                 data["unknown_usage"] = True
                 data["last_status"] = "blocked"
             return None
-        if data["paused"] or data["level"] < MINIMUM_LEVEL[domain] or _blockers(data, session):
+        reasons = []
+        if data.get("stopped"):
+            reasons.append("stopped")
+        if data["paused"]:
+            reasons.append("paused")
+        if data["level"] < MINIMUM_LEVEL[domain]:
+            reasons.append("insufficient_level")
+        reasons.extend(_blockers(data, session))
+        if reasons:
+            _audit_admission_denial(data, session, reasons)
             return None
         if data.get("next_wake_at") and parse_time(data["next_wake_at"]) > now:
             return None
         if data["budget"]["date"] != _day():
             data["budget"] = _budget()
         budget, policy = data["budget"], data["policy"]
-        if _admission_blockers(data):
+        if reasons := _admission_blockers(data):
+            _audit_admission_denial(data, session, reasons)
             return None
         exploring = domain == "exploration"
         share = policy["daily_token_limit"] * policy["exploration_percent"] // 100
@@ -541,6 +713,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         )
         reserved = min(reserve_tokens, max(0, lane_cap - lane_used))
         if reserve_tokens and reserved <= 0:
+            _audit_admission_denial(data, session, ["domain_token_allocation_exhausted"])
             return None
         from modstore_server.xiaoc_self_model import execution_scope
 
@@ -569,6 +742,39 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         data["next_wake_at"] = (
             now + timedelta(seconds=policy["wake_interval_seconds"])
         ).isoformat()
+        data.pop("admission_denial", None)
+        _event(
+            session,
+            f"life:phase:{cycle['cycle_id']}:claimed",
+            kind="life_transition",
+            status="claimed",
+            summary="原自主周期已持久认领与预留额度。",
+            evidence_refs=[f"policy:{data['revision']}"],
+            details={
+                "from": "idle",
+                "to": "claimed",
+                "cycle_id": cycle["cycle_id"],
+                "owner_user_id": cycle["owner_user_id"],
+                "policy_revision": cycle["policy_revision"],
+                "domain": domain,
+                "reserved_tokens": reserved,
+            },
+        )
+        if limits := _admission_blockers(data):
+            _event(
+                session,
+                f"life:limit:{cycle['cycle_id']}",
+                kind="life_transition",
+                status="budget_exhausted",
+                summary="本次认领达到当日额度边界，仅禁止新增周期。",
+                evidence_refs=[f"life:phase:{cycle['cycle_id']}:claimed"],
+                details={
+                    "cycle_id": cycle["cycle_id"],
+                    "policy_revision": cycle["policy_revision"],
+                    "budget_date": budget["date"],
+                    "reasons": limits,
+                },
+            )
         return {**cycle, "state": {**copy.deepcopy(data), "self_authority_active": True}}
 
     return _mutate(claim)
@@ -732,7 +938,14 @@ def finish_cycle(
                 data["unknown_usage"] = True
             elif expected_closeout is not None and budget["reserved_tokens"] == 0:
                 data["unknown_usage"] = False
-        safe = fresh and actual_tokens is not None and actual_tokens <= reserved
+        # A failed or blocked cycle may settle real tokens, but must not adopt
+        # a goal, interest or self-assessment just because the lease was fresh.
+        safe = (
+            fresh
+            and status == "completed"
+            and actual_tokens is not None
+            and actual_tokens <= reserved
+        )
         if fresh:
             _advance_goal_cursor(data, claim, details)
         if safe:
@@ -768,6 +981,22 @@ def finish_cycle(
                     data["world_review"] = next_review
                     world_receipt = {"world_review_snapshot": next_review}
         final_status = "unknown" if actual_tokens is None else status if fresh else "policy_changed"
+        # Even a blocked, cancelled or natively recovered cycle must carry an
+        # immutable reflection receipt. This does not approve learning or replay work.
+        from modstore_server.xiaoc_life_cognition import reflection_receipt
+        from modstore_server.xiaoc_life_reflection import failure_classification
+
+        received = dict(details or {})
+        if "reflection_receipt" not in received:
+            received["reflection_receipt"] = reflection_receipt(
+                received.get("outcome_feedback"),
+                evidence_refs=evidence_refs,
+                status=status,
+                actual_tokens=actual_tokens,
+            )
+        received["failure_classification"] = failure_classification(
+            final_status, received.get("reason")
+        )
         _event(
             session,
             event_id,
@@ -778,7 +1007,7 @@ def finish_cycle(
             actual_tokens=actual_tokens,
             model=model,
             details={
-                **(details or {}),
+                **received,
                 **world_receipt,
                 "policy_revision": claim["policy_revision"],
                 "execution_scope": active.get("execution_scope"),
@@ -787,6 +1016,8 @@ def finish_cycle(
                 "owner_user_id": claim["owner_user_id"],
                 "steps": active.get("steps", []),
                 "last_phase": active.get("phase", "claimed"),
+                "to_phase": "settled",
+                "terminal_status": final_status,
                 "graph_checkpoints": active.get("graph_checkpoints", {}),
                 "outbound_journal_version": active.get("outbound_journal_version"),
                 "outbound_attempted": bool(active.get("outbound_attempted")),
@@ -892,6 +1123,19 @@ def begin_cycle_graph(claim: dict[str, Any]) -> bool:
         if active.get("graph_started"):
             return False
         active["graph_started"] = True
+        _event(
+            session,
+            f"life:graph:{claim['cycle_id']}",
+            kind="life_transition",
+            status="graph_started",
+            summary="原认知图已通过单次准入，禁止重复启动。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:claimed"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+            },
+        )
         return True
 
     return _mutate(begin)
@@ -944,13 +1188,29 @@ def prepare_native_closeout(
     """Freeze an independently verified receipt before the native terminal write."""
     marker = {"source_checkpoint_id": source_checkpoint_id, "receipt": receipt}
 
-    def prepare(data: dict[str, Any], _session: Session) -> bool:
+    def prepare(data: dict[str, Any], session: Session) -> bool:
         active = data.get("active_cycle") or {}
         if not _matches_claim(active, claim) or not _native_closeout_eligible(active):
             return False
         if (previous := active.get("native_closeout")) is not None:
             return bool(previous == marker)
         active["native_closeout"] = marker
+        _event(
+            session,
+            f"life:closeout:{claim['cycle_id']}",
+            kind="life_transition",
+            status="closeout_prepared",
+            summary="原运行已冻结核实的检查点回执，未重放执行。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:act"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+                "source_checkpoint_sha256": hashlib.sha256(
+                    source_checkpoint_id.encode("utf-8")
+                ).hexdigest(),
+            },
+        )
         return True
 
     return _mutate(prepare)
@@ -974,6 +1234,19 @@ def admit_cycle_act(claim: dict[str, Any]) -> bool:
             return False
         active["act_admitted"] = True
         active["act_admitted_at"] = utcnow().isoformat()
+        _event(
+            session,
+            f"life:act:{claim['cycle_id']}",
+            kind="life_transition",
+            status="act_admitted",
+            summary="原运行的首个副作用节点已单次准入。",
+            evidence_refs=[f"life:graph:{claim['cycle_id']}"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+            },
+        )
         return True
 
     return _mutate(admit)
@@ -1007,6 +1280,22 @@ def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
             raise LifePolicyError("生命节点进度不可跳过或倒退")
         active["phase"] = phase
         active["phase_started_at"] = utcnow().isoformat()
+        _event(
+            session,
+            f"life:phase:{claim['cycle_id']}:{phase}",
+            kind="life_transition",
+            status=phase,
+            summary="原自主周期节点阶段已持久更新。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:claimed"],
+            details={
+                "from": previous,
+                "to": phase,
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+                "domain": claim["domain"],
+            },
+        )
 
     _mutate(record)
 
@@ -1066,7 +1355,23 @@ def mark_model_attempt(claim: dict[str, Any]) -> None:
     def mark(data: dict[str, Any], session: Session) -> None:
         if not _claim_active(data, session, claim):
             raise LifePolicyError("原模型授权已失效，禁止新增外呼")
-        data["active_cycle"]["outbound_attempted"] = True
+        active = data["active_cycle"]
+        if active.get("outbound_attempted"):
+            return
+        active["outbound_attempted"] = True
+        _event(
+            session,
+            f"life:outbound:{claim['cycle_id']}",
+            kind="life_transition",
+            status="model_attempted",
+            summary="模型外呼意图已持久标记；未知用量仍必须核对。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:claimed"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+            },
+        )
 
     _mutate(mark)
 
@@ -1135,16 +1440,20 @@ def portfolio_life_guard(decision_id: str, proposal: dict[str, Any], state: dict
 
 def require_operating_goal_admission(decision_id: str, proposal: dict[str, Any]) -> None:
     """Require a fresh same-goal observation before the original SQL task claim."""
+    from modstore_server.xiaoc_goal_governance import governance_gate
     from modstore_server.xiaoc_goal_management import ORIGIN
 
     if not str(proposal.get("period", "")).startswith("xiaoc-life:"):
         return
+    life = read_state()
     binding = next(
-        (goal for goal in read_state()["goals"] if goal.get("decision_id") == decision_id),
+        (goal for goal in life["goals"] if goal.get("decision_id") == decision_id),
         None,
     )
     if not binding or binding.get("candidate_origin") != ORIGIN:
         return  # The original portfolio life guard still owns generic life work.
+    if governance_gate(binding, life["goals"], now=utcnow())["status"] != "reviewable":
+        raise LifePolicyError("目标存在冲突或未满足真实前置依赖，禁止派工")
     claim = _CLAIM.get()
     admission = (claim or {}).get("operating_goal_admission") or {}
     gate = admission.get("gate") or {}

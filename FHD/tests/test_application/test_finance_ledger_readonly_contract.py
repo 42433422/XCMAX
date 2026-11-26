@@ -1,6 +1,6 @@
 """Exact ledger-query contract; no generic LOW-risk or name-based exemption."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import event
@@ -14,6 +14,7 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from app.db.models import ChartOfAccount, JournalEntry, JournalEntryLine
 from app.domain.shared_services.accounting_services import query_financial_ledger
+from app.domain.value_objects.date_range import DateRange
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
@@ -29,6 +30,30 @@ def test_only_reviewed_finance_read_is_exempt():
         "aging_report",
     ):
         assert not get_tool_action_spec("finance", action).read_only
+
+
+def test_ledger_period_filters_by_both_calendar_month_boundaries(trusted_actor):
+    actor = trusted_actor(permissions=["tool.finance.ledger_query"])
+    month = DateRange.this_month()
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        db.add_all(
+            JournalEntry(tenant_id=actor.tenant_id, entry_no=entry, journal_date=when)
+            for entry, when in (
+                ("previous", month.start - timedelta(days=1)),
+                ("first", month.start),
+                ("last", month.end),
+                ("next", month.end + timedelta(days=1)),
+            )
+        )
+    step = AgentStep(
+        node_id="monthly-ledger",
+        tool_id="finance",
+        action="ledger_query",
+        params={"period": "this_month"},
+    )
+    result = AgentToolExecutor().execute(step, runtime_context=actor.context)
+    assert result["success"] is True
+    assert [entry["entry_no"] for entry in result["data"]] == ["last", "first"]
 
 
 @pytest.mark.parametrize("params", [{}, {"account_code": "1000"}, {"account_code": "missing"}])

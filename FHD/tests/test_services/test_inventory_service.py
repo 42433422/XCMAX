@@ -460,7 +460,7 @@ class TestInventoryIn:
         db.add_all([product, warehouse])
         db.commit()
         if problem == "duplicate_product":
-            db.add(Product(name="重名型号", model_number="A100"))
+            db.add(Product(name="重名型号", model_number="A100", unit="箱"))
         if problem == "duplicate_warehouse":
             db.add(Warehouse(code="OTHER", name="主仓库", status="active"))
         db.commit()
@@ -541,38 +541,44 @@ class TestInventoryIn:
 # inventory_out
 # ---------------------------------------------------------------------------
 class TestInventoryOut:
-    @patch("app.domain.shared_services.inventory_service.get_db")
-    def test_insufficient_stock(self, mock_get_db):
-        mock_db = MagicMock()
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_get_db.return_value = mock_db
-
-        svc = InventoryService()
-        result = svc.inventory_out(product_id=1, warehouse_id=1, quantity=100)
+    def test_insufficient_stock(self, test_session):
+        product = Product(name="无库存产品")
+        warehouse = Warehouse(code="OUT", name="出库仓", status="active")
+        test_session.add_all([product, warehouse])
+        test_session.commit()
+        with patch(
+            "app.domain.shared_services.inventory_service.get_db", _mock_get_db(test_session)
+        ):
+            result = InventoryService().inventory_out(
+                product_id=product.id, warehouse_id=warehouse.id, quantity=100
+            )
         assert result["success"] is False
         assert "库存不足" in result["message"]
+        assert test_session.query(InventoryTransaction).count() == 0
 
 
 # ---------------------------------------------------------------------------
 # inventory_transfer
 # ---------------------------------------------------------------------------
 class TestInventoryTransfer:
-    @patch("app.domain.shared_services.inventory_service.get_db")
-    def test_source_insufficient(self, mock_get_db):
-        mock_db = MagicMock()
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_get_db.return_value = mock_db
-
-        svc = InventoryService()
-        result = svc.inventory_transfer(
-            product_id=1, from_warehouse_id=1, to_warehouse_id=2, quantity=100
-        )
+    def test_source_insufficient(self, test_session):
+        product = Product(name="无可调拨库存的产品")
+        source = Warehouse(code="FROM", name="来源仓", status="active")
+        target = Warehouse(code="TO", name="目标仓", status="active")
+        test_session.add_all([product, source, target])
+        test_session.commit()
+        with patch(
+            "app.domain.shared_services.inventory_service.get_db", _mock_get_db(test_session)
+        ):
+            result = InventoryService().inventory_transfer(
+                product_id=product.id,
+                from_warehouse_id=source.id,
+                to_warehouse_id=target.id,
+                quantity=100,
+            )
         assert result["success"] is False
         assert "库存不足" in result["message"]
+        assert test_session.query(InventoryTransaction).count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -635,12 +641,22 @@ class TestInventoryCountUnconfirmed:
         mock_ledger = MagicMock()
         mock_ledger.quantity = Decimal("100")
         mock_ledger.available_quantity = Decimal("90")
+        mock_ledger.reserved_quantity = Decimal("10")
         mock_ledger.id = 1
+        mock_ledger.tenant_id = 1
+        mock_ledger.product_id = 1
+        mock_ledger.warehouse_id = 1
+        mock_ledger.batch_no = None
+        mock_ledger.location_id = None
+        mock_ledger.updated_at = None
 
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_ledger
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [
+            mock_ledger
+        ]
+        mock_db.query.return_value.filter.return_value.scalar.return_value = 0
         mock_get_db.return_value = mock_db
 
         svc = InventoryService()
@@ -662,7 +678,7 @@ class TestInventoryCountUnconfirmed:
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
         mock_get_db.return_value = mock_db
 
         svc = InventoryService()
@@ -715,10 +731,15 @@ class TestInventoryCountConfirmed:
 
         svc = InventoryService()
         with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
+            preview = svc.inventory_count(
+                product_id=prod.id, warehouse_id=wh.id, actual_quantity=120
+            )
+            assert preview["success"] is True
             result = svc.inventory_count(
                 product_id=prod.id,
                 warehouse_id=wh.id,
                 actual_quantity=120,
+                expected_baseline_version=preview["data"]["baseline_version"],
                 confirmed=True,
                 operator="tester",
                 remark="年末盘点",
@@ -773,10 +794,15 @@ class TestInventoryCountConfirmed:
 
         svc = InventoryService()
         with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
+            preview = svc.inventory_count(
+                product_id=prod.id, warehouse_id=wh.id, actual_quantity=80
+            )
+            assert preview["success"] is True
             result = svc.inventory_count(
                 product_id=prod.id,
                 warehouse_id=wh.id,
                 actual_quantity=80,
+                expected_baseline_version=preview["data"]["baseline_version"],
                 confirmed=True,
             )
 
@@ -798,6 +824,85 @@ class TestInventoryCountConfirmed:
         )
         assert len(txns) == 1
         assert float(txns[0].quantity) == -20.0
+
+    def test_count_rejects_missing_and_stale_baseline(self, test_session, test_engine):
+        wh, prod, ledger = self._seed(test_session)
+        product_id, warehouse_id, ledger_id = prod.id, wh.id, ledger.id
+        factory = sessionmaker(autoflush=False, bind=test_engine)
+
+        @contextlib.contextmanager
+        def _get_db():
+            with factory() as db:
+                yield db
+                db.commit()
+
+        svc = InventoryService()
+        params = {"product_id": product_id, "warehouse_id": warehouse_id, "actual_quantity": 110}
+        with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
+            missing = svc.inventory_count(**params, confirmed=True)
+            assert missing["error_code"] == "inventory_count_baseline_required"
+            preview = svc.inventory_count(**params)
+            version = preview["data"]["baseline_version"]
+            different = svc.inventory_count(
+                **{**params, "actual_quantity": 111},
+                confirmed=True,
+                expected_baseline_version=version,
+            )
+            assert different["error_code"] == "inventory_count_stale"
+
+            # Net-zero stock movement: the original quantities are unchanged,
+            # but the original preview must no longer authorize an overwrite.
+            with factory() as writer:
+                row = writer.get(InventoryLedger, ledger_id)
+                writer.add(
+                    InventoryTransaction(
+                        tenant_id=row.tenant_id,
+                        ledger_id=ledger_id,
+                        product_id=product_id,
+                        warehouse_id=warehouse_id,
+                        transaction_type="in",
+                        quantity=Decimal("1"),
+                        before_quantity=Decimal("100"),
+                        after_quantity=Decimal("101"),
+                        transaction_date=datetime.now(),
+                    )
+                )
+                writer.add(
+                    InventoryTransaction(
+                        tenant_id=row.tenant_id,
+                        ledger_id=ledger_id,
+                        product_id=product_id,
+                        warehouse_id=warehouse_id,
+                        transaction_type="out",
+                        quantity=Decimal("-1"),
+                        before_quantity=Decimal("101"),
+                        after_quantity=Decimal("100"),
+                        transaction_date=datetime.now(),
+                    )
+                )
+                writer.commit()
+
+            stale = svc.inventory_count(**params, confirmed=True, expected_baseline_version=version)
+            assert stale["error_code"] == "inventory_count_stale"
+            refreshed = svc.inventory_count(**params)
+            applied = svc.inventory_count(
+                **params,
+                confirmed=True,
+                expected_baseline_version=refreshed["data"]["baseline_version"],
+            )
+            assert applied["success"] is True
+            duplicate = svc.inventory_count(
+                **params,
+                confirmed=True,
+                expected_baseline_version=refreshed["data"]["baseline_version"],
+            )
+            assert duplicate["error_code"] == "inventory_count_stale"
+
+        with factory() as verify:
+            assert verify.get(InventoryLedger, ledger_id).quantity == Decimal("110")
+            assert (
+                verify.query(InventoryTransaction).filter_by(transaction_type="count").count() == 1
+            )
 
 
 # ---------------------------------------------------------------------------

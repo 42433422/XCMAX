@@ -11,7 +11,7 @@ import json
 import math
 from datetime import UTC, datetime, timedelta
 from statistics import mean
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -520,10 +520,30 @@ def evaluate_review(
     sample = closed_sample(item, state, now)
     if not sample:
         return {"status": "pending_or_unknown_independent_measurement", "option_id": selected}
+    # A forecast recorded after approval or execution is not an out-of-sample
+    # prediction, even if the mutable SQL result later contains a valid receipt.
+    try:
+        frozen_at = _date(review["frozen_at"])
+        approved_at = _date(authorization["approved_at"])
+        started_at = _date(state["tasks"][selected]["started_at"])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    # A forecast captured at the approval instant is not verifiably pre-decision.
+    if not frozen_at < approved_at <= started_at <= now:
+        return {"status": "unscorable_prediction_timing", "option_id": selected}
     expected = option["forecast"]
     p = expected.get("probability_of_target")
     value = expected.get("expected_metric_value")
     cost = expected.get("expected_accrued_cost_cents")
+    if (
+        any(
+            number is not None and (type(number) not in (int, float) or not math.isfinite(number))
+            for number in (p, value, cost)
+        )
+        or (p is not None and not 0 <= p <= 1)
+        or (cost is not None and cost < 0)
+    ):
+        return {"status": "unscorable_invalid_frozen_forecast", "option_id": selected}
     return {
         "status": "independent_measurement_verified",
         "option_id": selected,
@@ -538,6 +558,10 @@ def evaluate_review(
         "cost_basis": sample["cost_basis"],
         "predicted_accrued_cost_cents": cost,
         "cost_error_cents": sample["accrued_cost_cents"] - cost if cost is not None else None,
+        "absolute_cost_error_cents": (
+            abs(sample["accrued_cost_cents"] - cost) if cost is not None else None
+        ),
+        "prediction_frozen_at": frozen_at.isoformat(),
         "counterfactual_status": "unknown_no_matched_control",
         "verification_scope": "original_ledger_snapshot_and_settlement_not_fresh_source_replay",
         "hit": sample["hit"],
@@ -545,5 +569,112 @@ def evaluate_review(
         "predicted_metric_value": value,
         "brier": (p - sample["hit"]) ** 2 if p is not None else None,
         "metric_error": sample["value"] - value if value is not None else None,
+        "absolute_metric_error": abs(sample["value"] - value) if value is not None else None,
         "forecast_status": expected["status"],
+    }
+
+
+def decision_quality_report(owner_user_id: int, *, as_of: datetime | None = None) -> dict[str, Any]:
+    """Read-only forecast-error audit from original approved, settled SQL receipts.
+
+    This is descriptive verification, not a causal business impact estimate or
+    permission to change goals. It never scores an unknown or late prediction.
+    """
+    if type(owner_user_id) is not int or owner_user_id <= 0:
+        raise PortfolioError("a valid decision owner is required")
+    moment = as_of or datetime.now(UTC)
+    if moment.tzinfo is None:
+        raise PortfolioError("quality report requires a timezone-aware cutoff")
+    moment = moment.astimezone(UTC)
+    reviews = measured = scored = missing = rejected = duplicate = 0
+    briers: list[float] = []
+    monetary_errors: list[float] = []
+    metric_errors: dict[str, list[float]] = {}
+    seen_evidence: set[tuple[str, str]] = set()
+    sample_refs: list[str] = []
+    with get_session_factory()() as session:
+        rows = session.scalars(
+            select(StrategicDecision)
+            .where(
+                StrategicDecision.scope == "strategy_portfolio",
+                StrategicDecision.scope_ref.like(f"user:{owner_user_id}:%"),
+                StrategicDecision.proposed_at <= moment,
+            )
+            .order_by(StrategicDecision.updated_at.desc(), StrategicDecision.id.desc())
+            .limit(HISTORY_LIMIT)
+        )
+        for row in rows:
+            if row.decided_by not in {"user", "council-vote"}:
+                continue
+            try:
+                proposal = json.loads(cast("str | None", row.decision_payload_json) or "{}")
+                state = json.loads(cast("str | None", row.execution_result_json) or "{}")
+                if (
+                    not isinstance(proposal, dict)
+                    or not isinstance(state, dict)
+                    or proposal.get("schema") != SCHEMA
+                    or proposal.get("owner_user_id") != owner_user_id
+                    or not isinstance(proposal.get("decision_review"), dict)
+                ):
+                    continue
+                reviews += 1
+                evaluation = evaluate_review(proposal, state, moment)
+            except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+                rejected += 1
+                continue
+            if evaluation is None or evaluation["status"].startswith("unscorable_"):
+                rejected += 1
+                continue
+            if evaluation["status"] != "independent_measurement_verified":
+                missing += 1
+                continue
+            evidence_key = (
+                evaluation["metric_id"],
+                evaluation["metric_evidence_sha256"],
+            )
+            if evidence_key in seen_evidence:
+                duplicate += 1
+                continue
+            seen_evidence.add(evidence_key)
+            measured += 1
+            sample_refs.append(evaluation["snapshot_sha256"])
+            brier = evaluation["brier"]
+            if brier is None:
+                continue
+            scored += 1
+            briers.append(brier)
+            cost_error = evaluation["absolute_cost_error_cents"]
+            if cost_error is not None:
+                monetary_errors.append(cost_error)
+            metric_error = evaluation["absolute_metric_error"]
+            if metric_error is not None:
+                metric_errors.setdefault(evaluation["metric_id"], []).append(metric_error)
+    return {
+        "schema": "xcagi.xiaoc_decision_quality/v1",
+        "owner_user_id": owner_user_id,
+        "as_of": moment.isoformat(),
+        "history_limit": HISTORY_LIMIT,
+        "reviewed_count": reviews,
+        "independently_measured_count": measured,
+        "scorable_probability_count": scored,
+        "unknown_or_pending_count": missing,
+        "invalid_or_late_count": rejected,
+        "duplicate_evidence_count": duplicate,
+        "status": (
+            "descriptive_observed_forecast_error_only"
+            if scored >= MIN_SAMPLES
+            else "unknown_insufficient_real_scored_predictions"
+        ),
+        "mean_brier": mean(briers) if briers else None,
+        "mean_absolute_accrued_cost_error_cents": (
+            mean(monetary_errors) if monetary_errors else None
+        ),
+        "mean_absolute_metric_error_by_metric": {
+            key: mean(values) for key, values in sorted(metric_errors.items())
+        },
+        "original_snapshot_refs": sample_refs,
+        "limitation": (
+            "Approved historical predictions and independently recorded measurements "
+            "only; no unobserved counterfactual, causal profit, or autonomous L6 proof."
+        ),
     }

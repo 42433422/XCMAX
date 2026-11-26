@@ -101,12 +101,17 @@ def execution_scope(
 def current_identity_evidence(
     scope: str | None, events: list[dict[str, Any]], *, now: datetime | None = None
 ) -> dict[str, Any]:
+    """Use the newest bound SQL check; conflicting proofs fail closed."""
     now = now or utcnow()
+    latest: tuple[datetime, str, str] | None = None
+    seen: dict[str, tuple[datetime, str]] = {}
+    conflicting = False
     for event in events:
+        event_id = event.get("id")
         if (
             event.get("kind") != "self_identity_check"
-            or not isinstance(event.get("id"), str)
-            or not event["id"].startswith("self-check:")
+            or not isinstance(event_id, str)
+            or not event_id.startswith("self-check:")
         ):
             continue
         try:
@@ -121,12 +126,25 @@ def current_identity_evidence(
             or event.get("status") != proof.verdict
         ):
             continue
+        candidate = (checked, proof.verdict)
+        previous = seen.setdefault(event_id, candidate)
+        if previous != candidate:
+            conflicting = True
+            continue
+        if latest is None or checked > latest[0]:
+            latest = (checked, proof.verdict, event_id)
+        elif checked == latest[0] and latest[1] != proof.verdict:
+            conflicting = True
+    if conflicting:
+        return {"status": "unverified", "reason": "conflicting_identity_proofs"}
+    if latest is not None:
+        checked, verdict, evidence_ref = latest
         return {
-            "status": "verified" if proof.verdict == "pass" else "unavailable",
+            "status": "verified" if verdict == "pass" else "unavailable",
             "reason": "independent_sql_identity_readback",
             "scope": "persistent_identity_only",
-            "evidence_ref": event["id"],
-            "checked_at": proof.checked_at,
+            "evidence_ref": evidence_ref,
+            "checked_at": checked.isoformat(),
         }
     return {"status": "unverified", "reason": "no_current_independent_identity_check"}
 
@@ -138,13 +156,11 @@ def performance(scope: str | None, events: list[dict[str, Any]]) -> dict[str, An
     tokens = 0
     unknown_tokens = 0
     historical = 0
-    seen: set[str] = set()
     models: Counter[str] = Counter()
-    for row in events:
-        event_id = row.get("id")
-        if not isinstance(event_id, str) or not event_id.startswith("cycle:") or event_id in seen:
-            continue
-        seen.add(event_id)
+    from modstore_server.xiaoc_self_metrics import consistent_cycle_receipts
+
+    consistent, conflicting = consistent_cycle_receipts(events)
+    for row in consistent:
         details = row.get("details") or {}
         if not scope or details.get("execution_scope") != scope:
             historical += 1
@@ -167,6 +183,7 @@ def performance(scope: str | None, events: list[dict[str, Any]]) -> dict[str, An
         "sample": "recent_original_cycle_receipts_not_business_or_capability_success",
         "current_scope_count": sum(counts.values()),
         "historical_or_unbound_count": historical,
+        "conflicting_cycle_receipts": conflicting,
         "statuses": dict(counts),
         "failure_types": dict(failures),
         "model_sample_counts": dict(models),
@@ -499,7 +516,8 @@ def main() -> None:
         result = record_fixture_report(*args.audit_fixture)
     else:
         result = record_identity_check()
-    print(json.dumps(result, ensure_ascii=False))
+    safe = {key: result[key] for key in ("status", "evidence_ref", "reason") if key in result}
+    print(json.dumps(safe, ensure_ascii=False))
 
 
 if __name__ == "__main__":

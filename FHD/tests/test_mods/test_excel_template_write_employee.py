@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from openpyxl import Workbook, load_workbook
+
+from tests.test_mods._excel_runtime import load_module as _load_module
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,15 +22,6 @@ WRITER_EMPLOYEE = (
     FHD_ROOT
     / "mods/_employees/excel-template-write-employee/backend/employees/excel_template_write_employee.py"
 )
-
-
-def _load_module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _sample_template_workbook(path: Path) -> None:
@@ -128,6 +119,268 @@ def _base_plan() -> dict:
         ],
         "expected": {"cells": 4, "note": "for QC"},
     }
+
+
+@pytest.fixture
+def native_workbook(tmp_path):
+    from jsonschema import Draft202012Validator
+
+    contract = _load_module(
+        "workbook_write_contract_test", FHD_ROOT / "app/domain/workbook_write_contract.py"
+    )
+    writer = _load_module("excel_native_writer_test", WRITER_CONVERT)
+    qc = _load_module(
+        "excel_native_qc_test",
+        FHD_ROOT / "mods/_employees/excel-qc-employee/backend/vendor/excel_qc/checks.py",
+    )
+    template, out = tmp_path / "template.xlsx", tmp_path / "filled.xlsx"
+    book = Workbook()
+    sales = book.active
+    sales.title = "销售明细"
+    sales.append(["产品", "数量", "单价", "金额"])
+    sales.append(["样品甲", 2, 20, "=ROUND(B2*C2,2)"])
+    sales.append(["样品乙", 1, 10, "=ROUND(B3*C3,2)"])
+    summary = book.create_sheet("产品汇总")
+    summary.append(["产品", "金额合计", "累计占比"])
+    summary.append(["样品甲", 40, "=B2/SUM(B$2:B$3)"])
+    summary.append(["样品乙", 10, "=SUM(B$2:B3)/SUM(B$2:B$3)"])
+    book.save(template)
+    book.close()
+
+    def run(phases, protected=()):
+        plan = {"plan_version": 1, "phases": phases, "protected_ranges": list(protected)}
+        payload = {"template_path": "synthetic-upload", "plan": plan}
+        Draft202012Validator(contract.WORKBOOK_WRITE_INPUT).validate(payload)
+        writer.convert_file(
+            None,
+            out,
+            template_path=template,
+            payload={**payload, "strict_protected": True},
+            ctx={},
+            rule_spec={},
+        )
+        return out, plan
+
+    return run, template, qc, writer
+
+
+def _sales_table_phase():
+    return {
+        "phase": "create_table",
+        "sheet": "销售明细",
+        "range": "A1:D3",
+        "name": "tblSales",
+        "sum_column": "金额",
+        "calculated_formula": "=ROUND([@数量]*[@单价],2)",
+    }
+
+
+def _sales_header_style_phase():
+    return {
+        "phase": "cell_styles",
+        "sheet": "销售明细",
+        "range": "A1:D1",
+        "bold": True,
+        "horizontal": "center",
+        "vertical": "center",
+        "fill_color": "FFF2CC",
+    }
+
+
+def _sales_border_phase():
+    return {"phase": "cell_styles", "sheet": "销售明细", "range": "A1:D3", "border": "thin"}
+
+
+def _sales_chart_phase():
+    return {
+        "phase": "create_combo_chart",
+        "sheet": "销售图表",
+        "source_sheet": "产品汇总",
+        "categories": "A2:A3",
+        "bar_values": "B2:B3",
+        "line_values": "C2:C3",
+        "title": "各产品销售额与累计占比",
+        "bar_title": "销售额",
+        "line_title": "累计占比",
+    }
+
+
+def test_writer_applies_header_style_and_data_borders(native_workbook):
+    run, template, qc, _ = native_workbook
+    out, plan = run([_sales_header_style_phase(), _sales_border_phase()])
+    wb = load_workbook(out)
+    try:
+        header = wb["销售明细"]["A1"]
+        assert header.font.bold is True
+        assert header.alignment.horizontal == "center"
+        assert header.alignment.vertical == "center"
+        assert header.fill.fgColor.rgb.upper().endswith("FFF2CC")
+        for ref in ("A1", "D3"):
+            cell = wb["销售明细"][ref]
+            assert cell.border.left.style == "thin"
+            assert cell.border.right.style == "thin"
+            assert cell.border.top.style == "thin"
+            assert cell.border.bottom.style == "thin"
+    finally:
+        wb.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    assert qc.run_qc(template, plan, template_path=template)["verdict"] == "FAIL"
+
+
+def test_writer_inserts_title_row_without_losing_existing_data_or_formulas(native_workbook):
+    run, template, qc, _ = native_workbook
+    sheet = "销售明细"
+    title = "2026 年 9 月销售明细表"
+    out, plan = run(
+        [
+            {"phase": "insert_rows", "sheet": sheet, "row": 1, "count": 1},
+            {"phase": "merge_cells", "sheet": sheet, "range": "A1:F1"},
+            {"phase": "cell_writes", "writes": [{"sheet": sheet, "ref": "A1", "value": title}]},
+            {
+                "phase": "cell_styles",
+                "sheet": sheet,
+                "range": "A1",
+                "font_size": 18,
+                "bold": True,
+                "horizontal": "center",
+            },
+            {"phase": "set_row_height", "sheet": sheet, "row": 1, "height": 30},
+            {"phase": "freeze_panes", "sheet": sheet, "ref": "A3"},
+        ]
+    )
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    wb = load_workbook(out)
+    try:
+        sales = wb[sheet]
+        assert sales["A1"].value == title
+        assert [cell.value for cell in sales[2][:4]] == ["产品", "数量", "单价", "金额"]
+        assert [cell.value for cell in sales[3][:4]] == ["样品甲", 2, 20, "=ROUND(B3*C3,2)"]
+        assert [cell.value for cell in sales[4][:4]] == ["样品乙", 1, 10, "=ROUND(B4*C4,2)"]
+        assert {str(region) for region in sales.merged_cells.ranges} == {"A1:F1"}
+        assert sales["A1"].font.sz == 18
+        assert sales["A1"].font.bold is True
+        assert sales["A1"].alignment.horizontal == "center"
+        assert sales.row_dimensions[1].height == 30
+        assert sales.freeze_panes == "A3"
+        sales["D3"] = "=ROUND(B2*C2,2)"
+        wb.save(out)
+    finally:
+        wb.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "FAIL"
+
+
+def test_native_qc_rejects_tampered_header_style(native_workbook):
+    run, template, qc, _ = native_workbook
+    out, plan = run([_sales_header_style_phase(), _sales_border_phase()])
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    wb = load_workbook(out)
+    try:
+        from copy import copy
+
+        font = copy(wb["销售明细"]["A1"].font)
+        font.bold = False
+        wb["销售明细"]["A1"].font = font
+        wb.save(out)
+    finally:
+        wb.close()
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] == "FAIL"
+    assert report["sections"]["conformance"]["status"] == "fail"
+
+
+def test_writer_creates_native_table_with_calculation_and_total(native_workbook):
+    from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
+
+    run, template, qc, _ = native_workbook
+    phase = _sales_table_phase()
+    out, plan = run([phase], ["销售明细!E:E"])
+    with ZipFile(out) as archive:
+        root = ET.fromstring(archive.read("xl/tables/table1.xml"))
+    ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    assert root.attrib["displayName"] == "tblSales"
+    assert root.attrib["ref"] == "A1:D4"
+    assert root.attrib["totalsRowCount"] == "1"
+    assert root.find("x:autoFilter", ns).attrib["ref"] == "A1:D3"
+    amount = root.find("x:tableColumns/x:tableColumn[@name='金额']", ns)
+    assert amount.attrib["totalsRowFunction"] == "sum"
+    assert (
+        amount.findtext("x:calculatedColumnFormula", namespaces=ns)
+        == phase["calculated_formula"][1:]
+    )
+    wb = load_workbook(out)
+    try:
+        assert wb["销售明细"]["D4"].value == "=SUBTOTAL(109,tblSales[金额])"
+    finally:
+        wb.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    assert qc.run_qc(template, plan, template_path=template)["verdict"] == "FAIL"
+
+
+def test_writer_rejects_table_overlap_with_protected_range(native_workbook):
+    run, _, _, writer = native_workbook
+    with pytest.raises(writer.PlanError, match="保护区"):
+        run([_sales_table_phase()], ["销售明细!D4"])
+
+
+def test_writer_creates_native_dual_axis_chart(native_workbook):
+    from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
+
+    run, template, qc, _ = native_workbook
+    out, plan = run([_sales_chart_phase()])
+    with ZipFile(out) as archive:
+        root = ET.fromstring(archive.read("xl/charts/chart1.xml"))
+    ns = {
+        "c": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+    }
+    bar = root.find(".//c:barChart", ns)
+    line = root.find(".//c:lineChart", ns)
+    assert bar.find("c:barDir", ns).attrib["val"] == "col"
+    assert bar.findtext("c:ser/c:cat/c:strRef/c:f", namespaces=ns) == "'产品汇总'!$A$2:$A$3"
+    assert bar.findtext("c:ser/c:val/c:numRef/c:f", namespaces=ns) == "'产品汇总'!$B$2:$B$3"
+    assert line.findtext("c:ser/c:val/c:numRef/c:f", namespaces=ns) == "'产品汇总'!$C$2:$C$3"
+    axis_id = line.findall("c:axId", ns)[1].attrib["val"]
+    assert axis_id != bar.findall("c:axId", ns)[1].attrib["val"]
+    axis = root.find(f".//c:valAx/c:axId[@val='{axis_id}']/..", ns)
+    assert axis.find("c:axPos", ns).attrib["val"] == "r"
+    assert axis.find("c:numFmt", ns).attrib["formatCode"] == "0.00%"
+    assert line.find("c:dLbls/c:showVal", ns).attrib["val"] == "1"
+    assert root.find(".//c:legendPos", ns).attrib["val"] == "b"
+    assert root.findtext(".//c:title//a:t", namespaces=ns) == "各产品销售额与累计占比"
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+    assert qc.run_qc(template, plan, template_path=template)["verdict"] == "FAIL"
+
+
+def test_native_qc_rejects_tampered_table_and_chart(native_workbook):
+    run, template, qc, _ = native_workbook
+    out, plan = run([_sales_table_phase(), _sales_chart_phase()], ["销售明细!E:E"])
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] == "PASS"
+    assert report["sections"]["conformance"]["stats"]["native_phases_checked"] == 2
+    wb = load_workbook(out)
+    try:
+        wb["销售明细"].tables["tblSales"].tableColumns[3].calculatedColumnFormula = None
+        wb["销售图表"]._charts[0]._charts[1].y_axis.axPos = "l"
+        wb.save(out)
+    finally:
+        wb.close()
+    for phase in plan["phases"]:
+        readback = qc.run_qc(out, {**plan, "phases": [phase]}, template_path=template)
+        assert readback["sections"]["conformance"]["status"] == "fail"
+
+
+def test_native_table_formula_remains_subject_to_formula_qc(native_workbook):
+    run, template, qc, _ = native_workbook
+    out, plan = run([{**_sales_table_phase(), "calculated_formula": "=#REF!"}])
+    assert qc.run_qc(out, plan, template_path=template)["sections"]["formulas"]["status"] == "fail"
+
+
+def test_writer_rejects_misaligned_combo_sources(native_workbook):
+    run, _, _, writer = native_workbook
+    with pytest.raises(writer.PlanError, match="同行对齐"):
+        run([{**_sales_chart_phase(), "line_values": "C3:C4"}])
 
 
 def test_writer_executes_plan_and_preserves_template(tmp_path: Path) -> None:
@@ -449,3 +702,87 @@ def test_read_plan_write_reread_roundtrip(tmp_path: Path) -> None:
     # 模板公式与合并在输出中保持
     assert "A1:D1" in detail_out["merged_ranges"]
     assert any((c.get("formula") or "").startswith("=SUMIF") for c in detail_out["cells"])
+
+
+@pytest.mark.parametrize("change", ["conditional", "validation", "defined_name", "print"])
+def test_workbook_controls_survive_save_and_qc_rejects_tampering(native_workbook, change):
+    run, template, qc, _ = native_workbook
+    sheet = "销售明细"
+    out, plan = run(
+        [
+            {
+                "phase": "conditional_format",
+                "sheet": sheet,
+                "range": "D2:D3",
+                "rule": "top_percent",
+                "percent": 10,
+                "color": "C6EFCE",
+            },
+            {
+                "phase": "conditional_format",
+                "sheet": sheet,
+                "range": "D2:D3",
+                "rule": "less_than",
+                "threshold": 1000,
+                "color": "9C0006",
+            },
+            {
+                "phase": "conditional_format",
+                "sheet": sheet,
+                "range": "A2:D3",
+                "rule": "duplicate_rows",
+                "key_column": "A",
+                "color": "FFC7CE",
+            },
+            {
+                "phase": "data_validation",
+                "sheet": sheet,
+                "range": "A2:A3",
+                "rule": "list",
+                "source_sheet": "产品汇总",
+                "source_range": "A2:A3",
+                "name": "ProductNames",
+                "error": "请选择有效产品",
+            },
+            {
+                "phase": "data_validation",
+                "sheet": sheet,
+                "range": "B2:B3",
+                "rule": "whole",
+                "minimum": 1,
+                "maximum": 999,
+                "error": "数量必须为 1-999 的整数",
+            },
+            {
+                "phase": "print_layout",
+                "sheet": sheet,
+                "range": "A1:H40",
+                "orientation": "landscape",
+                "paper": "A4",
+                "margins": "narrow",
+                "title_first_row": 1,
+                "title_last_row": 2,
+                "fit_width": 1,
+                "footer": "第 &P 页，共 &N 页",
+            },
+        ]
+    )
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] == "PASS", report["sections"]
+    assert report["sections"]["conformance"]["stats"]["native_phases_checked"] == 6
+
+    wb = load_workbook(out)
+    ws = wb[sheet]
+    if change == "conditional":
+        ws.conditional_formatting["D2:D3"][0].rank = 20
+    elif change == "validation":
+        ws.data_validations.dataValidation[-1].showErrorMessage = False
+    elif change == "defined_name":
+        wb.defined_names["ProductNames"].attr_text = "'产品汇总'!$A$2:$A$2"
+    else:
+        ws.page_setup.fitToWidth = 2
+    wb.save(out)
+    wb.close()
+    assert (
+        qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]["status"] == "fail"
+    )

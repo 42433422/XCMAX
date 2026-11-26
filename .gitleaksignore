@@ -93,3 +93,10 @@ a527a40336a0ee2372a7c021aab964e4d0fa98fb:FHD/tests/test_security/test_log_redact
 # 与 FHD/app/application/desktop_relay/e2ee.py 的 RESULT_INFO 完全一致，不含任何凭据。
 e0e5228e9583af38e2a54887a173aa9c9f40ba81:FHD/mobile-flutter-poc/lib/src/security/relay_e2ee.dart:generic-api-key:136
 
+# Independently verified public model SHA256 digests; no service credentials.
+# Qdrant/bge-small-zh-v1.5 revision 46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59.
+# Exact historical occurrences only; public URLs/digests and two AI-agent reviews:
+# .github/security/gitleaks-disposition/evidence/n29.json through n31.json.
+4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:23
+4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:24
+4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:25

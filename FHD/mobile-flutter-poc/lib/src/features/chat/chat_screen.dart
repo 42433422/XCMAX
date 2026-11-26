@@ -11,6 +11,7 @@ import '../../policy/pinned_ids.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_chat_core/flutter_chat_core.dart';
+import 'chat_stream_frame_batcher.dart';
 
 import '../../api/mobile_models.dart' show MobileMeData;
 import '../../data/ai_employee_profile.dart';
@@ -61,15 +62,26 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends _ChatStateActions {
+class _ChatScreenState extends _ChatStateActions
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _messages = [...widget.initialMessages];
     _syncFlyerChat();
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
+    _chatGeneration = _repository?.client.authGeneration ?? 0;
+    _controller.addListener(_scheduleChatDraftSave);
     _attachmentSessionSubscription = _repository?.client.sessionChanges
-        .listen((_) => _checkAttachmentScope());
+        .listen((_) {
+      if (_repository?.client.authGeneration != _chatGeneration) {
+        _revokeChatView();
+      } else {
+        unawaited(_checkAttachmentScope());
+      }
+    });
+    unawaited(_restoreChatDraft());
     _employeeRef = _parseEmployeeConversationRef(widget.conversation.id);
     _loadRemoteMessages();
     _loadUserAvatar();
@@ -77,8 +89,46 @@ class _ChatScreenState extends _ChatStateActions {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_chatForeground == foreground) return;
+    // Paint the last received bytes before hiding the screen; later packets
+    // remain fenced by the existing lifecycle/receipt recovery policy.
+    if (!foreground && mounted && _activeAssistantId != null) {
+      _streamTokenBatcher.flushFor(_activeAssistantId!);
+    }
+    _chatForeground = foreground;
+    _chatEpoch++;
+    if (!foreground) {
+      _persistChatDraftSnapshot();
+      // Stop painting stale stream bytes without cancelling server execution.
+      final assistantId = _activeAssistantId;
+      if (assistantId != null && mounted) {
+        _stopRequested = true;
+        setState(() {
+          final index = _messages.indexWhere((m) => m.id == assistantId);
+          if (index >= 0) {
+            _replaceMessage(assistantId, body: _messages[index].body,
+                status: ChatDeliveryStatus.pending);
+          }
+          _sending = false;
+          _activeAssistantId = null;
+        });
+        _syncFlyerChat();
+      }
+    } else if (!_chatInvalidated) {
+      unawaited(_loadRemoteMessages());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _attachmentSessionSubscription?.cancel();
+    _draftTimer?.cancel();
+    _persistChatDraftSnapshot();
+    _controller.removeListener(_scheduleChatDraftSave);
+    _streamTokenBatcher.dispose();
     _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
@@ -197,10 +247,16 @@ class _ChatScreenState extends _ChatStateActions {
                 ),
               ),
             ),
+            if (_chatInvalidated)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('账号已切换，请返回后重新打开此会话。'),
+              ),
             _Composer(
               controller: _controller,
               onSend:
-                  _uploading || _failedAttachments.isNotEmpty ? () {} : _send,
+                  _chatInvalidated || _uploading || _failedAttachments.isNotEmpty
+                       ? () {} : _send,
               onStop: _stopChat,
               busy: _sending,
               topContent: _composerTopContent(

@@ -105,9 +105,9 @@ jobs:
               raise SystemExit("browser extra must pin one Playwright release")
           packages = tomllib.loads(Path("uv.lock").read_text())["package"]
           requirements = list(browser)
-          # Browser imports SQLAlchemy; Computer Use requires Pydantic models.
+          # Browser imports SQLAlchemy, tenant scopes import Starlette, and Computer Use uses Pydantic.
           # The parent conftest stays outside confcutdir; no application factory is needed.
-          for name in ("pytest", "pytest-asyncio", "sqlalchemy", "pyyaml", "psutil", "pillow", "pydantic"):
+          for name in ("pytest", "pytest-asyncio", "sqlalchemy", "pyyaml", "psutil", "pillow", "pydantic", "starlette"):
               versions = [p["version"] for p in packages if p["name"] == name]
               if len(versions) != 1:
                   raise SystemExit(f"expected exactly one locked {name} version")

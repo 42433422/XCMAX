@@ -230,7 +230,7 @@ def confirm_phase(db_path: Path, marker: Path) -> None:
     context = _actor(factory, user_id)
     with tenant_scope(1):
         # This restart suite retains a historical approval graph across the
-        # rollout. New public tasks are covered by the fixed Codex suites.
+        # rollout. New public tasks are covered by the fixed Xiaox suites.
         from uuid import uuid4
 
         from app.application.agent_orchestrator.business_harness import (

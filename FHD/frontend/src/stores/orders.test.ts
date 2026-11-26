@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useOrdersStore } from '@/stores/orders'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 vi.mock('@/api/orders', () => ({
   default: {
     getOrders: vi.fn(),
     searchOrders: vi.fn(),
     deleteOrder: vi.fn(),
+    updateOrder: vi.fn(),
     clearAllOrders: vi.fn(),
   },
 }))
@@ -194,6 +196,93 @@ describe('useOrdersStore', () => {
     const result = await store.clearAllOrders()
     expect(result.success).toBe(false)
     expect(store.error).toBe('Server error')
+  })
+
+  it('discards an older read when a newer search has completed', async () => {
+    let finishOlder!: (value: unknown) => void
+    ;(ordersApi.getOrders as any).mockImplementation(() => new Promise((resolve) => { finishOlder = resolve }))
+    const older = store.fetchOrders()
+    ;(ordersApi.searchOrders as any).mockResolvedValue({ success: true, data: [{ id: 2, order_number: 'NEW' }] })
+    expect((await store.searchOrders('NEW')).success).toBe(true)
+    finishOlder({ success: true, data: [{ id: 1, order_number: 'OLD' }] })
+    expect(await older).toMatchObject({ success: false, stale: true })
+    expect(store.orders.map((order) => order.order_number)).toEqual(['NEW'])
+    expect(store.loading).toBe(false)
+  })
+
+  it('does not restore cleared orders from a response started before deletion', async () => {
+    let finishOlder!: (value: unknown) => void
+    ;(ordersApi.getOrders as any).mockImplementation(() => new Promise((resolve) => { finishOlder = resolve }))
+    const older = store.fetchOrders()
+    ;(ordersApi.clearAllOrders as any).mockResolvedValue({ success: true })
+    expect((await store.clearAllOrders()).success).toBe(true)
+    finishOlder({ success: true, data: [{ id: 1, order_number: 'REMOVED' }] })
+    expect(await older).toMatchObject({ stale: true })
+    expect(store.orders).toEqual([])
+  })
+
+  it('rejects a nested facade failure without replacing the last good list', async () => {
+    vi.mocked(ordersApi.getOrders).mockResolvedValue({ success: true, data: [{ id: 1 }] } as never)
+    await store.fetchOrders()
+    vi.mocked(ordersApi.getOrders).mockResolvedValue({
+      success: true, data: { success: false, message: '内层错误', data: [] },
+    } as never)
+    expect(await store.fetchOrders()).toMatchObject({ success: false, message: '内层错误' })
+    expect(store.orders).toEqual([{ id: 1 }])
+  })
+
+  it('does not treat malformed response data as an empty successful list', async () => {
+    vi.mocked(ordersApi.getOrders).mockResolvedValue({ success: true, data: { unexpected: 1 } } as never)
+    expect(await store.fetchOrders()).toMatchObject({ success: false })
+    expect(store.error).toBe('加载订单失败')
+  })
+
+  it('holds mutation ownership against concurrent reads and mutations', async () => {
+    let finish!: (value: { success: boolean }) => void
+    vi.mocked(ordersApi.clearAllOrders).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const clearing = store.clearAllOrders()
+    expect(store.loading).toBe(true)
+    expect(await store.searchOrders('during-clear')).toMatchObject({ stale: true })
+    expect(ordersApi.searchOrders).not.toHaveBeenCalled()
+    expect(await store.deleteOrder('ORD-1')).toMatchObject({ success: false })
+    expect(ordersApi.deleteOrder).not.toHaveBeenCalled()
+    expect(store.loading).toBe(true)
+    finish({ success: true })
+    expect(await clearing).toMatchObject({ success: true })
+    expect(store.loading).toBe(false)
+  })
+
+  it('updates the same order identity by order number or numeric ID', async () => {
+    vi.mocked(ordersApi.getOrders).mockResolvedValue({ success: true, data: [
+      { id: 1, order_number: 'ORD-001', status: 'pending' },
+    ] } as never)
+    await store.fetchOrders()
+    vi.mocked(ordersApi.updateOrder).mockResolvedValue({ success: true, data: { status: 'completed' } } as never)
+    expect(await store.updateOrder('ORD-001', {})).toMatchObject({ success: true })
+    expect(store.orders[0].status).toBe('completed')
+    vi.mocked(ordersApi.deleteOrder).mockResolvedValue({ success: true })
+    await store.deleteOrder('1')
+    expect(store.orders).toEqual([])
+  })
+
+  it('clears old account state and rejects old receipts without affecting a new account mutation', async () => {
+    vi.mocked(ordersApi.getOrders).mockResolvedValue({ success: true, data: [{ id: 1 }] } as never)
+    await store.fetchOrders()
+    let finishOld!: (value: { success: boolean }) => void
+    vi.mocked(ordersApi.clearAllOrders).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const old = store.clearAllOrders()
+    productReadAccountEpoch.value++
+    expect(store.orders).toEqual([])
+    expect(store.loading).toBe(false)
+    let finishNew!: (value: { success: boolean }) => void
+    vi.mocked(ordersApi.clearAllOrders).mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve }))
+    const next = store.clearAllOrders()
+    finishOld({ success: true })
+    expect(await old).toMatchObject({ stale: true })
+    expect(store.loading).toBe(true)
+    finishNew({ success: true })
+    expect(await next).toMatchObject({ success: true })
+    expect(store.loading).toBe(false)
   })
 
   it('orderCount computed returns correct count', async () => {

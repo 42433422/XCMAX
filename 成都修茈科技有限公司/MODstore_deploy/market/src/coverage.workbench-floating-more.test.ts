@@ -227,18 +227,19 @@ describe('workbench and floating agent extra component coverage', () => {
         .find('.bubble-dots')
         .exists(),
     ).toBe(true)
-    expect(
-      mount(AgentMessageBubble, {
-        props: {
-          msg: {
-            ...base,
-            role: 'tool_call',
-            content: '',
-            toolCall: { name: 'search', args: { q: '客户', limit: 2 } },
-          },
+    const toolBubble = mount(AgentMessageBubble, {
+      props: {
+        msg: {
+          ...base,
+          role: 'tool_call',
+          content: '',
+          toolCall: { name: 'search', args: { q: '客户', limit: 2 } },
         },
-      }).text(),
-    ).toContain('search: q=客户, limit=2')
+      },
+    })
+    expect(toolBubble.text()).toContain('search · 参数已隐藏')
+    expect(toolBubble.html()).not.toContain('客户')
+    expect(toolBubble.html()).not.toContain('limit=2')
     expect(
       mount(AgentMessageBubble, {
         props: {

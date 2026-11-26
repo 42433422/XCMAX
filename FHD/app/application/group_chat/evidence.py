@@ -237,6 +237,8 @@ class ExecutionResultPolicy:
             "dispatch_request_id",
             "dispatcher",
             "relay_id",
+            "execution_state",
+            "reconciliation_required",
         ):
             if key in result:
                 value = result[key]

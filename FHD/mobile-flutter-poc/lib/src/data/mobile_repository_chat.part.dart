@@ -46,6 +46,24 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     return reply;
   }
 
+  Future<Map<String, Object?>> loadChatComposerDraft(
+      String conversationId) async {
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return const {};
+    final draft = await store.readChatDraft(conversationId);
+    return scope == await _offlineScope() ? draft : const {};
+  }
+
+  Future<void> saveChatComposerDraft(String conversationId, String text,
+      {List<String> attachmentNames = const []}) async {
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return;
+    await store.saveChatDraft(conversationId, text,
+        attachmentNames: attachmentNames);
+  }
+
   Future<List<ChatMessage>> loadInitialMessages(
     ConversationItem conversation,
   ) async {
@@ -115,9 +133,13 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     }
 
     if (tool != null) {
-      if (resumeOnly) {
-        final dispatch = await _turnDispatch(conversation.id, idempotencyKey);
-        await requireScope();
+      // A caller retrying the same turn without resumeOnly is still a retry.
+      // Read the persisted original channel rather than replace its claim.
+      final dispatch = idempotencyKey.isEmpty
+          ? const <String, Object?>{}
+          : await _turnDispatch(conversation.id, idempotencyKey);
+      await requireScope();
+      if (resumeOnly || dispatch.isNotEmpty) {
         if (dispatch.isNotEmpty) {
           final reply = dispatch['channel'] == 'relay'
               ? await _readRelayTurn(conversationId: conversation.id, dispatch: dispatch,
@@ -187,9 +209,22 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             await cache(ChatRole.assistant, reply);
             return reply;
           }
-          // Post-dispatch transport errors are wrapped by the API as unknown.
-          // A raw socket error here occurred while opening the connection.
-          if (sseError is! SocketException) rethrow;
+          // Even a raw socket error cannot prove the server did not accept
+          // the POST. Failing over to relay would create a second execution.
+          // Read the stable original turn on the original LAN backend only.
+          if (sseError is SocketException) {
+            final reply = await _client.readSuperEmployeeTurn(
+              tool: tool,
+              conversationId: conversation.id,
+              idempotencyKey: idempotencyKey,
+              baseUrl: localBaseUrl,
+              expectedConnectionBase: base,
+            );
+            _throwIfCancelled(isCancelled);
+            await cache(ChatRole.assistant, reply);
+            return reply;
+          }
+          rethrow;
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
@@ -344,6 +379,9 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       body: body,
       authGeneration: generation,
       idempotencyKey: idempotencyKey,
+      // This call site runs only after a send threw; a timeout cannot prove
+      // the POST was never committed. Resume by receipt GET, never resend.
+      requiresReconciliation: true,
     );
   }
 
@@ -363,7 +401,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     }
   }
 
-  /// 依次重放待发送消息；跨账号的旧队列直接丢弃，避免串号。
+  /// 只读核对已持久化的原任务；旧版 pending 不能证明尚未派发。
   Future<int> flushPendingMessages() async {
     if (_flushingOutbox) return 0;
     _flushingOutbox = true;
@@ -372,14 +410,17 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       final scope = await _offlineScope();
       final store = await openOfflineStore(expectedScope: scope);
       if (store == null || scope != await _offlineScope()) return 0;
-      final pending = await store.pendingMessages(limit: 5);
+      final pending = await store.pendingMessages(
+          limit: 5, authGeneration: _client.authGeneration);
       for (final item in pending) {
         if (scope != await _offlineScope()) break;
         if (item.authGeneration != _client.authGeneration) {
-          await store.markSent(item.id);
+          // Credentials changed; retain the unknown original outcome until
+          // the owner can reconcile it against the original authorized scope.
           continue;
         }
-        await store.markSending(item.id);
+        // Do not promote an unknown result to another write attempt.
+        await store.markReconciliationRequired(item.id);
         if (scope != await _offlineScope()) break;
         try {
           await streamMessage(
@@ -392,15 +433,18 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             ),
             body: item.body,
             idempotencyKey: item.idempotencyKey,
-            resumeOnly: item.requiresReconciliation,
+            // Legacy pending rows may have been downgraded after a lost POST.
+            // No persisted row proves that the server never received it.
+            resumeOnly: true,
             cacheUserMessage: false,
           );
           await store.markSent(item.id);
           sent++;
         } catch (error) {
           await store.markFailed(item.id, error.toString(),
-              requiresReconciliation: item.requiresReconciliation || item.conversationType.superTool != null ||
-                  (error is! SocketException && error is! TimeoutException),
+              // Once dispatch was attempted, a socket error or timeout cannot
+              // establish that the server did not commit the original turn.
+              requiresReconciliation: true,
               terminal: error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_TERMINAL');
         }
       }

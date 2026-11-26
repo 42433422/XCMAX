@@ -57,6 +57,35 @@ void main() {
     }
   });
 
+  test('uncertain approvals persist until original server terminal is reconciled',
+      () async {
+    expect(await store.hasUnknownApprovalOutcome(42), isFalse);
+    final claims = await Future.wait([
+      store.markUnknownApprovalOutcome(42),
+      store.markUnknownApprovalOutcome(42),
+    ]);
+    expect(claims.where((claimed) => claimed), hasLength(1));
+    expect(await store.hasUnknownApprovalOutcome(42), isTrue);
+    // Merely reading or reopening the screen must not release the guard.
+    expect(await store.hasUnknownApprovalOutcome(42), isTrue);
+    await store.clearUnknownApprovalOutcome(42);
+    expect(await store.hasUnknownApprovalOutcome(42), isFalse);
+    expect(await store.markUnknownApprovalOutcome(42), isTrue);
+  });
+
+  test('composer drafts recover text but no authorization or upload credentials',
+      () async {
+    await store.saveChatDraft('chat/a', '库存检查',
+        attachmentNames: ['report.xlsx', 'invoice.pdf']);
+    final restored = await store.readChatDraft('chat/a');
+    expect(restored['text'], '库存检查');
+    expect(restored['attachment_names'], ['report.xlsx', 'invoice.pdf']);
+    expect(restored.containsKey('upload_id'), isFalse);
+    expect(await store.readChatDraft('chat/b'), isEmpty);
+    await store.saveChatDraft('chat/a', '');
+    expect(await store.readChatDraft('chat/a'), isEmpty);
+  });
+
   test('消息按时间顺序读取并返回旧缓存结构', () async {
     await store.appendMessage('c1', message(2, '第二条'));
     await store.appendMessage('c1', message(1, '第一条'));
@@ -67,6 +96,48 @@ void main() {
     expect(rows.first['id'], 'm-1');
     expect(rows.first['conversation_id'], 'c1');
     expect(rows.first['has_employee_profile'], isFalse);
+  });
+
+  test('expired display cache preserves unresolved execution identities', () async {
+    var now = DateTime.utc(2026, 11, 25, 12);
+    final cache = MobileOfflineStore.forExecutor(NativeDatabase.memory(),
+        clock: () => now);
+    try {
+      await cache.ensureReady();
+      await cache.appendMessage('c1', message(1, 'old confirmed'));
+      await cache.appendMessage('c1', {
+        ...message(2, 'unresolved', role: 'assistant'),
+        'status': 'pending',
+        'turn_id': 'original-turn',
+      });
+      await cache.saveConversationState('c1', preview: 'old preview', timestampMs: 2);
+      await cache.setInflightTaskId('c1', 'original-task');
+      await cache.enqueueMessage(
+        conversationId: 'c1',
+        conversationType: ConversationType.pinnedAssistant,
+        title: '小C',
+        body: 'unresolved write',
+        authGeneration: 1,
+        idempotencyKey: 'original-turn',
+        requiresReconciliation: true,
+      );
+      expect(await cache.cachedMessages('c1'), hasLength(2));
+      expect((await cache.latestMessagePreviews())['c1']?['body'], 'unresolved');
+      expect(await cache.conversationState('c1'), isNotNull);
+      now = now.add(MobileOfflineStore.displayCacheLifetime);
+      expect((await cache.cachedMessages('c1')).single['turn_id'], 'original-turn');
+      expect(await cache.latestMessagePreviews(), isEmpty);
+      expect(await cache.conversationState('c1'), isNull);
+      expect(await cache.inflightTaskId('c1'), 'original-task');
+      expect((await cache.pendingMessages()).single.requiresReconciliation, isTrue);
+      await cache.appendMessage('c1', message(1, 'refetched history'));
+      expect((await cache.cachedMessages('c1')).first['body'], 'refetched history');
+      expect((await cache.latestMessagePreviews())['c1']?['body'], 'refetched history');
+      await cache.saveConversationState('c1', preview: 'new preview', timestampMs: 1);
+      expect((await cache.conversationState('c1'))?['preview'], 'new preview');
+    } finally {
+      await cache.close();
+    }
   });
 
   test('每个会话只保留最近 80 条消息', () async {
@@ -137,6 +208,62 @@ void main() {
     expect(await store.pendingMessageCount(), 0);
   });
 
+  test('ambiguous transport outcome remains reconciliation-only across restarts', () async {
+    final id = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行库存写入',
+      authGeneration: 1,
+      idempotencyKey: 'stable-turn',
+      requiresReconciliation: true,
+    );
+    final queued = await store.pendingMessages();
+    expect(queued.single.id, id);
+    expect(queued.single.idempotencyKey, 'stable-turn');
+    expect(queued.single.requiresReconciliation, isTrue);
+
+    // A later enqueue attempt must not downgrade 'unknown' to sendable.
+    final duplicate = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行库存写入',
+      authGeneration: 1,
+      idempotencyKey: 'stable-turn',
+    );
+    expect(duplicate, id);
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+
+    await store.markSending(id);
+    // Sending interrupted by process exit must also require GET-only resume.
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+  });
+
+  test('already queued unsent draft becomes reconciliation-only on ambiguity',
+      () async {
+    final id = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行任务',
+      authGeneration: 1,
+      idempotencyKey: 'turn-2',
+    );
+    expect((await store.pendingMessages()).single.requiresReconciliation, isFalse);
+    final duplicate = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行任务',
+      authGeneration: 1,
+      idempotencyKey: 'turn-2',
+      requiresReconciliation: true,
+    );
+    expect(duplicate, id);
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+  });
+
   test('重试达到上限后标记为 failed，不再进入待发送列表', () async {
     final id = await store.enqueueMessage(
       conversationId: 'c1',
@@ -173,15 +300,19 @@ void main() {
     expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
   });
 
-  test('an undispatched connection failure may retry the same original key', () async {
+  test('an attempted dispatch remains read-only even after socket or timeout errors', () async {
     final id = await store.enqueueMessage(conversationId: 'c1',
         conversationType: ConversationType.pinnedAssistant, title: '小C',
-        body: '未建立连接', authGeneration: 1, idempotencyKey: 'not-sent');
+        body: '写入订单', authGeneration: 1, idempotencyKey: 'original-turn');
     await store.markSending(id);
-    await store.markFailed(id, 'connection refused');
-    final entry = (await store.pendingMessages()).single;
-    expect(entry.requiresReconciliation, isFalse);
-    expect(entry.idempotencyKey, 'not-sent');
+    for (final error in ['connection refused', 'socket reset', 'timeout']) {
+      await store.markFailed(id, error);
+      final entry = (await store.pendingMessages()).single;
+      expect(entry.requiresReconciliation, isTrue);
+      expect(entry.idempotencyKey, 'original-turn');
+    }
+    await store.markFailed(id, '原任务已确认终止', terminal: true);
+    expect(await store.pendingMessages(), isEmpty);
   });
 
   test('cached pending receipt retains its turn across restart and update', () async {
@@ -199,6 +330,9 @@ void main() {
       'scope': 'original-account', 'channel': 'relay',
     });
     await store.saveTurnDispatch('pinned:codex', 'second', {'client_request_id': 'second'});
+    expect(await store.saveTurnDispatch('pinned:codex', 'first', {
+      'channel': 'super', 'base_url': 'https://different.example/',
+    }), isFalse);
     final original = await store.turnDispatch('pinned:codex', 'first');
     expect(original['relay_id'], 'original-relay');
     expect(original['base_url'], 'https://original.example/');

@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "npm run build && electron .",
-    "build": "node scripts/inject-version.cjs && tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
+    "build": "node scripts/inject-version.cjs && tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('resources/splash.html','dist/splash.html')\"",
     "typecheck": "tsc -p tsconfig.test.json",
     "pack": "npm run build && electron-builder --dir --config electron-builder.yml",
     "dist": "npm run build && electron-builder --config electron-builder.yml",

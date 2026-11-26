@@ -36,6 +36,7 @@ def order_client(payment_client, tmp_path, monkeypatch):  # noqa: F811
         "local_user_id": 71,
         "tenant_id": 11,
         "status": "paid",
+        "amount_cents": 990,
         "trade_no": "provider-owned",
     }
     path.write_text(json.dumps({"orders": {"owned-order": row}, "entitlements": {}}))
@@ -96,21 +97,24 @@ def test_order_access_requires_identity_and_exact_scope(order_client, action):
 def test_own_order_preserves_real_rbac_and_business_call(order_client, action, provider_name):
     client, prefix, _, path, providers, _ = order_client
     response = _call(client, prefix, action)
-    assert response.status_code == 200, response.text
-    assert response.json()["success"] is True
+    expected_status = {"refund": 202, "refund-query": 409}.get(action, 200)
+    assert response.status_code == expected_status, response.text
+    assert response.json()["success"] is (expected_status == 200)
     providers[provider_name].assert_called_once()
     assert providers[provider_name].call_args.kwargs["out_trade_no"] == "owned-order"
     row = json.loads(path.read_text())["orders"]["owned-order"]
     assert row["local_user_id"] == 71 and row["tenant_id"] == 11
     if action in {"refund", "close"}:
-        assert row["status"] == {"refund": "refunded", "close": "closed"}[action]
+        assert (
+            row["status"] == {"refund": "refund_pending_reconciliation", "close": "closed"}[action]
+        )
 
 
 def test_refund_requires_live_host_permission_not_mod_role(order_client):
     from app.db.session import SessionLocal
 
     client, prefix, sessions, path, providers, _ = order_client
-    assert _call(client, prefix, "refund").status_code == 200
+    assert _call(client, prefix, "refund").status_code == 202
     providers["refund_order"].reset_mock()
     with sessions.begin() as db:
         db.query(Role).filter_by(name="tenant:11:finance").one().permissions = []
@@ -257,3 +261,80 @@ def test_order_actions_recheck_live_identity(order_client, state):
     assert path.read_bytes() == before
     for provider in providers.values():
         provider.assert_not_called()
+
+
+def test_refund_requires_distinct_confirmed_query_before_original_ledger_settles(order_client):
+    client, prefix, _, path, providers, _ = order_client
+    # A provider response is accepted but never counted as settled in the ledger.
+    first = _call(
+        client,
+        prefix,
+        "refund",
+        body={"out_trade_no": "owned-order", "refund_amount": "1.00", "out_request_no": "first"},
+    )
+    assert first.status_code == 202
+    assert first.json()["requires_reconciliation"] is True
+    assert "refunded_amount_cents" not in json.loads(path.read_text())["orders"]["owned-order"]
+
+    # The same identity is never sent a second time, even after the HTTP reply.
+    replay = _call(
+        client,
+        prefix,
+        "refund",
+        body={"out_trade_no": "owned-order", "refund_amount": "1.00", "out_request_no": "first"},
+    )
+    assert replay.status_code == 409
+    assert providers["refund_order"].call_count == 1
+
+    # Only a separate authenticated gateway query for this exact ID and amount
+    # can move the existing local record out of pending reconciliation.
+    providers["query_refund"].return_value = {
+        "success": True,
+        "raw": {
+            "refund_status": "REFUND_SUCCESS",
+            "refund_amount": "1.00",
+            "out_trade_no": "owned-order",
+            "out_request_no": "first",
+        },
+    }
+    confirmed = client.get(
+        prefix + "/refund/query",
+        params={"out_trade_no": "owned-order", "out_request_no": "first"},
+        headers={"X-User-ID": "71", "X-Tenant-ID": "11", "X-Session-ID": "checkout-session-71"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["gateway_refund_confirmed"] is True
+    assert confirmed.json()["bank_settlement_verified"] is False
+    original = json.loads(path.read_text())["orders"]["owned-order"]
+    assert original["status"] == "partially_refunded"
+    assert original["refunded_amount_cents"] == 100
+
+    # New part may use another request ID but cannot exceed original cents.
+    over = _call(
+        client,
+        prefix,
+        "refund",
+        body={"out_trade_no": "owned-order", "refund_amount": "9.00", "out_request_no": "over"},
+    )
+    assert over.status_code == 409
+    assert providers["refund_order"].call_count == 1
+
+    second = _call(
+        client,
+        prefix,
+        "refund",
+        body={"out_trade_no": "owned-order", "refund_amount": "8.90", "out_request_no": "second"},
+    )
+    assert second.status_code == 202
+    providers["query_refund"].return_value["raw"].update(
+        refund_amount="8.90", out_request_no="second"
+    )
+    confirmed = client.get(
+        prefix + "/refund/query",
+        params={"out_trade_no": "owned-order", "out_request_no": "second"},
+        headers={"X-User-ID": "71", "X-Tenant-ID": "11", "X-Session-ID": "checkout-session-71"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    original = json.loads(path.read_text())["orders"]["owned-order"]
+    assert original["status"] == "refunded"
+    assert original["refunded_amount_cents"] == 990

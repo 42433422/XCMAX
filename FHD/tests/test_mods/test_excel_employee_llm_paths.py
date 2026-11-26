@@ -7,10 +7,10 @@ LLM 不可用/关闭时行为与纯启发式完全一致；LLM 不可推翻确�
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 from pathlib import Path
-from types import ModuleType
+
+from tests.test_mods._excel_runtime import load_module as _load_module
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,14 +23,6 @@ WRITER_CONVERT = (
 )
 MAPPER_VENDOR = FHD_ROOT / "mods/_employees/excel-rules-map-employee/backend/vendor"
 QC_VENDOR = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/vendor"
-
-
-def _load_module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _load_pkgs():

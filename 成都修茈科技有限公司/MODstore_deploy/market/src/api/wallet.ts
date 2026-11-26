@@ -63,7 +63,7 @@ export interface PaymentPlansResponse extends Record<string, unknown> {
 
 export interface AccountLicensePlansResponse extends Record<string, unknown> {
   plans?: AccountLicensePlan[]
-  commercial_terms?: { customization_from_cents?: number }
+  commercial_terms?: { customization_from_cents?: number; launch_campaign?: { enabled: boolean; starts_at: string | null; ends_at: string | null; benefits: string[] } }
 }
 
 export interface PaymentQueryResponse extends Record<string, unknown> {

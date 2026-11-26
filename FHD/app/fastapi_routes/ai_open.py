@@ -35,9 +35,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.application.agent_orchestrator.chat_trace import (
-    create_chat_trace_run,
-)
+from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
 from app.application.aiopen.catalog_builder import (
     entity_schema,
     find_operation,
@@ -74,6 +72,7 @@ from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
 from app.fastapi_routes.aiopen_route_support import (
     create_client_router,
     handle_mcp_message,
+    retired_openclaw_chat_response,
     safe_control_payload,
     trace_control_result,
     trace_tool_call,
@@ -261,7 +260,7 @@ async def aiopen_invoke(
         x_aiopen_key,
         tool,
         channel="rest",
-        ok=status == 200 and result.get("success") is True,
+        ok=status == 200 and safe_control_payload(result).get("success") is True,
         duration_ms=(time.perf_counter() - started) * 1000,
     )
     payload = {"tool": tool, **result}
@@ -335,11 +334,17 @@ def _record_mcp_call(
 ) -> None:
     if msg.get("method") != "tools/call":
         return
+    result = response.get("result") if isinstance(response, dict) else None
     record_api_key_use(
         key,
         _mcp_tool_name(msg),
         channel="mcp",
-        ok=not (isinstance(response, dict) and response.get("error")),
+        ok=(
+            response is not None
+            and isinstance(result, dict)
+            and result.get("isError") is False
+            and not response.get("error")
+        ),
         duration_ms=(time.perf_counter() - started) * 1000,
     )
 
@@ -777,6 +782,19 @@ def aiopen_control(
         body=body,
         user_id=str(getattr(_admin, "id", "") or ""),
     )
+
+
+@router.post("/api/aiopen/openclaw/chat")
+def aiopen_openclaw_chat(
+    body: dict = Body(default_factory=dict),
+    x_aiopen_key: AiOpenKeyHeader = None,
+):
+    if not authorize_api_key(x_aiopen_key):
+        return _unauthorized()
+    message = str(body.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
+    return retired_openclaw_chat_response()
 
 
 # ---------------------------------------------------------------------------

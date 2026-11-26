@@ -1,0 +1,56 @@
+name: Frontend mobile E04 migration and recovery
+
+on:
+  pull_request:
+    branches:
+      - integration/frontend-desktop-mobile-20261125
+    paths:
+      - 'FHD/mobile-flutter-poc/lib/src/data/**'
+      - 'FHD/mobile-flutter-poc/test/offline_store*'
+      - 'FHD/mobile-flutter-poc/test/mobile_lan_ambiguous_dispatch_test.dart'
+      - '.github/workflows/frontend-mobile-e04-child.yml'
+  push:
+    branches:
+      - fix/frontend-e04-cache-expiry-20261125
+    paths:
+      - 'FHD/mobile-flutter-poc/lib/src/data/**'
+      - 'FHD/mobile-flutter-poc/test/offline_store*'
+      - 'FHD/mobile-flutter-poc/test/mobile_lan_ambiguous_dispatch_test.dart'
+      - '.github/workflows/frontend-mobile-e04-child.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-e04-child-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-e04:
+    name: Flutter cache v2-v3, task identity and reconnect
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Read pinned Flutter SDK
+        id: flutter_sdk
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.flutter_sdk.outputs.version }}
+          channel: stable
+          cache: true
+      - name: Install pinned dependencies
+        run: flutter pub get
+      - name: Analyze application
+        run: flutter analyze
+      - name: Exercise cache migration and unresolved dispatch identities
+        run: |
+          env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy NO_PROXY=127.0.0.1,localhost \
+            flutter test --no-pub \
+              test/offline_store_test.dart \
+              test/offline_store_migration_test.dart \
+              test/mobile_lan_ambiguous_dispatch_test.dart

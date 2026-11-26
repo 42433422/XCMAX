@@ -84,7 +84,7 @@ jobs:
             tests/test_application/test_task_conversation_store.py::test_task_conversation_survives_store_recreation_and_lists_metadata \
             tests/test_application/test_native_task_recovery.py::test_process_exit_real_startup_resumes_native_checkpoint_without_repeating_receipt \
             tests/test_application/test_native_task_recovery.py::test_restart_preserves_exact_queued_approval_before_first_write \
-            tests/test_application/test_native_task_recovery.py::test_concurrent_retry_preserves_original_write_receipt_and_atomically_requeues_same_run \
+            tests/test_application/test_native_task_recovery_receipts.py::test_concurrent_retry_preserves_original_write_receipt_and_atomically_requeues_same_run \
             tests/test_desktop/test_startup_schema_migration_real_db.py \
             -q --junitxml=performance-results/resilience.xml
 

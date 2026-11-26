@@ -540,3 +540,24 @@ def test_sales_report_keeps_customer_and_confirmation_filters(report_env):
         )
         assert orders["total"] == 2
         assert orders["summary"]["amount"] == result["summary"]["total_amount"]
+
+
+def test_sales_report_period_includes_the_last_fractional_second(report_env):
+    from datetime import timedelta
+
+    from app.domain.value_objects.date_range import DateRange
+
+    month = DateRange.this_month()
+    first = datetime.combine(month.start, datetime.min.time())
+    last = datetime.combine(month.end, datetime.max.time())
+    with report_env["test_db"]() as db:
+        for index, (created, amount) in enumerate(
+            ((first - timedelta(microseconds=1), 888), (first, 40), (last, 60))
+        ):
+            order = SalesOrder(order_no=f"PERIOD-{index}", created_at=created, total_amount=amount)
+            db.add(order)
+            db.flush()
+            db.add(SalesOrderItem(order_id=order.id, quantity=1, unit_price=amount, amount=amount))
+        db.flush()
+        result = ReportService().query_report("sales", {"period": "this_month"})
+        assert result["summary"]["total_amount"] == 100

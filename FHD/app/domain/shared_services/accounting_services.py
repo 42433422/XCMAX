@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from app.db.models import ChartOfAccount, JournalEntry, JournalEntryLine
@@ -26,6 +26,7 @@ from app.domain.shared_services.accounting_values import (
 from app.domain.shared_services.accounting_values import (
     to_float as _to_float,
 )
+from app.domain.value_objects.date_range import reporting_date_bounds
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +34,20 @@ logger = logging.getLogger(__name__)
 def query_financial_ledger(
     account_id: int | None = None,
     account_code: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
+    start_date: date | str | None = None,
+    end_date: date | str | None = None,
     status: str | None = None,
     page: int = 1,
     per_page: int = 20,
+    *,
+    period: str | None = None,
 ) -> dict[str, Any]:
     """查询总账：聚合各科目借贷发生额与余额。
 
     - 有 account 过滤时返回该科目的逐笔分录；
     - 无 account 过滤时按科目 code 汇总借贷发生额。
     """
+    start_date, end_date = reporting_date_bounds(period, start_date, end_date)
     with get_db() as db:
         q = db.query(JournalEntry)
         if status:
@@ -128,26 +132,42 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
     if not isinstance(lines_data, list) or not lines_data:
         return {"success": False, "message": "缺少 lines 分录行"}
 
+    status = data.get("status") or "posted"
     parsed_lines = []
     debit_total = Decimal("0")
     credit_total = Decimal("0")
     for item in lines_data:
+        if not isinstance(item, dict):
+            return {"success": False, "message": "分录行格式无效"}
         account_id = item.get("account_id")
+        account_code = str(item.get("account_code") or "").strip() or None
         account = None
         if account_id:
             account = _find_account(db, account_id)
-        elif item.get("account_code"):
-            account = _find_account_by_code(db, item.get("account_code"))
-        debit = _to_decimal(item.get("debit", 0))
-        credit = _to_decimal(item.get("credit", 0))
-        if debit == 0 and credit == 0:
-            return {"success": False, "message": "分录行借贷不能同时为 0"}
+        elif account_code:
+            account = _find_account_by_code(db, account_code)
+        try:
+            debit = _to_decimal(item.get("debit", 0))
+            credit = _to_decimal(item.get("credit", 0))
+            for amount in (debit, credit):
+                if (
+                    not amount.is_finite()
+                    or amount < 0
+                    or amount != amount.quantize(Decimal("0.01"))
+                ):
+                    raise ValueError("会计金额必须是非负、最多两位小数的有限数")
+        except (ValueError, TypeError, InvalidOperation):
+            return {"success": False, "message": "会计金额必须是非负、最多两位小数的有限数"}
+        if (debit > 0) == (credit > 0):
+            return {"success": False, "message": "分录行必须且只能有一侧借贷金额"}
+        if status == "posted" and not (account_code or account):
+            return {"success": False, "message": "过账分录必须指定会计科目"}
         debit_total += debit
         credit_total += credit
         parsed_lines.append(
             {
                 "account_id": account.id if account else None,
-                "account_code": item.get("account_code") or (account.code if account else None),
+                "account_code": account_code or (account.code if account else None),
                 "account_name": item.get("account_name") or (account.name if account else None),
                 "debit": debit,
                 "credit": credit,
@@ -157,7 +177,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
             }
         )
 
-    if abs(debit_total - credit_total) > Decimal("0.01"):
+    if debit_total != credit_total:
         return {
             "success": False,
             "message": f"借贷不平衡: 借 {debit_total} vs 贷 {credit_total}",
@@ -167,7 +187,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
     entry = JournalEntry(
         entry_no=entry_no,
         journal_date=data.get("journal_date") or date.today(),
-        status=data.get("status") or "posted",
+        status=status,
         description=data.get("description"),
         reference_type=data.get("reference_type"),
         reference_id=data.get("reference_id"),
@@ -268,6 +288,21 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
                 "message": f"凭证 {entry.entry_no} 已冲销，不能重复冲销",
             }
 
+        # Atomic claim: concurrent reversals must not each create a second
+        # counter-entry. This fences SQLite writers and PostgreSQL row updates.
+        claimed = (
+            db.query(JournalEntry)
+            .filter(
+                JournalEntry.id == entry.id,
+                JournalEntry.reversed_of_id.is_(None),
+                JournalEntry.reversed_at.is_(None),
+            )
+            .update({JournalEntry.reversed_at: datetime.now()}, synchronize_session=False)
+        )
+        if claimed != 1:
+            db.rollback()
+            return {"success": False, "message": "原凭证已被其他请求冲销，请核对原回执"}
+        db.refresh(entry)
         new_entry = JournalEntry(
             entry_no=_generate_entry_no(),
             journal_date=date.today(),
@@ -281,7 +316,7 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
         db.add(new_entry)
         db.flush()
         for line in entry.lines:
-            db.add(
+            new_entry.lines.append(
                 JournalEntryLine(
                     entry_id=new_entry.id,
                     account_id=line.account_id,
@@ -296,7 +331,7 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
                 )
             )
         new_entry.refresh_totals()
-        entry.reversed_at = datetime.now()
+        db.flush()
         db.commit()
         db.refresh(new_entry)
         return {
