@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { capture, isolate } from './capture'
 
-for (const [width, height] of [[1440, 900], [375, 812]]) {
+function checkWorkbench(width: number, height: number, scale: 'css' | 'device' = 'css') {
   test('market workbench ' + width, async ({ page, baseURL }) => {
     await page.setViewportSize({ width, height })
     await isolate(page, baseURL!)
@@ -26,14 +26,20 @@ for (const [width, height] of [[1440, 900], [375, 812]]) {
     await expect(page.locator('.wb-direct-sub')).toHaveText('像聊天一样提问，我直接帮你分析、总结和给出可执行答案。')
     const box = await input.boundingBox()
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(200)
-    await capture(page, 'workbench-empty-' + width)
+    await capture(page, 'workbench-empty-' + width, scale)
     await input.fill('请核对示例客户的订单进度')
     await expect(input).toHaveValue('请核对示例客户的订单进度')
-    await capture(page, 'workbench-draft-' + width)
+    await capture(page, 'workbench-draft-' + width, scale)
     if (width === 1440) {
       await page.getByRole('button', { name: 'tester 菜单' }).click()
       await expect(page.getByRole('menuitem', { name: '钱包' })).toBeVisible()
-      await capture(page, 'workbench-account-menu-' + width)
+      await capture(page, 'workbench-account-menu-' + width, scale)
     }
   })
 }
+
+checkWorkbench(1440, 900)
+test.describe('mobile workbench device pixels', () => {
+  test.use({ deviceScaleFactor: 2 })
+  checkWorkbench(375, 812, 'device')
+})

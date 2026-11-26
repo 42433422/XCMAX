@@ -92,7 +92,9 @@ def _run_trial(tasks_path: Path, trial: int) -> list[dict]:
         cmd,
         capture_output=True,
         text=True,
-        timeout=900,
+        # Thirteen tasks run in series with an individual 180-second deployment
+        # budget. Keep extra room for isolated database setup and final receipts.
+        timeout=2460 if tasks_path == _BENCHMARK_SETS["holdout"]["path"] else 900,
         env={
             **os.environ,
             "PYTHONPATH": str(PROJECT_ROOT) + os.pathsep + os.environ.get("PYTHONPATH", ""),

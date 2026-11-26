@@ -1446,6 +1446,7 @@
           "availability": "shared"
         },
         "inventory_summary": {
+          "description": "按仓库或产品汇总库存数量和可用余量，适用于明确的库存和现货查询。",
           "risk": "low",
           "idempotent": true,
           "read_only": true,

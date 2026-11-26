@@ -21,7 +21,7 @@ jobs:
   original-model-holdout:
     if: github.repository == 'xcagi/XCMAX'
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 140
     environment: ${{ github.ref_name == 'codex/integrate-open-prs-20261126' && 'xcmax-integration-holdout-3680' || 'xcmax-model-holdout' }}
     env:
       TASK_BENCHMARK_RUN: "1"

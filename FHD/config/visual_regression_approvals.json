@@ -32,9 +32,9 @@
       "autonomy-preview-375.png": {"baseline": null, "candidate": "973fb000e0418e16193f114a005476079586fb2e8d327b25de9985d5733fd01c"},
       "workbench-account-menu-1440.png": {"baseline": "a03d1df87ec1656aa9a27d967d8050fa948078d5ffc286b25c26ad855aaa333f", "candidate": "a79ef6518d0cd9fe5e8d423eafba5fb5b44ad1082b48cc67cd04e87be3ed19f8"},
       "workbench-draft-1440.png": {"baseline": "93a7345a1c4d59281ef9f6c53fcf16a5af894a56d2baea3a22bccc95d2165ca7", "candidate": "db02f1d81b541cdca7119d6f53c2b1fc0830e07540fc2a8b5f7a31966e5e69d8"},
-      "workbench-draft-375.png": {"baseline": "cef738e121988908b91bd6c49d0132527e1a8d25a39fba590cce46896fe081c8", "candidate": "232a1094025eaa81cfa0cdca3ffc5040f24ded19ecb9deb675c314fc9420038d"},
+      "workbench-draft-375.png": {"baseline": "12d7b3e5c0fbe8c212c845ca25883ee4dc4f5382c0f7cbe2cc8b5fe524835fbc", "candidate": "de05d792187f9641fd01a78c71b67a803f0c093011208222b4a55382ed594a68"},
       "workbench-empty-1440.png": {"baseline": "cce2ba24b9fb0d3e4d88ce7516bf1c3f6fedfb74695beb4fa7d5bfa49eaf30bb", "candidate": "57858e25709fba05919208e0e0014c5fad66b3b419fa3f74a29149870df2a0f4"},
-      "workbench-empty-375.png": {"baseline": "63401803a9dd7374a7d2874c2312c2a98e87f4c295778b53713c0fadbbb21a44", "candidate": "642b3d3581ed627407060119238881345c98c89ffb8634408f1ecc29f6aeae70"}
+      "workbench-empty-375.png": {"baseline": "901ea261bcad15afe2ebfd02f0a1a1e608d6feaa03627095d4cdc539d0ee3af8", "candidate": "b99958af361b73f699488dd1bcfad2d36a9fba8b9d74d6cb90d2eccdeaaa5e18"}
     },
     "flutter": {
       "approval-confirm-dark.png": {"baseline": "4f2027e2c0f32f1076359b3bbfcff6049f2e2c1644cff7bb7964649bf513f140", "candidate": "8609680a2cfdaf8ebb954c1609d42ea9d73accb9d692b7b5fa0371d5c60b06df"},

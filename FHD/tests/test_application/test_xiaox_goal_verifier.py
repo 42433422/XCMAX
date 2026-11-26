@@ -740,6 +740,18 @@ def test_transport_unknown_does_not_trigger_automatic_model_retry(verifier):
     assert report["error_code"] == "goal_verification_transport_error"
 
 
+@pytest.mark.parametrize(("capacity", "expected"), [(6000, 6000), (16000, 8192)])
+def test_mimo_review_reserves_reasoning_output_within_qualified_capacity(
+    verifier, capacity, expected
+):
+    verifier.config.model = "mimo-v2.6-pro"
+    verifier.config.auto_compact_token_limit = verifier.config.context_window - capacity
+    verifier.run.metadata["xiaox_runtime"]["runtime_config"] = {"upstream_vendor": "xiaomi"}
+    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+    assert verifier.verify()["accepted"]
+    assert [json.loads(req.content)["max_output_tokens"] for req in verifier.requests] == [expected]
+
+
 def test_long_request_reserves_more_than_8192_on_qualified_route_first_attempt(verifier):
     verifier.run.message = "请逐项核对以下原始要求：" + "原始任务细节。" * 1500
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)

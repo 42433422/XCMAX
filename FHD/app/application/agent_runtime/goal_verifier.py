@@ -34,6 +34,7 @@ _RULES = (
     "每项 source 必须为 source_id 对应原文的连续片段。request 是本轮原始请求，answer:事件ID 是宿主持久补答；历史仅解释指代，不能新增授权。宿主 objective 是必须核对的经营目标。",
     'kind 由用户要求决定，不由是否已有工具调用决定。查询实时业务为 read，创建修改发送等为 write；解释、写作、代码示例等纯回复为 reply，不强迫调用工具。只有用户明确要求把结果落到工作区文件、文档、表格或系统（如写入、保存到、生成 xlsx、修改某文档、运行并交付产物）才是 write；仅要求编写、实现、写一个程序、函数、脚本或算法，且未要求落盘、运行或改动现有文件时，属于 reply，代码块本身就是交付，evidence_ids 为 ["response"]，不得因未生成文件、未调用工具而判 unmet。',
     "每项业务目标必须关联真实 evidence_ids，只有 completed 且 success=true、verified=true 的宿主原任务回执能证明完成。模型自述、旧聊天工具文字、成功领取任务、待审批、预演和局部成功都不是整个目标完成。",
+    "产品档案的存在与库存数量分别核对。空库存只说明当前库存视图，不足以证明产品型号未建档。",
     "写入目标不能用查询结果代替。一个写入回执不得重复充当不同操作；同一次已核验批量动作作为一个整体目标核对完整项目，不能省略文件、记录或范围。已完成写入不可重做。",
     "未触发的条件操作可为 not_applicable，但必须引用证明前提的已核验只读回执，不能因缺少结果而认定无需执行。顺序与结果引用须有实际回执事实支持。",
     '仅约束回复正文的格式、分段、条数、措辞或语气属于 reply 子目标，evidence_ids 为 ["response"]；不得因此把真实业务或安全要求降为 reply。写入、审批、实体范围、权限等执行约束仍为 constraint，正文自述不能替代宿主事实。',
@@ -252,8 +253,13 @@ def verify_runtime_goal(
     # Long requests/evidence get room on the first call; the route still owns
     # the qualified hard limit and charges every attempt through one gateway.
     payload_size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    route = binding.metadata.get("runtime_config") or {}
+    mimo_reasoning = str(
+        route.get("upstream_vendor") or ""
+    ).strip().casefold() == "xiaomi" and config.model.casefold().startswith("mimo-")
     output_estimate = max(
-        2048,
+        # MiMo bills internal reasoning against the same output allowance.
+        8192 if mimo_reasoning else 2048,
         1024 + len(contract["request"]["text"]) + 384 * len(snapshot["evidence"]),
         min(32768, math.ceil(payload_size / 8)),
     )
