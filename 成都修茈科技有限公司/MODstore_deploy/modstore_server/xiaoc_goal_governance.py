@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from modstore_server.xiaoc_life_policy import parse_time
 
@@ -174,8 +174,8 @@ def goal_conflicts(
             ):
                 result.append({"goal_id": str(key), "reason": "invalid_metric_bounds"})
                 continue
-            lower = a if left["direction"] == "max" else b
-            upper = a if left["direction"] == "min" else b
+            lower = cast(float, a if left["direction"] == "max" else b)
+            upper = cast(float, a if left["direction"] == "min" else b)
             if lower > upper:
                 result.append({"goal_id": str(key), "reason": "incompatible_metric_bounds"})
     return result
