@@ -139,13 +139,15 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     if (prefsSaving.value) return
     const version = ++prefsVersion
     const scope = prefsScope()
+    const tenantScope = ensureActiveTenantScope()
     try {
-      const { fetchWorkspacePrefs, flushWorkspacePrefsSync } = await import('@/utils/workspacePrefsApi')
+      const { fetchWorkspacePrefs, flushWorkspacePrefsSync, confirmWorkspacePrefsSnapshot } = await import('@/utils/workspacePrefsApi')
       await flushWorkspacePrefsSync()
       if (version !== prefsVersion || scope !== prefsScope()) return
       const response = await fetchWorkspacePrefs()
       if (version !== prefsVersion || scope !== prefsScope()) return
       if (response.success !== true || !response.owner_id) throw new Error('无法确认工作区归属')
+      confirmWorkspacePrefsSnapshot(response, tenantScope)
       acceptConfirmedPreferences(response.data?.workflow_ai_employees || {})
     } catch (reason) {
       if (version !== prefsVersion || scope !== prefsScope()) return

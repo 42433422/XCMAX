@@ -14,10 +14,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 
@@ -375,4 +377,130 @@ def test_new_group_reads_preexisting_backlog_instead_of_skipping(redis_url, monk
         assert client.xlen(STREAM_KEY) == 1
     finally:
         _fresh_stream(client)
+        client.close()
+
+
+@pytest.mark.asyncio
+async def test_command_reply_stays_in_origin_while_notifications_cross_process(
+    redis_url, monkeypatch
+):
+    from app.application.facades import shipment_event_primary as shipment
+    from app.neuro_bus import command_gateway
+    from app.neuro_bus.bus import NeuroBus
+    from app.neuro_bus.events.events_base import NeuroEvent
+
+    monkeypatch.setenv("FHD_ENV", "development")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "")
+    for flag in ("REDIS_PUBSUB", "DEDUP", "CIRCUIT", "RATE_LIMIT", "RETRY", "DLQ_AUTO"):
+        monkeypatch.setenv("XCAGI_NEURO_BUS_" + flag, "0")
+    gateway = command_gateway.CommandGateway()
+    monkeypatch.setattr(command_gateway, "_gateway", gateway)
+    client = _client(redis_url)
+    bus = NeuroBus(enable_metrics=False, handler_timeout_sec=15)
+    bus._redis_bridge = RedisStreamsBridge(bus, client, consumer_id="origin")
+    monkeypatch.setattr(shipment, "get_neuro_bus", lambda: bus)
+    entered, release = asyncio.Event(), asyncio.Event()
+    records, ready, stop = (STREAM_KEY + suffix for suffix in (":calls", ":ready", ":stop"))
+
+    async def block_consumer(event):
+        entered.set()
+        await release.wait()
+
+    async def command(event):
+        client.rpush(records, str(os.getpid()))
+        command_gateway.try_complete_command_reply(event, {"success": True, "pid": os.getpid()})
+
+    bus.subscribe("test.block_consumer", block_consumer)
+    bus.subscribe("shipment.cancelled", command)
+    # Keep origin's actual stream reader busy so the other process deterministically
+    # receives shared-group work; its local partition worker remains available.
+    worker_code = """
+import asyncio, os, sys, redis
+from app.neuro_bus.bus import NeuroBus
+from app.neuro_bus.command_gateway import try_complete_command_reply
+from app.neuro_bus.transports import redis_streams as streams
+url, streams.STREAM_KEY, streams.DLQ_KEY, records, ready, stop = sys.argv[1:]
+async def main():
+    client = redis.Redis.from_url(url)
+    bus = NeuroBus(enable_metrics=False)
+    bus._redis_bridge = streams.RedisStreamsBridge(bus, client, consumer_id='other')
+    async def command(event):
+        client.rpush(records, str(os.getpid()))
+        try_complete_command_reply(event, {'success': True, 'pid': os.getpid()})
+    async def notification(event):
+        client.rpush(records, 'notice:' + str(os.getpid()))
+    bus.subscribe('shipment.cancelled', command)
+    bus.subscribe('test.notification', notification)
+    await bus.start()
+    try:
+        async with asyncio.timeout(15):
+            while not bus._redis_bridge.get_stats()['ready']:
+                await asyncio.sleep(0.01)
+            client.set(ready, '1')
+            while not client.exists(stop):
+                await asyncio.sleep(0.01)
+    finally:
+        await bus.stop()
+        client.close()
+asyncio.run(main())
+"""
+    process = None
+    try:
+        await bus.start()
+        assert bus.publish(NeuroEvent("test.block_consumer", {}))
+        await asyncio.wait_for(entered.wait(), 5)
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                worker_code,
+                redis_url,
+                STREAM_KEY,
+                DLQ_KEY,
+                records,
+                ready,
+                stop,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "PYTHONPATH": "."},
+        )
+        async with asyncio.timeout(10):
+            while not client.exists(ready):
+                assert process.poll() is None, process.stderr.read()
+                await asyncio.sleep(0.01)
+        facade = shipment.ShipmentApplicationServiceEventPrimary(object())
+        result = await facade._dispatch_command(
+            "shipment.cancelled", {"shipment_id": 42}, timeout=1
+        )
+        assert result == {"success": True, "pid": os.getpid()}, {
+            "reply": result,
+            "origin_pid": os.getpid(),
+            "executions": client.lrange(records, 0, -1),
+        }
+        assert client.lrange(records, 0, -1) == [str(os.getpid()).encode()]
+        assert not gateway._pending
+        assert client.xlen(STREAM_KEY) == 1  # Only the deliberately blocked event was streamed.
+        assert bus.publish(NeuroEvent("test.notification", {}))
+        async with asyncio.timeout(5):
+            while client.llen(records) < 2:
+                await asyncio.sleep(0.01)
+        assert client.lrange(records, 0, -1) == [
+            str(os.getpid()).encode(),
+            f"notice:{process.pid}".encode(),
+        ]
+    finally:
+        release.set()
+        client.set(stop, "1")
+        await bus.stop()
+        if process is not None:
+            try:
+                _, stderr = await asyncio.to_thread(process.communicate, timeout=5)
+                assert process.returncode == 0, stderr
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+        client.delete(records, ready, stop)
         client.close()
