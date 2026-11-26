@@ -1100,7 +1100,8 @@ class TestCallHandlerRetry:
     async def test_retry_handler_success_path(self) -> None:
         bus = _make_bus()
         await bus.start()
-        fake_retry_inst = AsyncMock()
+        fake_retry_inst = MagicMock()
+        fake_retry_inst.execute = AsyncMock()
         fake_retry_handler = MagicMock()
         fake_retry_handler.get_handler.return_value = fake_retry_inst
         bus._rel_retry_handler = fake_retry_handler
@@ -1113,15 +1114,15 @@ class TestCallHandlerRetry:
         bus.publish(_make_event("retry.ok"))
         await asyncio.sleep(0.15)
         await bus.stop()
-        fake_retry_inst.execute.assert_called()
+        fake_retry_inst.execute.assert_awaited_once()
 
     async def test_retry_handler_failure_path(self) -> None:
         bus = _make_bus()
         await bus.start()
-        fake_retry_inst = AsyncMock()
-        fake_retry_inst.execute.side_effect = OSError("retry exhausted")
-        fake_retry_inst._config = MagicMock()
-        fake_retry_inst._config.max_retries = 3
+        fake_retry_inst = MagicMock()
+        fake_retry_inst.execute = AsyncMock(side_effect=OSError("retry exhausted"))
+        fake_retry_inst.new_context.return_value.retry_count = 3
+        fake_retry_inst.new_context.return_value.retry_exhausted = True
         fake_retry_handler = MagicMock()
         fake_retry_handler.get_handler.return_value = fake_retry_inst
         bus._rel_retry_handler = fake_retry_handler
@@ -1133,6 +1134,7 @@ class TestCallHandlerRetry:
         bus.publish(_make_event("retry.fail"))
         await asyncio.sleep(0.15)
         await bus.stop()
+        fake_retry_inst.execute.assert_awaited_once()
         assert bus._error_count >= 1
 
 

@@ -609,12 +609,12 @@ def test_customers_update_normalizes_fields_for_the_shared_entry(monkeypatch) ->
     response = customer_routes.customers_update(
         request,
         1,
-        {
-            "unit_name": "新名称",
-            "contact_person": "张三",
-            "contact_phone": "",
-            "address": "上海",
-        },
+        customer_routes.CustomerCompatMutation(
+            unit_name="新名称",
+            contact_person="张三",
+            contact_phone="",
+            address="上海",
+        ),
     )
     assert response.status_code == 202
     entry.assert_called_once_with(

@@ -15,7 +15,7 @@ from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.xiaox_http_runtime import fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
 from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
@@ -252,19 +252,34 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     app = FastAPI()
     app.include_router(router, prefix="/api")
+
+    def chat_result(response):
+        if endpoint.endswith("/stream"):
+            for line in response.text.splitlines():
+                if line.startswith("data: "):
+                    event = json.loads(line[6:])
+                    if event.get("type") == "done":
+                        return event["result"]
+            pytest.fail("missing done event")
+        return response.json()
+
     with TestClient(app, headers=state.actor.headers) as client:
         payload = {"message": state.source, "context": state.context}
         response = client.post(endpoint, json=payload)
         assert response.status_code == 200, response.text
+        ack = chat_result(response)
+        assert ack["execution_state"] == "queued", ack
+        completed = finish_queued_chat(state, ack)
         assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
-        assert state.reply in response.text
-        assert "skip_dataset_ingest" in response.text
-        parent = state.repository.list_recent()[0]
+        assert state.reply in completed["response"]
+        assert "skip_dataset_ingest" in json.dumps(completed)
+        parent = state.repository.get(ack["run_id"])
         _assert_owned_artifact([artifact.to_dict() for artifact in parent.artifacts], state)
         assert parent.metadata["runtime_goal_verification"]["accepted"] is True
         assert not parent.tool_calls
         _transfer_upload(state)
         denied = client.post(endpoint, json=payload)
         assert denied.status_code == 200, denied.text
-        assert "重新上传" in denied.text
+        denial = finish_queued_chat(state, chat_result(denied))
+        assert "重新上传" in denial["response"]
         assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1

@@ -8,6 +8,7 @@ from sqlalchemy import event
 
 from app.db.models.purchase_unit import PurchaseUnit
 from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.test_application.test_customer_cascade_authority import (
     deletion as deletion,
 )

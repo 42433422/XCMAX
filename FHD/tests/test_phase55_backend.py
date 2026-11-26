@@ -20,6 +20,7 @@ import app.db as db_mod
 import app.domain.shared_services.user_memory_service as ums
 import app.utils.resilience.rate_limiter as redis_client_mod
 from app.application.finance_app_service import FinanceAppService, _parse_dt, _to_float
+from app.db.models.finance import FinancialTransaction
 from app.domain.shared_services.user_memory_service import (
     ActionPattern,
     ContextSummary,
@@ -95,7 +96,7 @@ def _query_chain(
     scalar: float | Decimal | None = None,
     count: int = 0,
     all_items: list | None = None,
-    first: MagicMock | None = None,
+    first: MagicMock | FinancialTransaction | None = None,
 ) -> MagicMock:
     q = MagicMock()
     q.filter.return_value = q
@@ -105,6 +106,7 @@ def _query_chain(
     q.order_by.return_value = q
     q.offset.return_value = q
     q.limit.return_value = q
+    q.with_for_update.return_value = q
     q.scalar.return_value = scalar
     q.count.return_value = count
     q.all.return_value = all_items or []
@@ -174,8 +176,9 @@ def test_finance_list_transactions_filters(mock_get_db: MagicMock) -> None:
 def test_finance_update_transaction_success(mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     mock_get_db.return_value = _mock_get_db(mock_db)
-    txn = MagicMock()
-    txn.to_dict.return_value = {"id": 5, "amount": "99"}
+    txn = FinancialTransaction(
+        id=5, status="draft", transaction_type="receipt", amount=Decimal("1")
+    )
     mock_db.query.return_value = _query_chain(first=txn)
     out = FinanceAppService().update_transaction(
         5,
@@ -189,10 +192,13 @@ def test_finance_update_transaction_success(mock_get_db: MagicMock) -> None:
 def test_finance_delete_transaction_success(mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     mock_get_db.return_value = _mock_get_db(mock_db)
-    mock_db.query.return_value = _query_chain(first=MagicMock())
+    txn = FinancialTransaction(
+        id=3, status="draft", transaction_type="receipt", amount=Decimal("1")
+    )
+    mock_db.query.return_value = _query_chain(first=txn)
     out = FinanceAppService().delete_transaction(3)
     assert out["success"] is True
-    mock_db.delete.assert_called_once()
+    mock_db.delete.assert_called_once_with(txn)
 
 
 @patch("app.application.finance_app_service.get_db")

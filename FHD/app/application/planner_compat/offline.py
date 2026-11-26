@@ -43,7 +43,7 @@ def offline_turn(
             "success": False,
             "response": message,
             "message": message,
-            "execution_state": "blocked",
+            "execution_state": "not_started",
             "error_code": "runtime_offline_mutation_blocked",
             "data": {
                 "action": "offline_response",

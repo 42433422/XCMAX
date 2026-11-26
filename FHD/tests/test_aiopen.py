@@ -18,6 +18,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.aiopen import service as aiopen_service
 from app.application.aiopen.service import AIOPEN_STATE
 from app.fastapi_routes.ai_open import router as ai_open_router
+from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
 from app.infrastructure.auth.dependencies import require_admin_user
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
@@ -32,6 +33,7 @@ def client(monkeypatch, admin_actor):
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
     app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
         id=73,
         tier="admin",
@@ -577,7 +579,7 @@ def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
 @pytest.mark.parametrize("path", ["/api/aiopen/openclaw/chat", "/api/ai/qclaw/openclaw/chat"])
 def test_legacy_openclaw_chat_does_not_dispatch_or_create_receipt(client, path):
     with (
-        patch.object(aiopen_service, "openclaw_chat_proxy") as proxy,
+        patch("app.application.agent_runtime.gateway.run_runtime_task") as dispatch,
         patch("app.application.agent_orchestrator.chat_trace.get_agent_run_repository") as repo,
     ):
         response = client.post(path, json={"message": "send", "user_id": "forged"})
@@ -588,7 +590,7 @@ def test_legacy_openclaw_chat_does_not_dispatch_or_create_receipt(client, path):
     assert body["execution_state"] == "not_started"
     assert body["retryable"] is False
     assert "run_id" not in body and "agent_run_id" not in body
-    proxy.assert_not_called()
+    dispatch.assert_not_called()
     repo.assert_not_called()
 
 

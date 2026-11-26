@@ -173,13 +173,13 @@ def test_upgraded_db_gets_missing_columns_like_fresh_install(tmp_path: Path) -> 
 def test_repair_is_noop_when_rerun_and_on_complete_db(tmp_path: Path) -> None:
     db = tmp_path / "upgraded.db"
     _make_upgraded_style_db(db)
-    _upgrade(db)
+    repair = "2026_10_10_credit_journal_cols"
+    _upgrade(db, repair)
     before = {table: _columns(db, table) for table in _REPAIRED_TABLES}
 
     # Re-run the repair revision on an already repaired database.
-    _upgrade(db, _PRE_REPAIR_HEAD)  # no-op: already past it
     command.downgrade(Config(str(_ALEMBIC_INI)), _PRE_REPAIR_HEAD)
-    _upgrade(db)
+    _upgrade(db, repair)
 
     after = {table: _columns(db, table) for table in _REPAIRED_TABLES}
     assert {t: sorted(c) for t, c in after.items()} == {t: sorted(c) for t, c in before.items()}

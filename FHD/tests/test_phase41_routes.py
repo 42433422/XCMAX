@@ -182,6 +182,7 @@ def _ensure_user(session, username: str) -> int:
         password="test-hash",
         display_name=username,
         is_active=True,
+        tenant_id=1,
     )
     session.add(user)
     session.flush()
@@ -296,11 +297,12 @@ def test_approval_delete_final_request(
             headers=_approval_headers(approval_db, applicant_id),
         )
         req_id = submit.json()["data"]["id"]
-        approval_client.post(
+        approved = approval_client.post(
             f"/api/approval/requests/{req_id}/approve",
             json={"opinion": "ok"},
             headers=_approval_headers(approval_db, approver_id),
         )
+        assert approved.status_code == 200, approved.text
         deleted = approval_client.delete(
             f"/api/approval/requests/{req_id}",
             headers=_approval_headers(approval_db, applicant_id),

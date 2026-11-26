@@ -13,6 +13,7 @@ from app.domain.shared_services.user_cs_pipeline import (
     save_pipeline,
     set_pipeline_stage,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ══════════════════════════════════════════════════════════════════════════════
 # user_cs_connected_welcome
@@ -209,34 +210,24 @@ class TestUserPreferenceService:
         result = svc.get_preference("user1", "theme")
         assert result is None
 
-    @patch("app.domain.shared_services.user_preference_service.get_db")
-    def test_set_preference_update_existing(self, mock_get_db):
+    def test_set_preference_update_existing(self, trusted_actor):
         from app.domain.shared_services.user_preference_service import UserPreferenceService
 
-        mock_db = MagicMock()
-        mock_pref = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_pref
-        mock_get_db.return_value.__enter__ = lambda s: mock_db
-        mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-
+        actor = trusted_actor()
+        owner = str(actor.user_id)
         svc = UserPreferenceService()
-        result = svc.set_preference("user1", "theme", "light")
-        assert result is True
-        mock_db.commit.assert_called_once()
+        assert svc.set_preference(owner, "theme", "dark")
+        assert svc.set_preference(owner, "theme", "light")
+        assert svc.get_all_preferences(owner) == {"theme": "light"}
 
-    @patch("app.domain.shared_services.user_preference_service.get_db")
-    def test_set_preference_create_new(self, mock_get_db):
+    def test_set_preference_create_new(self, trusted_actor):
         from app.domain.shared_services.user_preference_service import UserPreferenceService
 
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_get_db.return_value.__enter__ = lambda s: mock_db
-        mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-
+        actor = trusted_actor()
+        owner = str(actor.user_id)
         svc = UserPreferenceService()
-        result = svc.set_preference("user1", "theme", "dark")
-        assert result is True
-        mock_db.add.assert_called_once()
+        assert svc.set_preference(owner, "theme", "dark")
+        assert svc.get_preference(owner, "theme") == "dark"
 
     @patch("app.domain.shared_services.user_preference_service.get_db")
     def test_get_all_preferences(self, mock_get_db):
@@ -257,31 +248,23 @@ class TestUserPreferenceService:
         result = svc.get_all_preferences("user1")
         assert result == {"theme": "dark", "lang": "zh"}
 
-    @patch("app.domain.shared_services.user_preference_service.get_db")
-    def test_delete_preference_found(self, mock_get_db):
+    def test_delete_preference_found(self, trusted_actor):
         from app.domain.shared_services.user_preference_service import UserPreferenceService
 
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.delete.return_value = 1
-        mock_get_db.return_value.__enter__ = lambda s: mock_db
-        mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-
+        actor = trusted_actor()
+        owner = str(actor.user_id)
         svc = UserPreferenceService()
-        result = svc.delete_preference("user1", "theme")
-        assert result is True
+        assert svc.set_preference(owner, "theme", "dark")
+        assert svc.delete_preference(owner, "theme") is True
+        assert svc.get_preference(owner, "theme") is None
 
-    @patch("app.domain.shared_services.user_preference_service.get_db")
-    def test_delete_preference_not_found(self, mock_get_db):
+    def test_delete_preference_not_found(self, trusted_actor):
         from app.domain.shared_services.user_preference_service import UserPreferenceService
 
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.delete.return_value = 0
-        mock_get_db.return_value.__enter__ = lambda s: mock_db
-        mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-
+        actor = trusted_actor()
+        owner = str(actor.user_id)
         svc = UserPreferenceService()
-        result = svc.delete_preference("user1", "theme")
-        assert result is False
+        assert svc.delete_preference(owner, "theme") is False
 
 
 # ══════════════════════════════════════════════════════════════════════════════

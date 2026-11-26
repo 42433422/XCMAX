@@ -8,8 +8,11 @@ from unittest.mock import Mock
 import pytest
 
 from app.application.agent_orchestrator import result_verification
+from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.domain.task_lifecycle.results import execution_result_proven_not_executed
 from app.infrastructure.xiaox import receipts
+from app.infrastructure.xiaox.binding import XiaoxBindingStore
 
 
 @pytest.mark.parametrize(
@@ -66,14 +69,10 @@ def test_no_effect_receipt_requires_original_frozen_binding(monkeypatch):
     ],
 )
 def test_uncertain_write_receipt_cannot_be_retried(monkeypatch, status, output):
-    record = SimpleNamespace(
-        status="failed",
-        output=output,
-        metadata={},
-        cost_units=0,
-        to_dict=lambda: {"output": output},
+    step = AgentStep("write", "customers", "ensure_exists", status="failed", output=output)
+    record = ToolCall(
+        step.step_id, step.node_id, step.tool_id, step.action, status="failed", output=output
     )
-    step = SimpleNamespace(status="failed", output=output)
     child = SimpleNamespace(
         status=status,
         user_id="owner",
@@ -93,12 +92,12 @@ def test_uncertain_write_receipt_cannot_be_retried(monkeypatch, status, output):
         "summarize_verification",
         lambda run: {"accepted": False, "status": "inconclusive"},
     )
-    repository = Mock()
+    repository = Mock(spec=SQLAlchemyAgentRunRepository)
     repository.get.return_value = child
     binding = _receipt_binding()
     binding.run_id = "parent"
     result = receipts.read_call_receipt(
-        SimpleNamespace(repository=repository),
+        XiaoxBindingStore(repository),
         binding,
         {"child_task_id": "task", "child_run_id": "original"},
     )
@@ -112,6 +111,7 @@ def _receipt_binding():
     return SimpleNamespace(
         run=SimpleNamespace(user_id="owner", metadata={"runtime_context": {"tenant_id": "tenant"}}),
         metadata={
+            "version": 1,
             "generation": 1,
             "coordinator_active": True,
             "revoked": False,
@@ -121,10 +121,10 @@ def _receipt_binding():
 
 
 def test_missing_bound_child_cannot_adopt_current_attempt_or_report_claimed():
-    repository = Mock()
+    repository = Mock(spec=SQLAlchemyAgentRunRepository)
     repository.get.return_value = None
     result = receipts.read_call_receipt(
-        SimpleNamespace(repository=repository),
+        XiaoxBindingStore(repository),
         _receipt_binding(),
         {
             "child_task_id": "task",
@@ -143,14 +143,14 @@ def test_missing_bound_child_cannot_adopt_current_attempt_or_report_claimed():
 
 @pytest.mark.parametrize(("attempt", "run_count"), [(2, 2), (1, 2), (2, 1)])
 def test_unbound_receipt_cannot_adopt_multiple_admissions(attempt, run_count):
-    repository = Mock()
+    repository = Mock(spec=SQLAlchemyAgentRunRepository)
     repository.get_task.return_value = SimpleNamespace(
         attempt=attempt,
         run_count=run_count,
         active_run_id="replacement",
     )
     result = receipts.read_call_receipt(
-        SimpleNamespace(repository=repository),
+        XiaoxBindingStore(repository),
         _receipt_binding(),
         {"child_task_id": "task", "state": "claimed", "generation": 1},
     )
@@ -161,7 +161,7 @@ def test_unbound_receipt_cannot_adopt_multiple_admissions(attempt, run_count):
 
 
 def test_lost_binding_ack_can_read_only_the_single_original_admission():
-    repository = Mock()
+    repository = Mock(spec=SQLAlchemyAgentRunRepository)
     repository.get_task.return_value = SimpleNamespace(
         attempt=1,
         run_count=1,
@@ -170,7 +170,7 @@ def test_lost_binding_ack_can_read_only_the_single_original_admission():
     repository.get.return_value = SimpleNamespace(user_id="other", metadata={})
     with pytest.raises(receipts.XiaoxBindingError) as exc:
         receipts.read_call_receipt(
-            SimpleNamespace(repository=repository),
+            XiaoxBindingStore(repository),
             _receipt_binding(),
             {"child_task_id": "task", "state": "claimed", "generation": 1},
         )

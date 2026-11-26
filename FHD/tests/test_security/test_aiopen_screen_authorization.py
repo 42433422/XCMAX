@@ -301,12 +301,11 @@ def test_client_key_is_session_owned_revocable_and_scope_limited(monkeypatch, tm
             rejected = http.post(path, headers=headers, json={"message": "blocked"})
             assert rejected.status_code == 403
             assert rejected.json()["code"] == "AIOPEN_SCOPE_DENIED"
-        assert (
-            http.post(
-                "/api/aiopen/openclaw/chat", headers=headers, json={"message": "blocked"}
-            ).status_code
-            == 404
+        retired = http.post(
+            "/api/aiopen/openclaw/chat", headers=headers, json={"message": "blocked"}
         )
+        assert retired.status_code == 410
+        assert retired.json()["execution_state"] == "not_started"
         for account in ("b", "other"):
             http.cookies.set("session", account)
             assert not http.get("/api/aiopen/client").json()["has_active_key"]

@@ -289,8 +289,19 @@ class TestAlembicForwardUpgrade:
         assert list(product_fks[0].get("constrained_columns") or []) == ["base_uom_id"]
         assert product_fks[0].get("referred_table") == "uom_units"
         assert list(product_fks[0].get("referred_columns") or []) == ["id"]
-        # 已实现的产品 base-UOM 索引
-        assert "ix_products_base_uom_id" in {i["name"] for i in _indexes(_db_url, "products")}
+        from sqlalchemy import create_engine
+
+        engine = create_engine(_db_url)
+        try:
+            with engine.connect() as connection:
+                indexes = (
+                    connection.exec_driver_sql("SELECT name FROM pragma_index_list('products')")
+                    .scalars()
+                    .all()
+                )
+        finally:
+            engine.dispose()
+        assert {"ix_products_base_uom_id", "uq_products_tenant_unit_sku"} <= set(indexes)
 
         # 租户复合唯一约束（跨租户允许重复）
         assert "uq_sales_orders_tenant_order_no" in _unique_constraint_names(
@@ -325,10 +336,14 @@ class TestAlembicForwardUpgrade:
 
         command.upgrade(_alembic_config(), "head")
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT id, name, tenant_id FROM products")).one() == (
+            assert connection.execute(
+                text("SELECT id, name, tenant_id, model_number, unit FROM products")
+            ).one() == (
                 7,
                 "preserved-product",
                 1,
+                None,
+                None,
             )
 
         assert {
@@ -362,7 +377,7 @@ class TestAlembicForwardUpgrade:
                         "INSERT INTO roles (id, name, description, is_system) VALUES (901, 'operator', '', 1)"
                     )
                 )
-            command.upgrade(cfg, "head")
+            command.upgrade(cfg, "2026_11_15_delivery_slices_merge")
             assert "source_slice" in _columns(_db_url, _run_rows_table(_db_url))
             grant = text(
                 "SELECT count(*) FROM role_permissions rp JOIN permissions p "

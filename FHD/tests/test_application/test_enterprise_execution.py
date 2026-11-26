@@ -391,14 +391,14 @@ def test_unreachable_goal_stays_unknown_in_world_scenario(execution_env):
     assert not parent.tool_calls
 
 
-def test_evidence_bound_world_scenario_reaches_codex_model_input(execution_env):
-    from app.application.agent_runtime.codex_runtime import _input_text
+def test_evidence_bound_world_scenario_reaches_xiaox_model_input(execution_env):
+    from app.application.agent_runtime.xiaox_runtime import _input_text
 
     service, _goals, _projections, _repo, _state, _factory = execution_env
     run = submit(service, request_id="world-model-input-evidence")
     binding = run.metadata["runtime_context"]["enterprise_cognition"]
     scenario = binding["world_scenario"]
-    payload = run.metadata["_codex_input_data"]
+    payload = run.metadata["_xiaox_input_data"]
     assert payload["world_scenario"] == scenario
     assert payload["baseline"]["source_version"] == scenario["baseline_source_version"]
     model_input = _input_text(run.message, [], payload)

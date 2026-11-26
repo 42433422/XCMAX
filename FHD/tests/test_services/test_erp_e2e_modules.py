@@ -201,6 +201,7 @@ class TestInventoryCountChain:
             warehouse_id=wh_id,
             actual_quantity=120,
             confirmed=True,
+            expected_baseline_version=unconfirmed["data"]["baseline_version"],
             operator="tester",
             remark="年末盘点",
         )

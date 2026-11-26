@@ -88,7 +88,10 @@ async def test_offline_stream_and_json_match_without_calling_online_paths(
     paths.kitten.assert_not_awaited()
     if expected_code:
         assert response["success"] is False
-        assert response["execution_state"] == "blocked"
+        expected_state = (
+            "not_started" if expected_code == "runtime_offline_mutation_blocked" else "blocked"
+        )
+        assert response["execution_state"] == expected_state
         assert response["error_code"] == expected_code
         assert response["data"]["model_called"] is False
     elif business_result is None:
@@ -270,7 +273,7 @@ async def test_offline_batch_never_invokes_legacy_mutation_handlers():
     assert result["count"] == result["processed_count"] == 3
     assert all(
         item["data"]["error_code"] == "runtime_offline_mutation_blocked"
-        and item["execution_state"] == "blocked"
+        and item["execution_state"] == "not_started"
         for item in result["results"]
     )
     business.assert_not_called()

@@ -125,7 +125,7 @@ class TestLlmOpsToolRegistration:
             "list_vlm_models",
             "get_vlm_route",
             "query_cursor_usage",
-            "query_xiaox_usage",
+            "query_codex_usage",
             "query_trae_usage",
         }, f"实际工具集: {tools}"
 

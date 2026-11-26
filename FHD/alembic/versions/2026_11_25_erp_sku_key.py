@@ -16,6 +16,12 @@ _WHERE = "tenant_id IS NOT NULL AND model_number IS NOT NULL AND trim(model_numb
 
 def upgrade() -> None:
     connection = op.get_bind()
+    # Stamped legacy product tables may have undergone the UOM repair while
+    # still lacking the original SKU columns. Missing values stay unknown.
+    columns = {column["name"] for column in sa.inspect(connection).get_columns("products")}
+    for name in ("model_number", "unit"):
+        if name not in columns:
+            op.add_column("products", sa.Column(name, sa.String(), nullable=True))
     conflict = connection.execute(
         sa.text(
             f"SELECT min(id) AS first_id, count(*) AS n FROM products "

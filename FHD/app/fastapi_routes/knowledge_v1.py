@@ -297,6 +297,7 @@ revoke_dataset_api_key = _view_routes.revoke_dataset_api_key
 dataset_graph = _view_routes.dataset_graph
 list_persy_memories = _memory_routes.list_persy_memories
 query_persy_memories = _memory_routes.query_persy_memories
+auto_review_persy_memories = _memory_routes.auto_review_persy_memories
 confirm_persy_memory = _memory_routes.confirm_persy_memory
 reject_persy_memory = _memory_routes.reject_persy_memory
 correct_persy_memory = _memory_routes.correct_persy_memory

@@ -165,6 +165,12 @@ def test_privileged_review_and_scan_load_only_the_protected_controller():
     assert (
         checkouts["controller"]["ref"] == "${{ github.event.pull_request.base.sha || github.sha }}"
     )
+    assert checkouts["controller"]["sparse-checkout-cone-mode"] == "false"
+    assert checkouts["controller"]["sparse-checkout"].splitlines() == [
+        "/.github/codeql/codeql-config.yml",
+        "/.github/codeql/strip_elt_dir_fd_path_injection_fps.py",
+        "/scripts/dev/change_classifier.py",
+    ]
     assert checkouts["candidate"]["ref"] == "${{ github.sha }}"
     init = next(
         s["with"]
@@ -269,6 +275,7 @@ def test_poisoned_candidate_classifier_is_never_executed_by_codeql(tmp_path):
     shutil.copyfile(
         ROOT / "scripts/dev/change_classifier.py", controller / "scripts/dev/change_classifier.py"
     )
+    (controller / "legacy_product.py").write_text('version = "base"\n')
 
     def git(*args):
         return subprocess.check_output(
@@ -288,6 +295,13 @@ def test_poisoned_candidate_classifier_is_never_executed_by_codeql(tmp_path):
     git("worktree", "add", "--detach", str(tmp_path / "candidate"), head)
     git("checkout", "--detach", base)
     scan = workflow(".github/workflows/codeql.yml")["jobs"]["analyze"]
+    checkout = next(
+        s["with"] for s in scan["steps"] if s.get("name") == "Checkout trusted scan controller"
+    )
+    patterns = checkout["sparse-checkout"].splitlines()
+    git("sparse-checkout", "set", "--no-cone", *patterns)
+    assert not (controller / "legacy_product.py").exists()
+    assert (tmp_path / "candidate/legacy_product.py").is_file()
     step = next(s for s in scan["steps"] if s.get("id") == "paths")
     command = step["run"].replace(
         "${{ matrix.language == 'python' && 'codeql_python' || 'codeql_javascript' }}",

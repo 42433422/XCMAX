@@ -1,7 +1,7 @@
 """考勤 SDK loader（app.mod_sdk.attendance）单一正本与降级行为门禁。
 
-引擎唯一正本：``FHD/XCAGI/mods/attendance-industry/backend/attendance_engine/``
-（EXPORT_ONLY 运行时副本 SSOT）。本文件守护三件事：
+引擎编辑正本：``FHD/mods/attendance-industry/backend/attendance_engine/``。
+本文件守护三件事：
 1. SDK 导出面（convert/paths/parser）全部解析到 mod 正本；
 2. ``ensure_attendance_engine_on_path`` 幂等；
 3. mod 缺失时降级为显式 RuntimeError（不静默、不误指 taiyangniao-pro）。
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ENGINE_BACKEND = (REPO_ROOT / "XCAGI" / "mods" / "attendance-industry" / "backend").resolve()
+ENGINE_BACKEND = (REPO_ROOT / "mods" / "attendance-industry" / "backend").resolve()
 
 
 def test_engine_exports_resolve_to_mod_copy():

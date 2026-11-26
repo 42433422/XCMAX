@@ -2389,8 +2389,8 @@ class TestRouteAfterDiscussion:
             discussion_turns=[],
             mentions=None,
         )
-        assert len(selected) == 2
-        assert "明确点名" in rationale
+        assert selected == candidates
+        assert "明确广播" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_explicit_mention_returns_candidates(self, tmp_path: Path):
@@ -2403,8 +2403,8 @@ class TestRouteAfterDiscussion:
             discussion_turns=[],
             mentions=["e1"],
         )
-        assert len(selected) == 2
-        assert "明确点名" in rationale
+        assert selected == candidates[:1]
+        assert "点名派工" in rationale
 
     @pytest.mark.asyncio
     async def test_route_after_discussion_llm_returns_valid_json(self, tmp_path: Path):
