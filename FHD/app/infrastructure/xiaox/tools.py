@@ -234,9 +234,10 @@ class XiaoxToolBridge:
 
         spec = get_tool_action_spec(str(args.get("tool_id") or ""), str(args.get("action") or ""))
         if spec is not None:
+            action_key = (spec.tool_id, spec.action)
             spec = authorized_tool_specs(
-                binding.context, include_aiopen=True, tool_actions={(spec.tool_id, spec.action)}
-            ).get((spec.tool_id, spec.action))
+                binding.context, include_aiopen=True, specs={action_key: spec}
+            ).get(action_key)
         if spec is None or not self._allowed(spec, binding, args.get("params")):
             raise XiaoxBindingError("permission_denied", "当前账号或员工未获授权使用该能力")
         return spec

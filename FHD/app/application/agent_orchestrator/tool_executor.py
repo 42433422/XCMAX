@@ -516,7 +516,9 @@ class AgentToolExecutor:
 
             action_key = (validation.tool_id, validation.action)
             authorized_spec = authorized_tool_specs(
-                context, include_aiopen=True, tool_actions={action_key}
+                context,
+                include_aiopen=True,
+                specs={action_key: validation.spec} if validation.spec is not None else {},
             ).get(action_key)
             if authorized_spec is None or expected_schema != authorized_spec.schema_digest:
                 return _pre_dispatch_refusal(
