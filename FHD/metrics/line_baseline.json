@@ -1,5 +1,5 @@
 {
-  "lines": 2733564,
+  "lines": 2733541,
   "updated": "2026-11-26",
-  "note": "审计闭环修复：AlipayNotifyIntegrationTest 移除 verifyNotify mock 改为真实 RSA2 签发与验签并补充无效签名负向用例，fhd-release-android.yml 锁定 .flutter-version；由用户授权提交 PR"
+  "note": "按已授权 Android 与支付宝验签 PR 同步 #3678 后重算：Android 固定 Flutter SDK 与 RSA2 真实验签测试合计净增 50 行，能力中心页面日期重生成无净增。"
 }

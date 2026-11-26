@@ -136,16 +136,19 @@ def source_inventory(root: Path) -> tuple[dict, dict[str, str]]:
     return configuration, dict(sorted(files.items()))
 
 
+SHARD_CHOICES = (4, 8, 16, 24, 32, 48, 64)
+
+
 def configured_total() -> int:
     value = os.environ.get("BACKEND_SHARD_TOTAL", "")
-    if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 24:
-        raise ValueError("Explicit BACKEND_SHARD_TOTAL in 1..24 is required")
+    if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 64:
+        raise ValueError("Explicit BACKEND_SHARD_TOTAL in 1..64 is required")
     return int(value)
 
 
 def plan(total: int) -> dict:
-    if total not in (4, 8, 16, 24):
-        raise ValueError("Supported shard plans are 4, 8, 16, and 24")
+    if total not in SHARD_CHOICES:
+        raise ValueError("Supported shard plans are 4, 8, 16, 24, 32, 48, and 64")
     return {"total": total, "matrix": {"shard": list(range(1, total + 1))}}
 
 
@@ -287,7 +290,7 @@ def verify(
     *,
     source_root: Path | None = None,
 ) -> dict:
-    if not 1 <= total <= 24 or mode not in ("full", "behavior"):
+    if not 1 <= total <= 64 or mode not in ("full", "behavior"):
         raise ValueError("Invalid shard total or evidence mode")
     if re.fullmatch(r"[A-Za-z0-9_-]+", artifact_prefix) is None:
         raise ValueError("Invalid artifact directory prefix")
@@ -419,7 +422,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     planner = commands.add_parser("plan")
-    planner.add_argument("--total", type=int, choices=(4, 8, 16, 24), default=4)
+    planner.add_argument("--total", type=int, choices=SHARD_CHOICES, default=4)
     commands.add_parser("seal").add_argument("directory", type=Path)
     verifier = commands.add_parser("verify")
     verifier.add_argument("directory", type=Path)

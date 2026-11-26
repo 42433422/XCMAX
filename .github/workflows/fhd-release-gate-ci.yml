@@ -27,7 +27,7 @@ defaults:
 jobs:
   release-gate:
     name: Release gate (hard block)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
