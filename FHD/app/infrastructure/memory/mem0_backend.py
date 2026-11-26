@@ -2,7 +2,7 @@
 
 设计原则：
 - 可选依赖：未安装 mem0ai / qdrant-client 时静默停用，调用方继续走原有记忆链路。
-- 离线可用：嵌入复用本地 ``EmbeddingService``（默认 hash，可切本地模型），不联网、无 torch。
+- 离线可用：嵌入复用本地 ``EmbeddingService``（默认优先缓存的 FastEmbed，缺失时使用 hash），不联网、无 torch。
 - Mem0 抽取只产生待确认候选；已确认 MemoryV2 记录按来源 ID / revision 投影。
 - 记忆带有效区间：``valid_from`` / ``valid_to`` / ``superseded_by``，召回时过滤失效项。
 - 数据边界：所有查询强制带 ``user_id`` 过滤，租户/Mod/渠道在应用层再过滤。

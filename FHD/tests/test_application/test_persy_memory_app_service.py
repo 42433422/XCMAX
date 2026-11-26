@@ -85,13 +85,14 @@ def test_capture_is_deduplicated_governed_and_carries_provenance(
     assert second["created_count"] == 0
     assert listed["summary"] == {
         "total": 1,
-        "active": int(model_verified),
-        "pending": int(not model_verified),
+        "active": 1,
+        "pending": 0,
         "returned": 1,
     }
     memory = listed["memories"][0]
-    assert memory["status"] == ("active" if model_verified else "pending")
-    assert memory["requires_user_confirmation"] is not model_verified
+    assert memory["status"] == "active"
+    assert memory["requires_user_confirmation"] is False
+    assert memory["auto_review_policy"] == "direct_assertion_v1"
     assert memory["evidence"][0]["session_id"] == "chat-1"
     assert memory["statement"] == "用户的偏好是每周二下午沟通"
 
@@ -211,7 +212,7 @@ def test_user_memory_is_private_while_tenant_memory_is_shared() -> None:
     other_rows = service.list_memories(access_context=other_tenant)["memories"]
 
     assert {(row["scope"], row["status"]) for row in alice_rows} == {
-        ("user", "pending"),
+        ("user", "active"),
         ("tenant", "pending"),
     }
     assert [row["scope"] for row in bob_rows] == ["tenant"]
