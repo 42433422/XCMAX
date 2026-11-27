@@ -29,38 +29,82 @@ describe('useAgentRunEvents', () => {
     expect(extractAgentRunId({})).toBe('')
   })
 
-  it('retains the durable event cursor across a transient read failure', async () => {
+  it('observes the authoritative terminal run when its diagnostic feed is unavailable', async () => {
+    vi.useFakeTimers()
+    const terminal = { run_id: 'original', status: 'completed' }
+    agentRunsApiMock.listEvents.mockRejectedValue(new Error('event store unavailable'))
+    agentRunsApiMock.getRun.mockResolvedValue({ data: terminal })
+    try {
+      const pending = waitForAgentRunTerminal('original', () => true, 100)
+      await vi.advanceTimersByTimeAsync(2000)
+      await expect(pending).resolves.toEqual(terminal)
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['empty', 'error'])('updates task progress from the ledger when events are %s', async state => {
+    const run = { run_id: 'original', status: 'cancelled', message: '订单处理',
+      metadata: { runtime_context: { task_id: 'task-original' } } }
+    if (state === 'error') agentRunsApiMock.listEvents.mockRejectedValue(new Error('event store unavailable'))
+    else agentRunsApiMock.listEvents.mockResolvedValue({ data: [] })
+    agentRunsApiMock.getRun.mockResolvedValue({ data: run })
+    const upsertTask = vi.fn()
+    await useAgentRunEventSync({ upsertTask }).syncAgentRunEvents('original')
+    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }))
+  })
+
+  it('publishes task status before a stalled event request finishes and retains it on failure', async () => {
+    let rejectEvents!: (error: Error) => void
+    agentRunsApiMock.listEvents.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectEvents = reject }))
+    agentRunsApiMock.getRun.mockResolvedValue({ data: { run_id: 'original', status: 'cancelled', message: '原任务' } })
+    const upsertTask = vi.fn(), removeTask = vi.fn()
+    const pending = useAgentRunEventSync({ upsertTask, removeTask }).syncAgentRunEvents('original')
+    await vi.waitFor(() => expect(upsertTask).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'cancelled' })))
+    const removed = removeTask.mock.calls.length
+    rejectEvents(new Error('event request timed out'))
+    await pending
+    expect(removeTask).toHaveBeenCalledTimes(removed)
+    expect(upsertTask).toHaveBeenCalledOnce()
+  })
+
+  it('does not overwrite a newer cancellation with a late running snapshot', async () => {
+    let resolveOld!: (value: unknown) => void
+    agentRunsApiMock.listEvents.mockResolvedValue({ data: [] })
+    agentRunsApiMock.getRun.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+      .mockResolvedValueOnce({ data: { run_id: 'original', status: 'cancelled', message: '原任务' } })
+    const upsertTask = vi.fn()
+    const sync = useAgentRunEventSync({ upsertTask })
+    const old = sync.syncAgentRunEvents('original')
+    await sync.syncAgentRunEvents('original')
+    resolveOld({ data: { run_id: 'original', status: 'running', message: '原任务' } })
+    await old
+    expect(upsertTask).toHaveBeenCalledOnce()
+    expect(upsertTask).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'cancelled' }))
+  })
+
+  it('retries the durable status across a transient read failure without polling diagnostics', async () => {
     vi.useFakeTimers()
     const terminal = { run_id: 'original', status: 'paused' }
-    agentRunsApiMock.listEvents
-      .mockResolvedValueOnce({ data: [{ event_id: 'e1' }] })
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ data: [{ event_id: 'e2' }] })
     agentRunsApiMock.getRun
       .mockResolvedValueOnce({ data: { run_id: 'original', status: 'running' } })
+      .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce({ data: terminal })
     try {
       const pending = waitForAgentRunTerminal(' original ')
       await vi.advanceTimersByTimeAsync(4000)
       await expect(pending).resolves.toEqual(terminal)
-      expect(agentRunsApiMock.listEvents.mock.calls).toEqual([
-        ['original', {}], ['original', { after_event_id: 'e1' }], ['original', { after_event_id: 'e1' }],
-      ])
+      expect(agentRunsApiMock.getRun).toHaveBeenCalledTimes(3)
+      expect(agentRunsApiMock.listEvents).not.toHaveBeenCalled()
     } finally { vi.useRealTimers() }
   })
 
-  it.each(['events', 'detail'])('stops following when ownership ends during %s', async stage => {
+  it('stops following when ownership ends during the detail read', async () => {
     let current = true
-    agentRunsApiMock.listEvents.mockImplementationOnce(async () => {
-      if (stage === 'events') current = false
-      return { data: [] }
-    })
     agentRunsApiMock.getRun.mockImplementationOnce(async () => {
       current = false
       return { data: { run_id: 'original', status: 'completed' } }
     })
     await expect(waitForAgentRunTerminal('original', () => current)).resolves.toBeNull()
-    if (stage === 'events') expect(agentRunsApiMock.getRun).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.listEvents).not.toHaveBeenCalled()
   })
 
   it('does not project missing text or attach another run’s terminal receipt', async () => {

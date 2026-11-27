@@ -220,10 +220,7 @@ def test_queued_turn_preserves_one_durable_assistant_id(runtime, monkeypatch, se
         runtime_requests={canonical_digest({"turn_id": turn, "owner": owner}): receipt},
     )
     run.final_output["xiaox_result"] = {"ok": True, "output": "其他轮次的结果"}
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
-        lambda: SimpleNamespace(get=lambda _: run),
-    )
+    repository = runtime.compiled.repository
     queued = runtime_chat_payload(
         {"run_id": run.run_id, "execution_state": "queued", "output": "队列确认"}
     )
@@ -238,11 +235,13 @@ def test_queued_turn_preserves_one_durable_assistant_id(runtime, monkeypatch, se
     }
     if settled_by == "ack":
         receipt.update(finished)
+    repository.save(run)
     ack = persist_chat_turn(owner, body.message, context, queued)
     if settled_by != "ack":
         evidence = _prepare_history(store, context, "boundary-session", runtime.actor.user_id)
         assert evidence["_chat_history_ids"] == ack["message_ids"][:1]
         receipt.update(finished)
+        repository.save(run)
     if settled_by == "withdrawn":
         assert (
             store.delete_messages_from(
@@ -298,10 +297,8 @@ def test_same_input_retry_repairs_original_chat_reply(runtime, monkeypatch):
         runtime_requests={original_key: original},
         _xiaox_input_data={"attachment_upload_ids": ["owned-file"]},
     )
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
-        lambda: SimpleNamespace(get=lambda _: run),
-    )
+    repository = runtime.compiled.repository
+    repository.save(run)
     queued = runtime_chat_payload(
         {"run_id": run.run_id, "execution_state": "queued", "output": "已排队"}
     )
@@ -317,6 +314,7 @@ def test_same_input_retry_repairs_original_chat_reply(runtime, monkeypatch):
         },
     )
     run.status = "blocked"
+    repository.save(run)
     assert reconcile_queued_chat_reply(context, turn, run.run_id)
 
     latest = {
@@ -339,6 +337,7 @@ def test_same_input_retry_repairs_original_chat_reply(runtime, monkeypatch):
     }
     run.final_output["xiaox_result"] = latest
     run.status = "completed"
+    repository.save(run)
     with tenant_scope(runtime.actor.tenant_id):
         history = store.get_history(
             session_id="boundary-session", user_id=runtime.actor.user_id, turn_id=turn

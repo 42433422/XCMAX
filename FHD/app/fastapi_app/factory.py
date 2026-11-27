@@ -128,7 +128,7 @@ def _create_fastapi_app(
             "allow_credentials": True,
             "allow_methods": ["*"],
             "allow_headers": ["*"],
-            "expose_headers": ["*"],
+            "expose_headers": ["*", "X-Artifact-SHA256", "X-Artifact-Size"],
         }
         if _cors_regex:
             _cors_kw["allow_origin_regex"] = _cors_regex

@@ -7,6 +7,8 @@
 import json
 import logging
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
@@ -337,6 +339,7 @@ class ConversationService(NeuroEventPublisherMixin):
         expected_revision: int,
         assistant: dict[str, Any],
         allow_retry_repair: bool = False,
+        source_guard: Callable[[Session], AbstractContextManager[bool]] | None = None,
     ) -> int | None:
         """Replace the trusted queue acknowledgement under the original session fence."""
         replacement = json.loads(assistant["metadata"])
@@ -345,49 +348,64 @@ class ConversationService(NeuroEventPublisherMixin):
             return None
         marker = json.dumps({"turn_id": binding[0]}, ensure_ascii=False)[1:-1]
         with get_db() as db:
-            begin_conversation_write(db)
-            session = lock_conversation_session(
-                db,
-                session_id=session_id,
-                user_id=self._normalize_user_id(user_id),
-                expected_revision=expected_revision,
-            )
-            messages = db.query(AIConversation).filter(
-                AIConversation.session_id == session_id,
-                AIConversation.user_id == user_id,
-                public_messages(db),
-            )
-            for row in messages.filter(
-                AIConversation.role == "assistant",
-                AIConversation.conversation_metadata.contains(marker, autoescape=True),
-            ):
-                try:
-                    prior = json.loads(row.conversation_metadata or "{}")
-                except (TypeError, ValueError):
-                    continue
-                if not isinstance(prior, dict) or queued_chat_binding(prior) != binding:
-                    continue
-                prior_status = prior["summary"].get("status")
-                if prior_status == "queued" or (
-                    allow_retry_repair
-                    and prior_status in {"blocked", "failed", "unknown"}
-                    and replacement["summary"].get("status") == "completed"
+            if source_guard is None:
+                begin_conversation_write(db)
+            with source_guard(db) if source_guard is not None else nullcontext(True) as current:
+                if not current:
+                    return None
+                session = lock_conversation_session(
+                    db,
+                    session_id=session_id,
+                    user_id=self._normalize_user_id(user_id),
+                    expected_revision=expected_revision,
+                )
+                messages = db.query(AIConversation).filter(
+                    AIConversation.session_id == session_id,
+                    AIConversation.user_id == user_id,
+                    public_messages(db),
+                )
+                for row in messages.filter(
+                    AIConversation.role == "assistant",
+                    AIConversation.conversation_metadata.contains(marker, autoescape=True),
                 ):
-                    replacement["idempotency_key"] = prior["idempotency_key"]
-                    replacement["queued_ack_intent"] = row.intent or ""
-                    row.content = assistant["content"]
-                    row.intent = assistant["intent"]
-                    row.conversation_metadata = json.dumps(replacement, ensure_ascii=False)
-                    if (
-                        row.id
-                        == messages.with_entities(AIConversation.id)
-                        .order_by(AIConversation.id.desc())
-                        .first()[0]
+                    try:
+                        prior = json.loads(row.conversation_metadata or "{}")
+                    except (TypeError, ValueError):
+                        continue
+                    if not isinstance(prior, dict) or queued_chat_binding(prior) != binding:
+                        continue
+                    prior_status = prior["summary"].get("status")
+                    if prior_status == "queued" or (
+                        allow_retry_repair
+                        and (
+                            prior_status in {"blocked", "failed", "unknown"}
+                            or source_guard is not None
+                            and prior_status
+                            in {
+                                "waiting_user",
+                                "waiting_approval",
+                                "waiting_auth",
+                                "paused",
+                                "running",
+                            }
+                        )
+                        and replacement["summary"].get("status") == "completed"
                     ):
-                        session.summary = _message_title(row.content)[:120]
-                    db.commit()
-                    return int(row.id)
-                return None
+                        replacement["idempotency_key"] = prior["idempotency_key"]
+                        replacement["queued_ack_intent"] = row.intent or ""
+                        row.content = assistant["content"]
+                        row.intent = assistant["intent"]
+                        row.conversation_metadata = json.dumps(replacement, ensure_ascii=False)
+                        if (
+                            row.id
+                            == messages.with_entities(AIConversation.id)
+                            .order_by(AIConversation.id.desc())
+                            .first()[0]
+                        ):
+                            session.summary = _message_title(row.content)[:120]
+                        db.commit()
+                        return int(row.id)
+                    return None
         return None
 
     def save_employee_memory(

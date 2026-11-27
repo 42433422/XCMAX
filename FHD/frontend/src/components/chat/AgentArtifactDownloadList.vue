@@ -16,7 +16,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
-import type { AgentArtifactDownload } from '@/utils/agentArtifactDownloads'
+import { ArtifactDownloadIntegrityError, verifiedArtifactDownload, type AgentArtifactDownload } from '@/utils/agentArtifactDownloads'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { readActiveModIdFromStorage } from '@/utils/chatStorageKeys'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
@@ -30,7 +30,7 @@ function retireDownload(): void {
   downloadingId.value = ''
   downloadError.value = ''
 }
-const scopeKey = () => JSON.stringify([props.scope, props.files.map(file => file.uri),
+const scopeKey = () => JSON.stringify([props.scope, props.files.map(file => [file.uri, file.metadata]),
   getAuthSessionEpoch(), productReadScopeKey(readActiveModIdFromStorage())])
 watch(scopeKey, retireDownload, { flush: 'sync' })
 onBeforeUnmount(retireDownload)
@@ -44,10 +44,10 @@ async function download(file: AgentArtifactDownload): Promise<void> {
   try {
     const response = await agentRunsApi.downloadArtifact(file.run_id, file.artifact_id)
     if (!isCurrent()) return
-    const blob = await response.blob()
+    const blob = await verifiedArtifactDownload(response, file)
     if (isCurrent()) downloadBlob(blob, file.name)
-  } catch {
-    if (isCurrent()) downloadError.value = '下载失败，请重试。'
+  } catch (error) {
+    if (isCurrent()) downloadError.value = error instanceof ArtifactDownloadIntegrityError ? error.message : '下载失败，请重试。'
   } finally {
     if (epoch === downloadEpoch) downloadingId.value = ''
   }

@@ -6,6 +6,7 @@ from fastapi import Depends
 from fastapi.responses import JSONResponse, Response
 
 from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.fastapi_routes.domains.agent.route_support import owned_run as _owned_run
 from app.fastapi_routes.domains.agent.task_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
@@ -29,14 +30,17 @@ def download_agent_artifact(
         if run
         else None
     )
-    if artifact is None or artifact.artifact_type not in {"file", "office_document"}:
+    if run is None or artifact is None or artifact.artifact_type not in {"file", "office_document"}:
         return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
     try:
-        if (
-            artifact.artifact_type == "office_document"
-            and artifact.uri != f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"
+        # Historical spreadsheets may lack explicit scope metadata. A stored
+        # binding, when present, must still agree with the authoritative run.
+        for field, expected in (
+            ("owner_user_id", run.user_id),
+            ("tenant_id", tenant_id_of_run(run)),
         ):
-            raise ValueError("office artifact is not bound to this run")
+            if field in artifact.metadata and str(artifact.metadata[field]) != expected:
+                raise ValueError("artifact owner or tenant mismatch")
         content = read_verified_run_file(run_id, artifact.to_dict())
     except (OSError, ValueError, KeyError):
         return JSONResponse(
@@ -48,5 +52,7 @@ def download_agent_artifact(
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(artifact.name, safe='')}",
             "Cache-Control": "private, no-store",
+            "X-Artifact-SHA256": artifact.metadata["sha256"],
+            "X-Artifact-Size": str(len(content)),
         },
     )

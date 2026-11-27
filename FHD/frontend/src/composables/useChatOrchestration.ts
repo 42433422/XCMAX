@@ -14,7 +14,7 @@ import {
   useChatTaskPanelPersistence,
 } from './useChatPersistence'
 import { useChatTaskList } from './useChatTaskList'
-import { useChatMessages, type ChatMessage } from './useChatMessages'
+import { chatMessageExtrasFromServerRow, useChatMessages, type ChatMessage } from './useChatMessages'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 import { usePrintService } from './usePrintService'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
@@ -39,7 +39,7 @@ import { useChatOrchestrationAutoActions } from './chat-orchestration/useChatOrc
 import { useChatOrchestrationTaskExecution } from './chat-orchestration/useChatOrchestrationTaskExecution'
 import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrchestrationPrintFlow'
 import { useChatAttachmentPicker } from './useChatAttachmentPicker'
-import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
+import { useChatOrchestrationRemoteRound, type ChatTurnObservationOptions } from './chat-orchestration/useChatOrchestrationRemoteRound'
 import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
 import { APPROVAL_GRANT_MISSING_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import agentRunsApi from '@/api/agentRuns'
@@ -56,6 +56,7 @@ import { activeChatTurnMessage, activeChatTurnStatus, droppedRoundFromHistory, r
 import { useAiSdkChatRound } from './chat-orchestration/useAiSdkChatRound'
 import { stepsFromAiParts } from '@/utils/agentStepChain'
 import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
+import { readRuntimeOutputDownloads } from '@/utils/agentArtifactDownloads'
 import { plannerExecutionState, requiresTurnReconciliation } from './chat-orchestration/chatOrchestrationShared'
 
 function durableRecallMessageId(message: ChatMessage): number | undefined {
@@ -300,7 +301,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     toggleExpanded: toggleTaskExpanded,
     clearLocalHistory: clearLocalTaskHistory,
   })
-  let observedTurn: { turn: ActiveChatTurn; controller: AbortController; message: ChatMessage; checkingReceipt: boolean } | undefined
+  let observedTurn: { turn: ActiveChatTurn; controller: AbortController; message: ChatMessage; checkingReceipt: boolean;
+    sessionId: string; revision?: number; isCurrent: () => boolean; retryAt: number; failures: number } | undefined
 
   function stopTurnObservation() {
     observedTurn?.controller.abort()
@@ -308,14 +310,29 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   function observeConversation(data: unknown) {
-    const turn = readActiveChatTurn(data)
-    if (turn) observeActiveTurn(turn)
+    const body = asRecord(data), revision = typeof body.revision === 'number' ? body.revision : undefined
+    const turn = readActiveChatTurn(body)
+    if (turn) return observeActiveTurn(turn, { revision })
+    // A terminal run can still have an undelivered queue acknowledgement.
+    // Reopening that history must keep following its original bound turn.
+    if (body.durable !== true || body.id !== sessionId.value || revision === undefined) return
+    for (const raw of [...asArray(body.messages)].reverse()) {
+      const row = asRecord(raw)
+      if (row.role !== 'assistant') continue
+      let metadata = asRecord(row.metadata)
+      if (typeof row.metadata === 'string') {
+        try { metadata = asRecord(JSON.parse(row.metadata)) } catch { continue }
+      }
+      if (asRecord(metadata.business_harness).queued_reply !== true) continue
+      const pending = readActiveChatTurn({ active_turn: metadata.summary })
+      if (pending) return observeActiveTurn(pending, { revision, resume: false })
+    }
   }
 
-  function observeActiveTurn(turn: ActiveChatTurn) {
+  function observeActiveTurn(turn: ActiveChatTurn, options: ChatTurnObservationOptions = {}) {
     let message = messages.value.find(row => row.role === 'ai' && row.turnId === turn.turnId)
     if (message && observedTurn?.message === message && observedTurn.turn.runId === turn.runId
-      && message.workflowAction === turn.status) return
+      && observedTurn.revision === options.revision && observedTurn.isCurrent()) return
     stopTurnObservation()
     const text = activeChatTurnMessage(turn)
     if (!message) {
@@ -329,9 +346,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (turn.taskId) message.recoveryTaskId = turn.taskId
     if (turn.status === 'blocked') return
     const controller = new AbortController()
-    const observation = { turn, controller, message, checkingReceipt: false }
+    const scope = captureLocalScope()
+    const observation = { turn, controller, message, checkingReceipt: false, sessionId: scope.sessionId,
+      revision: options.revision, isCurrent: () => scope.isCurrent() && options.isCurrent?.() !== false, retryAt: 0, failures: 0 }
     observedTurn = observation
-    const isCurrent = () => observedTurn === observation && messages.value.includes(message)
+    const isCurrent = () => observedTurn === observation && observation.isCurrent() && messages.value.includes(message)
+    // Both new queued turns and reopened history use the existing task feed and
+    // its 15-second refresh. No second background scheduler or execution retry.
+    void agentTaskRuntime.refreshTasks().catch(() => undefined)
+    if (options.resume === false) return
     let receipt: unknown
     let awaitingAuthorization = false
     const stream = useAiSdkChatRound({
@@ -349,7 +372,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       },
     })
     void stream.resume(turn.turnId, controller.signal).then(result => {
-      if (!isCurrent() || result.error || readActiveChatTurn(receipt)) return
+      if (!isCurrent()) return
+      if (result.error) {
+        if ([401, 403].includes(Number(asRecord(result.error).status))) {
+          finishObservedTurn(observation, 'waiting_auth', '当前授权无法读取原任务回执，请核对授权。')
+        }
+        return
+      }
+      if (readActiveChatTurn(receipt)) return
       const payload = asRecord(receipt)
       if (awaitingAuthorization && !requiresTurnReconciliation(receipt)
         && parseApprovalCardFromPayload(payload)?.status !== 'pending') {
@@ -359,71 +389,102 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const response = asString(payload.response || payload.message || result.text).trim()
       if (!response || typeof payload.success !== 'boolean') return
       const state = plannerExecutionState(payload)
+      if (['queued', 'running', 'planning', 'retrying'].includes(state)) return
       const action = state === 'unknown' ? 'unknown'
         : parseApprovalCardFromPayload(payload)?.status === 'pending' ? 'waiting_approval'
           : state || (payload.success ? 'completed' : 'failed')
       finishObservedTurn(observation, action, response, payload)
     })
-    // The workspace already consumes task updates and polls when its stream is unavailable.
-    void agentTaskRuntime.refreshTasks().catch(() => undefined)
   }
 
-  function finishObservedTurn(observation: NonNullable<typeof observedTurn>, action: string, text: string, payload?: Record<string, unknown>) {
+  function finishObservedTurn(observation: NonNullable<typeof observedTurn>, action: string, text: string, payload?: Record<string, unknown>, savedMessage?: Record<string, unknown>) {
     const { message } = observation
     const index = messages.value.indexOf(message)
-    if (observedTurn !== observation || index < 0) return
+    if (observedTurn !== observation || !observation.isCurrent() || index < 0) return
     const execution = payload ? readChatExecution(payload) : undefined
     const card = payload ? parseApprovalCardFromPayload(payload) : undefined
     const runtimeContinuation = payload ? runtimeContinuationFromPayload(payload) : undefined
-    applyPlainTextToMessageIndex(index, text, { workflowAction: action, ...(execution ? { execution } : {}), ...(card ? { approvalCard: card } : {}), ...(runtimeContinuation ? { runtimeContinuation } : {}) })
+    const files = payload ? readRuntimeOutputDownloads(payload) : []
+    applyPlainTextToMessageIndex(index, text, { ...(savedMessage ? chatMessageExtrasFromServerRow(savedMessage) : {}),
+      workflowAction: action, ...(execution ? { execution } : {}), ...(card ? { approvalCard: card } : {}),
+      ...(runtimeContinuation ? { runtimeContinuation } : {}), ...(files.length ? { outputArtifacts: files } : {}) })
+    if (!runtimeContinuation && !chatMessageExtrasFromServerRow(savedMessage).runtimeContinuation) delete message.runtimeContinuation
     delete message.toolProgressLabel
+    chatSessionActivity.forSession(observation.sessionId).setStatus(action === 'completed' ? 'ready'
+      : ['failed', 'rejected'].includes(action) ? 'error'
+        : ['cancelled', 'interrupted'].includes(action) ? 'stopped'
+          : ['waiting_user', 'waiting_approval', 'waiting_auth', 'waiting_input', 'paused'].includes(action) ? 'waiting' : 'review')
     stopTurnObservation()
     flushMessagesCache()
   }
 
-  watch(taskList, async tasks => {
+  watch([taskList, () => agentTaskRuntime.taskSyncState.value.checking], async ([tasks, checking]) => {
     const observation = observedTurn
-    if (!observation || observation.checkingReceipt || agentTaskRuntime.taskSyncState.value.stale) return
-    const task = tasks.find(item => activeRunIdOfTask(item) === observation.turn.runId)
-    if (!task) return
-    const fields = asRecord(task.payload)
+    if (!observation) return
+    if (!observation.isCurrent() || !messages.value.includes(observation.message)) return stopTurnObservation()
+    if (checking || observation.checkingReceipt) return
+    const task = agentTaskRuntime.taskSyncState.value.stale ? undefined : tasks.find(item => activeRunIdOfTask(item) === observation.turn.runId)
+    const fields = asRecord(task?.payload)
     const taskId = asString(fields.taskId).trim()
     if (taskId) observation.message.recoveryTaskId = taskId
     const status = activeChatTurnStatus(asString(fields.rawRunStatus))
     if (status) {
-      observation.message.toolProgressLabel = task.stage || activeChatTurnMessage(observation.turn)
+      observation.message.toolProgressLabel = task?.stage || activeChatTurnMessage(observation.turn)
       if (observation.message.workflowAction !== status) {
         applyPlainTextToMessageIndex(messages.value.indexOf(observation.message), activeChatTurnMessage({
           ...observation.turn, status, message: '',
         }))
       }
       observation.message.workflowAction = status
+      chatSessionActivity.forSession(observation.sessionId).setStatus(['waiting_approval', 'paused'].includes(status) ? 'waiting' : 'review')
       if (status === 'blocked') stopTurnObservation()
       return
     }
-    const sid = sessionId.value
+    if (Date.now() < observation.retryAt) return
     observation.checkingReceipt = true
     try {
-      const data = await chatApi.getConversation(sid, { turn_id: observation.turn.turnId })
-      if (observedTurn !== observation) return
-      const receipt = droppedRoundFromHistory(data, observation.turn.turnId)
+      // getConversation has a finite transport timeout; only one read is in flight.
+      const data = asRecord(await chatApi.getConversation(observation.sessionId, { turn_id: observation.turn.turnId }))
+      if (observedTurn !== observation || !observation.isCurrent()) return
+      const binding = asRecord(data.turn_receipt || data.active_turn)
+      if ((data.id !== undefined && data.id !== observation.sessionId)
+        || (data.durable === true && data.revision === null)
+        || (observation.revision !== undefined && data.revision !== observation.revision)
+        || (binding.turn_id !== undefined && binding.turn_id !== observation.turn.turnId)
+        || (binding.run_id !== undefined && binding.run_id !== observation.turn.runId)) {
+        finishObservedTurn(observation, 'unknown', '原会话或任务回执已改变，请重新核对原对话。')
+        return
+      }
+      if (typeof data.revision === 'number') observation.revision = data.revision
+      const row = asArray(data.messages).map(asRecord).find(message => typeof binding.message_id === 'number'
+        && message.id === binding.message_id && message.role === 'assistant')
+      const receipt = droppedRoundFromHistory(row ? { ...data, turn_receipt: { ...binding, message: row.content } } : data, observation.turn.turnId)
       if (receipt.activeTurn) {
         if (receipt.activeTurn.status === 'blocked') observeActiveTurn(receipt.activeTurn)
+      } else if (data.success === true && data.durable === true && receipt.savedMessage
+        && ['completed', 'failed', 'cancelled', 'rejected', 'interrupted', 'unknown'].includes(asString(binding.status))
+        && asString(receipt.savedMessage.content).trim()
+        && binding.turn_id === observation.turn.turnId && binding.run_id === observation.turn.runId) {
+        const action = ['cancelled', 'rejected'].includes(asString(binding.status)) ? asString(binding.status) : receipt.workflowAction
+        finishObservedTurn(observation, action, asString(receipt.savedMessage.content), undefined, receipt.savedMessage)
         return
       }
-      if (['completed', 'failed', 'interrupted', 'waiting_approval'].includes(receipt.status)) {
-        finishObservedTurn(observation, receipt.workflowAction, receipt.text)
+    } catch (error) {
+      const status = Number(asRecord(error).status)
+      if ([401, 403, 404, 410].includes(status)) {
+        finishObservedTurn(observation, [401, 403].includes(status) ? 'waiting_auth' : 'unknown',
+          [401, 403].includes(status) ? '当前授权无法读取原任务回执，请核对授权。' : '原对话已不可用，已停止读取交付回执。')
         return
       }
-    } catch {
-      // Keep the most recent task state while the conversation receipt is unavailable.
     } finally {
       observation.checkingReceipt = false
     }
-    if (observedTurn !== observation) return
-    if (['success', 'failed', 'cancelled'].includes(task.status)) {
-      finishObservedTurn(observation, 'unknown', '已读取原任务的结束状态，业务结果请在原任务中核对。')
-    }
+    if (observedTurn !== observation || !observation.isCurrent()) return
+    observation.retryAt = Date.now() + Math.min(2000 * 2 ** Math.min(observation.failures++, 4), 30_000)
+    applyPlainTextToMessageIndex(messages.value.indexOf(observation.message),
+      '原任务交付回执正在同步。业务结果请在原任务中核对，无需重复提交。', { workflowAction: 'unknown' })
+    delete observation.message.toolProgressLabel
+    chatSessionActivity.forSession(observation.sessionId).setStatus('review')
   }, { flush: 'post' })
   watch([sessionId, chatIdentity], stopTurnObservation, { flush: 'sync' })
   onDeactivated(stopTurnObservation)
@@ -590,6 +651,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
    * thinking shell is removed, without the manual-stop banner.
    */
   function stopReply(options?: { supersede?: boolean }) {
+    stopTurnObservation()
     localViewRevision++
     const stopped = chatSessionActivity.cancelSession(sessionId.value, { showStopNotice: !options?.supersede })
     chatRequest.cancelPendingChatBatch(sessionId.value)
