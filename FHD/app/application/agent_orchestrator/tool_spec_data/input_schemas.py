@@ -1255,6 +1255,34 @@ def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
             "excel_join_compare", ["file_path_a", "file_path_b", "key_columns"]
         ),
     }
+    native_fields = (
+        "view",
+        "table_id",
+        "expected_sha256",
+        "cursor",
+        "row_range",
+        "native_columns",
+        "column_types",
+        "offset",
+        "max_rows",
+    )
+    for action in ("query", "statistics"):
+        schema = deepcopy(_SPECIAL_INPUT_SCHEMAS[("excel_analysis", action)])
+        # Keep query's oneOf and expression restrictions, and statistics'
+        # existing verification fields; the public catalog owns native inputs.
+        schema["properties"].update(
+            {
+                field: deepcopy(schemas[("excel_analysis", "read")]["properties"][field])
+                for field in native_fields
+            }
+        )
+        if action == "statistics":
+            schema["properties"]["query_expression"] = deepcopy(
+                _SPECIAL_INPUT_SCHEMAS[("excel_analysis", "query")]["properties"][
+                    "query_expression"
+                ]
+            )
+        schemas[("excel_analysis", action)] = schema
     schemas[("excel_join_compare", "join")]["properties"]["file_paths"].update(
         minItems=2, maxItems=2
     )

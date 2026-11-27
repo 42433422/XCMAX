@@ -1,7 +1,7 @@
 {
   "id": "excel-qc-employee",
   "name": "Excel 质检员",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "XCAGI",
   "description": "Excel质检员工：对回填结果做独立结构对账——计划符合性、保护区完整性、expected 重算、公式健康、rules_ref 追溯、块结构漂移，输出 qc_report.json（PASS/WARN/FAIL + 问责路由），不复用映射员/写入员代码路径，禁止编造检查结果",
   "artifact": "employee_pack",
@@ -38,7 +38,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "excel-qc-employee",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "artifact": "employee_pack",
       "name": "Excel 质检员",
       "description": "Excel质检员工：对回填结果做独立结构对账——计划符合性、保护区完整性、expected 重算、公式健康、rules_ref 追溯、块结构漂移，输出 qc_report.json（PASS/WARN/FAIL + 问责路由），不复用映射员/写入员代码路径，禁止编造检查结果"

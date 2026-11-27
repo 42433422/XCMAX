@@ -1,7 +1,7 @@
 {
   "id": "ppt-full-read-employee",
   "name": "PPT 全量读取员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
   "description": "PPT全量读取员工：上传 .pptx，输出 presentation_full.json 中介；解析大纲与每页正文；图片 VLM 识图；按「为这份PPT生成每页的演讲备注」生成演讲备注。direct_python，禁止编造幻灯片正文。",
   "artifact": "employee_pack",
@@ -40,7 +40,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "ppt-full-read-employee",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "PPT 全量读取员",
       "description": "制作 PPT 全量读取员工包"

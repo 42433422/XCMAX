@@ -219,6 +219,22 @@ def parse_document(
     return parsed.text, parsed.parser, parsed.metadata
 
 
+def read_document_facts(
+    path: Path, *, authorization_scope: str = "", expected_sha256: str | None = None
+) -> dict[str, Any]:
+    """Read coordinate facts through the existing native format adapters.
+
+    This source-readback lane does not substitute compatibility text or claim
+    Docling/OCR interpretation. Their qualification remains separate from native
+    page, region, table and cell locations.
+    """
+    from app.infrastructure.document_parsing.native import read_native_document
+
+    return read_native_document(
+        path, authorization_scope=authorization_scope, expected_sha256=expected_sha256
+    )
+
+
 __all__ = [
     "ParsedDocument",
     "docling_available",
@@ -226,4 +242,5 @@ __all__ = [
     "parse_pdf_bytes_with_docling",
     "parse_with_docling",
     "parser_mode",
+    "read_document_facts",
 ]

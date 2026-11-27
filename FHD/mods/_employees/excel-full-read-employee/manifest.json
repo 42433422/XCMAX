@@ -1,7 +1,7 @@
 {
   "id": "excel-full-read-employee",
   "name": "Excel 读取员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
   "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格",
   "artifact": "employee_pack",
@@ -38,7 +38,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "excel-full-read-employee",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "Excel 读取员",
       "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格"

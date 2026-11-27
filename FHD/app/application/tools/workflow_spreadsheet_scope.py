@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
-from tempfile import TemporaryDirectory, mkdtemp
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -77,7 +77,7 @@ def _run_file(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | No
             if file_path in {str(path), f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"} or (
                 len(receipts) == 1 and isinstance(data, dict) and data.get("file_path") == file_path
             ):
-                if path.suffix in {".pdf", ".docx", ".pptx"}:
+                if path.suffix in {".pdf", ".docx", ".pptx", ".png", ".json", ".txt"}:
                     actor = _bound_actor(context)
                     metadata = receipt.get("metadata") or {}
                     if (
@@ -300,14 +300,52 @@ def office_reader_input(
 ) -> Iterator[dict[str, Any]]:
     aliases = ("upload_id", "file_path", "path", "excel_path")
     source = next((str(payload[key]).strip() for key in aliases if payload.get(key)), "")
+    if not isinstance(context.get("run_id"), str) or not re.fullmatch(
+        r"[A-Za-z0-9_-]{1,160}", context["run_id"]
+    ):
+        raise PermissionError("读取员工需要当前任务身份以发布可回读产物")
     with workflow_file_snapshot(source, context) as snapshot:
         if EMPLOYEE_BY_SUFFIX.get(snapshot.suffix) != employee_id:
             raise PermissionError("文件类型与读取员工不匹配")
-        workspace = mkdtemp(prefix="employee-read-", dir=_staging_root())
-        options: dict[str, Any] = {
-            key: payload[key] for key in ("action", "max_row_cap", "max_col_cap") if key in payload
-        }
-        yield {**options, "file_path": str(snapshot), "workspace_root": workspace}
+        with TemporaryDirectory(prefix="employee-read-", dir=_staging_root()) as workspace:
+            options: dict[str, Any] = {
+                key: payload[key]
+                for key in ("action", "max_row_cap", "max_col_cap")
+                if key in payload
+            }
+            yield {**options, "file_path": str(snapshot), "workspace_root": workspace}
+
+
+def publish_reader_output(employee_id: str, result: dict, context: dict, workspace: str) -> dict:
+    """Publish and verify while the caller still owns the private reader workspace."""
+    from app.mod_sdk.employee_tool_registry import office_output_paths
+
+    paths = office_output_paths(employee_id, result)
+    if len(paths) != 1:
+        raise PermissionError("读取员工没有唯一实际产物")
+    path = resolve_elt_path(paths[0], workspace_root=workspace)
+    if not path.is_relative_to(Path(workspace).resolve()):
+        raise PermissionError("读取产物不在当前员工工作区")
+    receipts = employee_output_receipts(employee_id, result, context, workspace)
+    if len(receipts) != 1:
+        raise PermissionError("读取员工未生成可验证的原文件回执")
+    published = {**result, "artifacts": receipts, "file_path": receipts[0]["uri"]}
+    employee_output_receipts(employee_id, published, context, workspace)
+    published["result"] = copy.deepcopy(result.get("result"))
+
+    def expose(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if key.endswith("output_path") and nested == paths[0]:
+                    value[key] = receipts[0]["uri"]
+                else:
+                    expose(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                expose(nested)
+
+    expose(published["result"])
+    return published
 
 
 @contextmanager
@@ -408,7 +446,15 @@ def export_workflow_spreadsheet(
 def store_employee_output(
     run_id: str, path: Path, content: bytes, context: dict[str, Any]
 ) -> dict[str, Any]:
-    owner = _bound_actor(context).id if path.suffix.lower() in {".pdf", ".docx", ".pptx"} else None
+    # Reader JSON and auxiliary text/images have the same ownership contract
+    # as generated Office files; only the verified runtime may supply the actor.
+    owner = _bound_actor(context).id
+    if not run_id or context.get("run_id") != run_id:
+        raise PermissionError("员工产物缺少当前任务身份")
+    if any(key in context for key in ("step_id", "node_id", "call_id", "input_sha256")):
+        # A partial invocation is not a run-only legacy call. The existing
+        # scoped writer validates every original identity field before writing.
+        return store_scoped_run_file(content, name=path.name, context=context)
     return store_run_file(
         run_id,
         content,

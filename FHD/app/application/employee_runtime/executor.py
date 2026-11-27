@@ -478,17 +478,19 @@ def execute_employee_task_local(
     from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
     from app.application.tools.workflow_spreadsheet_scope import (
         office_reader_input,
+        publish_reader_output,
         publish_written_workbook,
         workbook_writer_input,
     )
     from app.domain.workbook_write_contract import WORKBOOK_WRITER
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
     context = runtime_context or {}
-    candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
+    candidates = candidate_pack_ids(employee_id)
     if denial := host_employee_denial(candidates, input_data or {}, context):
         return denial
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
-    writer = WORKBOOK_WRITER in candidates
+    writer = WORKBOOK_WRITER in candidates and "_actor_authorization" in context
     if (
         (reader or writer)
         and context_only
@@ -544,8 +546,10 @@ def execute_employee_task_local(
             )
             if writer and payload and result.get("success") is True:
                 return publish_written_workbook(result, context, payload["workspace_root"])
+            if reader and payload and result.get("success") is True:
+                return publish_reader_output(reader, result, context, payload["workspace_root"])
             return result
-    except PermissionError as exc:
+    except (PermissionError, AgentModAuthorizationError) as exc:
         return {"success": False, "error_code": "employee_file_access_denied", "error": str(exc)}
 
 

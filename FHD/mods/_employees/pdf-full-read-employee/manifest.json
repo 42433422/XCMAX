@@ -1,7 +1,7 @@
 {
   "id": "pdf-full-read-employee",
   "name": "PDF 全量读取员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
   "description": "制作 PDF 全量读取员工包",
   "artifact": "employee_pack",
@@ -40,7 +40,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "pdf-full-read-employee",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "PDF 全量读取员",
       "description": "制作 PDF 全量读取员工包"

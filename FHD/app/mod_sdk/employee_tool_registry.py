@@ -221,7 +221,9 @@ def office_output_paths(pack_id: str, result: dict[str, Any]) -> list[str]:
     return paths
 
 
-def _verify_office_artifact(pack_id: str, result: dict[str, Any]) -> dict[str, Any] | None:
+def _verify_office_artifact(
+    pack_id: str, result: dict[str, Any], runtime_context: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """Return a postcondition record for a built-in office worker, if applicable."""
 
     try:
@@ -234,6 +236,18 @@ def _verify_office_artifact(pack_id: str, result: dict[str, Any]) -> dict[str, A
         return None
     if result.get("success") is not True:
         return {"verified": False, "reason": "员工运行未成功", "paths": []}
+    if result.get("artifacts"):
+        from app.application.tools.workflow_spreadsheet_scope import employee_output_receipts
+
+        try:
+            receipts = employee_output_receipts(pack_id, result, runtime_context or {})
+        except RECOVERABLE_ERRORS:
+            return {"verified": False, "reason": "员工产物回执验证失败", "paths": []}
+        return {
+            "verified": True,
+            "paths": [receipt["uri"] for receipt in receipts],
+            "artifacts": receipts,
+        }
 
     paths = office_output_paths(pack_id, result)
     if not paths:
@@ -286,7 +300,7 @@ def execute_employee_tool(
         runtime_context=runtime_context,
     )
     ok = bool(result.get("success") is True and not result.get("blocked_by_risk_gate"))
-    artifact = _verify_office_artifact(pack_id, result)
+    artifact = _verify_office_artifact(pack_id, result, runtime_context)
     if artifact is not None and not artifact.get("verified"):
         ok = False
     payload: dict[str, Any] = {
@@ -298,8 +312,10 @@ def execute_employee_tool(
     if ok and runtime_context and runtime_context.get("run_id"):
         from app.application.tools.workflow_spreadsheet_scope import employee_output_receipts
 
-        payload["artifacts"] = employee_output_receipts(
-            pack_id, result, runtime_context, workspace_root
+        payload["artifacts"] = (
+            artifact.pop("artifacts")
+            if artifact is not None and "artifacts" in artifact
+            else employee_output_receipts(pack_id, result, runtime_context, workspace_root)
         )
         payload["data"] = result
     if artifact is not None:

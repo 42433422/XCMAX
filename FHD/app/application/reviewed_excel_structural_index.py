@@ -26,6 +26,7 @@ from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 from openpyxl.utils.cell import get_column_letter
 
 from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.table_structure_candidates import worksheet_candidate_summary
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_io_lock import serialize_workbook_io
 
@@ -549,6 +550,7 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                     "sheet_state": state,
                     "sheet_index": sheet_index,
                     "status": "indexed",
+                    **worksheet_candidate_summary(ws),
                     "rows": ws.max_row or 0,
                     "columns": ws.max_column or 0,
                     "headers": header_rows,
@@ -653,6 +655,12 @@ def compress_structural_index_for_model(
             "status": sheet.get("status", "indexed"),
             "rows": sheet.get("rows"),
             "columns": sheet.get("columns"),
+            "structure_candidates": [
+                dict(item) for item in (sheet.get("structure_candidates") or [])[:80]
+            ],
+            "structure_candidate_total": sheet.get("structure_candidate_total", 0),
+            "structure_candidates_truncated": bool(sheet.get("structure_candidates_truncated")),
+            "structure_readback_range": sheet.get("structure_readback_range"),
             "block_title_rows": [dict(item) for item in titles[:40]],
             "block_title_row_total": sheet.get("block_title_row_total", len(titles)),
             "order_key_columns": [
@@ -664,9 +672,13 @@ def compress_structural_index_for_model(
             "cross_sheet_formula_refs": [dict(item) for item in refs[:12]],
             "formula_refs_may_be_truncated": bool(sheet.get("formula_refs_may_be_truncated")),
         }
+        entry["structure_candidates_truncated"] |= entry["structure_candidate_total"] > len(
+            entry["structure_candidates"]
+        )
         if (
             entry["block_title_row_total"] > len(entry["block_title_rows"])
             or entry["candidate_row_range_total"] > len(entry["candidate_row_ranges"])
+            or entry["structure_candidates_truncated"]
             or len(refs) > 12
             or entry["formula_refs_may_be_truncated"]
         ):
@@ -687,12 +699,15 @@ def compress_structural_index_for_model(
         "cross_sheet_formula_refs",
         "order_key_columns",
         "block_title_rows",
+        "structure_candidates",
         "candidate_row_ranges",
     ):
         if encoded_size() <= budget_bytes:
             return summary
         summary["truncated"] = True
         for entry in summary["sheets"]:
+            if field == "structure_candidates" and entry[field]:
+                entry["structure_candidates_truncated"] = True
             entry[field] = []
     if encoded_size() > budget_bytes:
         summary["notes"] = []
