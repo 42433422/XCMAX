@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from itertools import chain
+from pathlib import Path
 from typing import Any
 
 # Match table readback, reviewed-workbook extent and ELT cell-text budgets.
@@ -73,6 +74,16 @@ def export_input_error(args: dict[str, Any]) -> dict[str, Any] | None:
             "success": False,
             "error_code": "empty_business_result",
             "message": "没有可写入的行",
+        }
+    file_path = args.get("file_path")
+    if not isinstance(file_path, str) or Path(file_path.strip()).suffix.lower() not in {
+        ".csv",
+        ".xlsx",
+    }:
+        return {
+            "success": False,
+            "error_code": "invalid_excel_path",
+            "message": "导出文件名必须以 .csv 或 .xlsx 结尾",
         }
     try:
         if len(rows) > MAX_EXPORT_ROWS:

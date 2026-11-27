@@ -43,6 +43,9 @@ def _extract_pptx(src_path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
+    from app.mod_sdk.host_services import read_native_document
+
+    document_facts = read_native_document(src_path)
     prs = Presentation(str(src_path))
     title_guess = ""
     slides_out: List[Dict[str, Any]] = []
@@ -110,6 +113,7 @@ def _extract_pptx(src_path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]
         if s.get("title")
     ]
     payload = {
+        "document_facts": document_facts,
         "title": title_guess or src_path.stem,
         "slide_count": len(slides_out),
         "outline": outline,

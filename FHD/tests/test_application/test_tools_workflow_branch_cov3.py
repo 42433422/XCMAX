@@ -19,6 +19,12 @@ from app.application.tools.workflow import (
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
+def _write_excel_fixture(path, frame, *, sheet_name="Sheet1", header_row=1):
+    frame.to_excel(
+        path, engine="openpyxl", sheet_name=sheet_name, index=False, startrow=header_row - 1
+    )
+
+
 class TestHandleExcelAnalysis:
     """handle_excel_analysis 分支覆盖。"""
 
@@ -44,21 +50,22 @@ class TestHandleExcelAnalysis:
 
     def test_read_failed_returns_error(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
+        _write_excel_fixture(f, pd.DataFrame({"a": [1]}))
         with patch(
             "app.application.tools.workflow._read_excel_dataframe",
             side_effect=OSError("read fail"),
-        ):
+        ) as read:
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "read"}, workspace_root=str(tmp_path)
             )
         assert result["success"] is False
         assert result["error"] == "read_excel_failed"
+        read.assert_called_once()
 
     def test_action_query_uses_expression(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
+        _write_excel_fixture(f, df)
         with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "query", "query_expression": "a > 1"},
@@ -70,8 +77,8 @@ class TestHandleExcelAnalysis:
 
     def test_action_read_with_customer_hint(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
+        _write_excel_fixture(f, df)
         with (
             patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
             patch(
@@ -89,8 +96,8 @@ class TestHandleExcelAnalysis:
 
     def test_action_read_customer_hint_error_swallowed(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
+        _write_excel_fixture(f, df)
         with (
             patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
             patch(
@@ -107,8 +114,8 @@ class TestHandleExcelAnalysis:
 
     def test_action_read_with_header_row(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2]})
+        _write_excel_fixture(f, df, header_row=2)
         with (
             patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
             patch(
@@ -126,8 +133,8 @@ class TestHandleExcelAnalysis:
 
     def test_action_query_with_expr(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        _write_excel_fixture(f, df)
         with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "query", "query_expression": "a > 1"},
@@ -139,8 +146,8 @@ class TestHandleExcelAnalysis:
 
     def test_action_query_without_expr(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2, 3]})
+        _write_excel_fixture(f, df)
         with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df) as read:
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "query"},
@@ -153,8 +160,8 @@ class TestHandleExcelAnalysis:
 
     def test_action_aggregate_with_metrics(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"cat": ["a", "a", "b"], "val": [1, 2, 3]})
+        _write_excel_fixture(f, df)
         with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {
@@ -170,9 +177,9 @@ class TestHandleExcelAnalysis:
 
     def test_action_aggregate_with_invalid_metrics(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"cat": ["a"], "val": [1]})
-        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
+        _write_excel_fixture(f, df)
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df) as read:
             result = handle_excel_analysis(
                 {
                     "file_path": "data.xlsx",
@@ -183,22 +190,24 @@ class TestHandleExcelAnalysis:
                 workspace_root=str(tmp_path),
             )
         assert result["success"] is False
+        read.assert_called_once()
 
     def test_action_aggregate_no_group_by(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
+        _write_excel_fixture(f, df)
+        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df) as read:
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "aggregate"},
                 workspace_root=str(tmp_path),
             )
         assert result["success"] is False
+        read.assert_called_once()
 
     def test_action_statistics(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1, 2, 3]})
+        _write_excel_fixture(f, df)
         with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "statistics"},
@@ -210,8 +219,8 @@ class TestHandleExcelAnalysis:
 
     def test_unsupported_action(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
-        f.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
+        _write_excel_fixture(f, df)
         with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
             result = handle_excel_analysis(
                 {"file_path": "data.xlsx", "action": "unknown"},
@@ -394,35 +403,39 @@ class TestReadExcelDataframe:
 
     def test_xlsx_uses_openpyxl_engine(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
-        p.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch("pandas.read_excel", return_value=df) as mock_read:
-            _read_excel_dataframe(p, sheet_name=None, header_row_1based=None)
+        _write_excel_fixture(p, df)
+        with patch("pandas.read_excel", wraps=pd.read_excel) as mock_read:
+            result = _read_excel_dataframe(p, sheet_name=None, header_row_1based=None)
             assert mock_read.call_args.kwargs.get("engine") == "openpyxl"
+        pd.testing.assert_frame_equal(result, df)
 
     def test_xlsm_uses_openpyxl_engine(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsm"
-        p.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch("pandas.read_excel", return_value=df) as mock_read:
-            _read_excel_dataframe(p, sheet_name=None, header_row_1based=None)
+        _write_excel_fixture(p, df)
+        with patch("pandas.read_excel", wraps=pd.read_excel) as mock_read:
+            result = _read_excel_dataframe(p, sheet_name=None, header_row_1based=None)
             assert mock_read.call_args.kwargs.get("engine") == "openpyxl"
+        pd.testing.assert_frame_equal(result, df)
 
     def test_sheet_name_passed(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
-        p.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch("pandas.read_excel", return_value=df) as mock_read:
-            _read_excel_dataframe(p, sheet_name="Sheet2", header_row_1based=None)
+        _write_excel_fixture(p, df, sheet_name="Sheet2")
+        with patch("pandas.read_excel", wraps=pd.read_excel) as mock_read:
+            result = _read_excel_dataframe(p, sheet_name="Sheet2", header_row_1based=None)
             assert mock_read.call_args.kwargs.get("sheet_name") == "Sheet2"
+        pd.testing.assert_frame_equal(result, df)
 
     def test_header_row_passed(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
-        p.write_text("not excel")
         df = pd.DataFrame({"a": [1]})
-        with patch("pandas.read_excel", return_value=df) as mock_read:
-            _read_excel_dataframe(p, sheet_name=None, header_row_1based=3)
+        _write_excel_fixture(p, df, header_row=3)
+        with patch("pandas.read_excel", wraps=pd.read_excel) as mock_read:
+            result = _read_excel_dataframe(p, sheet_name=None, header_row_1based=3)
             assert mock_read.call_args.kwargs.get("header") == 2
+        pd.testing.assert_frame_equal(result, df)
 
     def test_no_extra_kwargs_for_xls(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xls"

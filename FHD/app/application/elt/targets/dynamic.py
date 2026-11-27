@@ -41,15 +41,25 @@ def _is_lock_error(exc: BaseException) -> bool:
     return any(marker in text for marker in _LOCK_ERRORS)
 
 
-def _fingerprint(headers: list[str], marker: dict[str, Any] | None = None) -> str:
-    """表的身份＝表头 + 来源区块。
-
-    同一 sheet 里并排的多个区块常常共用同一套列名；只按表头做指纹会把
-    它们合成一张表，再把内容相同的行当成重复丢掉。
-    """
+def _legacy_fingerprint(headers: list[str], marker: dict[str, Any] | None = None) -> str:
     material = "|".join(headers)
     if marker:
         material += f"#sheet={marker.get('sheet') or ''}#table={marker.get('table_id') or ''}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _fingerprint(headers: list[str], marker: dict[str, Any] | None = None) -> str:
+    """Keep established unambiguous identities; encode delimiter-bearing parts explicitly."""
+    partition = (
+        [str(marker.get("sheet") or ""), str(marker.get("table_id") or "")] if marker else None
+    )
+    if not any(
+        token in part
+        for part in [*headers, *(partition or [])]
+        for token in ("|", "#sheet=", "#table=")
+    ):
+        return _legacy_fingerprint(headers, marker)
+    material = json.dumps(["table-v2", headers, partition], ensure_ascii=False)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -95,23 +105,69 @@ def _group_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 def _usable_dedupe_keys(
     dedupe_keys: list[str], headers: list[str], rows: list[dict[str, Any]]
 ) -> list[str]:
-    """只保留在本分片里有区分度的去重键。
+    """Reject incomplete or non-unique proposed keys; do not collapse source rows."""
+    if not rows or not dedupe_keys or any(key not in headers for key in dedupe_keys):
+        return []
+    if len(set(dedupe_keys)) != len(dedupe_keys):
+        return []
+    if any(row.get(key) in (None, "") for row in rows for key in dedupe_keys):
+        return []
+    return dedupe_keys if len({_row_hash(row, dedupe_keys) for row in rows}) == len(rows) else []
 
-    模型常把「备注」「已付款」这类列当成主键；照它去重会把几千行正常数据
-    折叠成几十行。区分度不足一半的键一律不参与去重，退回按来源坐标去重。
-    """
-    present = set(headers)
-    usable: list[str] = []
-    total = len(rows)
-    for key in dedupe_keys:
-        if key not in present:
-            continue
-        distinct = len(
+
+def _legacy_dedupe_keys(
+    proposed: list[str], mapped: list[str], headers: list[str], rows: list[dict[str, Any]]
+) -> list[str]:
+    """Reconstruct main@7911ad68 only to detect stored identities, never to write."""
+    present = set(mapped) & set(headers)
+    return [
+        key
+        for key in proposed
+        if key in present
+        and rows
+        and len(
             {json.dumps(json_safe(row.get(key)), ensure_ascii=False, default=str) for row in rows}
         )
-        if total and distinct / total >= 0.5:
-            usable.append(key)
-    return usable
+        / len(rows)
+        >= 0.5
+    ]
+
+
+def _source_row_hash(payload: dict[str, Any], keys: list[str], identity: tuple[str, ...]) -> str:
+    source = payload if keys else {**payload, "__source__": "|".join(identity)}
+    return _row_hash(source, keys)
+
+
+def _check_legacy_dedupe(db, table, group, *, old_keys, new_keys) -> None:
+    """Refuse ambiguous old row identities before any partition can be committed."""
+    from app.db.models.elt import EltDynamicRow
+
+    if old_keys == new_keys:
+        return
+    hashes: set[str] = set()
+
+    def check_chunk() -> None:
+        if hashes and (
+            db.query(EltDynamicRow.id)
+            .filter(
+                EltDynamicRow.table_id == table.id,
+                EltDynamicRow.tenant_id == table.tenant_id,
+                EltDynamicRow.owner_user_id == table.owner_user_id,
+                EltDynamicRow.row_hash.in_(hashes),
+            )
+            .first()
+            is not None
+        ):
+            raise ValueError("dynamic_table_legacy_dedupe_requires_reconciliation")
+
+    for payload, identity in zip(group["rows"], group["identities"], strict=True):
+        old_hash = _source_row_hash(payload, old_keys, identity)
+        if old_hash != _source_row_hash(payload, new_keys, identity):
+            hashes.add(old_hash)
+        if len(hashes) == _CHUNK_SIZE:
+            check_chunk()
+            hashes.clear()
+    check_chunk()
 
 
 def _partition_columns(schema_columns: list[Any], headers: list[str]) -> list[dict[str, Any]]:
@@ -262,14 +318,14 @@ class DynamicTableAdapter(TargetAdapter):
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
-        from app.application.elt.service_support import dump_json, new_id, new_session
+        from app.application.elt.service_support import dump_json, load_json, new_id, new_session
         from app.db.models.elt import EltDynamicRow, EltDynamicTable
         from app.infrastructure.tenant_scope import tenant_id_for_write
 
         headers, schema = self._table_spec(context)
-        dedupe_keys = [
-            str(key) for key in schema.get("dedupe_keys") or [] if str(key) in set(headers)
-        ]
+        # Validate the whole proposed composite key. Filtering missing columns here
+        # would silently turn (warehouse, sku) into a different business key (sku).
+        dedupe_keys = [str(key) for key in schema.get("dedupe_keys") or []]
         tenant_id = tenant_id_for_write()
         owner_user_id = int(context["owner_user_id"])
         run_id = str(context["run_id"])
@@ -287,6 +343,9 @@ class DynamicTableAdapter(TargetAdapter):
             attempted_total = 0
             inserted_total = 0
             used_names: set[str] = set()
+            prepared = []
+            # Resolve every identity before adding tables or committing any rows.
+            # A later partition's migration failure must leave earlier ones untouched.
             for index, group in enumerate(partitions):
                 part_rows = group["rows"]
                 part_headers = _partition_headers(part_rows, headers)
@@ -301,15 +360,51 @@ class DynamicTableAdapter(TargetAdapter):
                 part_dedupe = _usable_dedupe_keys(dedupe_keys, part_headers, part_rows)
                 part_columns = _partition_columns(schema.get("columns") or [], part_headers)
                 fingerprint = _fingerprint(part_headers, group["marker"])
-                table = (
+                legacy_fingerprint = _legacy_fingerprint(part_headers, group["marker"])
+                existing = (
                     db.query(EltDynamicTable)
                     .filter(
                         EltDynamicTable.tenant_id == tenant_id,
                         EltDynamicTable.owner_user_id == owner_user_id,
-                        EltDynamicTable.fingerprint == fingerprint,
+                        EltDynamicTable.fingerprint.in_({fingerprint, legacy_fingerprint}),
                     )
-                    .first()
+                    .all()
                 )
+                by_fingerprint = {item.fingerprint: item for item in existing}
+                table = by_fingerprint.get(fingerprint)
+                legacy = by_fingerprint.get(legacy_fingerprint)
+                if (
+                    table is None
+                    and legacy is not None
+                    and load_json(legacy.headers_json, []) == part_headers
+                ):
+                    # Old records have no independently stored partition identity.
+                    # Do not silently move or duplicate an ambiguous existing table.
+                    raise ValueError("dynamic_table_ambiguous_legacy_identity_requires_migration")
+                if table is not None and load_json(table.headers_json, []) != part_headers:
+                    raise ValueError("dynamic_table_header_identity_mismatch")
+                if table is not None:
+                    _check_legacy_dedupe(
+                        db,
+                        table,
+                        group,
+                        old_keys=_legacy_dedupe_keys(dedupe_keys, headers, part_headers, part_rows),
+                        new_keys=part_dedupe,
+                    )
+                prepared.append(
+                    (group, part_headers, part_name, part_dedupe, part_columns, fingerprint, table)
+                )
+
+            for (
+                group,
+                part_headers,
+                part_name,
+                part_dedupe,
+                part_columns,
+                fingerprint,
+                table,
+            ) in prepared:
+                part_rows = group["rows"]
                 if table is None:
                     table = EltDynamicTable(
                         id=new_id(),
@@ -334,16 +429,13 @@ class DynamicTableAdapter(TargetAdapter):
                 for payload, identity in zip(part_rows, group["identities"], strict=False):
                     # 没有显式去重键时按来源坐标去重：同一份文件重复导入仍幂等，
                     # 但不会把不同位置、内容相同的业务行误判成重复丢掉。
-                    hash_source = (
-                        payload if part_dedupe else {**payload, "__source__": "|".join(identity)}
-                    )
                     chunk.append(
                         {
                             "table_id": table_id,
                             "tenant_id": tenant_id,
                             "owner_user_id": owner_user_id,
                             "run_id": run_id,
-                            "row_hash": _row_hash(hash_source, part_dedupe),
+                            "row_hash": _source_row_hash(payload, part_dedupe, identity),
                             "payload_json": dump_json(payload),
                         }
                     )

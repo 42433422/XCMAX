@@ -1057,9 +1057,7 @@ def advise_table_schema(*, headers: list[str], samples: dict[str, list[str]]) ->
         confidence = float(data.get("confidence") or 0)
     except (TypeError, ValueError):
         confidence = 0.0
-    dedupe_keys = [
-        key for key in (str(item) for item in data.get("dedupe_keys") or []) if key in seen
-    ]
+    dedupe_keys = [str(item) for item in data.get("dedupe_keys") or []]
     result.data = {
         "is_table": bool(data.get("is_table")) and bool(columns),
         "table_name": str(data.get("table_name") or "")[:40],
