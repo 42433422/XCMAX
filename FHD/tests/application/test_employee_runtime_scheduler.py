@@ -9,9 +9,18 @@ import pytest
 from app.application.employee_runtime import scheduler
 
 
+def _not_executed_failure(error):
+    return {
+        "success": False,
+        "error": error,
+        "execution": {"outcome": "not_executed", "committed": False},
+    }
+
+
 @pytest.fixture(autouse=True)
 def _reset_scheduler(monkeypatch: pytest.MonkeyPatch):
     scheduler.stop_employee_scheduler(timeout=0.1)
+    monkeypatch.setattr(scheduler, "_jobs", {})
     monkeypatch.setenv("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_DAILY_ORCHESTRATOR_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_DAILY_ORCHESTRATOR_HOUR", "8")
@@ -149,7 +158,7 @@ def test_failure_schedules_retry_when_max_retries_set(monkeypatch: pytest.Monkey
     scheduler.refresh_employee_scheduler_jobs()
     with patch(
         "app.application.employee_runtime.executor.execute_employee_task_local",
-        return_value={"success": False, "error": "boom"},
+        return_value=_not_executed_failure("boom"),
     ):
         out = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     assert out["success"] is False
@@ -168,13 +177,13 @@ def test_retry_exhausted_marks_failed_and_resets(monkeypatch: pytest.MonkeyPatch
     # 先制造一次失败进入 retrying
     with patch(
         "app.application.employee_runtime.executor.execute_employee_task_local",
-        return_value={"success": False, "error": "boom"},
+        return_value=_not_executed_failure("boom"),
     ):
         scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     # 第二次失败（retry_count 已=1，max_retries=1，不再重试）
     with patch(
         "app.application.employee_runtime.executor.execute_employee_task_local",
-        return_value={"success": False, "error": "still boom"},
+        return_value=_not_executed_failure("still boom"),
     ):
         out = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     job = out["job"]
@@ -190,7 +199,7 @@ def test_success_resets_retry_count(monkeypatch: pytest.MonkeyPatch) -> None:
     scheduler.refresh_employee_scheduler_jobs()
     with patch(
         "app.application.employee_runtime.executor.execute_employee_task_local",
-        return_value={"success": False, "error": "boom"},
+        return_value=_not_executed_failure("boom"),
     ):
         scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     with patch(
@@ -211,7 +220,7 @@ def test_no_retry_when_max_retries_zero(monkeypatch: pytest.MonkeyPatch) -> None
     scheduler.refresh_employee_scheduler_jobs()
     with patch(
         "app.application.employee_runtime.executor.execute_employee_task_local",
-        return_value={"success": False, "error": "boom"},
+        return_value=_not_executed_failure("boom"),
     ):
         out = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     job = out["job"]
@@ -234,7 +243,7 @@ def test_alert_hook_invoked_on_final_failure(monkeypatch: pytest.MonkeyPatch) ->
     try:
         with patch(
             "app.application.employee_runtime.executor.execute_employee_task_local",
-            return_value={"success": False, "error": "boom"},
+            return_value=_not_executed_failure("boom"),
         ):
             scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     finally:
@@ -254,7 +263,7 @@ def test_alert_hook_not_invoked_during_retry(monkeypatch: pytest.MonkeyPatch) ->
     try:
         with patch(
             "app.application.employee_runtime.executor.execute_employee_task_local",
-            return_value={"success": False, "error": "boom"},
+            return_value=_not_executed_failure("boom"),
         ):
             scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     finally:
@@ -274,7 +283,7 @@ def test_alert_hook_exception_does_not_break_scheduler(monkeypatch: pytest.Monke
     try:
         with patch(
             "app.application.employee_runtime.executor.execute_employee_task_local",
-            return_value={"success": False, "error": "boom"},
+            return_value=_not_executed_failure("boom"),
         ):
             out = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
     finally:
@@ -295,3 +304,181 @@ def test_job_to_dict_includes_new_fields() -> None:
     job = jobs[0]
     for key in ("max_retries", "retry_count", "next_retry_at", "source", "depends_on"):
         assert key in job, f"missing field: {key}"
+
+
+@pytest.mark.parametrize(
+    "state", ["unknown", "waiting_approval", "waiting_auth", "paused", "queued", "blocked"]
+)
+@pytest.mark.parametrize("reported_success", [False, True])
+def test_unfinished_receipt_holds_original_job_across_refresh(monkeypatch, state, reported_success):
+    """An unfinished/uncertain effect is never a new cron attempt, including manual retry."""
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", "3")
+    scheduler.refresh_employee_scheduler_jobs()
+    alerts = []
+    monkeypatch.setattr(scheduler, "_alert_hook", lambda *args: alerts.append(args))
+    receipt = {
+        "success": reported_success,
+        "result": {"execution_state": state, "run_id": "original-run", "task_id": "original-task"},
+    }
+    with patch(
+        "app.application.employee_runtime.executor.execute_employee_task_local",
+        return_value=receipt,
+    ) as execute:
+        first = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
+        assert first["success"] is False
+        job = first["job"]
+        assert job["last_status"] == state
+        assert job["state"] == state
+        assert job["success_count"] == job["failure_count"] == 0
+        assert job["next_retry_at"] is None
+        assert job["next_run_at"] is None
+        assert job["pending_execution"] == {
+            "execution_state": state,
+            "run_id": "original-run",
+            "task_id": "original-task",
+        }
+        scheduler.refresh_employee_scheduler_jobs()
+        assert scheduler._due_job_ids() == []
+        second = scheduler.run_employee_cron_job("daily-orchestrator", source="manual")
+        assert second["success"] is False
+        assert second["error_code"] == "employee_cron_pending_execution"
+        assert second["job"]["pending_execution"] == job["pending_execution"]
+        assert second["job"]["runs_total"] == 1
+        assert execute.call_count == 1
+        assert alerts == [("daily-orchestrator", job["last_error"], job)]
+
+
+@pytest.mark.parametrize(
+    "error", [TimeoutError("receipt timed out"), ConnectionError("connection lost")]
+)
+def test_executor_exception_after_effect_is_not_retried(monkeypatch, error):
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", "3")
+    scheduler.refresh_employee_scheduler_jobs()
+    effects = []
+
+    def execute(*args, **kwargs):
+        effects.append("effect happened")
+        raise error
+
+    with patch(
+        "app.application.employee_runtime.executor.execute_employee_task_local", side_effect=execute
+    ):
+        first = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
+        assert first["result"]["execution_state"] == "unknown"
+        assert first["result"]["reconciliation_required"] is True
+        assert first["job"]["next_retry_at"] is None
+        for source in ("manual", "cron"):
+            assert (
+                scheduler.run_employee_cron_job("daily-orchestrator", source=source)["error_code"]
+                == "employee_cron_pending_execution"
+            )
+        assert effects == ["effect happened"]
+
+
+def test_employee_agent_swallowed_timeout_cannot_trigger_second_effect(tmp_path, monkeypatch):
+    from app.application.employee_runtime import agent, executor
+
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", "3")
+    scheduler.refresh_employee_scheduler_jobs()
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    source_file = tmp_path / "input.txt"
+    source_file.write_text("input")
+    manifest = {
+        "id": "daily-orchestrator",
+        "employee_config_v2": {
+            "memory": {"type": "none"},
+            "actions": {"handlers": ["direct_python"]},
+        },
+    }
+    monkeypatch.setattr(
+        agent,
+        "load_employee_pack_from_disk",
+        lambda _: {
+            "pack_id": "daily-orchestrator",
+            "version": "test",
+            "pack_dir": str(tmp_path),
+            "manifest": manifest,
+        },
+    )
+    monkeypatch.setattr(agent, "gate_action_or_block", lambda *args: {"ok": True})
+    monkeypatch.setattr(
+        agent.EmployeeAgent, "_run_upstream_collaboration", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        agent.EmployeeAgent, "_augment_config_with_persona", lambda self, config, user_id: config
+    )
+    effect = tmp_path / "effect.txt"
+
+    def action(*args, **kwargs):
+        with effect.open("a") as stream:
+            stream.write("effect\n")
+        raise TimeoutError("receipt lost after action")
+
+    monkeypatch.setattr(executor, "_actions_fhd", action)
+    first = scheduler.run_employee_cron_job(
+        "daily-orchestrator",
+        source="cron",
+        input_data={"file_path": str(source_file)},
+        workspace_root=str(tmp_path),
+    )
+    assert effect.read_text() == "effect\n"  # The real EmployeeAgent reached and caught the action.
+    assert first["result"]["execution_state"] == "unknown"
+    assert first["job"]["next_retry_at"] is None
+    assert (
+        scheduler.run_employee_cron_job("daily-orchestrator", source="manual")["error_code"]
+        == "employee_cron_pending_execution"
+    )
+    assert effect.read_text() == "effect\n"
+
+
+@pytest.mark.parametrize("execution", [None, {"outcome": "not_executed", "committed": True}])
+@pytest.mark.parametrize("message", ["execution failed", "宿主未配置模型"])
+def test_failed_receipt_without_no_effect_proof_is_held(monkeypatch, execution, message):
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", "2")
+    scheduler.refresh_employee_scheduler_jobs()
+    receipt = {"success": False, "error": message}
+    if execution is not None:
+        receipt["execution"] = execution
+    with patch(
+        "app.application.employee_runtime.executor.execute_employee_task_local",
+        return_value=receipt,
+    ) as execute:
+        first = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
+        assert first["result"]["execution_state"] == "unknown"
+        assert first["job"]["next_retry_at"] is None
+        assert first["job"]["next_run_at"] is None
+        for source in ("manual", "cron"):
+            assert (
+                scheduler.run_employee_cron_job("daily-orchestrator", source=source)["error_code"]
+                == "employee_cron_pending_execution"
+            )
+        assert execute.call_count == 1
+
+
+def test_runtime_missing_before_invocation_keeps_no_effect_proof(monkeypatch):
+    import builtins
+    from unittest.mock import Mock
+
+    from app.application.employee_runtime import executor
+
+    execute = Mock()
+    alert = Mock()
+    monkeypatch.setattr(executor, "execute_employee_task_local", execute)
+    monkeypatch.setattr(scheduler, "_alert_hook", alert)
+    original_import = builtins.__import__
+
+    def runtime_unavailable(name, *args, **kwargs):
+        if name == "app.application.employee_runtime.executor":
+            raise ImportError("runtime unavailable")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", runtime_unavailable)
+    result = scheduler.run_employee_cron_job("daily-orchestrator", source="cron")
+    assert result["result"]["execution"] == {"outcome": "not_executed", "committed": False}
+    assert result["job"]["last_status"] == "blocked_config"
+    assert result["job"]["next_retry_at"] is None
+    assert result["job"]["pending_execution"] == {}
+    alert.assert_called_once()
+    assert alert.call_args.args[:2] == ("daily-orchestrator", result["job"]["last_error"])
+    assert alert.call_args.args[2]["last_status"] == "blocked_config"
+    execute.assert_not_called()

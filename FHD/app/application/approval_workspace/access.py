@@ -46,6 +46,18 @@ def unsupported_approval_policy() -> JSONResponse:
     )
 
 
+def single_step_policy_required() -> JSONResponse:
+    return JSONResponse(
+        {
+            "success": False,
+            "code": "single_step_approval_required",
+            "message": "新增审批仅允许一个串行节点、单人批准，不再支持多级、会签、并行、转签或委托；"
+            "历史记录和在途请求保留。",
+        },
+        status_code=409,
+    )
+
+
 def allow_x_user_id_header() -> bool:
     """测试/e2e 专用；生产环境不信任自报 X-User-ID。"""
     return os.environ.get("FHD_ALLOW_X_USER_ID_HEADER", "").strip().lower() in {"1", "true", "yes"}

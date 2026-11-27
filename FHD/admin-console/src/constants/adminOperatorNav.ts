@@ -1,5 +1,5 @@
 /**
- * 平台管理员 · XCMAX 服务器后台（与太阳鸟企业 ERP 壳分离）
+ * 平台管理员 · XCAGI 服务器后台（与太阳鸟企业 ERP 壳分离）
  */
 
 import type { CoreMenuCatalogItem } from '@/constants/coreMenuCatalog'
@@ -53,7 +53,7 @@ export const ADMIN_OPERATOR_CORE_KEYS = ADMIN_OPERATOR_VISIBLE_CORE_KEYS
 
 export const ADMIN_OPERATOR_HOME_ROUTE = 'xcmax-admin'
 
-export const ADMIN_OPERATOR_BRAND_TITLE = 'XCMAX 服务器后台'
+export const ADMIN_OPERATOR_BRAND_TITLE = 'XCAGI 服务器后台'
 export const ADMIN_OPERATOR_BRAND_SUBTITLE = '平台运维 · 系统管理'
 
 export function isAdminOperatorNavContext(

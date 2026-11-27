@@ -21,6 +21,7 @@ class _FakeSyncApi extends MobileApiClient {
     this.conflicts = const [],
     this.changes = const [],
     this.cursor = 0,
+    this.switchAt = '',
     int startCursor = 0,
   }) : session = MobileSessionData(syncCursor: startCursor);
 
@@ -28,12 +29,17 @@ class _FakeSyncApi extends MobileApiClient {
   final List<Map<String, Object?>> conflicts;
   final List<Map<String, Object?>> changes;
   final int cursor;
+  final String switchAt;
   MobileSessionData session;
   final calls = <String>[];
   int? pulledSince;
   List<Map<String, Object?>>? pushedItems;
 
   void _maybeFail(String step) {
+    if (switchAt == step) {
+      beginLoginAttempt();
+      session = const MobileSessionData(syncCursor: 0);
+    }
     if (failStep == step) {
       throw const MobileApiException(
         statusCode: 500,
@@ -52,6 +58,7 @@ class _FakeSyncApi extends MobileApiClient {
     int? syncCursor,
     String? lastSyncAt,
     bool? autoSync,
+    int? authGeneration,
   }) async {
     calls.add('save');
     session = session.copyWith(
@@ -90,6 +97,7 @@ class _FakeSyncApi extends MobileApiClient {
   @override
   Future<MobileEnvelope<Map<String, Object?>>> syncConflicts() async {
     calls.add('conflicts');
+    _maybeFail('conflicts');
     return _ok({'items': conflicts});
   }
 
@@ -109,6 +117,17 @@ class _FakeSyncApi extends MobileApiClient {
 }
 
 void main() {
+  for (final step in ['status', 'push', 'pull', 'conflicts']) {
+    test('account switch during $step stops the original sync', () async {
+      final api = _FakeSyncApi(startCursor: 31, cursor: 99, switchAt: step);
+      await expectLater(runMobileSync(api), throwsA(contains('同步上下文已变更')));
+      final sequence = ['status', 'push', 'pull', 'conflicts'];
+      expect(api.calls, sequence.take(sequence.indexOf(step) + 1).toList());
+      expect(api.session.syncCursor, 0);
+      expect(api.session.lastSyncAt, isEmpty);
+    });
+  }
+
   test('runs status → push → pull → conflicts and advances cursor', () async {
     final api = _FakeSyncApi(startCursor: 3, cursor: 9, changes: const [
       {'id': 4},

@@ -228,7 +228,7 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
   管理端: {
     id: '管理端',
     name: '平台运维',
-    scenario: 'XCMAX 服务器后台运维。',
+    scenario: 'XCAGI 服务器后台运维。',
     welcomeIntro: '你好，平台运维助手。',
     welcomeBullets: ['查看运维总览', '管理服务器功能'],
     quickButtons: [

@@ -146,6 +146,40 @@ def test_unbound_or_other_account_never_reaches_provider(authorized, trusted_act
     )
 
 
+@pytest.mark.parametrize("personal_authority", ["account_tier", "account_kind"])
+def test_personal_account_loses_old_tool_binding(authorized, monkeypatch, personal_authority):
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+
+    calls = []
+
+    def read(path, *_args):
+        calls.append(path)
+        return {"success": True, "data": {}}
+
+    monkeypatch.setattr(kellai, "request_kellai", read)
+    assert kellai.execute_kellai("channels", {}, authorized.context)["success"]
+    assert calls == ["channels"]
+    calls.clear()
+    before = store._store_path().read_bytes()
+    with authorized.factory.begin() as db:
+        if personal_authority == "account_tier":
+            db.get(User, authorized.user_id).account_tier = "personal"
+        else:
+            db.get(UserSession, authorized.session_row_id).account_kind = "personal"
+    # A newly sealed personal session still cannot reuse the enterprise pairing.
+    authorized.context["_actor_authorization"] = bind_agent_actor_scope(
+        session_id=authorized.session_id, user_id=str(authorized.user_id)
+    )
+    assert kellai.connection_scope(authorized.context, "channels") == {"available": False}
+    result = kellai.execute_kellai("channels", {}, authorized.context)
+    assert result["error_code"] == "kellai_scope_required"
+    assert "个人版" in result["message"]
+    assert calls == []
+    assert store._store_path().read_bytes() == before
+
+
 def test_send_requires_shared_persisted_approval(authorized, monkeypatch):
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
 

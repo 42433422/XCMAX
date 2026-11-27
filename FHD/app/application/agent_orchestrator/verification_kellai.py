@@ -46,7 +46,6 @@ def can_observe_kellai_delivery(run, step, call) -> bool:
 def verify_kellai_delivery(run, step, call, context: dict) -> dict:
     from app.application import kellai_binding_app_service as binding
     from app.application.tools.kellai import delivery_request_id
-    from app.infrastructure.auth.agent_mod_scope import _bound_actor
     from app.infrastructure.kellai_client import request_kellai
 
     source = "kellai_original_delivery"
@@ -55,11 +54,7 @@ def verify_kellai_delivery(run, step, call, context: dict) -> dict:
     claimed = original_delivery_receipt(run, step, output)
     if claimed is None:
         return _report("failed", "result_delivery_identity_mismatch", source)
-    actor = _bound_actor(context)
-    actor_id, tenant_id = int(actor.id), str(context.get("tenant_id") or "")
-    connection = binding.scoped_connection(
-        actor=actor_id, tenant_id=tenant_id, scope="messages.send"
-    )
+    connection = binding.scoped_connection(context=context, scope="messages.send")
     approved_connection = (call.metadata.get("verification_contract") or {}).get(
         "kellai_connection_sha256"
     )
@@ -97,9 +92,7 @@ def verify_kellai_delivery(run, step, call, context: dict) -> dict:
         return _report("failed", "result_delivery_identity_mismatch", source)
     # A matching provider ID alone does not prove the approved customer,
     # recipient and content. Read the original scoped message projection too.
-    connection = binding.scoped_connection(
-        actor=actor_id, tenant_id=tenant_id, scope="customer_conversations.read"
-    )
+    connection = binding.scoped_connection(context=context, scope="customer_conversations.read")
     if binding.connection_identity_sha256(connection) != approved_connection:
         return _report("failed", "result_delivery_connection_changed", source)
     params = step.params

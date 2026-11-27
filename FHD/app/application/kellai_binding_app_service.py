@@ -31,16 +31,22 @@ def connection_identity_sha256(connection: dict[str, Any] | None = None) -> str:
     ).hexdigest()
 
 
-def scoped_connection(*, actor: int | None, tenant_id: str, scope: str) -> dict[str, Any]:
-    if actor is None:
-        raise KellaiAuthorizationError("请先登录 XCMAX 企业账号", 401)
+def scoped_connection(*, context: dict[str, Any], scope: str) -> dict[str, Any]:
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+    actor = _bound_actor(context)
+    # _bound_actor compares this sealed session metadata against its live row.
+    account = context["_actor_authorization"]["market_authorization"]
+    if actor.account_tier == "personal" or account.get("account_kind") == "personal":
+        raise KellaiAuthorizationError("个人版不开放客来来企业通信能力")
+    if account.get("account_kind") == "admin" or account.get("is_admin"):
+        raise KellaiAuthorizationError("平台管理账号无权读取客户原始会话")
     connection = kellai_binding_store.connection_credentials()
     if not connection:
         raise KellaiAuthorizationError("客来来尚未连接", 409)
-    if (
-        connection.get("xcmax_user_id") != actor
-        or str(connection.get("xcmax_tenant_id") or "") != tenant_id
-    ):
+    if connection.get("xcmax_user_id") != int(actor.id) or str(
+        connection.get("xcmax_tenant_id") or ""
+    ) != str(context.get("tenant_id") or ""):
         raise KellaiAuthorizationError("请由当前账号重新申请客来来模块授权")
     if scope not in connection.get("authorized_scopes", []):
         raise KellaiAuthorizationError(f"尚未授权 {scope}，请在连接与账号中申请")

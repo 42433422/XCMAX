@@ -53,13 +53,14 @@ def _require_loopback(request: Request) -> None:
         raise HTTPException(status_code=403, detail="客来来绑定仅允许本机桌面端访问")
 
 
-def _require_xcmax_client(request: Request) -> None:
+def _require_xcmax_client(request: Request, *, revoke_only: bool = False) -> None:
     """Keep customer data in the enterprise/client plane, never the admin shell."""
     _require_loopback(request)
     shell = str(request.headers.get("X-XCMAX-Client-Shell") or "").strip().lower()
     if shell not in {"enterprise", "desktop", "web"}:
         raise HTTPException(status_code=403, detail="客来来客户数据仅允许企业客户端访问")
 
+    session_id = ""
     try:
         from app.application.session_account_meta import load_session_account_meta
         from app.infrastructure.auth.client_shell_session import resolve_session_id_from_request
@@ -73,6 +74,12 @@ def _require_xcmax_client(request: Request) -> None:
         or bool(meta.get("market_is_admin"))
     ):
         raise HTTPException(status_code=403, detail="平台管理账号无权读取客户原始会话")
+    if not revoke_only:
+        from app.enterprise.mod_entitlements import session_has_personal_plan
+
+        personal = isinstance(meta, dict) and meta.get("account_kind") == "personal"
+        if personal or (session_id and session_has_personal_plan(session_id)):
+            raise HTTPException(status_code=403, detail="个人版不开放客来来企业通信能力")
     owners = kellai_binding_app.binding_owners()
     if owners and _client_actor(request) not in owners:
         raise HTTPException(status_code=403, detail="此客来来连接属于另一个 XCMAX 账号")
@@ -136,11 +143,16 @@ def _read_kellai_capability(
 
 
 def _scoped_connection(request: Request, scope: str) -> dict[str, Any]:
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
+
     _require_xcmax_client(request)
     try:
         return kellai_binding_app.scoped_connection(
-            actor=_client_actor(request), tenant_id=_client_tenant(request), scope=scope
+            context=request_runtime_context(request), scope=scope
         )
+    except AgentModAuthorizationError as exc:
+        raise HTTPException(status_code=401, detail="请先登录 XCMAX 企业账号") from exc
     except kellai_binding_app.KellaiAuthorizationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
@@ -223,7 +235,7 @@ def cancel_binding(body: CancelBindingBody, request: Request):
 
 @router.post("/disconnect")
 def disconnect_binding(request: Request):
-    _require_xcmax_client(request)
+    _require_xcmax_client(request, revoke_only=True)
     _require_pairing_request(request)
 
     try:

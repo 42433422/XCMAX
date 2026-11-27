@@ -1008,12 +1008,12 @@ class TestSubmitRequest:
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
-        flow = Mock()
+        flow = Mock(node_type="serial", allow_transfer=False, allow_delegate=False)
         flow.id = 1
         flow.flow_key = "fk"
         mock_query.first.return_value = flow
 
-        first_node = Mock()
+        first_node = Mock(node_type="serial", min_approvals=1)
         first_node.id = 10
         first_node.node_order = 1
 
@@ -2441,39 +2441,19 @@ class TestCreateFlow:
                 },
             )
             assert result["success"] is True
+            assert MockFlow.call_args.kwargs["allow_transfer"] is False
+            assert MockFlow.call_args.kwargs["allow_delegate"] is False
 
-    def test_create_flow_non_dict_node_skipped(self):
-        """Non-dict entries in nodes list are silently skipped."""
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = None
-
-        flow = Mock()
-        flow.id = 1
-        flow.to_dict.return_value = {"id": 1}
-
-        with (
-            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
-            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
-            patch("app.application.approval_workspace_app_service._audit"),
-            patch("app.application.approval_workspace_app_service.ApprovalFlow") as MockFlow,
-            patch("app.application.approval_workspace_app_service.ApprovalFlowNode") as MockNode,
-        ):
-            mock_resolve.return_value = 1
-            MockFlow.return_value = flow
-            MockNode.return_value = Mock()
-            mock_get_db.return_value = _make_db_ctx(mock_db)
-            result = create_flow(
-                request,
+    def test_create_flow_non_dict_node_rejected(self):
+        with pytest.raises(Exception) as exc_info:
+            create_flow(
+                Mock(),
                 body={
                     "flow": {"flow_name": "fn", "flow_key": "fk"},
                     "nodes": ["not_a_dict", {"node_name": "n1", "approver_ids": [1]}],
                 },
             )
-            assert result["success"] is True
+        assert exc_info.value.status_code == 400
 
 
 @pytest.mark.usefixtures("platform_admin")

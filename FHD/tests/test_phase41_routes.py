@@ -202,6 +202,8 @@ def _seed_flow(
         is_active=True,
         is_deleted=False,
         allow_withdraw=True,
+        allow_transfer=False,
+        allow_delegate=False,
     )
     node = ApprovalFlowNode(
         node_name="审批节点",
