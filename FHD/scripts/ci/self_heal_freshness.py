@@ -72,6 +72,7 @@ class Decision:
     event: str = ""
     head_branch: str = ""
     head_repo: str = ""
+    head_repo_id: int = 0
     disposition: str = "unresolved"
 
     def line(self) -> str:
@@ -154,6 +155,68 @@ def incident_fields(body: str) -> dict[str, str]:
     return dict(re.findall(r"^- ([\w /-]+): `([^`\n]+)`\s*$", header, flags=re.M))
 
 
+def _repository_id(value: Any) -> int:
+    """Read a stable ID from verified GitHub metadata, never from a string."""
+    number = value.get("id") if isinstance(value, dict) else None
+    return number if type(number) is int and number > 0 else 0
+
+
+def _verified_repository_migration(
+    get: Getter,
+    *,
+    repo: str,
+    run_id: int,
+    previous: str,
+    current: str,
+    source_id: int,
+    branch: str,
+    workflow_id: int,
+    workflow_path: str,
+    attempt: int,
+) -> bool:
+    """Accept historical names only for the exact original GitHub repository ID."""
+    repo_pattern = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}"
+    if source_id <= 0 or any(
+        not re.fullmatch(repo_pattern, name) or ".." in name
+        for name in (repo, previous, current)
+    ):
+        return False
+    run = _get(get, f"/repos/{repo}/actions/runs/{run_id}")
+    head = run.get("head_repository") or {}
+    owner = run.get("repository") or {}
+    if (
+        run.get("id") != run_id
+        or run.get("head_branch") != branch
+        or run.get("workflow_id") != workflow_id
+        or run.get("path") != workflow_path
+        or run.get("run_attempt") != attempt
+        or _repository_id(head) != source_id
+        or str(head.get("full_name") or "").casefold() != current.casefold()
+        or _repository_id(owner) == 0
+    ):
+        return False
+    current_meta = _get(get, f"/repos/{current}")
+    owner_meta = _get(get, f"/repos/{repo}")
+    if (
+        _repository_id(current_meta) != source_id
+        or str(current_meta.get("full_name") or "").casefold() != current.casefold()
+        or _repository_id(owner_meta) != _repository_id(owner)
+        or str(owner_meta.get("full_name") or "").casefold() != repo.casefold()
+    ):
+        return False
+    status, historical = get(f"/repos/{previous}", {})
+    if status == 200 and isinstance(historical, dict):
+        return (
+            _repository_id(historical) == source_id
+            and str(historical.get("full_name") or "").casefold() == current.casefold()
+        )
+    if status == 301 and isinstance(historical, dict):
+        # Only GitHub's fixed repository-ID endpoint can prove a transfer.
+        # Never follow a URL taken from an incident or an arbitrary redirect.
+        return historical.get("url") == f"{GITHUB_API}/repositories/{source_id}"
+    return False
+
+
 def reconcile_source(issue: dict[str, Any], repo: str, get: Getter) -> Decision:
     """Read-only disposition; superseded is distinct from a proven recovery."""
     fields = incident_fields(str(issue.get("body") or ""))
@@ -172,15 +235,40 @@ def reconcile_source(issue: dict[str, Any], repo: str, get: Getter) -> Decision:
         get=get,
         event_run={"run_attempt": attempt},
     )
-    if decision.action != BLOCK and (
+    if decision.action == BLOCK:
+        return decision
+    recorded_id = fields.get("Head Repository ID", "")
+    if recorded_id and (
+        not recorded_id.isdecimal() or int(recorded_id) != decision.head_repo_id
+    ):
+        return Decision(BLOCK, "incident_source_repository_id_mismatch", run_id=run_id)
+    if (
         fields.get("Branch") != decision.head_branch
-        or fields.get("Head Repository", repo).casefold() != decision.head_repo.casefold()
         or (
             fields.get("Self-Heal-Workflow")
             and fields["Self-Heal-Workflow"] != f"{decision.workflow_id}@{decision.workflow_path}"
         )
     ):
         return Decision(BLOCK, "incident_source_branch_or_repository_mismatch", run_id=run_id)
+    previous_repo = fields.get("Head Repository", repo)
+    if previous_repo.casefold() != decision.head_repo.casefold():
+        try:
+            verified = _verified_repository_migration(
+                get,
+                repo=repo,
+                run_id=run_id,
+                previous=previous_repo,
+                current=decision.head_repo,
+                source_id=decision.head_repo_id,
+                branch=decision.head_branch,
+                workflow_id=decision.workflow_id,
+                workflow_path=decision.workflow_path,
+                attempt=decision.run_attempt,
+            )
+        except (LookupFailed, KeyError, TypeError, ValueError, OSError):
+            verified = False
+        if not verified:
+            return Decision(BLOCK, "incident_source_branch_or_repository_mismatch", run_id=run_id)
     return decision
 
 
@@ -266,6 +354,7 @@ def evaluate(
             event=event,
             head_branch=str(run.get("head_branch") or ""),
             head_repo=str((run.get("head_repository") or {}).get("full_name") or repo),
+            head_repo_id=_repository_id(run.get("head_repository")),
         )
         if (
             not re.fullmatch(r"[0-9a-f]{40}", src_sha)
@@ -351,6 +440,8 @@ def source_markers(decision: Decision, *, include_source: bool = True) -> list[s
     部署/巡检类只用 run id+attempt，避免同一提交的再次部署失败被误判为重复。
     """
     marks = [f"Self-Heal-Run: `{decision.run_id}/{decision.run_attempt}`"]
+    if decision.head_repo_id:
+        marks.append(f"Head Repository ID: `{decision.head_repo_id}`")
     if decision.workflow_path:
         marks.append(f"Self-Heal-Workflow: `{decision.workflow_id}@{decision.workflow_path}`")
     if include_source and decision.source_sha:
@@ -363,7 +454,9 @@ def source_markers(decision: Decision, *, include_source: bool = True) -> list[s
 def find_marked_issue(get: Getter, repo: str, markers: list[str]) -> str:
     """在 auto-incident issue 中查找已带相同标记的单；查询失败抛 LookupFailed。"""
     # Workflow identity is shared by many sources; it must never deduplicate by itself.
-    identities = [m for m in markers if not m.startswith("Self-Heal-Workflow:")]
+    identities = [
+        m for m in markers if m.startswith(("Self-Heal-Run:", "Self-Heal-Source:"))
+    ]
     for item in pages(
         get,
         f"/repos/{repo}/issues",
