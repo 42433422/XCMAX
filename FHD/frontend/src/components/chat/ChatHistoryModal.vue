@@ -34,10 +34,7 @@
             {{ $t('chat.retry') }}
           </button>
         </div>
-        <div v-if="!historyLoading && !historyError && historySessions.length === 0" class="empty-state">
-          {{ $t('chat.historyEmpty') }}
-          <div class="history-empty-tip">{{ $t('chat.historyEmptyTip') }}</div>
-        </div>
+        <div v-if="!historyLoading && !historyError && historySessions.length === 0" class="empty-state">{{ $t('chat.historyEmpty') }}</div>
         <template v-if="historySessions.length">
           <button
             v-for="session in visibleSessions"
@@ -68,7 +65,6 @@
             <button type="button" :disabled="sessionPage + 1 >= sessionPageCount" @click="sessionPage++">下一页</button>
           </nav>
           <button v-if="historyHasMore" type="button" class="btn btn-secondary btn-sm" :disabled="historyLoadingMore" @click="$emit('load-more')">{{ historyLoadingMore ? '正在加载…' : '加载更早的会话' }}</button>
-          <p v-else-if="!historyError" class="history-empty-tip">已显示全部可用会话</p>
         </template>
       </div>
     </div>
@@ -174,12 +170,6 @@ defineEmits<{
 .history-error-text {
   color: #b91c1c;
   font-size: 13px;
-}
-
-.history-empty-tip {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #6b7280;
 }
 
 .history-pagination {

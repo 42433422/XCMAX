@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from tests.test_mods._excel_runtime import load_module as _load_module
 
@@ -342,6 +342,26 @@ def test_qc_detects_mapper_false_claim(tmp_path: Path) -> None:
     assert report["blame"] == ["mapper"]
     issues = "；".join(i["detail"] for i in report["sections"]["expected"]["issues"])
     assert "cells_planned" in issues and "统计失真" in issues
+
+
+def test_protection_tracks_inserted_rows_and_new_blanks():
+    _, _, qc = _load_vendor_pkgs()
+    original, written = Workbook(), Workbook()
+    source, result = original.active, written.active
+    source["D2"], source["D3"] = 1, "=C3"
+    result["D2"], result["D4"] = 1, "=C4"
+    plan = {
+        "protected_ranges": ["Sheet!$D$2:$D$3"],
+        "phases": [{"phase": "insert_rows", "sheet": "Sheet", "row": 3, "count": 1}],
+    }
+    try:
+        assert qc._check_protection(written, plan, original).status == "pass"
+        result["D3"], result["D2"] = 5, "1"
+        finding = qc._check_protection(written, plan, original)
+        assert finding.status == "fail" and finding.stats["diffs"] == 2
+    finally:
+        original.close()
+        written.close()
 
 
 def test_qc_detects_protection_breach(tmp_path: Path) -> None:

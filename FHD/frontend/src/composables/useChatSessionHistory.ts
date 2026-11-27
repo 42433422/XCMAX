@@ -9,11 +9,12 @@ import {
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
-import { samePersistedMessage } from './useChatMessagePersistence'
+import { isServerHistoryCopy, samePersistedMessage } from './useChatMessagePersistence'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { isDurableChatScope } from '@/utils/chatSessionRestore'
 import type { ChatConversationStatus } from './useChatSessionActivity'
 
 export interface UseChatSessionHistoryDeps {
@@ -194,15 +195,18 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       if (!canLoad()) return
       const dataRow = asRecord(data)
       const serverMessages = asArray(dataRow.messages ?? asRecord(dataRow.data).messages)
+      const ownedHistory = isDurableChatScope(resolveChatStorageScope())
+      const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid)).filter(message => {
+        if (data.success && ownedHistory && isServerHistoryCopy(message)) return false
+        if (typeof dataRow.revision !== 'number') return true
+        return message.persistence?.request ? (message.persistence.request.expected_revision ?? 0) === dataRow.revision : ownedHistory
+      })
       if (dataRow.durable === true && dataRow.revision === null) {
-        loadMessages([], dataRow)
+        loadMessages(ownedHistory ? localMessages : [], dataRow)
         showHistory.value = false
         deps.onConversation?.(dataRow)
         return
       }
-      const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid)).filter(message =>
-        typeof dataRow.revision !== 'number' || (message.persistence?.request
-          && (message.persistence.request.expected_revision ?? 0) === dataRow.revision))
       if (data.success && serverMessages.length > 0) {
         const merged = [...localMessages]
         const matched = new Set<number>()
@@ -217,7 +221,8 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           }
         })) {
           const index = localMessages.findIndex((local, i) => !matched.has(i)
-            && samePersistedMessage(local, message, historyPersistence.toPlainText))
+            && (ownedHistory && local.role === 'user' && message.role === 'user' && local.turnId && local.turnId === message.turnId
+              || samePersistedMessage(local, message, historyPersistence.toPlainText)))
           if (index < 0) merged.push(message)
           else {
             matched.add(index)
@@ -239,6 +244,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         throw new Error(asString((data as { message?: unknown }).message, '加载会话失败'))
       }
       showHistory.value = false
+      refreshLocalHistorySessions()
       deps.onConversation?.(dataRow)
     } catch (e) {
       if (!canLoad()) return

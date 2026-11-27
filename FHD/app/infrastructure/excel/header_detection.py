@@ -30,9 +30,26 @@ _NUMERIC_LIKE = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "-", "+", "."
 
 
 class HeaderConfirmationRequired(ValueError):
-    def __init__(self, candidate_rows: list[int]) -> None:
-        super().__init__("表头候选不唯一，请确认表头所在行。")
+    def __init__(self, candidate_rows: list[int], rows: list[list[str]]) -> None:
+        from openpyxl.utils.cell import get_column_letter
+
+        super().__init__("无法确认表头所在行。")
         self.candidate_rows = tuple(candidate_rows)
+        self.sample_rows = [
+            {
+                "row": row_number,
+                "cells": {
+                    get_column_letter(column): value
+                    for column, value in enumerate(row[:24], 1)
+                    if value
+                },
+            }
+            for row_number, row in enumerate(rows[:3], 1)
+        ]
+
+
+class HeaderDetectionFailed(ValueError):
+    """The header model failed to produce a usable decision."""
 
 
 def _cell_text(value: Any) -> str:
@@ -62,7 +79,7 @@ def detect_header_row_1based(
     *,
     max_scan_rows: int = _MAX_SCAN_ROWS,
 ) -> int | None:
-    """返回 1-based 表头行号；无候选返回 None，多候选要求明确确认。"""
+    """Return a header row or distinguish undecided layout from model failure."""
     if path.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
         return None
     if not zipfile.is_zipfile(path):
@@ -121,10 +138,12 @@ def detect_header_row_1based(
             except StructuredOutputError as exc:
                 # A configured model's failed/invalid judgement must not silently
                 # become a conflicting heuristic choice.
-                raise ValueError("header model did not produce a valid decision") from exc
+                raise HeaderDetectionFailed("模型未能完成表头识别。") from exc
             header = result.data["header_row"]
+            if type(header) is int and header == 0:
+                raise HeaderConfirmationRequired([], rows)
             if type(header) is not int or not 1 <= header <= len(rows):
-                raise ValueError("header model did not identify a valid header row")
+                raise HeaderDetectionFailed("模型返回的表头行号无效。")
             return header
         # Text-rich business rows and report metadata can both resemble headers.
         # Neither a denser nor an earlier row is proof when several qualify.
@@ -136,11 +155,13 @@ def detect_header_row_1based(
             # Numeric year labels can fail the text score while a later business
             # row passes it. Do not silently discard the earlier populated row.
             candidates.insert(0, populated[0])
-        if len(candidates) > 1:
-            raise HeaderConfirmationRequired(candidates)
+        if len(candidates) > 1 or (
+            not candidates and populated and any(any(row) for row in rows[: populated[0] - 1])
+        ):
+            raise HeaderConfirmationRequired(candidates, rows)
         return candidates[0] if candidates else None
     finally:
         workbook.close()
 
 
-__all__ = ["HeaderConfirmationRequired", "detect_header_row_1based"]
+__all__ = ["HeaderConfirmationRequired", "HeaderDetectionFailed", "detect_header_row_1based"]

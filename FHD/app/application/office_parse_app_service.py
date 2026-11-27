@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.domain.workbook_write_contract import WORKBOOK_READER
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -17,9 +18,9 @@ OFFICE_UPLOAD_SUFFIXES = frozenset(
 )
 
 EMPLOYEE_BY_SUFFIX: dict[str, str] = {
-    ".xlsx": "excel-full-read-employee",
-    ".xlsm": "excel-full-read-employee",
-    ".xls": "excel-full-read-employee",
+    ".xlsx": WORKBOOK_READER,
+    ".xlsm": WORKBOOK_READER,
+    ".xls": WORKBOOK_READER,
     ".csv": "csv-full-read-employee",
     ".docx": "word-full-read-employee",
     ".doc": "word-full-read-employee",

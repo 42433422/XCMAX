@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { MOD_STORE_ROUTE } from '@/constants/modStoreNavigation'
 
 /** 设置 / 工具 / 员工空间 / Mod 落地等壳层路由 */
 export const SHELL_ROUTES: RouteRecordRaw[] = [
@@ -26,9 +27,9 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
   },
   {
     path: '/mod-store',
-    name: 'mod-store',
+    name: MOD_STORE_ROUTE.name,
     component: () => import('../../views/ModStore.vue'),
-    meta: { title: 'AI 市场' },
+    meta: { title: MOD_STORE_ROUTE.title },
   },
   {
     path: '/settings',

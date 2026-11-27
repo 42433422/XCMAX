@@ -139,9 +139,11 @@ def store_run_file(
     suffix = Path(name).suffix.lower()
     if suffix not in RUN_FILE_MIME_TYPES:
         raise ValueError("unsupported run file format")
-    if suffix in _OWNER_BOUND_TYPES:
+    scoped = suffix in _OWNER_BOUND_TYPES or owner_user_id is not None
+    if scoped:
         if type(owner_user_id) is not int or owner_user_id <= 0 or not tenant_id:
             raise ValueError("office artifact requires account and tenant scope")
+    if suffix in _OWNER_BOUND_TYPES:
         _verify_bound_content(content, suffix)
     artifact_id = f"{suffix[1:]}_{digest[:32]}"
     path = artifact_path(run_id, artifact_id)
@@ -157,9 +159,12 @@ def store_run_file(
     else:
         if hashlib.sha256(previous).hexdigest() != digest:
             raise ValueError("existing artifact content differs")
-    metadata = {"sha256": digest, "size_bytes": len(content)}
-    if suffix in _OWNER_BOUND_TYPES:
-        metadata.update(run_id=run_id, owner_user_id=str(owner_user_id), tenant_id=str(tenant_id))
+    metadata = {"sha256": digest, "size_bytes": len(content), "run_id": run_id}
+    if scoped:
+        metadata.update(owner_user_id=str(owner_user_id), tenant_id=str(tenant_id))
+    elif tenant_id is not None:
+        # Legacy spreadsheet publishers bind the owner in the SQL run only.
+        metadata["tenant_id"] = str(tenant_id)
     return {
         "artifact_id": artifact_id,
         "artifact_type": "file",
@@ -206,17 +211,30 @@ def read_verified_run_file(run_id: str, artifact: dict[str, Any]) -> bytes:
     path = artifact_path(run_id, artifact["artifact_id"])
     content = _read_artifact(path)
     metadata = artifact.get("metadata") or {}
-    if len(content) != metadata.get("size_bytes") or hashlib.sha256(
-        content
-    ).hexdigest() != metadata.get("sha256"):
+    digest = hashlib.sha256(content).hexdigest()
+    if (
+        not isinstance(metadata, dict)
+        or type(metadata.get("size_bytes")) is not int
+        or len(content) != metadata["size_bytes"]
+        or digest != metadata.get("sha256")
+    ):
         raise ValueError("artifact checksum mismatch")
+    # The URI identifies one immutable version even if a later receipt and
+    # the file bytes are replaced together. Retain pre-prefix legacy IDs.
+    if artifact["artifact_id"].startswith(path.suffix[1:] + "_") and artifact["artifact_id"] != (
+        f"{path.suffix[1:]}_{digest[:32]}"
+    ):
+        raise ValueError("artifact content identity mismatch")
+    if (
+        Path(str(artifact.get("name") or "")).suffix.lower() != path.suffix
+        or artifact.get("mime_type") != RUN_FILE_MIME_TYPES[path.suffix]
+        or artifact.get("uri") != f"/api/agent/runs/{run_id}/artifacts/{artifact['artifact_id']}"
+        or metadata.get("run_id", run_id) != run_id
+        or path.suffix in _OWNER_BOUND_TYPES
+        and metadata.get("run_id") != run_id
+    ):
+        raise ValueError("artifact format or run mismatch")
     if path.suffix in _OWNER_BOUND_TYPES:
-        if (
-            Path(str(artifact.get("name") or "")).suffix.lower() != path.suffix
-            or artifact.get("mime_type") != RUN_FILE_MIME_TYPES[path.suffix]
-            or metadata.get("run_id") != run_id
-        ):
-            raise ValueError("office artifact format or run mismatch")
         _verify_bound_content(content, path.suffix)
     return content
 

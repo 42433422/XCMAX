@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { buildLocalProactiveSuggestions, isFailedChatReply, proactiveReplyMessageId, PROACTIVE_SUGGESTIONS_STORAGE_KEY, useProactiveReplySuggestions } from './useProactiveReplySuggestions'
+import { buildLocalProactiveSuggestions, isFailedChatReply, proactiveReplyMessageId, useProactiveReplySuggestions } from './useProactiveReplySuggestions'
 
 it.each([
   ['<span title=">">处理失败：暂不可用</span>', true],
@@ -32,18 +32,40 @@ describe('buildLocalProactiveSuggestions', () => {
     expect(items.some((i) => /导入|映射|预览|写入/.test(i.text))).toBe(true)
   })
 
-  it('exports an isolated storage key distinct from WeChat star refresh', () => {
-    expect(PROACTIVE_SUGGESTIONS_STORAGE_KEY).toBe('xcagi_proactive_suggestions')
-    expect(PROACTIVE_SUGGESTIONS_STORAGE_KEY).not.toContain('wechat')
+  it('enables proactive choices at enterprise L2 and above and retires choices after a downgrade', () => {
+    const scope = effectScope()
+    const enterpriseLevel = ref<number | null>(null)
+    const messageInput = ref('')
+    const api = scope.run(() => useProactiveReplySuggestions({
+      messages: ref([
+        { role: 'assistant', content: '请核对订单' },
+        { role: 'ai', content: '[附件] 不支持的文件类型' },
+      ]),
+      messageInput, enterpriseLevel,
+    }))!
+    try {
+      expect(api.proactiveSuggestions.value).toEqual([])
+      enterpriseLevel.value = 1
+      expect(api.proactiveSuggestions.value).toEqual([])
+      for (const level of [2, 3, 4, 5, 6]) {
+        enterpriseLevel.value = level
+        expect(api.proactiveSuggestions.value).toHaveLength(3)
+      }
+      const choice = api.proactiveSuggestions.value[0]!
+      enterpriseLevel.value = 1
+      expect(api.proactiveSuggestions.value).toEqual([])
+      api.pickProactiveSuggestion(choice)
+      expect(messageInput.value).toBe('')
+    } finally { scope.stop() }
   })
 
   it('waits for a completed reply, fills only the draft, and clears on session change', async () => {
     const scope = effectScope()
-    const enabled = ref(true), isLoading = ref(true), scopeKey = ref('session-1')
+    const enterpriseLevel = ref(2), isLoading = ref(true), scopeKey = ref('session-1')
     const messageInput = ref('')
     const api = scope.run(() => useProactiveReplySuggestions({
       messages: ref([{ role: 'assistant', content: '请核对订单' }]),
-      messageInput, enabled, isLoading, scopeKey,
+      messageInput, enterpriseLevel, isLoading, scopeKey,
     }))!
     try {
       expect(api.proactiveSuggestions.value).toHaveLength(0)
@@ -55,7 +77,7 @@ describe('buildLocalProactiveSuggestions', () => {
       expect(messageInput.value).not.toBe('')
       scopeKey.value = 'session-2'
       expect(api.proactiveSuggestions.value).toHaveLength(0)
-      enabled.value = false
+      enterpriseLevel.value = 1
       await nextTick()
       const draft = messageInput.value
       api.pickProactiveSuggestion(choice)
@@ -73,7 +95,7 @@ describe('buildLocalProactiveSuggestions', () => {
     ])
     const isLoading = ref(false), isStreamingReply = ref(true)
     const api = scope.run(() => useProactiveReplySuggestions({
-      messages, messageInput: ref(''), enabled: ref(true), isLoading, isStreamingReply, scopeKey: ref('a'),
+      messages, messageInput: ref(''), enterpriseLevel: ref(2), isLoading, isStreamingReply, scopeKey: ref('a'),
     }))!
     try {
       const firstId = proactiveReplyMessageId(messages.value[1]!)
@@ -97,7 +119,7 @@ describe('buildLocalProactiveSuggestions', () => {
     const scope = effectScope()
     const messages = ref([{ role: 'ai', content: '请核对订单', persistence: { id: 'shared-id' } }])
     const scopeKey = ref('a'), messageInput = ref('原草稿'), isLoading = ref(false)
-    const api = scope.run(() => useProactiveReplySuggestions({ messages, messageInput, scopeKey, isLoading, enabled: ref(true) }))!
+    const api = scope.run(() => useProactiveReplySuggestions({ messages, messageInput, scopeKey, isLoading, enterpriseLevel: ref(2) }))!
     try {
       const old = api.proactiveSuggestions.value[0]!
       scopeKey.value = 'b'
@@ -123,7 +145,7 @@ describe('buildLocalProactiveSuggestions', () => {
     const scope = effectScope()
     const messages = ref([{ role: 'ai', content: '确认订单', persistence: { id: 'reply' } }])
     const messageInput = ref('')
-    const api = scope.run(() => useProactiveReplySuggestions({ messages, messageInput, enabled: ref(true), scopeKey: ref('history') }))!
+    const api = scope.run(() => useProactiveReplySuggestions({ messages, messageInput, enterpriseLevel: ref(2), scopeKey: ref('history') }))!
     try {
       const old = api.proactiveSuggestions.value[0]!
       messages.value = [{ role: 'ai', content: 'Excel 导入完成', persistence: { id: 'reply' } }]

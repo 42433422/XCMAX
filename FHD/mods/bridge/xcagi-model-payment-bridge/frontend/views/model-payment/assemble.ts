@@ -7,14 +7,6 @@ import { useMpCatalog } from './useMpCatalog'
 import { useMpMembershipPlans } from './useMpMembershipPlans'
 import { useMpHandoff } from './mpHandoff'
 import { useMpMarketActions } from './useMpMarketActions'
-import {
-  providerInitials, providerModelCount, providerState,
-} from './useMpCatalog'
-
-/**
- * 组装模型服务视图全部状态与动作；子组件通过单一 ctx prop 共享，
- * 逻辑自 ModelPaymentView.vue 逐字迁移，行为不变。
- */
 export function assembleMpModelPayment() {
   const handoffController = new AbortController()
   const offline = useMpOffline({
@@ -77,9 +69,6 @@ export function assembleMpModelPayment() {
     ...catalog,
     ...plans,
     ...actions,
-    providerInitials,
-    providerModelCount,
-    providerState,
   }
 }
 

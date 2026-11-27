@@ -24,6 +24,7 @@ interface DroppedRoundPresentation {
   text: string
   workflowAction: string
   activeTurn?: ActiveChatTurn
+  savedMessage?: Record<string, unknown>
 }
 
 export function activeChatTurnStatus(raw: string): ActiveChatTurn['status'] | undefined {
@@ -101,14 +102,17 @@ export function droppedRoundFromHistory(conversation: unknown, turnId: string): 
     return { status, workflowAction: activeTurn.status, text: activeChatTurnMessage(activeTurn), activeTurn }
   }
   const receipt = asRecord(body.turn_receipt)
+  const rows = asArray(body.messages ?? asRecord(body.data).messages)
   if (turnId && asString(receipt.turn_id) === turnId && (asString(receipt.run_id)
     || (receipt.receipt_kind === 'turn' && receipt.durable === true))) {
     const uncertain = receipt.requires_reconciliation === true || receipt.reconciliation_required === true || receipt.outcome_unknown === true
-    return droppedRoundPresentation({
+    const presentation = droppedRoundPresentation({
       reachable: true, serverStatus: uncertain ? 'unknown' : asString(receipt.execution_state || receipt.status), serverText: asString(receipt.message),
     })
+    const savedMessage = typeof receipt.message_id === 'number' && body.durable === true
+      ? rows.map(asRecord).find(row => row.id === receipt.message_id && ['assistant', 'ai'].includes(asString(row.role))) : undefined
+    return { ...presentation, ...(savedMessage && !uncertain ? { savedMessage: { ...savedMessage, durable: true } } : {}) }
   }
-  const rows = asArray(body.messages ?? asRecord(body.data).messages)
   if (turnId && body.success !== false) {
     for (const raw of [...rows].reverse()) {
       const row = asRecord(raw)
@@ -127,7 +131,8 @@ export function droppedRoundFromHistory(conversation: unknown, turnId: string): 
         : ['completed', 'succeeded', 'failed', 'interrupted', 'running', 'queued', 'waiting_approval', 'unknown'].includes(state) ? state
         : summary.success === false ? 'failed'
           : summary.success === true && !summary.status && !row.status ? 'completed' : 'unknown'
-      return droppedRoundPresentation({ reachable: true, serverStatus, serverText: asString(row.content) })
+      return { ...droppedRoundPresentation({ reachable: true, serverStatus, serverText: asString(row.content) }),
+        ...(body.durable === true ? { savedMessage: { ...row, durable: true } } : {}) }
     }
   }
   return droppedRoundPresentation({ reachable: true })

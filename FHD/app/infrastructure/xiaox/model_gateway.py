@@ -8,25 +8,31 @@ native remote tools and client-supplied provider changes are rejected.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
+import sqlite3
 import sys
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable
-from contextlib import AsyncExitStack, ExitStack, aclosing
+from collections.abc import AsyncGenerator, Callable, Iterator
+from contextlib import AsyncExitStack, ExitStack, aclosing, contextmanager
+from email.utils import parsedate_to_datetime
+from random import uniform
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, get_args
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from httpx_sse import EventSource
+from sqlalchemy.exc import DBAPIError
 from starlette.types import Receive, Scope, Send
 
 from app.infrastructure.xiaox.policy import ModelRoute
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 MODEL_PATH = "/api/agent-runtime/xiaox/responses"
 _ZERO_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -62,6 +68,30 @@ def request_remaining(deadline: float) -> float:
     return left
 
 
+def _retry_after_seconds(headers: httpx.Headers) -> float | None:
+    raw = headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        delay = float(raw)
+    except ValueError:
+        try:
+            delay = parsedate_to_datetime(raw).timestamp() - time.time()
+        except (ValueError, OverflowError, OSError):
+            return None
+    return delay if math.isfinite(delay) and delay >= 0 else None
+
+
+async def _wait_for_model_retry(request: Request, delay: float) -> bool:
+    import anyio
+
+    with anyio.move_on_after(delay):
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+        return False
+    return True
+
+
 _TERMINAL_STATES = frozenset({"completed", "incomplete", "failed"})
 # 0.171 registers these local helper functions even when no business permission
 # was granted to them. Keep the model's catalog limited to the bound MCP bridge.
@@ -84,6 +114,12 @@ class ModelGatewayContractError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+class _ModelOutputItemError(ValueError):
+    def __init__(self, reason: str, **fields: str | None) -> None:
+        super().__init__("Model output item did not match the controlled response contract")
+        self.diagnostic = {"reason": reason, **fields}
 
 
 def response_usage(response: dict[str, Any]) -> dict[str, int] | None:
@@ -144,19 +180,38 @@ def _validate_output_item(item: Any) -> None:
     from app.infrastructure.xiaox.tool_names import XIAOX_TOOL_NAMES
 
     if not isinstance(item, dict):
-        raise ValueError("Invalid model output item")
+        raise _ModelOutputItemError("item_not_object")
     kind = item.get("type")
+    if not isinstance(kind, str):
+        raise _ModelOutputItemError("item_type_not_string")
     if kind in {"message", "reasoning", "compaction"}:
         return
+    if kind != "function_call":
+        from openai.types.responses import ResponseOutputItem
+
+        # Report only the SDK's public discriminator values, never arbitrary provider text.
+        item_models = get_args(get_args(ResponseOutputItem)[0])
+        known_type = any(
+            kind in get_args(model.model_fields["type"].annotation) for model in item_models
+        )
+        raise _ModelOutputItemError(
+            "item_type_not_allowed", item_type=kind if known_type else "unrecognized"
+        )
     name, namespace = item.get("name"), item.get("namespace")
-    if kind == "function_call" and (
-        namespace == "mcp__xcmax"
-        and name in XIAOX_TOOL_NAMES
-        or namespace in {None, ""}
-        and name in {f"mcp__xcmax__{tool}" for tool in XIAOX_TOOL_NAMES}
+    flat_names = {f"mcp__xcmax__{tool}" for tool in XIAOX_TOOL_NAMES}
+    if isinstance(name, str) and (
+        (namespace == "mcp__xcmax" and name in XIAOX_TOOL_NAMES)
+        or (namespace in (None, "") and name in flat_names)
     ):
         return
-    raise ValueError("Model proposed a tool outside the controlled business bridge")
+    raise _ModelOutputItemError(
+        "function_identity_not_allowed",
+        item_type=kind,
+        namespace=namespace if namespace in (None, "", "mcp__xcmax") else "unrecognized",
+        name=name
+        if isinstance(name, str) and name in flat_names.union(XIAOX_TOOL_NAMES, _LOCAL_HELPERS)
+        else "unrecognized",
+    )
 
 
 def _validate_model_output(response: Any) -> None:
@@ -328,18 +383,21 @@ def _finish(
     if market_route is not None and usage is not None:
         from app.infrastructure.billing.model_reservation import record_platform_model_usage
 
-        binding = store.get(run_id)
-        settled = record_platform_model_usage(
-            usage_key=usage_key,
-            run_id=run_id,
-            user_id=binding.run.user_id,
-            request_id=request_id,
-            route=market_route,
-            usage=usage,
-            receipt=platform_receipt,
-        )
+        with _settlement_storage("binding_read"):
+            binding = store.get(run_id)
+        with _settlement_storage("usage_ledger"):
+            settled = record_platform_model_usage(
+                usage_key=usage_key,
+                run_id=run_id,
+                user_id=binding.run.user_id,
+                request_id=request_id,
+                route=market_route,
+                usage=usage,
+                receipt=platform_receipt,
+            )
     else:
-        settled = settle_model_usage(usage_key, usage) if usage is not None else None
+        with _settlement_storage("usage_ledger"):
+            settled = settle_model_usage(usage_key, usage) if usage is not None else None
 
     def finish(run: Any, metadata: dict[str, Any]) -> None:
         call = metadata["model_requests"][request_id]
@@ -392,7 +450,39 @@ def _finish(
         )
         refresh_ai_budget_metadata(run)
 
-    store.update(run_id, finish)
+    with _settlement_storage("run_projection"):
+        store.update(run_id, finish)
+
+
+class _ModelSettlementStorageError(RuntimeError):
+    code = "model_settlement_storage_failed"
+
+    def __init__(self, stage: str, error: BaseException) -> None:
+        super().__init__("Model settlement could not be persisted")
+        self.diagnostic: dict[str, str | int] = {
+            "storage_stage": stage,
+            "error_type": type(error).__name__,
+        }
+        original = error.orig if isinstance(error, DBAPIError) else error
+        if isinstance(original, sqlite3.Error):
+            code = getattr(original, "sqlite_errorcode", None)
+            name = getattr(original, "sqlite_errorname", None)
+            if type(code) is int and 0 < code <= 0x7FFFFFFF:
+                self.diagnostic["sqlite_error_code"] = code
+            if (
+                isinstance(name, str) and len(name) <= 64 and name.startswith("SQLITE_")
+                and name.isascii() and name.isidentifier()
+            ):
+                self.diagnostic["sqlite_error_name"] = name
+
+
+@contextmanager
+def _settlement_storage(stage: str) -> Iterator[None]:
+    try:
+        yield
+    except (sqlite3.Error, DBAPIError) as error:
+        # DBAPIError renders bound SQL parameters in its traceback.
+        raise _ModelSettlementStorageError(stage, error) from None
 
 
 @router.post(MODEL_PATH)
@@ -532,6 +622,20 @@ async def forward_responses(request: Request):
                 details.update(outcome="not_started", retryable=True)
             if isinstance(error, ModelGatewayContractError):
                 details.update(failure_kind=error.code, failure_reason=str(error), retryable=False)
+            if isinstance(error, _ModelSettlementStorageError):
+                details.update(
+                    error.diagnostic,
+                    failure_kind=error.code,
+                    failure_reason=str(error),
+                )
+                logger.warning(
+                    "Xiaox settlement storage phase=%s driver_result=%s run=%s",
+                    error.diagnostic["storage_stage"],
+                    error.diagnostic.get("sqlite_error_name", "unavailable"),
+                    binding.run_id,
+                )
+            if isinstance(error, _ModelOutputItemError):
+                details["response_item"] = error.diagnostic
 
             def record(run: Any, metadata: dict[str, Any]) -> None:
                 call = metadata.get("model_requests", {}).get(request_id)
@@ -730,17 +834,22 @@ async def forward_responses(request: Request):
                 )
             )
             finished = True
+            retry_after = (
+                _retry_after_seconds(upstream.headers) if upstream.status_code == 429 else None
+            )
             if upstream.status_code == 429 and attempt < 3:
-                try:
-                    delay = max(0.25, min(float(upstream.headers.get("retry-after", "0.5")), 5.0))
-                except ValueError:
-                    delay = 0.5
+                # Missing retry hints use the SDK's bounded exponential jitter.
+                delay = (
+                    max(0.25, retry_after) if retry_after is not None
+                    else 0.5 * 2 ** (attempt - 1) * uniform(0.75, 1)
+                )
                 if request_remaining(deadline) > delay:
                     await upstream.aclose()
                     await client.aclose()
                     upstream = client = None
                     slot_failure = None
-                    await anyio.sleep(delay)
+                    if not await _wait_for_model_retry(request, delay):
+                        return Response(status_code=499)
                     continue
             return JSONResponse(
                 {
@@ -750,6 +859,7 @@ async def forward_responses(request: Request):
                     }
                 },
                 status_code=upstream.status_code if definite else 502,
+                headers={"Retry-After": str(math.ceil(retry_after))} if retry_after is not None else None,
             )
         assert upstream is not None and client is not None
         slot_failure = None
@@ -962,6 +1072,9 @@ async def forward_responses(request: Request):
         raise HTTPException(409, "Model admission or settlement requires reconciliation") from exc
     except XiaoxBindingError as exc:
         raise HTTPException(409, "Model admission or settlement requires reconciliation") from exc
+    except _ModelSettlementStorageError as exc:
+        await record_failure(exc, stream_phase="settlement")
+        raise HTTPException(503, "Model settlement requires reconciliation") from exc
     except (ModelCircuitOpenError, ModelConcurrencyLimitError, ModelRateLimitError) as exc:
         raise HTTPException(
             429, "Model request admission was denied", headers={"Retry-After": str(exc.retry_after)}

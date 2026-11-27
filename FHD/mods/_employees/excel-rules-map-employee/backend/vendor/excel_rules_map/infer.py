@@ -22,6 +22,8 @@ import re
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from openpyxl.utils.cell import column_index_from_string
+
 RULES_VERSION = 1
 
 _MIN_BLOCKS = 3
@@ -30,13 +32,6 @@ _FORMULA_COVERAGE_MIN = 0.6
 _FIT_SAMPLE_BLOCKS = 6
 
 _RANGE_RE = re.compile(r"^([A-Z]{1,3})(\d+):([A-Z]{1,3})(\d+)$")
-
-
-def _col_to_index(letters: str) -> int:
-    idx = 0
-    for ch in letters:
-        idx = idx * 26 + (ord(ch) - ord("A") + 1)
-    return idx
 
 
 def _index_to_col(idx: int) -> str:
@@ -56,7 +51,7 @@ def _vertical_merges(sheet: Dict[str, Any]) -> List[Tuple[int, int, int]]:
             continue
         c1, r1, c2, r2 = m.group(1), int(m.group(2)), m.group(3), int(m.group(4))
         if c1 == c2 and r2 > r1:
-            out.append((_col_to_index(c1), r1, r2 - r1 + 1))
+            out.append((column_index_from_string(c1), r1, r2 - r1 + 1))
     return out
 
 

@@ -60,6 +60,7 @@ _XIAOX_CONTROL_MESSAGES = {
 }
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
 _XIAOX_PUBLIC_CONTROL_CODES = {
+    "autonomy_level_denied": "autonomy_level_denied",
     "binding_conflict": "binding_conflict",
     "binding_missing": "binding_missing",
     "budget_exceeded": "budget_exceeded",
@@ -148,6 +149,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "node_outputs",
         "active_skills",
         "tenant_id",
+        "execution_autonomy_level",
         "user_id",
         "actor_id",
         "local_user_id",
@@ -156,6 +158,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "_actor_authorization",
         "_credential_authorization",
         "_tool_approval_scope",
+        "_workbook_write_review",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "mutation_policy",

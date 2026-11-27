@@ -70,6 +70,18 @@ def _registered_router_client_product_issue(action, params, runtime_context, pro
 
 
 def _registered_router_conversation_history(action, params, runtime_context, profile, user_message):
+    if action == "read_attachment":
+        from app.application.agent_orchestrator.attachment_inputs import read_bound_chat_attachment
+
+        try:
+            data = read_bound_chat_attachment(params.get("upload_id"), runtime_context)
+        except (PermissionError, ValueError):
+            return {
+                "success": False,
+                "error_code": "attachment_read_unavailable",
+                "message": "只能读取当前对话任务已绑定、仍有效的附件。",
+            }
+        return {"success": True, "data": data}
     from app.application.tools.conversation_history import read_conversation_history
 
     return read_conversation_history(action, params, runtime_context)

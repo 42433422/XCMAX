@@ -44,7 +44,7 @@ def projection_allowed(run: AgentRun) -> bool:
     queued = run.metadata.get("_xiaox_queued_request") or {}
     return bool(
         run.metadata.get("runtime_type") == "xiaox"
-        and run.status in {"waiting_user", "running", "blocked"}
+        and run.status in {"waiting_user", "running", "blocked", "unknown"}
         and run.metadata.get("runtime_goal_contract")
         and metadata.get("calls")
         and not metadata.get("coordinator_active")
@@ -69,12 +69,19 @@ def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
     )
 
 
-def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun | None:
+def project_receipt_state(
+    run: AgentRun,
+    rows: list[dict[str, Any]],
+    *,
+    verified_child_recovery: bool = False,
+) -> AgentRun | None:
     """Build a projection; the SQL queue boundary independently verifies its inputs."""
     if not projection_allowed(run):
         return None
-    if requires_retry_reconciliation(run) and not any(
-        receipt_state(row) == "unknown" for row in rows
+    if (
+        requires_retry_reconciliation(run)
+        and not verified_child_recovery
+        and not any(receipt_state(row) == "unknown" for row in rows)
     ):
         return None  # Later receipts cannot silently clear an earlier unknown outcome.
     metadata = run.metadata["xiaox_runtime"]
@@ -135,6 +142,14 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
     projected.error = str(result.get("error") or "")
     projected.final_output["xiaox_result"] = result
     projected.metadata["runtime_receipt_projection"] = fingerprint
+    if verified_child_recovery:
+        projected.metadata.pop("non_retryable", None)
+        projected.metadata.pop("recovery", None)
+        projected.add_event(
+            "runtime.reconciliation.verified",
+            "原子任务已由独立回执核实，无需重放写入",
+            {"child_run_ids": sorted({str(row["child_run_id"]) for row in rows})},
+        )
     if result.get("reconciliation_required"):
         projected.metadata.update(
             non_retryable=True, recovery={"state": "manual_reconciliation_required"}
@@ -207,7 +222,7 @@ def resume_ready_xiaox_runs(
     with repository.transaction(read_only=True) as db:
         query = db.query(AgentRunRecord).filter(
             AgentRunRecord.intent == "xiaox.runtime",
-            AgentRunRecord.status.in_(("waiting_user", "running")),
+            AgentRunRecord.status.in_(("waiting_user", "running", "unknown")),
         )
         if cursor:
             query = query.filter(

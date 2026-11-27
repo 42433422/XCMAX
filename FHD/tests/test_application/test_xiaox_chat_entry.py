@@ -193,16 +193,30 @@ def test_unverified_candidate_is_not_streamed_but_progress_is(monkeypatch, mode)
     note.assert_called_once()
 
 
-def test_unknown_work_retains_original_task_pointer():
+@pytest.mark.parametrize(
+    "result_state",
+    [
+        {"execution_state": "unknown"},
+        {"execution_state": "unknown", "reconciliation_required": True},
+        {"execution_state": "blocked", "exit_status": "reconciliation_required"},
+        {"execution_state": "waiting_user", "resume_required": True, "reconciliation_required": True},
+    ],
+)
+def test_reconciliation_preserves_receipt_without_a_continuation(result_state):
     result = chat.runtime_chat_payload(
         {
             "run_id": "original",
-            "execution_state": "unknown",
-            "reconciliation_required": True,
+            **result_state,
         },
         conversation_id="session",
     )
-    assert result["runtime_context_update"]["agent_runtime_run_id"] == "original"
+    assert result["run_id"] == result["data"]["run_id"] == "original"
+    assert result["requires_reconciliation"] is True
+    assert result["runtime_context_update"] == {
+        "agent_runtime_run_id": None,
+        "status": "reconciliation_required",
+        "conversation_id": "session",
+    }
     assert result["success"] is False
 
 
@@ -228,8 +242,19 @@ def test_no_retired_planner_compatibility_entry_is_exposed():
     assert not hasattr(AgentOrchestrator, "start_run")
 
 
-@pytest.mark.parametrize("state,run_id", [("waiting_user", "parent"), ("completed", None)])
-def test_server_history_retains_continuation_and_terminal_clear(monkeypatch, state, run_id):
+@pytest.mark.parametrize(
+    "state,run_id,continuation_status",
+    [
+        ("waiting_user", "parent", "waiting_user"),
+        ("waiting_approval", "parent", "waiting_approval"),
+        ("queued", "parent", "queued"),
+        ("completed", None, "completed"),
+        ("unknown", None, "reconciliation_required"),
+    ],
+)
+def test_server_history_retains_continuation_and_terminal_clear(
+    monkeypatch, state, run_id, continuation_status
+):
     from app.application.ai_chat.conversation_history import persist_chat_turn
 
     monkeypatch.setattr(
@@ -250,11 +275,56 @@ def test_server_history_retains_continuation_and_terminal_clear(monkeypatch, sta
     )
     assert result["status"] == "saved"
     metadata = json.loads(store.save_turn.call_args.kwargs["messages"][1]["metadata"])
+    assert metadata["summary"]["run_id"] == "parent"
     assert metadata["ui"]["runtimeContinuation"] == {
         "runId": run_id,
-        "status": state,
+        "status": continuation_status,
         "sessionId": "original",
     }
+
+
+def test_verified_child_download_survives_chat_history_and_legacy_replay(monkeypatch):
+    from app.application.ai_chat.conversation_history import persist_chat_turn, restore_runtime_history_files
+    from app.domain.conversation.client_metadata import strip_client_recall_binding
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+    context = {"local_user_id": 71, "tenant_id": "12", "mod_id": "office", "session_id": "original",
+               "turn_id": "turn", "_conversation_revision": 4}
+    artifact = {"artifact_type": "file", "name": "报表.xlsx", "artifact_id": "xlsx-1",
+                "uri": "/api/agent/runs/child/artifacts/xlsx-1", "metadata": {"sha256": "c" * 64}}
+    operation = {"tool_id": "employee", "action": "execute", "params": {}}
+    child = {"run_id": "child", "task_id": "child-task", "status": "completed", "success": True,
+             "verified": True, "artifacts": [artifact], "verification": {"accepted": True, "steps": [
+                 {"checks": [{"source": "run_artifact", "status": "passed", "evidence": {
+                     "run_id": "child", "artifact_id": "xlsx-1", "sha256": "c" * 64}}]}]}}
+    result = {"run_id": "parent", "ok": True, "execution_state": "completed", "output": "报表.xlsx", "business_receipts": [
+        {**operation, "fingerprint": canonical_digest(operation), "state": "completed", "child_run_id": "child",
+         "child_task_id": "child-task", "receipt": child}]}
+    expected = [{**artifact, "run_id": "child"}]
+    payload = chat.runtime_chat_payload(result, conversation_id="original")
+    assert payload["data"]["output_artifacts"] == expected
+    monkeypatch.setattr("app.application.ai_chat.active_conversation.remember_active_conversation", Mock())
+    store = SimpleNamespace(save_turn=Mock(return_value=[1, 2]))
+    assert persist_chat_turn("71", "生成", context, payload, store=store)["status"] == "saved"
+    metadata = json.loads(store.save_turn.call_args.kwargs["messages"][1]["metadata"])
+    assert metadata["ui"]["outputArtifacts"] == expected
+    assert "outputArtifacts" not in json.loads(strip_client_recall_binding(json.dumps(metadata)))["ui"]
+
+    metadata["ui"].pop("outputArtifacts")
+    original = json.dumps(metadata)
+    archive = SimpleNamespace(status="completed", user_id="71", metadata={
+        "runtime_type": "xiaox", "runtime_context": context, "runtime_requests": {
+            canonical_digest({"turn_id": "turn", "owner": "71"}): {
+                "state": "returned", "turn_id": "turn", "result": result}}})
+    repository = SimpleNamespace(get=Mock(return_value=archive))
+    monkeypatch.setattr("app.application.agent_orchestrator.run_repository.get_agent_run_repository", lambda: repository)
+    page = {"messages": [{"role": "assistant", "metadata": original}]}
+    restore_runtime_history_files(page, {**context, "tenant_id": "34"})
+    assert page["messages"][0]["metadata"] == original
+    restore_runtime_history_files(page, context)
+    assert json.loads(page["messages"][0]["metadata"])["ui"]["outputArtifacts"] == expected
+    child["verified"] = False
+    assert "output_artifacts" not in chat.runtime_chat_payload(result)["data"]
 
 
 def test_reconfiguration_resumes_original_run_without_new_dispatch(entry):

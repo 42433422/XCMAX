@@ -1,0 +1,34 @@
+.employee-office-notice {
+  margin: 0;
+  padding: var(--xc-token-spacing-md) var(--xc-token-spacing-lg);
+  color: var(--xc-color-text);
+  background: var(--xc-color-surface-2);
+  border-inline-start: var(--xc-token-focus-ring-width) solid var(--xc-color-warning);
+  font-size: var(--xc-token-typography-label-small-size);
+}
+
+.employee-panel { display: grid; gap: var(--xc-token-spacing-md); min-width: 0; }
+.employee-panel :is(h3, p, ul) { margin: 0; }
+.employee-panel h3 { color: var(--xc-color-text); font-size: var(--xc-token-typography-body-medium-size); }
+.employee-panel-status {
+  display: grid;
+  gap: var(--xc-token-spacing-xs);
+  padding: var(--xc-token-spacing-md);
+  border-radius: var(--xc-token-radius-medium);
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text-secondary);
+  overflow-wrap: anywhere;
+}
+.employee-panel-status strong { color: var(--xc-color-text); }
+.employee-panel-tasks { list-style: none; padding: 0; }
+.employee-panel-tasks a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--xc-token-spacing-sm);
+  padding: var(--xc-token-spacing-sm) 0;
+  border-block-end: 1px solid var(--xc-color-border);
+  color: var(--xc-color-text);
+  overflow-wrap: anywhere;
+}
+.employee-panel-tasks small { color: var(--xc-color-text-secondary); }
+.employee-panel-workbench { justify-self: end; color: var(--xc-color-primary); }

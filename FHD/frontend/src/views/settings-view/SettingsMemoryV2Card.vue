@@ -1,10 +1,10 @@
 <template>
-  <details class="settings-card" data-tutorial-id="settings-memory-v2">
+  <details class="settings-card" :data-tutorial-id="`settings-${SETTINGS_ENTRIES.memory.id}`">
     <summary class="settings-row">
       <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
         <img class="settings-row__icon-art" :src="persyArtSrc" alt="" />
       </span>
-      <span class="settings-row__label">{{ $t('settings.persySystem') }}</span>
+      <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.memory.labelKey) }}</span>
       <span class="settings-row__meta">{{ persyFoldMeta }}</span>
       <span class="settings-row__arrow" aria-hidden="true"></span>
     </summary>
@@ -76,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { SETTINGS_ENTRIES } from './settingsNavigation'
 import type { ButlerProfileView } from '@/api/butlerProfile'
 import persyArtSrc from '@/assets/icons/settings/r2c1.png'
 

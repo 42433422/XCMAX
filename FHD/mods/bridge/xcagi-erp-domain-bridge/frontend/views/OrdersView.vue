@@ -8,7 +8,7 @@
           <button class="btn btn-danger" @click="handleClearAll" :disabled="!canClearAll" title="清空当前业务空间内全部出货记录，不限于当前筛选结果">清空全部出货记录</button>
         </div>
       </div>
-      <div class="search-box">
+      <div class="search-box erp-filters">
         <input v-model.trim="searchQuery" type="text" placeholder="搜索客户名/单号..." @input="scheduleSearch">
       </div>
       <section v-if="tutorialSalesEvidence" class="tutorial-business-proof" data-tutorial-id="tutorial-order-proof">
@@ -17,7 +17,7 @@
         <span>订单 {{ tutorialCount('sales_order_count') }} 张 · 明细 {{ tutorialCount('sales_order_item_count') }} 条</span>
         <span>数量 10 · 单价 ¥100 · 金额 ¥{{ tutorialCount('order_total') }}</span>
       </section>
-      <div class="card" data-tutorial-id="orders-table">
+      <div class="card erp-list" data-tutorial-id="orders-table">
         <DataTable
           :columns="columns"
           :data="store.orders"
@@ -178,3 +178,4 @@ onMounted(() => {
 .tutorial-business-proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e7c46a; border-radius: 10px; background: #fff8df; color: #6f5314; }
 .tutorial-business-proof strong { color: #744707; }
 </style>
+<style scoped src="./erp-list-surfaces.css"></style>

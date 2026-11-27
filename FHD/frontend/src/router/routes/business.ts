@@ -1,5 +1,6 @@
 import type { NavigationGuardNext, RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import { AI_DELIVERY_ROUTES } from '../privateModDeliveryRoutes'
+import { MODEL_SERVICE_SECTION } from '@/constants/modelServiceNavigation'
 
 /** 宿主 ERP / 审批等业务路由。客户端只保留企业版完整表。 */
 const routes: RouteRecordRaw[] = [
@@ -18,8 +19,8 @@ const routes: RouteRecordRaw[] = [
     },
     {
       path: '/model-payment',
-      name: 'model-payment',
-      redirect: { name: 'settings', query: { section: 'model-payment' } },
+      name: MODEL_SERVICE_SECTION,
+      redirect: { name: 'settings', query: { section: MODEL_SERVICE_SECTION } },
       meta: { title: '模型服务' },
     },
     {

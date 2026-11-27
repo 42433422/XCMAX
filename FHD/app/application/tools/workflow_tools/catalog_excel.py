@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.application.tools.workflow_tools.contracts import Payload
+from app.domain.excel import EXCEL_HEADER_ROW
 
 
 def tool_spec(name: str, description: str, properties: Payload, required: list[str]) -> Payload:
@@ -30,12 +31,7 @@ def excel_tool_specs() -> list[Payload]:
                     "type": "string",
                     "description": "工作表名称（Sheet名），用于读取特定工作表。如果用户选中了某个工作表，请使用此参数指定。",
                 },
-                "header_row": {
-                    "type": "integer",
-                    "description": "表头所在行号（Excel 从 1 开始计数）。报价单等多行标题表格必须与上传预览 extract-grid "
-                    "检测到的 header_row_index / tables[].header_row 一致，否则会出现 "
-                    "Unnamed 列、大量 nan、价格错位。",
-                },
+                "header_row": EXCEL_HEADER_ROW,
                 "offset": {
                     "type": "integer",
                     "description": "分页起始数据行（从 0 开始，默认 0）。上一次结果 has_more=true 时，传 next_offset 继续读取。",
@@ -69,6 +65,11 @@ def excel_tool_specs() -> list[Payload]:
                         "type": "object",
                         "properties": {
                             "column": {"type": "string"},
+                            "cell_range": {
+                                "type": "string",
+                                "maxLength": 23,
+                                "description": "无表头的单列 SUM 区域，如 C2:C100。该方式只接受单个指标，且不分组。",
+                            },
                             "op": {
                                 "type": "string",
                                 "enum": ["sum", "mean", "count", "min", "max"],

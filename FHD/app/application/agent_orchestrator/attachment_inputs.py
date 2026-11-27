@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from zipfile import BadZipFile, ZipFile
@@ -18,14 +20,28 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024
 MAX_TEXT = 24_000
+_CONTEXT_FILE_BYTES = 256 * 1024
+_CONTEXT_PACKAGE_BYTES = 2 * 1024 * 1024
+_CONTEXT_TEXT_BYTES = 16 * 1024
+_CONTEXT_SUFFIXES = frozenset({".csv", ".docx"})
 
 
 class AttachmentInputError(ValueError):
     """Safe actionable error; never includes a local path or parser traceback."""
 
 
-def _docx_preview(raw: bytes, coverage: dict[str, Any]) -> str:
+@dataclass
+class _InlineReadBudget:
+    file_bytes: int = _CONTEXT_FILE_BYTES
+    package_bytes: int = _CONTEXT_PACKAGE_BYTES
+    text_bytes: int = _CONTEXT_TEXT_BYTES
+
+
+def _docx_preview(
+    raw: bytes, coverage: dict[str, Any], *, budget: _InlineReadBudget | None
+) -> str:
     from docx import Document
+    from docx.opc.constants import RELATIONSHIP_TYPE
     from docx.oxml.exceptions import InvalidXmlError
     from docx.oxml.ns import qn
     from docx.text.paragraph import Paragraph
@@ -58,10 +74,23 @@ def _docx_preview(raw: bytes, coverage: dict[str, Any]) -> str:
     try:
         with ZipFile(package) as archive:
             # Bound expanded bytes before python-docx loads related package parts.
-            if sum(member.file_size for member in archive.infolist()) > 2 * MAX_ATTACHMENT_BYTES:
+            expanded = sum(member.file_size for member in archive.infolist())
+            if expanded > (budget.package_bytes if budget else 2 * MAX_ATTACHMENT_BYTES):
                 raise AttachmentInputError("附件解压后体积过大，请重新上传较小的文件")
+            if budget is not None:
+                budget.package_bytes -= expanded
         package.seek(0)
         document = Document(package)
+        # Inline recall requires complete body data. A footnotes part often
+        # contains just template separators, so inspect actual body references.
+        if budget is not None and (document.element.xpath(
+            ".//w:sdt | .//w:ins | .//w:del | .//w:moveFrom | .//w:moveTo | .//w:drawing | "
+            ".//w:pict | .//w:object | .//w:altChunk | .//w:footnoteReference | .//w:endnoteReference"
+        ) or any(
+            rel.reltype in {RELATIONSHIP_TYPE.HEADER, RELATIONSHIP_TYPE.FOOTER}
+            for rel in document.part.rels.values()
+        )):
+            coverage["truncated"] = True
         table_index = 0
         for block in document.element.body:
             if block.tag == paragraph_tag:
@@ -111,7 +140,10 @@ def _docx_preview(raw: bytes, coverage: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
+def _decode(
+    raw: bytes, suffix: str, *, inline_context: bool = False,
+    budget: _InlineReadBudget | None = None,
+) -> tuple[str, dict[str, Any]]:
     coverage: dict[str, Any] = {"truncated": False, "max_text_chars": MAX_TEXT}
 
     def finish(text: str) -> tuple[str, dict[str, Any]]:
@@ -125,25 +157,42 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
 
     if suffix in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
+        from openpyxl.utils.cell import get_column_letter
 
         workbook = load_workbook(io.BytesIO(raw), read_only=True, data_only=True, keep_links=False)
         coverage.update(max_sheets=20, max_rows_per_sheet=200, max_columns=40, max_cell_chars=500)
         try:
-            lines = []
+            lines: list[str] = []
+            length = 0
+
+            def append(line: str) -> bool:
+                nonlocal length
+                length += len(line) + bool(lines)
+                if length > MAX_TEXT:
+                    coverage["truncated"] = True
+                    return False
+                lines.append(line)
+                return True
+
             coverage["truncated"] = len(workbook.worksheets) > 20
             for sheet in workbook.worksheets[:20]:
                 coverage["truncated"] |= (sheet.max_row or 0) > 200 or (sheet.max_column or 0) > 40
-                lines.append(sheet.title)
-                for row in sheet.iter_rows(
-                    max_row=min(sheet.max_row or 200, 200),
-                    max_col=min(sheet.max_column or 40, 40),
+                if not append("[工作表] " + json.dumps(sheet.title, ensure_ascii=False)):
+                    break
+                column_count = min(sheet.max_column or 40, 40)
+                last_column = get_column_letter(column_count)
+                rows = sheet.iter_rows(
+                    min_row=1, min_col=1,
+                    max_row=min(sheet.max_row or 200, 200), max_col=column_count,
                     values_only=True,
-                ):
+                )
+                # Read-only openpyxl yields missing rows and cells at their original positions.
+                for number, row in enumerate(rows, start=1):
                     cells = ["" if value is None else str(value) for value in row]
                     coverage["truncated"] |= any(len(cell) > 500 for cell in cells)
-                    lines.append(" | ".join(cell[:500] for cell in cells))
-                    if sum(map(len, lines)) >= MAX_TEXT:
-                        coverage["truncated"] = True
+                    ref = f"A{number}:{last_column}{number}"
+                    values = json.dumps([cell[:500] for cell in cells], ensure_ascii=False)
+                    if not append(f"[{ref}] {values}"):
                         return finish("\n".join(lines))
             return finish("\n".join(lines))
         finally:
@@ -178,11 +227,15 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
     if suffix == ".csv":
         return finish(raw.decode("utf-8-sig"))
     if suffix == ".docx":
-        return finish(_docx_preview(raw, coverage))
+        return finish(_docx_preview(
+            raw, coverage, budget=budget or (_InlineReadBudget() if inline_context else None),
+        ))
     raise AttachmentInputError("附件格式暂不支持，请重新上传 PDF、图片、CSV 或 XLSX")
 
 
-def resolve_attachment_inputs(context: dict[str, Any]) -> list[dict[str, Any]]:
+def resolve_attachment_inputs(
+    context: dict[str, Any], *, inline_context: bool = False
+) -> list[dict[str, Any]]:
     ids = context.get("attachment_upload_ids")
     if ids is None:
         return []  # Legacy evidence remains untrusted context, never an ingestible artifact.
@@ -196,6 +249,7 @@ def resolve_attachment_inputs(context: dict[str, Any]) -> list[dict[str, Any]]:
     if validate_actor_context(context) is not None:
         raise AttachmentInputError("附件需要有效登录授权，请重新登录")
     owner, tenant = int(context["user_id"]), int(context["tenant_id"])
+    budget = _InlineReadBudget() if inline_context else None
     artifacts = []
     with tenant_scope(tenant), get_db() as db:
         for upload_id in ids:
@@ -213,23 +267,33 @@ def resolve_attachment_inputs(context: dict[str, Any]) -> list[dict[str, Any]]:
             expiry = row.expires_at
             if expiry is None or expiry.replace(tzinfo=UTC) <= datetime.now(UTC):
                 raise AttachmentInputError("附件已过期，请重新上传")
+            max_bytes = budget.file_bytes if budget is not None else MAX_ATTACHMENT_BYTES
+            if budget is not None and (
+                row.suffix not in _CONTEXT_SUFFIXES or row.size_bytes > max_bytes
+            ):
+                return []
             try:
                 with open_elt_input_file(row.storage_path, owner_user_id=owner) as stream:
-                    raw = stream.read(MAX_ATTACHMENT_BYTES + 1)
+                    raw = stream.read(max_bytes + 1)
             except (OSError, ValueError, RuntimeError) as exc:
                 raise AttachmentInputError("附件无法安全读取，请重新上传") from exc
             if (
-                len(raw) > MAX_ATTACHMENT_BYTES
+                len(raw) > max_bytes
                 or len(raw) != row.size_bytes
                 or hashlib.sha256(raw).hexdigest() != row.sha256
             ):
                 raise AttachmentInputError("附件内容校验失败，请重新上传")
             try:
-                text, coverage = _decode(raw, row.suffix)
+                text, coverage = _decode(raw, row.suffix, budget=budget)
             except (OSError, ValueError, RuntimeError, ImportError) as exc:
                 raise AttachmentInputError("附件解析失败，请重新上传可读取的文件") from exc
             if not text.strip():
                 raise AttachmentInputError("附件没有可读取的文字，请重新上传清晰文件")
+            if budget is not None:
+                budget.file_bytes -= len(raw)
+                budget.text_bytes -= len(text.encode("utf-8"))
+                if coverage["truncated"] or budget.text_bytes < 0:
+                    return []
             artifacts.append(
                 {
                     "artifact_type": "file_analysis",
@@ -267,3 +331,38 @@ def resolve_attachment_context(context: dict[str, Any]):
             ]
         },
     }, artifacts
+
+
+def read_bound_chat_attachment(upload_id: str, context: dict[str, Any]) -> dict[str, Any]:
+    """Reopen a current or same-conversation upload bound by the parent goal."""
+    from app.application.agent_runtime.conversation_attachments import resolve_conversation_upload
+    from app.infrastructure.xiaox.receipts import action_parent
+
+    reference = resolve_conversation_upload(upload_id, context) if isinstance(upload_id, str) else None
+    if reference:
+        selected, expected = reference.upload_id, reference.sha256
+    else:
+        parent = action_parent(context)
+        if parent is None:
+            raise AttachmentInputError("附件读取需要原对话任务")
+        _, binding, _ = parent
+        request = binding.run.metadata["runtime_goal_contract"]["request"]
+        selected, expected = upload_id, next(
+            (
+                item["metadata"]["sha256"]
+                for item in request["attachments"]
+                if item.get("source") == "owned_elt_upload" and item["metadata"]["upload_id"] == upload_id
+            ),
+            None,
+        )
+    if not expected:
+        raise AttachmentInputError("附件未绑定到当前对话任务")
+    [artifact] = resolve_attachment_inputs({**context, "attachment_upload_ids": [selected]})
+    if artifact["metadata"]["sha256"] != expected:
+        raise AttachmentInputError("附件内容与原任务凭证不一致")
+    return {
+        "upload_id": upload_id,
+        "name": artifact["name"],
+        "sha256": expected,
+        **artifact["preview"],
+    }

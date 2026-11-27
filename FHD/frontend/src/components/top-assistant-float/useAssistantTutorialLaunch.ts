@@ -121,14 +121,7 @@ export function useAssistantTutorialLaunch(
     await router.push({ name: 'chat' }).catch(() => {})
     await nextTick()
     // 教程入口等同于「新对话」初始化，避免继承旧会话上下文。
-    for (let i = 0; i < 4; i += 1) {
-      const newConversationBtn = document.getElementById('newConversationBtn')
-      if (newConversationBtn) {
-        newConversationBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 80))
-    }
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
     // 进入教程前统一回到初始教学态，避免沿用上一次副窗临时状态。
     pushFeed.value = []
     productKeyword.value = ''

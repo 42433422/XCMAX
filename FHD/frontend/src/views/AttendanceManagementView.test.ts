@@ -48,7 +48,7 @@ describe('AttendanceManagementView', () => {
     await wrapper.get('.empty-state button').trigger('click')
     await flushPromises()
     expect(apiFetch.mock.lastCall?.[0]).toMatch(/search=$/)
-    expect(wrapper.get('.empty-state a').text()).toBe('导入考勤资料')
+    expect(wrapper.get('.empty-state a').text()).toBe('导入考勤表')
     wrapper.unmount()
   })
 

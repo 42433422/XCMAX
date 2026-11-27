@@ -51,7 +51,7 @@
         <div class="page-title-wrap">
           <div class="page-kicker">{{ topKickerText }}</div>
           <div class="page-title" :key="currentViewTitle">{{ currentViewTitle }}</div>
-          <div v-if="accountUsername && displayBrand" class="page-account-sub muted">
+          <div v-if="accountUsername && displayBrand && accountUsername.toLowerCase() !== topKickerText.toLowerCase()" class="page-account-sub muted">
             {{ accountUsername }}
           </div>
         </div>
@@ -198,8 +198,8 @@ const accountUsername = computed(() => {
   try {
     const raw = window.localStorage.getItem(LS_MARKET_USER_JSON)
     if (!raw) return ''
-    const u = JSON.parse(raw)
-    return String(u?.username || '').trim()
+    const profile = JSON.parse(raw)
+    return typeof profile?.username === 'string' ? profile.username.trim() : ''
   } catch {
     return ''
   }

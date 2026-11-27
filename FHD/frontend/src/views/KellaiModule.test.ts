@@ -26,7 +26,8 @@ describe('Kellai product module', () => {
     await router.isReady()
     const wrapper = mount(KellaiView, { global: { plugins: [router] } })
     await flushPromises()
-    expect(wrapper.findAll('h1').map(item => item.text())).toEqual(['智能生态 / 客来来'])
+    expect(wrapper.find('main[aria-label="客来来"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('智能生态 / 客来来')
     expect(wrapper.findAll('[role="tab"]').map(item => item.text())).toEqual(['连接与账号', '消息中心', '联系人', '数据接入', '自动化'])
     const authorize = () => wrapper.findAll('button').find(item => item.text() === '连接客来来')!
     await authorize().trigger('click')
@@ -45,6 +46,7 @@ describe('Kellai product module', () => {
     const wrapper = mount(KellaiView, { global: { plugins: [router] } })
     await flushPromises()
     expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('消息中心')
+    expect(wrapper.get('.kellai-inbox[aria-label="客户消息"]').attributes('aria-labelledby')).toBeUndefined()
     expect(api.customers).not.toHaveBeenCalled()
     expect(api.sendMessage).not.toHaveBeenCalled()
     await router.push('/kellai?source=wechat_local_db&workspace=data')

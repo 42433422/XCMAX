@@ -23,6 +23,9 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.db.db_base import Base
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
+from tests.test_routes.test_xiaox_receipt_projection import receipt_task as receipt_task
 
 reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
 task_dispatcher = importlib.import_module("app.application.agent_orchestrator.task_dispatcher")
@@ -227,6 +230,30 @@ def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkey
     finally:
         set_agent_run_repository_for_tests(None)
         engine.dispose()
+
+
+def test_desktop_restart_preserves_xiaox_parent_parked_on_child_receipt(
+    receipt_task, monkeypatch
+) -> None:
+    from app.infrastructure.xiaox.receipt_projection import refresh_xiaox_receipts
+
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    state = receipt_task
+    # Preserve an actual frozen parent, original child receipt and released queue
+    # claim. A runtime_type label alone cannot establish a delegated task.
+    state.complete_child()
+    parent = refresh_xiaox_receipts(
+        state.repository.get(state.parent_id), repository=state.repository
+    )
+    assert parent.status == "running"
+    _backdate_run(state.actor.factory, parent.run_id, status="running", updated_at=_iso(-300))
+    before = state.repository.get(parent.run_id).to_dict()
+
+    assert reconciler.reconcile_stale_running_runs(now=_iso()) == 0
+    assert state.repository.get(parent.run_id).status == "running"
+    assert state.queue.get(parent.run_id).state == "waiting_approval"
+    assert state.repository.get(parent.run_id).to_dict() == before
+    assert state.effect_count() == 1 and state.resume_count == 0
 
 
 def test_dispatcher_reconciles_before_it_starts_dispatching(monkeypatch) -> None:

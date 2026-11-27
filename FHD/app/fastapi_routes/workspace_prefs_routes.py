@@ -4,20 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from anyio import CapacityLimiter
 from anyio.lowlevel import RunVar
 from anyio.to_thread import run_sync
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.tenant_workspace_prefs import (
+    ENTERPRISE_LEVEL_KEY,
+    ENTERPRISE_MODEL_KEY,
     WorkspacePrefsVersionConflict,
     bind_selected_industry_for_user,
+    enterprise_intelligence_scope,
     get_workspace_prefs,
     patch_workspace_prefs,
     resolve_workspace_owner_id,
+    workspace_intelligence_level,
+    workspace_model_choice,
     workspace_prefs_revision,
 )
 from app.infrastructure.auth.dependencies import (
@@ -47,6 +53,124 @@ class WorkspacePrefsPatch(BaseModel):
     workflow_ai_employees: dict[str, bool] | None = None
     product_flow_completed: bool | None = None
     host_pack_acknowledged: bool | None = None
+
+
+class EnterprisePreferenceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_owner_id: str = Field(min_length=1, max_length=160)
+    expected_revision: int = Field(ge=0, strict=True)
+
+
+class IntelligenceUpdate(EnterprisePreferenceUpdate):
+    level: int = Field(ge=1, le=6, strict=True)
+
+
+class ModelUpdate(EnterprisePreferenceUpdate):
+    provider: str | None = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,31}$")
+    model: str | None = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_./:@+\-]{0,255}$")
+
+
+def _enterprise_scope(request: Request) -> tuple[Any, str, bool]:
+    actor = get_logged_in_user(request)
+    scope = enterprise_intelligence_scope(actor)
+    if scope is None:
+        raise HTTPException(status_code=403, detail="缺少有效的企业身份")
+    return actor, *scope
+
+
+def _intelligence_snapshot(owner: str, editable: bool, prefs: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "owner_id": owner,
+        "editable": editable,
+        "level": workspace_intelligence_level(prefs),
+        "revision": workspace_prefs_revision(prefs),
+    }
+
+
+@router.get("/intelligence")
+def get_enterprise_intelligence(request: Request, response: Response):
+    _, owner, editable = _enterprise_scope(request)
+    response.headers["Cache-Control"] = "private, no-store"
+    return _intelligence_snapshot(owner, editable, get_workspace_prefs(owner, strict=True))
+
+
+@router.put("/intelligence")
+def set_enterprise_intelligence(body: IntelligenceUpdate, request: Request):
+    _, owner, editable = _enterprise_scope(request)
+    if not editable:
+        raise HTTPException(status_code=403, detail="仅本企业主账号可修改智能等级")
+    if body.expected_owner_id != owner:
+        raise HTTPException(status_code=409, detail="企业登录范围已变化，请重新读取智能等级")
+    try:
+        prefs = patch_workspace_prefs(
+            owner, {ENTERPRISE_LEVEL_KEY: body.level}, expected_revision=body.expected_revision
+        )
+    except WorkspacePrefsVersionConflict as exc:
+        raise HTTPException(status_code=409, detail="企业设置已变化，请重新读取智能等级") from exc
+    return _intelligence_snapshot(owner, editable, prefs)
+
+
+def _model_snapshot(owner: str, editable: bool, prefs: dict[str, Any]) -> dict[str, Any]:
+    provider, model, _ = workspace_model_choice(prefs) or (None, None, None)
+    return {
+        "owner_id": owner,
+        "editable": editable,
+        "provider": provider,
+        "model": model,
+        "revision": workspace_prefs_revision(prefs),
+    }
+
+
+@router.get("/model")
+def get_enterprise_model(request: Request, response: Response):
+    _, owner, editable = _enterprise_scope(request)
+    response.headers["Cache-Control"] = "private, no-store"
+    editable = editable and not os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip()
+    return _model_snapshot(owner, editable, get_workspace_prefs(owner, strict=True))
+
+
+@router.put("/model")
+def set_enterprise_model(body: ModelUpdate, request: Request):
+    from app.application.agent_runtime.configuration import (
+        RuntimeSetupError,
+        validate_account_model_choice,
+    )
+    from app.application.modstore_conversation_app import request_model_scope
+
+    actor, owner, editable = _enterprise_scope(request)
+    if not editable:
+        raise HTTPException(403, "仅本企业主账号可修改默认模型")
+    if os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip():
+        raise HTTPException(403, "模型由部署配置管理")
+    conflict = HTTPException(409, "企业设置已变化，请重新读取默认模型")
+    if body.expected_owner_id != owner or body.expected_revision != workspace_prefs_revision(
+        get_workspace_prefs(owner, strict=True)
+    ):
+        raise conflict
+    if (body.provider is None) != (body.model is None):
+        raise HTTPException(422, "请同时选择供应商和模型")
+    choice = None
+    if body.provider and body.model:
+        try:
+            with request_model_scope(request):
+                key_source = validate_account_model_choice(
+                    str(actor.id), (body.provider, body.model)
+                )
+        except RuntimeSetupError as exc:
+            status = 503 if exc.code == "runtime_platform_unavailable" else 422
+            raise HTTPException(status, exc.public_message) from None
+        choice = {"provider": body.provider, "model": body.model, "key_source": key_source}
+        current, current_owner, editable = _enterprise_scope(request)
+        if current.id != actor.id or current_owner != owner or not editable:
+            raise conflict
+    try:
+        prefs = patch_workspace_prefs(
+            owner, {ENTERPRISE_MODEL_KEY: choice}, expected_revision=body.expected_revision
+        )
+    except WorkspacePrefsVersionConflict:
+        raise conflict from None
+    return _model_snapshot(owner, True, prefs)
 
 
 async def _try_grant_market_entitlements(

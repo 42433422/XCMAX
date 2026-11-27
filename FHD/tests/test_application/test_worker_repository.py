@@ -109,6 +109,8 @@ def test_expired_and_replaced_workers_cannot_overwrite_run(tmp_path):
         with pytest.raises(WorkerLeaseLost):
             old.save(run)
         assert runs.get(run.run_id).status == "paused"
+        with pytest.raises(WorkerLeaseLost):
+            old.save_if_unchanged(run, newest)
         with pytest.raises(WorkerLeaseLost, match="another run"):
             fresh.save(AgentRun(user_id="owner", message="unrelated"))
         assert len(runs.list_recent()) == 1

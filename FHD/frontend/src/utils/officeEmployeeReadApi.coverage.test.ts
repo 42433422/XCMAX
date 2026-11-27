@@ -92,6 +92,23 @@ beforeEach(async () => {
 
 // ── uploadChatOfficeFile ──
 
+it('uploads Word chat context without workspace or tutorial fallbacks', async () => {
+  const file = new File(['document'], '对账单.docx')
+  mocks.apiFetch.mockResolvedValueOnce(jsonRes({
+    success: true, data: { upload_id: 'owned-word', filename: file.name },
+  }))
+  await expect(mod.uploadChatWordAttachment(file)).resolves.toEqual({
+    uploadId: 'owned-word', name: file.name,
+  })
+  expect(mocks.apiFetch).toHaveBeenCalledExactlyOnceWith(
+    '/api/platform-shell/chat-office-file-upload?attachment_only=true',
+    expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+  )
+  mocks.apiFetch.mockReset().mockResolvedValueOnce(jsonRes({}, { ok: false, status: 404 }))
+  await expect(mod.uploadChatWordAttachment(file)).rejects.toThrow('404')
+  expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
+})
+
 describe('uploadChatOfficeFile', () => {
   it('CHAT 上传成功时直接返回结果（含 filename）', async () => {
     mocks.apiFetch.mockResolvedValueOnce(

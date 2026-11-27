@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 WORKSPACE_PREFS_KEY = "workspace_prefs"
 WORKSPACE_PREFS_REVISION_KEY = "_revision"
+ENTERPRISE_LEVEL_KEY = "enterprise_intelligence_level"
+ENTERPRISE_MODEL_KEY = "enterprise_model"
 
 
 @contextmanager
@@ -60,6 +62,8 @@ ALLOWED_TOP_LEVEL_KEYS = frozenset(
         "onboarding_completed_at",
         "onboarding_seed_done",
         "onboarding_ai_demo_done",
+        ENTERPRISE_LEVEL_KEY,
+        ENTERPRISE_MODEL_KEY,
     }
 )
 
@@ -106,7 +110,7 @@ def session_workspace_owner_id(request: Request) -> str | None:
     return resolve_workspace_owner_id(request, user) if user is not None else None
 
 
-def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
+def get_workspace_prefs(owner_id: str, *, strict: bool = False) -> dict[str, Any]:
     owner = str(owner_id or "").strip()
     if not owner:
         return {}
@@ -118,10 +122,71 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
         if not raw:
             return {}
         data = json.loads(raw)
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict):
+            return data
+        if strict:
+            raise ValueError("Workspace preferences must contain a JSON object")
+        return {}
     except RECOVERABLE_ERRORS:
+        if strict:
+            raise
         logger.exception("get_workspace_prefs failed owner=%s", owner)
         return {}
+
+
+def enterprise_intelligence_scope(user: Any) -> tuple[str, bool] | None:
+    """Only an active enterprise's authenticated members may read its mode."""
+    from app.db.models.tenant import Tenant
+    from app.db.models.user import User
+    from app.db.session import get_host_db
+
+    tid = _safe_positive_int(getattr(user, "tenant_id", None))
+    if tid is None or getattr(user, "role", None) == "admin":
+        return None
+    with get_host_db() as db:
+        tenant = (
+            db.query(Tenant.owner_user_id)
+            .join(User, User.id == Tenant.owner_user_id)
+            .filter(
+                Tenant.id == tid,
+                Tenant.is_active.is_(True),
+                User.is_active.is_(True),
+                User.tenant_id == tid,
+                User.tier == "enterprise",
+            )
+            .one_or_none()
+        )
+    return (f"tenant:{tid}", tenant.owner_user_id == user.id) if tenant is not None else None
+
+
+def workspace_intelligence_level(prefs: dict[str, Any]) -> int | None:
+    level = prefs.get(ENTERPRISE_LEVEL_KEY)
+    if level is not None and (type(level) is not int or not 1 <= level <= 6):
+        raise ValueError("Invalid persisted enterprise intelligence level")
+    return level
+
+
+def workspace_model_choice(prefs: dict[str, Any]) -> tuple[str, str, str] | None:
+    value = prefs.get(ENTERPRISE_MODEL_KEY)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("Invalid persisted enterprise model")
+    provider, model, key_source = (value.get(key) for key in ("provider", "model", "key_source"))
+    if not all(isinstance(item, str) and item for item in (provider, model, key_source)):
+        raise ValueError("Invalid persisted enterprise model")
+    return provider, model, key_source
+
+
+def enterprise_model_for_actor(actor_id: str) -> tuple[str, str, str] | None:
+    """Read the actor's current tenant choice, including when no HTTP context exists."""
+    from app.db.models.user import User
+    from app.db.session import get_host_db
+
+    with get_host_db() as db:
+        actor = db.get(User, int(actor_id))
+        scope = enterprise_intelligence_scope(actor) if actor and actor.is_active else None
+    return workspace_model_choice(get_workspace_prefs(scope[0], strict=True)) if scope else None
 
 
 _OWNER_PREF_PREFIX = "user_pref:"

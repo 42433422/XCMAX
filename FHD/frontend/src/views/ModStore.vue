@@ -271,6 +271,7 @@ import 'element-plus/theme-chalk/base.css'
 import 'element-plus/theme-chalk/el-segmented.css'
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
+import { MOD_STORE_EMPLOYEE_OPTION } from '@/constants/modStoreNavigation'
 import Modal from '@/components/Modal.vue'
 import ModDetails from './ModDetails.vue'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
@@ -360,7 +361,7 @@ export default {
       applyFilters,
     } = catalog
 
-    const marketTypes = [{ label: '模块', value: 'module' }, { label: '员工', value: 'employee' }]
+    const marketTypes = [{ label: '模块', value: 'module' }, MOD_STORE_EMPLOYEE_OPTION]
     const employeeNavTabs = storeNavTabs.filter((tab) => tab.id !== 'industry_mod')
     const employeeTabs = new Set(employeeNavTabs.map((tab) => tab.id))
     let lastEmployeeTab = 'host_foundation'

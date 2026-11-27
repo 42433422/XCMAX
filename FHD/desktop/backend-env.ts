@@ -30,6 +30,24 @@ export function desktopBackendEnv(
     const modsRoot = path.join(developmentSourceRoot, 'mods')
     isolated.XCAGI_MODS_ROOT = modsRoot
     isolated.XCAGI_MODS_DIR = modsRoot
+    // A shared development venv may have editable installs from another worktree.
+    // Bind source imports to the same checkout as run.py; the Python vendored
+    // provenance assertion remains the fail-closed authority.
+    const packages = path.join(developmentSourceRoot, 'packages')
+    const sourcePaths = [
+      developmentSourceRoot,
+      ...[
+        'xcagi_langgraph_core',
+        'xcagi_langgraph_prebuilt',
+        'xcagi_langgraph_checkpoint',
+        'xcagi_langgraph_checkpoint_backends/checkpoint-sqlite',
+        'xcagi_langgraph_checkpoint_backends/checkpoint-postgres',
+        'xcagi_langgraph_sdk',
+      ].map(packageName => path.join(packages, packageName)),
+    ]
+    isolated.PYTHONPATH = [...sourcePaths, ...(isolated.PYTHONPATH?.split(path.delimiter) || [])]
+      .filter(Boolean).filter((value, index, values) => values.indexOf(value) === index)
+      .join(path.delimiter)
   }
   return isolated;
 }

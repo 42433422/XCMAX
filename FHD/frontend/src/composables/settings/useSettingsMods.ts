@@ -12,6 +12,7 @@ import { appAlert, appConfirm } from '@/utils/appDialog'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset } from '@/constants/industryPresets'
 import { isProtectedClientModId } from '@/constants/protectedMods'
+import { canShowModelServiceBilling } from '@/constants/modelServiceNavigation'
 import {
   ACCOUNT_CUSTOM_MOD_IDS,
   expectedHostBridgeModIds,
@@ -56,10 +57,7 @@ export function useSettingsMods() {
   const accountProfileStore = useAccountProfileStore()
   const modsStore = useModsStore()
   const { clientModsUiOff, loadError, isLoaded, mods, modRoutes, activeModId } = storeToRefs(modsStore)
-
-  const MODEL_PAYMENT_BRIDGE_ID = 'xcagi-model-payment-bridge'
-
-  const modelPaymentBridgeInstalled = computed(() => mods.value.some((m) => String(m.id || '').trim() === MODEL_PAYMENT_BRIDGE_ID))
+  const modelPaymentBridgeInstalled = computed(() => canShowModelServiceBilling(mods.value, false))
 
   function openSettingsExtensions() {
     const el = document.querySelector('[data-tutorial-id="settings-extensions"]')
@@ -99,10 +97,7 @@ export function useSettingsMods() {
 
   const workflowEmployeeMods = computed(() => mods.value.filter((m) => isWorkflowEmployeeModId(String(m.id || ''))))
 
-  const showModelPaymentBridge = computed(() => {
-    if (isAdminConsole) return true
-    return modelPaymentBridgeInstalled.value
-  })
+  const showModelPaymentBridge = computed(() => isAdminConsole || modelPaymentBridgeInstalled.value)
 
   function goHostPackOnboarding() {
     router.push({ path: '/onboarding', query: { step: 'host-pack' } })

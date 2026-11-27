@@ -115,13 +115,7 @@ export function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
 
-export function normalizeServerContentToHtml(raw: unknown): string {
-  const text = String(raw || '')
-  if (/<[a-z][\s\S]*>/i.test(text)) return text
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML.replace(/\n/g, '<br>')
-}
+export { normalizeServerContentToHtml } from '@/utils/sanitizeHtml'
 
 export function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
   const row = asRecord(data)

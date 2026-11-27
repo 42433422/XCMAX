@@ -7,6 +7,8 @@ describe('buildBasicSteps', () => {
     expect(Array.isArray(steps)).toBe(true)
     expect(steps.length).toBeGreaterThan(3)
     expect(steps[0].id).toBe('chat-entry')
+    const uploadIndex = steps.findIndex((step) => step.id === 'chat-excel-analyze-toolbar')
+    expect(steps[uploadIndex].targetSelector).toContain('toolbar-excel-analyze')
     for (const s of steps) {
       expect(typeof s.id).toBe('string')
       expect(typeof s.title).toBe('string')

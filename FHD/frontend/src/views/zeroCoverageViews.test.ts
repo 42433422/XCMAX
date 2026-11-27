@@ -126,27 +126,9 @@ describe('OtherToolsView', () => {
   })
 })
 
-describe('EmployeeWorkspaceView', () => {
+describe('EmployeeWorkbenchView', () => {
   afterEach(() => vi.unstubAllEnvs())
-  it.each(['', '1'])('renders the workspace scene on client %s', async (admin) => {
-    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', admin)
-    const mod = await import('./EmployeeWorkspaceView.vue')
-    const wrapper = mount(mod.default, {
-      global: {
-        stubs: {
-          EmployeeWorkspaceScene: {
-            template: '<div class="stub-scene" />',
-          },
-        },
-      },
-    })
-    expect(wrapper.find('#view-workflow-employee-space').exists()).toBe(true)
-    expect(wrapper.find('.ews-page-title').exists()).toBe(false)
-    expect(wrapper.find('.ews-page-sub').exists()).toBe(false)
-    expect(wrapper.find('.stub-scene').exists()).toBe(true)
-    wrapper.unmount()
-  })
-  it.each(['', '1'])('renders the independent task workbench on client %s', async (admin) => {
+  it.each(['', '1'])('renders the durable task console on surface %s', async (admin) => {
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', admin)
     const mod = await import('./EmployeeWorkbenchView.vue')
     const wrapper = mount(mod.default, { global: { stubs: {
@@ -155,34 +137,6 @@ describe('EmployeeWorkspaceView', () => {
     expect(wrapper.find('#view-employee-workbench').exists()).toBe(true)
     expect(wrapper.find('.stub-loop-console').exists()).toBe(true)
     expect(wrapper.find('#view-workflow-employee-space').exists()).toBe(false)
-    wrapper.unmount()
-  })
-  it('keeps the workspace scene separate from the task workbench in admin mode', async () => {
-    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
-    const mod = await import('./EmployeeWorkspaceView.vue')
-    const wrapper = mount(mod.default, { global: { stubs: {
-      EmployeeWorkspaceScene: { template: '<div class="stub-scene" />' },
-      EmployeeWorkspaceLoopConsole: { template: '<div class="stub-loop-console" />' },
-    } } })
-    expect(wrapper.find('.stub-loop-console').exists()).toBe(false)
-    expect(wrapper.find('.stub-scene').exists()).toBe(true)
-    expect(wrapper.find('.ews-page-title').exists()).toBe(false)
-    wrapper.unmount()
-  })
-})
-
-describe('EmployeeWorkbenchView', () => {
-  afterEach(() => vi.unstubAllEnvs())
-  it.each(['', '1'])('renders the durable task console on surface %s', async (admin) => {
-    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', admin)
-    const mod = await import('./EmployeeWorkbenchView.vue')
-    const wrapper = mount(mod.default, { global: { stubs: {
-      EmployeeWorkspaceLoopConsole: { template: '<div class="stub-loop-console" />' },
-      EmployeeWorkspaceScene: { template: '<div class="stub-scene" />' },
-    } } })
-    expect(wrapper.find('#view-employee-workbench').exists()).toBe(true)
-    expect(wrapper.find('.stub-loop-console').exists()).toBe(true)
-    expect(wrapper.find('.stub-scene').exists()).toBe(false)
     wrapper.unmount()
   })
 })

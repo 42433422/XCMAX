@@ -217,3 +217,153 @@ def test_recent_sql_window_uses_latest_messages_and_enforces_owner_and_provenanc
         )
     finally:
         engine.dispose()
+
+
+def test_employee_memory_does_not_become_public_history(tmp_path, monkeypatch):
+    from app.application import task_conversation_store as history
+    from app.application.ai_chat import chat_evidence, dialogue_memory
+    from app.db.models import AIConversation, AIConversationSession, User
+    from app.domain.shared_services import conversation_service as conversations
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'transcript.sqlite'}")
+    for model in (User, AIConversationSession, AIConversation):
+        model.__table__.create(engine)
+
+    @contextmanager
+    def database():
+        with Session(engine) as db:
+            yield db
+
+    monkeypatch.setattr(conversations, "get_db", database)
+    monkeypatch.setattr(history, "get_db", database)
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue"))
+    pushes = []
+    monkeypatch.setattr(conversations, "notify_user", lambda **event: pushes.append(event))
+    manager = EmployeeMemoryManager(MemoryScope("worker", tenant_id=1, long_term_enabled=False))
+    meta = {**manager._metadata(41), "execution_status": "completed"}
+    sid = "public-thread"
+    public_at = datetime(2026, 1, 1)
+    private_at = public_at + timedelta(days=1)
+    with Session(engine) as db:
+        db.add(User(id=41, username="owner", password="unused", tenant_id=1))
+        db.add(
+            AIConversationSession(
+                session_id=sid,
+                user_id=41,
+                title="Legacy private task",
+                summary="Legacy private result",
+                message_count=4,
+                last_message_at=private_at,
+            )
+        )
+        for role, content, metadata, when in (
+            ("user", "Legacy private task", json.dumps(meta), public_at),
+            ("user", "Public question", "invalid legacy metadata", public_at),
+            (
+                "assistant",
+                "Public reply",
+                json.dumps({"source": "employee_task", "custom": meta}),
+                public_at,
+            ),
+            ("assistant", "Legacy private result", json.dumps(meta), private_at),
+        ):
+            db.add(
+                AIConversation(
+                    session_id=sid,
+                    user_id="41",
+                    role=role,
+                    content=content,
+                    conversation_metadata=metadata,
+                    created_at=when,
+                )
+            )
+        db.commit()
+
+    store = history.task_conversation_store
+    manager.remember("New private task", "New private result", user_id=41, session_id=sid)
+    assert pushes == []
+    with Session(engine) as db:
+        private_session = (
+            db.query(AIConversation.session_id)
+            .filter(AIConversation.content == "New private result")
+            .scalar()
+        )
+        assert private_session and private_session != sid
+        assert db.query(AIConversation).filter_by(session_id=sid).count() == 4
+    assert store.get_conversation(session_id=private_session, user_id=41)["session"] is None
+    page = store.get_conversation(session_id=sid, user_id=41, limit=1)
+    assert [row["content"] for row in page["messages"]] == ["Public reply"]
+    assert page["snapshot_latest_id"] == page["next_before_id"] == page["messages"][0]["id"]
+    oldest = store.get_conversation(
+        session_id=sid, user_id=41, limit=1, before_id=page["next_before_id"]
+    )
+    assert [row["content"] for row in oldest["messages"]] == ["Public question"]
+    assert not oldest["has_more"]
+    [session] = store.list_sessions(user_id=41, limit=20)
+    assert (
+        session["title"],
+        session["summary"],
+        session["message_count"],
+        session["last_message_at"],
+    ) == (
+        "Public question",
+        "Public reply",
+        2,
+        public_at.isoformat(),
+    )
+    assert [
+        r["content"]
+        for r in store.memory_snapshot(session_id=sid, user_id=41, include_messages=True)[
+            "messages"
+        ]
+    ] == [
+        "Public question",
+        "Public reply",
+    ]
+    assert [
+        r["content"] for r in manager.recall("task", user_id=41, session_id=sid).short_term_messages
+    ] == [
+        "Legacy private task",
+        "Legacy private result",
+        "New private task",
+        "New private result",
+    ]
+
+    context = {"session_id": sid, "tenant_id": 1, "local_user_id": 41}
+    key = dialogue_memory.conversation_key(context)
+    dialogue_memory._path(key).write_text(
+        json.dumps(
+            {
+                "active": True,
+                "scope": {"session_id": sid, "user_id": 41},
+                "revision": 0,
+                "turns": [{"role": "assistant", "content": "Legacy private result"}],
+                "summary": {"kind": "langchain", "text": "Private cached summary", "source": "sql"},
+                "receipts": {
+                    "pending": {
+                        "status": "failed",
+                        "payload": {"history_persistence": {"status": "failed"}},
+                    }
+                },
+            }
+        )
+    )
+    restored = dialogue_memory._read(key, context)
+    assert [r["content"] for r in restored["turns"]] == ["Public question", "Public reply"]
+    assert restored["summary"] is None
+    assert restored["receipts"]["pending"]["payload"]["history_persistence"]["status"] == "failed"
+    model_history = chat_evidence._prepare_history(store, context, sid, 41)[
+        "_chat_history_messages"
+    ]
+    assert [row["content"].split("\n", 1)[-1] for row in model_history] == [
+        "Public question",
+        "Public reply",
+    ]
+
+    public = conversations.ConversationService()
+    public.save_message(sid, "41", "user", "Another public question", metadata=json.dumps(meta))
+    assert [r[4] for r in public.get_session_messages(sid, user_id=41)] == [
+        "Public question",
+        "Public reply",
+        "Another public question",
+    ]

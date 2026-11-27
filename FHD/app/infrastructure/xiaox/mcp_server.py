@@ -8,20 +8,20 @@ import anyio
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
-from app.infrastructure.xiaox.tools import XiaoxToolBridge, mcp_tool_definitions
+from app.infrastructure.xiaox.binding import XiaoxBindingError
+from app.infrastructure.xiaox.tools import XiaoxToolBridge, mcp_tool_definitions, schema_violation
 
 MCP_PATH = "/api/agent-runtime/xiaox/mcp"
 router = APIRouter(tags=["xiaox-runtime"])
 
 
 class _McpResponse(Response):
-    def __init__(self, *, token: str, store: XiaoxBindingStore, bridge: XiaoxToolBridge) -> None:
+    def __init__(self, *, token: str, bridge: XiaoxToolBridge) -> None:
         super().__init__(content=None)
-        self.token, self.store, self.bridge = token, store, bridge
+        self.token, self.bridge = token, bridge
 
     async def __call__(self, scope, receive, send) -> None:
-        from jsonschema import ValidationError, validate
+        from jsonschema import Draft202012Validator
         from mcp.server import ServerRequestContext
         from mcp.server.lowlevel import Server
         from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -33,33 +33,36 @@ class _McpResponse(Response):
             TextContent,
         )
 
+        # The per-request catalog improves selection. Calls still resolve the exact
+        # pair against live authority rather than a snapshot sent to the model.
         definitions = mcp_tool_definitions()
-        input_schemas = {
-            tool.name: tool.model_dump(by_alias=True)["inputSchema"] for tool in definitions
-        }
+        input_validators = {tool.name: Draft202012Validator(tool.input_schema) for tool in definitions}
 
         async def list_tools(
             _ctx: ServerRequestContext, _params: PaginatedRequestParams | None
         ) -> ListToolsResult:
-            await anyio.to_thread.run_sync(self.store.authenticate, self.token, "mcp")
-            return ListToolsResult(tools=definitions)
+            tools = await anyio.to_thread.run_sync(self.bridge.list_tool_definitions, self.token)
+            return ListToolsResult(tools=tools)
 
         async def call_tool(
             _ctx: ServerRequestContext, params: CallToolRequestParams
         ) -> CallToolResult:
             try:
                 arguments = params.arguments or {}
-                schema = input_schemas.get(params.name)
-                if schema is not None:
-                    try:
-                        validate(arguments, schema)
-                    except ValidationError as exc:
-                        raise XiaoxBindingError(
-                            "invalid_arguments", "工具参数不满足已发布的能力契约"
-                        ) from exc
-                result = await anyio.to_thread.run_sync(
-                    self.bridge.invoke, self.token, params.name, arguments
-                )
+                validator = input_validators.get(params.name)
+                if validator and (error := next(validator.iter_errors(arguments), None)) is not None:
+                    result = {
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
+                        "error_code": "invalid_arguments",
+                        "message": "工具参数不满足已发布的能力契约",
+                        "schema_violation": schema_violation(error),
+                    }
+                else:
+                    result = await anyio.to_thread.run_sync(
+                        self.bridge.invoke, self.token, params.name, arguments
+                    )
             except XiaoxBindingError as exc:
                 result = {
                     "success": False,
@@ -67,6 +70,8 @@ class _McpResponse(Response):
                     "error_code": exc.code,
                     "message": str(exc),
                 }
+                if params.name == "capability_describe" and exc.code == "permission_denied":
+                    result["next_call"] = {"name": "capability_search", "arguments": {}}
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps(result, ensure_ascii=False))],
                 structured_content=result,
@@ -113,4 +118,4 @@ async def xiaox_mcp(request: Request):
             raise XiaoxBindingError("scope_conflict", "运行凭据不属于此工具入口")
     except XiaoxBindingError as exc:
         return JSONResponse({"success": False, "error_code": exc.code}, status_code=403)
-    return _McpResponse(token=token, store=store, bridge=bridge)
+    return _McpResponse(token=token, bridge=bridge)

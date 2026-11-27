@@ -88,12 +88,29 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
 
   steps.push(
     createStep({
+      id: 'quickstart-import-open-chat-panel',
+      title: '打开任务和对话面板',
+      description: '点击「任务 / 对话」，打开侧边面板。',
+      routeName: 'chat',
+      targetSelector: '#view-chat [data-tutorial-id="chat-side-panel-toggle"][aria-expanded="false"]',
+      actionType: 'click',
+      track: 'advanced',
+    }),
+    createStep({
+      id: 'quickstart-import-open-conversations',
+      title: '切换到对话列表',
+      description: '点击侧边面板里的「对话」标签。',
+      routeName: 'chat',
+      targetSelector: '#chat-side-panel [data-tutorial-id="chat-conversation-tab"][aria-selected="false"]',
+      actionType: 'click',
+      track: 'advanced',
+    }),
+    createStep({
       id: 'quickstart-import-cleanup',
       title: '清理对话附件',
-      description: '最后新开一轮对话，并删除服务器上的教程上传文件。',
+      description: '点击对话列表里的「新建对话」，并删除服务器上的教程上传文件。',
       routeName: 'chat',
-      targetSelector: '#newConversationBtn',
-      highlightSelector: '#newConversationBtn',
+      targetSelector: '#chat-side-panel #newConversationBtn',
       actionType: 'click',
       track: 'advanced',
       allowCardNext: true,

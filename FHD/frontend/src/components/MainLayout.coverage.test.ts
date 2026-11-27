@@ -481,6 +481,15 @@ describe('MainLayout.vue - coverage ramp', () => {
       wrapper.unmount()
     })
 
+    it('品牌已显示同一账号名时省略重复副标题', async () => {
+      testState.accountProfileStore.displayBrand = 'TESTUSER'
+      localStorage.setItem('xcagi_market_user_json', JSON.stringify({ username: 'testuser' }))
+      const { wrapper } = await mountMainLayout()
+      expect(wrapper.get('.page-kicker').text()).toBe('TESTUSER')
+      expect(wrapper.find('.page-account-sub').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
     it('localStorage JSON 解析失败时返回空字符串', async () => {
       testState.accountProfileStore.displayBrand = '测试品牌'
       localStorage.setItem('xcagi_market_user_json', 'invalid-json{')

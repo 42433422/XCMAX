@@ -69,7 +69,7 @@ for(const [elementName,desktopRef,marketRef] of elementMappings){
  * claim that all existing legacy components are tokenized. */
 const migratedDesktopStyles = [
   'frontend/src/views/AdminBusinessCustomersView.css',
-  'frontend/src/components/workflow/EmployeeWorkspaceScene.css',
+  'frontend/src/views/EmployeeWorkspaceView.css',
 ];
 const definedDesktopTokens = new Set(
   [...(result.css + '\n' + desktopElements).matchAll(/(--xc-[\w-]+)\s*:/g)].map(match => match[1]),

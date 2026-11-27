@@ -435,7 +435,11 @@ class SQLAlchemyTaskExecutionRepository:
         from app.application.agent_orchestrator.run_sql_repository import (
             SQLAlchemyAgentRunRepository,
         )
-        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
+        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentTaskRecord
+        from app.domain.task_lifecycle.agent_runtime_results import (
+            model_unsettled,
+            receipt_verified,
+        )
         from app.domain.task_lifecycle.control import SessionBook, remember
         from app.infrastructure.xiaox.binding import (
             XiaoxBinding,
@@ -466,7 +470,34 @@ class SQLAlchemyTaskExecutionRepository:
                 if child is None or child.updated_at != receipt.get("child_updated_at"):
                     return None
                 children[child_id] = child
-        projected = project_receipt_state(previous, rows)
+        previous_result = previous.final_output.get("xiaox_result") or {}
+        prior = {
+            str(row.get("call_id")): row for row in previous_result.get("business_receipts") or []
+        }
+        recovered_writes = [
+            row
+            for row in rows
+            if row.get("read_only") is not True
+            and (prior.get(str(row["call_id"])) or {}).get("state")
+            in {"waiting_user", "waiting_approval", "running"}
+        ]
+        verified_child_recovery = bool(
+            (previous.metadata.get("recovery") or {}) == {"state": "manual_reconciliation_required"}
+            and previous.metadata.get("non_retryable") is True
+            and previous.status in {"running", "waiting_user", "unknown"}
+            and not previous.metadata.get("stream_interruption")
+            and not model_unsettled(binding.metadata)
+            and previous_result.get("exit_status") in {"waiting_user", "running"}
+            and not any(
+                (request.get("result") or {}).get("execution_state") == "unknown"
+                for request in (previous.metadata.get("runtime_requests") or {}).values()
+            )
+            and recovered_writes
+            and all(receipt_verified(row) for row in rows)
+        )
+        projected = project_receipt_state(
+            previous, rows, verified_child_recovery=verified_child_recovery
+        )
         if projected is None:
             return None
         result = projected.final_output["xiaox_result"]
@@ -532,7 +563,37 @@ class SQLAlchemyTaskExecutionRepository:
                     != 1
                 ):
                     return None
-            if not run_repository.save_if_unchanged_in_session(db, projected, previous):
+            if verified_child_recovery:
+                for row in recovered_writes:
+                    child_id, task_id = row["child_run_id"], row["child_task_id"]
+                    child = children[child_id]
+                    tasks = (
+                        db.query(AgentTaskRecord)
+                        .filter(
+                            AgentTaskRecord.task_id == task_id,
+                            AgentTaskRecord.user_id == previous.user_id,
+                            AgentTaskRecord.tenant_id == tenant_id_of_run(previous),
+                        )
+                        .limit(2)
+                        .all()
+                    )
+                    if (
+                        len(tasks) != 1
+                        or tasks[0].active_run_id != child_id
+                        or tasks[0].root_run_id != previous.run_id
+                        or tasks[0].attempt != 1
+                        or tasks[0].run_count != 1
+                        or child.status != "completed"
+                        or child.metadata.get("non_retryable")
+                        or child.metadata.get("recovery")
+                    ):
+                        return None
+            if not run_repository.save_if_unchanged_in_session(
+                db,
+                projected,
+                previous,
+                allow_verified_xiaox_recovery=verified_child_recovery,
+            ):
                 return None
             if projected.status != result["execution_state"] and not (
                 projected.status == "blocked"

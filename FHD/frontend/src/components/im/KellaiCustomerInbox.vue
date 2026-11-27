@@ -1,5 +1,10 @@
 <template>
-  <section class="kellai-inbox" aria-labelledby="kellai-inbox-title">
+  <section
+    class="kellai-inbox"
+    :class="{ 'kellai-inbox--embedded': embedded }"
+    :aria-label="embedded ? '客户消息' : undefined"
+    :aria-labelledby="embedded ? undefined : 'kellai-inbox-title'"
+  >
     <header v-if="!embedded" class="kellai-inbox__head">
       <span class="kellai-inbox__avatar" aria-hidden="true">客</span>
       <div class="kellai-inbox__heading">
@@ -74,7 +79,7 @@
           </div>
         </aside>
 
-        <main class="kellai-inbox__conversation">
+        <section class="kellai-inbox__conversation" aria-label="客户会话">
           <header v-if="activeCustomer" class="kellai-inbox__conversation-head">
             <div>
               <h3>{{ activeCustomer.display_name }}</h3>
@@ -237,7 +242,7 @@
             <i class="fa fa-shield" aria-hidden="true"></i>
             AI 仅能在人工批准后创建本地跟进任务；不能自动向客户发送消息或写回外部系统。
           </footer>
-        </main>
+        </section>
       </div>
     </template>
   </section>
@@ -278,3 +283,42 @@ onBeforeUnmount(store.detach)
 </script>
 
 <style scoped src="./KellaiCustomerInbox.css"></style>
+
+<style scoped>
+.kellai-inbox--embedded {
+  background: transparent;
+}
+
+.kellai-inbox--embedded .kellai-inbox__connect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  width: auto;
+  margin: 0;
+  padding: 20px clamp(16px, 3vw, 28px);
+  border: 0;
+  background: transparent;
+}
+
+.kellai-inbox--embedded .kellai-inbox__connect-copy {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.kellai-inbox--embedded .kellai-inbox__connect-actions {
+  flex-flow: row wrap;
+  align-self: center;
+}
+
+.kellai-inbox--embedded .kellai-inbox__connect li {
+  padding: 8px 0;
+  border-top: 1px solid var(--xc-color-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.kellai-inbox--embedded :is(.kellai-inbox__button, .kellai-inbox__link, .kellai-inbox__customer):focus-visible {
+  outline: 2px solid var(--xc-color-primary);
+  outline-offset: -2px;
+}
+</style>

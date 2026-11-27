@@ -10,7 +10,7 @@
     </Teleport>
     <p v-if="earlierError" role="alert">{{ earlierError }}</p>
     <div class="chat-messages" id="chatMessages" ref="messagesHostRef" role="list" aria-label="聊天消息"
-      @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage">
+      @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage" @click="copyCode">
       <div
         v-for="{ msg, idx } in visibleMessages"
         :key="presentation(msg).key"
@@ -152,6 +152,33 @@
             @collapse="$emit('collapse-message', idx)"
           />
         </template>
+        <ul v-if="msg.role === 'user' && msg.inputAttachments?.length" class="message-input-attachments">
+          <li v-for="file in msg.inputAttachments" :key="file.reference" :title="file.reference">
+            <i class="fa fa-paperclip" aria-hidden="true"></i> {{ file.name }}
+          </li>
+        </ul>
+        <template v-if="msg.role === 'ai' && !msg.streamingShell && msg.outputArtifacts?.length">
+          <p v-if="msg.workflowAction === 'unknown'">已核验文件可下载供核对。</p>
+          <AgentArtifactDownloadList :files="msg.outputArtifacts" :scope="presentation(msg).key" />
+        </template>
+        <TraceCollapsible v-if="msg.role === 'ai' && !msg.streamingShell && msg.fileSources?.length" class="message-file-sources">
+          <TraceCollapsibleTrigger class="message-receipt__summary">
+            <TraceLine>
+              <TraceIcon><i class="fa fa-file-text-o" aria-hidden="true"></i></TraceIcon>
+              <TraceTitle>来源（{{ msg.fileSources.length }}）</TraceTitle>
+            </TraceLine>
+          </TraceCollapsibleTrigger>
+          <TraceCollapsibleContent class="message-receipt__body">
+            <ul class="message-file-sources__list">
+              <li v-for="(source, sourceIndex) in msg.fileSources" :key="sourceIndex">
+                <strong>{{ source.name }}</strong>
+                <ul>
+                  <li v-for="excerpt in source.excerpts" :key="excerpt"><q>{{ excerpt }}</q></li>
+                </ul>
+              </li>
+            </ul>
+          </TraceCollapsibleContent>
+        </TraceCollapsible>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
           <span v-if="msg.persistence && (msg.persistence.status === 'saving' || msg.persistence.status === 'failed' || msg.persistence.error || msg.persistence.localSaved === false)" class="message-save-status" role="status">
@@ -220,7 +247,7 @@
             <i class="fa" :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'" aria-hidden="true"></i>
           </button>
         </div>
-        <div v-if="msg.role === 'ai' && !msg.streamingShell && ['unknown', 'blocked'].includes(msg.workflowAction || '')" class="message-recovery" data-testid="chat-unknown-recovery">
+        <div v-if="msg.role === 'ai' && !msg.streamingShell && ['unknown', 'blocked'].includes(msg.workflowAction || '') && receiptStatus(msg) === 'unknown'" class="message-recovery" data-testid="chat-unknown-recovery">
           <p class="message-recovery__text">本轮结果未知，请先核对。</p>
         </div>
         <div v-else-if="msg.role === 'ai' && !isMessageStreaming(msg) && !msg.streamingShell && isFailedChatReply(msg) && !hasIncompleteToolReceipt(msg)" class="message-recovery" data-testid="chat-error-recovery">
@@ -267,6 +294,7 @@ import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent, stripPlannerDisplayMarkers, stripToolInvocationLeaks } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import AgentArtifactDownloadList from '@/components/chat/AgentArtifactDownloadList.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 import ChatTurnTrace from '@/components/chat/ChatTurnTrace.vue'
 import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
@@ -284,8 +312,10 @@ import { shouldDeferMarkdownWhileStreaming } from '@/utils/chatMarkdownStreaming
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 import { chatFailureRecoveryText } from '@/components/chat/chatFailureRecovery'
+import { useChatCodeCopy, writeChatClipboard } from '@/composables/useChatCodeCopy'
 
 useI18n()
+const copyCode = useChatCodeCopy()
 
 const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正在保存…', saved: '已保存到服务端', failed: '保存未确认' }
 
@@ -408,7 +438,10 @@ function receiptStatus(message: ChatMessage): ReceiptStatus {
   const outcome = String(message.execution?.outcome || '')
   const businessState = String(message.businessResult?.status || '')
   if (outcome === 'unknown' || message.execution?.effect === 'unknown'
-    || ['unknown', 'blocked'].includes(state) || businessState === 'unknown') return 'unknown'
+    || state === 'unknown' || businessState === 'unknown') return 'unknown'
+  if (state === 'blocked') {
+    return outcome === 'not_executed' && !hasUnreceiptedTools(message) ? 'not_started' : 'unknown'
+  }
   if (isMessageStreaming(message)) return 'running'
   if (state === 'paused') return 'paused'
   if (state === 'cancelled' || state === 'interrupted' || state === 'rejected' || state === 'not_started') return state
@@ -619,12 +652,7 @@ async function copyMessage(message: ChatMessage, event: MouseEvent) {
   temporary?.remove()
   if (!text) { copyLabels.value.set(message, '没有可复制的正文'); return }
   try {
-    if (window.xcagiDesktop?.clipboardWriteText) {
-      const result = await window.xcagiDesktop.clipboardWriteText(text)
-      if (!result?.ok) throw new Error('clipboard write failed')
-    } else {
-      await navigator.clipboard.writeText(text)
-    }
+    await writeChatClipboard(text)
     copyLabels.value.set(message, '已复制')
   } catch {
     copyLabels.value.set(message, '复制失败，请重试')
@@ -732,6 +760,16 @@ watch(
 </script>
 
 <style scoped>
+.message-input-attachments {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
 .proactive-suggestions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
@@ -946,6 +984,21 @@ watch(
 
 .message-task-trace__trigger :deep(.xc-trace-chevron) {
   margin-left: auto;
+}
+
+.message-file-sources__list, .message-file-sources__list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.message-file-sources__list > li + li {
+  margin-top: 8px;
+}
+
+.message-file-sources__list q {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .message-task-trace__activity pre {

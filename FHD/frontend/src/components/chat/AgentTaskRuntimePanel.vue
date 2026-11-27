@@ -51,18 +51,7 @@
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
-    <div v-if="downloadableArtifacts.length" class="agent-artifact-downloads">
-      <button
-        v-for="artifact in downloadableArtifacts"
-        :key="artifact.artifact_id"
-        class="btn btn-primary btn-sm"
-        :disabled="Boolean(downloadingId)"
-        @click="downloadArtifact(artifact)"
-      >
-        {{ downloadingId === artifact.artifact_id ? '正在下载…' : `下载 ${artifact.name || '报表文件'}` }}
-      </button>
-      <p v-if="downloadError" role="alert">{{ downloadError }}</p>
-    </div>
+    <AgentArtifactDownloadList :files="downloadableArtifacts" :scope="task.id" />
     <details v-if="hasResultEvidence" class="agent-result-evidence">
       <summary>技术明细（高级）</summary>
       <pre v-if="verificationDetailsText" class="agent-verification-details">{{ verificationDetailsText }}</pre>
@@ -102,11 +91,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import AgentArtifactDownloadList from './AgentArtifactDownloadList.vue'
 import AgentClarificationForm, { type ClarificationQuestion } from './AgentClarificationForm.vue'
 import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
 import type { AgentArtifact, AgentRunStep, AgentToolCall, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
 import agentRunsApi from '@/api/agentRuns'
-import { downloadBlob } from '@/utils'
+import { readAgentArtifactDownloads } from '@/utils/agentArtifactDownloads'
 import { readActiveModIdFromStorage } from '@/utils/chatStorageKeys'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
@@ -220,41 +210,7 @@ async function reverify(): Promise<void> {
     if (requestedEpoch === verificationEpoch) verificationPending.value = false
   }
 }
-const downloadingId = ref('')
-const downloadError = ref('')
-let downloadEpoch = 0
-function retireDownload(): void {
-  downloadEpoch++
-  downloadingId.value = ''
-  downloadError.value = ''
-}
-watch(verificationScope, retireDownload, { flush: 'sync' })
-onBeforeUnmount(retireDownload)
-const downloadableArtifacts = computed(() =>
-  artifacts.value.filter(
-    (artifact) =>
-      runId.value &&
-      artifact.artifact_type === 'file' &&
-      artifact.uri === `/api/agent/runs/${encodeURIComponent(runId.value)}/artifacts/${encodeURIComponent(artifact.artifact_id)}`,
-  ),
-)
-async function downloadArtifact(artifact: AgentArtifact): Promise<void> {
-  if (downloadingId.value || !downloadableArtifacts.value.includes(artifact)) return
-  const requestedRun = runId.value, requestedScope = verificationScope(), epoch = ++downloadEpoch
-  const isCurrent = () => epoch === downloadEpoch && requestedScope === verificationScope()
-  downloadingId.value = artifact.artifact_id
-  downloadError.value = ''
-  try {
-    const response = await agentRunsApi.downloadArtifact(requestedRun, artifact.artifact_id)
-    if (!isCurrent()) return
-    const blob = await response.blob()
-    if (isCurrent()) downloadBlob(blob, artifact.name || '报表.xlsx')
-  } catch {
-    if (isCurrent()) downloadError.value = '下载失败，请重试；如果文件已失效，请重新导出。'
-  } finally {
-    if (epoch === downloadEpoch) downloadingId.value = ''
-  }
-}
+const downloadableArtifacts = computed(() => readAgentArtifactDownloads(artifacts.value, runId.value))
 const resultSummary = computed(() => {
   const output = payload.value.finalOutput
   if (!output || typeof output !== 'object') return ''

@@ -1,8 +1,7 @@
 """员工记忆管理器：短期会话（SQL）+ 长期向量记忆。
 
 打通此前断开的链路：
-- 短期：``ConversationService.save_message / get_session_messages``，按 session_id 落库，
-  metadata 携带 tenant_id、user_id、employee_id，只取可证明归属的历史。
+- 短期：按会话、租户、账号和员工记录私有 SQL 历史。
 - 长期：``UserMemoryVectorIngest.ingest_chunks`` 写、``UserMemoryRag.query`` 读，
   使用默认私有的 v2 命名空间；企业共享须显式声明且仍限定租户。
 
@@ -19,6 +18,7 @@ from typing import Any
 
 from langchain_core.messages import trim_messages
 
+from app.domain.conversation.message_visibility import EMPLOYEE_MEMORY_SOURCE, is_employee_memory
 from app.domain.employee.memory_scope import MemoryScope
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -143,7 +143,13 @@ class EmployeeMemoryManager:
         try:
             from app.domain.shared_services.conversation_service import ConversationService
 
-            rows = ConversationService().get_session_messages(sid, limit=50, user_id=user_id)
+            rows = ConversationService().get_employee_memory(
+                sid,
+                limit=50,
+                user_id=str(user_id),
+                tenant_id=str(self.scope.tenant_id),
+                employee_id=self.scope.employee_id,
+            )
         except RECOVERABLE_ERRORS:
             logger.debug("short-term recall skipped (session=%s)", sid, exc_info=True)
             return []
@@ -185,9 +191,7 @@ class EmployeeMemoryManager:
             meta.get("scope_version") != 2
             or str(meta.get("employee_id") or "") != self.scope.employee_id
             or str(meta.get("tenant_id") or "") != str(self.scope.tenant_id)
-            or meta.get("source") != "employee_task"
-            or meta.get("source_component") != "employee_runtime"
-            or meta.get("evidence_kind") != "execution_summary"
+            or not is_employee_memory(meta)
             or meta.get("execution_status") not in {"completed", "failed"}
             or meta.get("memory_scope") != ("user" if self.scope.user_scoped else "tenant")
             or not self.scope.long_term_index(meta.get("user_id"))
@@ -268,24 +272,18 @@ class EmployeeMemoryManager:
             {**self._metadata(user_id), "execution_status": "completed" if success else "failed"},
             ensure_ascii=False,
         )
-        uid = str(user_id if user_id is not None else "")
         try:
             from app.domain.shared_services.conversation_service import ConversationService
 
-            svc = ConversationService()
-            if task:
-                svc.save_message(
-                    sid, uid, "user", str(task), intent=self.scope.employee_id, metadata=meta
-                )
-            if summary:
-                svc.save_message(
-                    sid,
-                    uid,
-                    "assistant",
-                    str(summary),
-                    intent=self.scope.employee_id,
-                    metadata=meta,
-                )
+            ConversationService().save_employee_memory(
+                sid,
+                user_id=str(user_id),
+                tenant_id=str(self.scope.tenant_id),
+                employee_id=self.scope.employee_id,
+                task=str(task or ""),
+                summary=str(summary or ""),
+                metadata=meta,
+            )
         except RECOVERABLE_ERRORS:
             logger.debug("short-term remember skipped", exc_info=True)
 
@@ -323,9 +321,7 @@ class EmployeeMemoryManager:
     def _metadata(self, user_id: Any) -> dict[str, Any]:
         return {
             "scope_version": 2,
-            "source": "employee_task",
-            "source_component": "employee_runtime",
-            "evidence_kind": "execution_summary",
+            **EMPLOYEE_MEMORY_SOURCE,
             "verified_business_result": False,
             "tenant_id": str(self.scope.tenant_id),
             "user_id": str(user_id),

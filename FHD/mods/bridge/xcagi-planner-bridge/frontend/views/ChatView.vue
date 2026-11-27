@@ -85,19 +85,17 @@
       />
     </div>
     <div class="input-area" data-tour="chat-input-area">
+      <div class="chat-speech-controls">
+        <ChatSpeechToggle :enabled="ttsEnabled" @update:enabled="setTtsEnabled" />
+      </div>
       <ChatInputToolbar
-        :excel-analyze-uploading="excelAnalyzeUploading"
+        :attachment-uploading="attachmentUploading"
         :multimodal-pending-count="multimodalPendingCount"
-        :proactive-suggestions-enabled="proactiveEnabled"
-        :tts-enabled="ttsEnabled"
-        :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
         @show-history="showHistoryPanel"
         @trigger-office-docking="triggerOfficeDocking"
-        @excel-file-change="onExcelAnalyzeFileChange"
-        @proactive-suggestions-change="persistProactiveEnabled"
-        @toggle-tts="setTtsEnabled"
+        @attachment-file-change="onAttachmentFileChange"
       />
       <ChatModelRecovery :scope-key="messageSessionKey" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
@@ -120,6 +118,7 @@
         </button>
       </div>
       <div class="input-wrapper">
+        <EnterpriseIntelligencePicker ref="intelligencePicker" />
         <textarea
           id="messageInput"
           rows="2"
@@ -212,6 +211,8 @@ import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
+import ChatSpeechToggle from '@/components/chat/ChatSpeechToggle.vue'
+import EnterpriseIntelligencePicker from '@/components/chat/EnterpriseIntelligencePicker.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
@@ -234,7 +235,7 @@ const { mods: modsFromStore } = storeToRefs(modsStore)
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
-// The suggestions toggle must never activate WeChat polling.
+// 聊天建议与星标微信轮询各自独立。
 const autoRefreshStarredWechat = ref(false)
 const isTaskPaneResizable = ref(true)
 
@@ -250,7 +251,6 @@ if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 const chatViewApi = useChatView({ sessionId: currentSessionId })
 const chatRefBag = {
   chatMessagesRef: chatViewApi.chatMessagesRef,
-  excelAnalyzeInputRef: chatViewApi.excelAnalyzeInputRef,
 }
 
 const {
@@ -281,7 +281,7 @@ const {
   loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
-  excelAnalyzeUploading,
+  attachmentUploading,
   multimodalPendingCount,
   excelSheetOptions,
   linkedExcelSheet,
@@ -299,7 +299,7 @@ const {
   setCustomOrderNumber,
   cancelTask,
   showTaskConfirm,
-  onExcelAnalyzeFileChange,
+  onAttachmentFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
   selectTask,
@@ -494,12 +494,18 @@ useChatViewHost({
   stopTaskPaneResize,
 })
 
+const intelligencePicker = ref<{ level: number | null } | null>(null)
 const {
-  proactiveEnabled,
   proactiveSuggestionsByMessage,
-  persistProactiveEnabled,
   pickProactiveSuggestion,
-} = useProactiveReplySuggestions({ messages, messageInput, isLoading, isStreamingReply, scopeKey: messageSessionKey })
+} = useProactiveReplySuggestions({
+  enterpriseLevel: computed(() => intelligencePicker.value?.level ?? null),
+  messages,
+  messageInput,
+  isLoading,
+  isStreamingReply,
+  scopeKey: messageSessionKey,
+})
 
 function openShipmentRecordsFromAuditTask() {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'shipment-records' } }))

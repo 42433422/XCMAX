@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
+import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.run_models import AgentRun, RunContextScope, utc_now_iso
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_execution_models import AgentTaskExecution
 from app.application.agent_orchestrator.task_execution_repository import (
@@ -26,6 +28,9 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     withhold_runtime_output,
 )
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def durable_queue(repository: SQLAlchemyAgentRunRepository) -> SQLAlchemyTaskExecutionRepository:
@@ -64,6 +69,122 @@ def stage_queued_request(
     run.final_output["xiaox_result"] = copy.deepcopy(result)
     run.add_event("runtime.queued", "原任务已进入后台执行队列")
     return result
+
+
+def interrupted_queue_result(run: AgentRun, request_key: str) -> dict[str, Any] | None:
+    """Use the committed result only for the interrupted worker that owned this queue turn."""
+    pending = run.metadata.get("_xiaox_queued_request") or {}
+    binding = run.metadata.get("xiaox_runtime") or {}
+    requests = run.metadata.get("runtime_requests") or {}
+    generation = pending.get("generation")
+    worker_turn = pending.get("worker_turn_id")
+    if (
+        run.status != "blocked"
+        or pending.get("request_key") != request_key
+        or pending.get("state") != "queued"
+        or (requests.get(request_key) or {}).get("state") != "queued"
+        or type(generation) is not int
+        or binding.get("generation") != generation + 1
+        or binding.get("coordinator_active") is not False
+        or binding.get("revoked") is not True
+        or not isinstance(worker_turn, str)
+        or not worker_turn
+    ):
+        return None
+    worker_key = canonical_digest({"turn_id": worker_turn, "owner": run.user_id})
+    worker = requests.get(worker_key) or {}
+    result = run.final_output.get("xiaox_result")
+    if (
+        worker.get("state") == "interrupted"
+        and worker.get("turn_id") == worker_turn
+        and isinstance(result, dict)
+        and result.get("run_id") == run.run_id
+        and result.get("execution_state") == "unknown"
+        and result.get("reconciliation_required") is True
+        and result.get("ok") is False
+    ):
+        return copy.deepcopy(result)
+    return None
+
+
+def _return_queue_result(run: AgentRun, key: str, result: dict[str, Any]) -> None:
+    run.metadata["_xiaox_queued_request"]["state"] = "returned"
+    run.metadata["runtime_requests"][key].update(
+        state="returned", result=copy.deepcopy(result), returned_at=utc_now_iso()
+    )
+
+
+def recover_interrupted_queue_request(
+    repository: SQLAlchemyAgentRunRepository, run: AgentRun, key: str
+) -> dict[str, Any] | None:
+    """After owner authorization, publish only this terminal queue receipt in the host DB."""
+    from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
+    from app.domain.shared_services.conversation_service import (
+        ConversationRevisionError,
+        lock_conversation_session,
+    )
+
+    if not isinstance(repository, SQLAlchemyAgentRunRepository) or not interrupted_queue_result(
+        run, key
+    ):
+        return None
+    context = run.metadata.get("runtime_context") or {}
+    owner = run.user_id
+    session = str(context.get("session_id") or context.get("conversation_id") or "")
+    revision = context.get("_conversation_revision")
+    if not session or type(revision) is not int or not owner.isdecimal():
+        return None
+    scope = RunContextScope(
+        str(context.get("tenant_id")),
+        str(context.get("mod_id") or context.get("active_mod_id") or ""),
+        session,
+        revision,
+    )
+    with repository.transaction() as db:
+        row = db.get(AgentRunRecord, run.run_id)
+        current = repository._record_to_run(row) if row is not None else None
+        if current is None or current.user_id != owner or not scope.matches(current):
+            return None
+        receipt = (current.metadata.get("runtime_requests") or {}).get(key) or {}
+        turn = receipt.get("turn_id")
+        if not turn or canonical_digest({"turn_id": turn, "owner": owner}) != key:
+            return None
+        if receipt.get("state") == "returned":
+            return copy.deepcopy(receipt.get("result"))
+        result = interrupted_queue_result(current, key)
+        if (
+            result is None
+            or current.metadata.get("non_retryable") is not True
+            or (current.metadata.get("recovery") or {}).get("state")
+            != "manual_reconciliation_required"
+        ):
+            return None
+        try:
+            lock_conversation_session(
+                db, session_id=session, user_id=int(owner), expected_revision=revision
+            )
+        except (ConversationRevisionError, PermissionError):
+            return None
+        execution = AgentTaskExecutionRecord
+        # The conditional write fences claim/requeue on SQLite as well as SQL engines with row locks.
+        fenced = (
+            db.query(execution)
+            .filter(
+                execution.run_id == current.run_id,
+                execution.user_id == owner,
+                execution.tenant_id == scope.tenant_id,
+                execution.state == "failed",
+                execution.finished_at.is_not(None),
+                execution.lease_owner.is_(None),
+                execution.lease_expires_at.is_(None),
+            )
+            .update({execution.state: "failed"}, synchronize_session=False)
+        )
+        if fenced != 1:
+            return None
+        returned = copy.deepcopy(current)
+        _return_queue_result(returned, key, result)
+        return result if repository.save_if_unchanged_in_session(db, returned, current) else None
 
 
 def enqueue_resume(
@@ -206,6 +327,8 @@ def _execute_queued_runtime(
     result: dict[str, Any]
     if previous is not None:
         stored_result = previous.get("result")
+        if not isinstance(stored_result, dict):
+            stored_result = interrupted_queue_result(run, pending["request_key"])
         if isinstance(stored_result, dict):
             result = copy.deepcopy(stored_result)
         else:
@@ -232,19 +355,27 @@ def _execute_queued_runtime(
             )
             if sorted(restored) != sorted(actions or []):
                 raise XiaoxBindingError("owner_changed", "原员工能力范围已变化")
-        result = run_runtime_task(
-            run_id=run.run_id,
-            task=pending["task"],
-            system_prompt=run.metadata["_xiaox_system_prompt"],
-            runtime_context=context,
-            history=copy.deepcopy(pending.get("history")),
-            input_data=copy.deepcopy(pending.get("input_data")),
-            completion_mode=run.metadata["runtime_completion_mode"],
-            allowed_actions=actions,
-            gate=gate,
-            answer_to_waiting_input=pending.get("answer_to_waiting_input", False),
-            _repository=claimed,
-        )
+        try:
+            result = run_runtime_task(
+                run_id=run.run_id,
+                task=pending["task"],
+                system_prompt=run.metadata["_xiaox_system_prompt"],
+                runtime_context=context,
+                history=copy.deepcopy(pending.get("history")),
+                input_data=copy.deepcopy(pending.get("input_data")),
+                completion_mode=run.metadata["runtime_completion_mode"],
+                allowed_actions=actions,
+                gate=gate,
+                answer_to_waiting_input=pending.get("answer_to_waiting_input", False),
+                _repository=claimed,
+            )
+        except asyncio.CancelledError:
+            interrupted = interrupted_queue_result(
+                store.get(run.run_id).run, pending["request_key"]
+            )
+            if interrupted is None:
+                raise
+            result = interrupted
 
     def finish(parent: AgentRun, current: dict[str, Any]) -> None:
         request = parent.metadata.get("_xiaox_queued_request") or {}
@@ -266,10 +397,7 @@ def _execute_queued_runtime(
                 exit_status="unknown",
                 reconciliation_required=True,
             )
-        request["state"] = "returned"
-        parent.metadata["runtime_requests"][pending["request_key"]].update(
-            state="returned", result=copy.deepcopy(result), returned_at=utc_now_iso()
-        )
+        _return_queue_result(parent, pending["request_key"], result)
         if result.get("reconciliation_required"):
             parent.metadata.update(
                 non_retryable=True, recovery={"state": "manual_reconciliation_required"}
@@ -297,7 +425,7 @@ def execute_queued_runtime(
     from app.application.agent_runtime.gateway import _failure
 
     try:
-        return _execute_queued_runtime(repository, execution, owner)
+        result = _execute_queued_runtime(repository, execution, owner)
     except XiaoxBindingError as exc:
         code, message = exc.code, str(exc)
         result = _failure(code, message, run_id=execution.run_id)
@@ -315,10 +443,7 @@ def execute_queued_runtime(
                 run.final_output["xiaox_result"] = copy.deepcopy(result)
             pending = run.metadata.get("_xiaox_queued_request") or {}
             if pending.get("request_key") in (run.metadata.get("runtime_requests") or {}):
-                pending["state"] = "returned"
-                run.metadata["runtime_requests"][pending["request_key"]].update(
-                    state="returned", result=copy.deepcopy(result), returned_at=utc_now_iso()
-                )
+                _return_queue_result(run, pending["request_key"], result)
             if result.get("reconciliation_required"):
                 run.metadata.update(
                     non_retryable=True, recovery={"state": "manual_reconciliation_required"}
@@ -328,4 +453,21 @@ def execute_queued_runtime(
         XiaoxBindingStore(_ClaimedRuntimeRepository(repository, execution, owner)).update(
             execution.run_id, blocked
         )
+    # The claim-fenced run receipt has committed before touching the originating
+    # conversation database. A detached chat view does not own that write.
+    try:
+        run = repository.get(execution.run_id)
+    except RECOVERABLE_ERRORS:
+        logger.warning("queued runtime receipt could not be read for chat history", exc_info=True)
         return result
+    if run is not None:
+        context = run.metadata.get("runtime_context") or {}
+        pending = run.metadata.get("_xiaox_queued_request") or {}
+        original = (run.metadata.get("runtime_requests") or {}).get(pending.get("request_key"), {})
+        if context.get("session_id") or context.get("conversation_id"):
+            from app.application.ai_chat.conversation_history import reconcile_queued_chat_reply
+
+            reconcile_queued_chat_reply(
+                context, str(original.get("turn_id") or ""), run.run_id, run=run
+            )
+    return result

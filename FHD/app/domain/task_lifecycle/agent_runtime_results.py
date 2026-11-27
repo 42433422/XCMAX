@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Literal
 
 from app.domain.task_lifecycle.agent_runtime_contract import (
@@ -43,6 +44,9 @@ def base_runtime_result(run_id: str) -> dict[str, Any]:
 
 def withhold_runtime_output(result: dict[str, Any], *, status: str, error: str) -> None:
     """Keep reviewed evidence, but retract an apparent success rejected by the host."""
+    result.pop("file_sources", None)
+    if files := result.pop("output_artifacts", None):
+        result["artifacts"] = [item for item in result.get("artifacts", []) if item not in files]
     result.update(
         ok=False,
         business_completed=False,
@@ -112,6 +116,71 @@ def receipt_settled_failure(row: dict[str, Any]) -> bool:
         and receipt.get("success") is False
         and (row.get("read_only") is True or execution_result_proven_not_executed(receipt))
     )
+
+
+def released_runtime_artifacts(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project only downloadable files proven by the original child readback."""
+    if result.get("ok") is not True or result.get("execution_state") != "completed":
+        return []
+    return verified_receipt_artifacts(result.get("business_receipts") or [])
+
+
+def verified_receipt_artifacts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract individually proven artifacts without deciding the parent outcome."""
+    files: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict) or not receipt_verified(row):
+            continue
+        receipt, run_id = row["receipt"], row["child_run_id"]
+        if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id):
+            continue
+        verification = receipt.get("verification") or {}
+        if not isinstance(verification, dict) or verification.get("accepted") is not True:
+            continue
+        checked = {
+            (evidence.get("artifact_id"), evidence.get("sha256"))
+            for step in verification.get("steps") or []
+            if isinstance(step, dict)
+            for check in step.get("checks") or []
+            if isinstance(check, dict)
+            and check.get("source") == "run_artifact"
+            and check.get("status") == "passed"
+            and isinstance(evidence := check.get("evidence"), dict)
+            and evidence.get("run_id") == run_id
+            and isinstance(evidence.get("artifact_id"), str)
+            and isinstance(evidence.get("sha256"), str)
+        }
+        for artifact in receipt.get("artifacts") or []:
+            if not isinstance(artifact, dict) or artifact.get("artifact_type") not in {
+                "file",
+                "office_document",
+            }:
+                continue
+            artifact_id, name = artifact.get("artifact_id"), artifact.get("name")
+            metadata = artifact.get("metadata") or {}
+            digest = metadata.get("sha256") if isinstance(metadata, dict) else None
+            if (
+                not isinstance(artifact_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id)
+                or not isinstance(name, str)
+                or not name.strip()
+                or not isinstance(digest, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or (artifact_id, digest) not in checked
+            ):
+                continue
+            uri = f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"
+            if artifact.get("uri") != uri:
+                continue
+            files[(run_id, artifact_id)] = {
+                "run_id": run_id,
+                "artifact_id": artifact_id,
+                "name": name,
+                "uri": uri,
+                "artifact_type": artifact["artifact_type"],
+                "metadata": {"sha256": digest},
+            }
+    return list(files.values())
 
 
 def model_unsettled(metadata: dict[str, Any]) -> bool:
@@ -262,6 +331,7 @@ def classify_runtime_result(
         report,
     )
     result["goal_coverage"] = coverage
+    unavailable_plan = result.pop("plan_unavailable", "")
     # Historic failures only cease to block when their *own* receipt proves
     # no side effect and the full original goal is independently verified.
     # A failed write with an unknown effect remains non-replayable.
@@ -320,7 +390,11 @@ def classify_runtime_result(
             exit_status="goal_verification_required",
             execution_state="blocked",
             error="已执行动作不等于整体目标完成，原任务目标仍需核对",
-            output="本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。",
+            output=(
+                unavailable_plan
+                if unavailable_plan and report.get("error_code") == "plan_delivery_unavailable"
+                else "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
+            ),
             goal_response=reviewed_output,
             verification_feedback=feedback,
             retryable=isinstance(report, dict)

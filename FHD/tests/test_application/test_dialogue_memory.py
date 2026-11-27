@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import os
 import subprocess
@@ -87,6 +88,39 @@ def test_same_turn_replays_receipt_and_rejects_changed_message(memory_dir: Path)
     assert replay["data"]["replay"] is True
     assert prepare_chat_turn("查询其他产品", context)["success"] is False
     assert turn_status(conversation_key(context), "same") == "completed"
+
+
+def test_plan_mode_persists_across_new_turns_without_replaying_execution(memory_dir: Path) -> None:
+    from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY
+
+    session = "plan-mode-continuation"
+    initial = _context(session, "1")
+    execute = "请开始执行。"
+    assert prepare_chat_turn(execute, initial) is None
+    settle_chat_turn(execute, initial, {"response": "原轮已经结束。"}, "completed")
+
+    plan = _context(session, "2")
+    only_plan = "请给出操作方案，先不执行。"
+    assert prepare_chat_turn(only_plan, plan) is None
+    assert plan[CONTEXT_KEY] == "plan"
+    settle_chat_turn(only_plan, plan, {"response": "方案已列出。"}, "completed")
+
+    interrupted = _context(session, "3")
+    assert prepare_chat_turn("继续细化。", interrupted) is None
+    assert interrupted[CONTEXT_KEY] == "plan"
+    memory._release_turn(conversation_key(interrupted), "3")
+
+    replay = prepare_chat_turn(execute, _context(session, "1"))
+    assert replay["data"]["replay"] is True
+    assert replay["response"] == "原轮已经结束。"
+    followup = _context(session, "4")
+    assert prepare_chat_turn("增加一个核对步骤。", followup) is None
+    assert followup[CONTEXT_KEY] == "plan"
+    settle_chat_turn("增加一个核对步骤。", followup, {"response": "已补充。"}, "completed")
+
+    authorized = _context(session, "5")
+    assert prepare_chat_turn("现在请开始执行。", authorized) is None
+    assert authorized[CONTEXT_KEY] == "execute"
 
 
 def test_settle_with_reused_turn_id_does_not_break_the_turn(memory_dir: Path) -> None:
@@ -318,16 +352,31 @@ def test_summary_is_cleared_when_transcript_is_too_short(memory_dir: Path) -> No
     assert memory._read(conversation_key(context)).get("summary") is None
 
 
-def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monkeypatch):
+@pytest.mark.parametrize("error_number", [errno.EIO, errno.ENOSPC])
+def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monkeypatch, error_number):
     from app.application.ai_chat import dialogue_memory as memory
 
     context = _context("write-failure", "first")
     key = conversation_key(context)
+    write_bytes = Path.write_bytes
+
+    def fail_snapshot(path, content):
+        if path.suffixes[-2:] == [".json", ".tmp"]:
+            write_bytes(path, content[:8])
+            raise OSError(error_number, "write failed", "/private/local/file")
+        return write_bytes(path, content)
+
     with monkeypatch.context() as patch:
-        patch.setattr(memory, "_write", lambda *_: (_ for _ in ()).throw(OSError("disk")))
-        with pytest.raises(OSError):
-            prepare_chat_turn("private message", context)
+        patch.setattr(Path, "write_bytes", fail_snapshot)
+        if error_number == errno.ENOSPC:
+            result = prepare_chat_turn("private message", context)
+            assert result["error_code"] == "chat_storage_full" and result["execution_started"] is False
+            assert "/private" not in result["response"]
+        else:
+            with pytest.raises(OSError):
+                prepare_chat_turn("private message", context)
     assert not memory._turn_is_live(key, "first")
+    assert not memory._path(key).with_suffix(".json.tmp").exists()
     assert prepare_chat_turn("private message", context) is None
 
 
