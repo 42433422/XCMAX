@@ -58,16 +58,9 @@ def _second_waiting_child(state):
     return pending["run_id"]
 
 
-@pytest.mark.parametrize("no_effect_proof", [True, False])
-def test_settled_failed_child_resumes_parent_without_replaying_success(
-    receipt_task, monkeypatch, no_effect_proof
-):
-    from app.domain.task_lifecycle.results import execution_result_proven_not_executed
+def _reject_waiting_child(state, rejected_id, monkeypatch, *, no_effect_proof=True):
     from app.utils.resilience import rate_limiter
 
-    state = receipt_task
-    state.complete_child()
-    rejected_id = _second_waiting_child(state)
     endpoint = "agent-tool:customers.create"
     monkeypatch.setitem(rate_limiter._rate_limiters, endpoint, rate_limiter._InMemoryRateLimiter(1))
     assert rate_limiter.check_rate_limit(str(state.actor.tenant_id), endpoint)["allowed"]
@@ -82,6 +75,18 @@ def test_settled_failed_child_resumes_parent_without_replaying_success(
     )
     assert response.status_code == 202, response.text
     state.drain(rejected_id)
+
+
+@pytest.mark.parametrize("no_effect_proof", [True, False])
+def test_settled_failed_child_resumes_parent_without_replaying_success(
+    receipt_task, monkeypatch, no_effect_proof
+):
+    from app.domain.task_lifecycle.results import execution_result_proven_not_executed
+
+    state = receipt_task
+    state.complete_child()
+    rejected_id = _second_waiting_child(state)
+    _reject_waiting_child(state, rejected_id, monkeypatch, no_effect_proof=no_effect_proof)
     rejected = state.repository.get(rejected_id)
     assert rejected.status == "failed"
     assert len(rejected.tool_calls) == 1
@@ -111,6 +116,52 @@ def test_settled_failed_child_resumes_parent_without_replaying_success(
     assert final.status == "completed", final.final_output
     assert final.final_output["xiaox_result"]["goal_coverage"]["completed"] is True
     assert state.resume_count == 1 and state.effect_count() == 1
+    assert state.repository.get(state.child_id).to_dict() == original
+    assert len(state.repository.get(rejected_id).tool_calls) == 1
+
+
+@pytest.mark.parametrize("fence", ["settled_receipt", "goal_digest", "goal_version"])
+def test_no_effect_continuation_requires_new_receipt_and_original_goal(
+    receipt_task, monkeypatch, fence
+):
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.domain.task_lifecycle.results import execution_result_proven_not_executed
+
+    state = receipt_task
+    state.complete_child()
+    rejected_id = _second_waiting_child(state)
+    _reject_waiting_child(state, rejected_id, monkeypatch)
+    rows = state.store.receipt_snapshot(state.parent_id)
+    failed = next(row for row in rows if row["child_run_id"] == rejected_id)
+    assert execution_result_proven_not_executed(failed["receipt"])
+    original = state.repository.get(state.child_id).to_dict()
+
+    def change(parent, metadata):
+        if fence == "settled_receipt":
+            parent.final_output["xiaox_result"]["business_receipts"] = copy.deepcopy(rows)
+        elif fence == "goal_digest":
+            metadata["goal_digest"] = "different-goal"
+        else:
+            contract = parent.metadata["runtime_goal_contract"]
+            contract["protocol"] += ":unsupported"
+            contract["digest"] = canonical_digest(
+                {key: value for key, value in contract.items() if key != "digest"}
+            )
+            parent.metadata["runtime_goal_digest"] = metadata["goal_digest"] = contract["digest"]
+
+    before = state.store.update(state.parent_id, change).run
+    parent = refresh_xiaox_receipts(before, repository=state.repository)
+    result = parent.final_output["xiaox_result"]
+    if fence == "settled_receipt":
+        assert parent.status == "blocked" and result["execution_state"] == "partial"
+        assert result["reconciliation_required"] is True and result["retryable"] is False
+        assert result["verified_operations"] is True
+        assert state.queue.get(parent.run_id).last_error_code == "needs_verification"
+    else:
+        assert parent.to_dict() == before.to_dict()
+    assert result["business_completed"] is False
+    assert resume_ready_xiaox_runs(repository=state.repository) == 0
+    assert state.effect_count() == 1 and state.resume_count == 0
     assert state.repository.get(state.child_id).to_dict() == original
     assert len(state.repository.get(rejected_id).tool_calls) == 1
 

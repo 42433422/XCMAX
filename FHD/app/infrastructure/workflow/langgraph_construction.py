@@ -87,12 +87,13 @@ class LangGraphConstructionMixin:
         # scheduler whenever routing, multiple prerequisites, or any
         # non-verified reader is present, so independent writers still pause
         # for their own approval instead of starting together.
-        serial_scheduler = not parallel or any(
-            node.branches
-            or node.next
-            or len(node.depends_on) > 1
-            or not _ReadersWriterGate.is_reader(node)
-            for node in plan.nodes
+        exclusive_node_ids = frozenset(
+            node.node_id for node in plan.nodes if not _ReadersWriterGate.is_reader(node)
+        )
+        serial_scheduler = (
+            not parallel
+            or bool(exclusive_node_ids)
+            or any(node.branches or node.next or len(node.depends_on) > 1 for node in plan.nodes)
         )
         if serial_scheduler and "__xcagi_schedule__" in {node.node_id for node in plan.nodes}:
             raise ValueError("计划节点占用了 LangGraph 调度保留标识")
@@ -110,6 +111,7 @@ class LangGraphConstructionMixin:
                     effective,
                     block_unselected=parallel and not serial_scheduler,
                     dependent_node_ids=self._dependent_nodes(plan, node.node_id),
+                    exclusive_node_ids=exclusive_node_ids,
                 ),
             )
         if serial_scheduler:
@@ -632,6 +634,7 @@ class LangGraphConstructionMixin:
         effective_schema: StateSchema | None = None,
         block_unselected: bool = True,
         dependent_node_ids: list[str] | None = None,
+        exclusive_node_ids: frozenset[str] = frozenset(),
     ) -> Any:
         nid = node.node_id
         candidates = set(self._candidates(node))
@@ -664,9 +667,16 @@ class LangGraphConstructionMixin:
                     apply_state_schema({}, effective_schema, writes={key: value})
                     update[key] = self._contribute(sf, value)
             else:
-                isolated = self._failure_is_local(node, result)
                 done = set(state.get("executed") or [])
                 done.add(nid)
+                # Preserve fail-stop for a write batch. Only explicit dependency
+                # or route closures can exclude pending writes from this boundary.
+                isolated = self._failure_is_local(node, result) and not (
+                    exclusive_node_ids
+                    - done
+                    - set(state.get("blocked") or [])
+                    - set(dependent_node_ids or [])
+                )
                 affected = dependent_node_ids if isolated else plan_node_ids
                 update["blocked"] = [p for p in (affected or []) if p not in done]
                 update["failure"] = {

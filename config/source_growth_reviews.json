@@ -45,7 +45,7 @@
       "after_lines": 865,
       "reason": "工作组07架构评审请求，尚未批准：在原回执投影事务校验中接受既有blocked/partial状态组合，净增1行，避免合法部分完成投影回滚并丢失成功分支证据。",
       "boundary": "仍由原SQL仓储执行同库事务、父状态CAS和原子任务快照复核；不增加调度或新状态，活租约、取消、unknown及重试对账防线保持。",
-      "validation": "最终联合回归118 passed，其中tests/test_routes/test_xiaox_collaboration.py四例覆盖成功保留、no-effect唤醒、无证明阻断及取消部分完成；此前核心账本回归235 passed、3个PostgreSQL案例因无本地服务跳过。完整精确head CI与人工架构审查待完成。",
+      "validation": "最新联合回归208 passed，包含collaboration完整7例及原public_exception_boundaries安全合同，覆盖成功保留、新no-effect唤醒、旧settled及目标篡改阻断、取消部分完成。此前同树PostgreSQL事务CI主套件448 passed/3 skipped，缺服务跳过的原队列3例在CI已运行；最新补丁完整CI与人工架构审查待完成。",
       "follow_up": "沿用原登记负责人@42433422在PR #3690核对本次精确blob及+1行状态约束；语义投影留在receipt_projection，事务职责留在本仓储，无新增拆分计划。该登记不表示评审批准。",
       "review_owner": "@42433422"
     },
@@ -345,7 +345,7 @@
       "after_lines": 2344,
       "reason": "工作组07架构评审请求，尚未批准：原员工连续任务交接保留完整原始失败或等待回执，区分partial与failed并识别既有unknown别名，净增13行，避免等待任务被误判失败和成功结果丢失。",
       "boundary": "仅调整原handoff消费和continuity结果投影，沿用既有身份、授权、子任务归属、SQL账本及未知效果冻结；不新增Runtime、重试入口或调度车道。",
-      "validation": "最终联合回归118 passed，其中tests/test_application/test_employee_handoff_durability.py完整56例覆盖身份隔离、pending读回、unknown阻断、终态优先及两个真实SQLite并发员工场景；E25、continuity acceptance、enterprise与admission周边63例为本轮较早通过记录。真实模型、生产长稳及人工架构审查仍待完成。",
+      "validation": "最新联合回归208 passed，其中employee_handoff_durability完整56例覆盖身份隔离、pending读回、unknown阻断、终态优先及真实SQLite并发员工；原批次与历史no-effect目标核验合同均保留断言并通过。周边E25等63例为本轮较早记录。真实模型、长稳与人工架构审查仍待完成。",
       "follow_up": "沿用原登记负责人@42433422在PR #3690复核精确blob、+13行和原回执完整性；后续按任务拆分与交接消费的业务边界审查，不为800行提醒线机械分片。本登记不代替人工审批。",
       "review_owner": "@42433422"
     },

@@ -121,9 +121,7 @@ class LangGraphExecutionMixin:
         spec = get_tool_action_spec(node.tool_id, node.action)
         return bool(
             spec is not None
-            and (
-                spec.is_read_only_call(node.params) or execution_result_proven_not_executed(output)
-            )
+            and (_ReadersWriterGate.is_reader(node) or execution_result_proven_not_executed(output))
         )
 
     def _execute_node(

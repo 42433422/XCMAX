@@ -196,6 +196,71 @@ def test_failed_employee_read_only_blocks_its_dependency_branch(parallel):
     assert status["remaining_nodes"] == ["dependent", "descendant", "failed"]
 
 
+@pytest.mark.parametrize("parallel", [False, True])
+@pytest.mark.parametrize("write_boundary", ["batch", "dependency", "route", "completed"])
+def test_local_read_failure_preserves_the_write_batch_boundary(parallel, write_boundary):
+    from app.application.workflow.checkpointer import WorkflowCheckpointer
+
+    failed = _read_node("failed", "failed")
+    independent = _read_node("independent", "independent")
+    write = WorkflowNode(
+        node_id="write",
+        tool_id="excel_analyzer",
+        action="analyze",
+        params={"file_path": "input.xlsx", "output_json": "result.json"},
+        risk="low",
+        idempotent=True,
+    )
+    nodes = [failed, write, independent]
+    if write_boundary == "dependency":
+        write.depends_on = [failed.node_id]
+    elif write_boundary == "route":
+        failed.next = write.node_id
+    elif write_boundary == "completed":
+        nodes = [write, failed, independent]
+    calls, checkpoint = [], WorkflowCheckpointer()
+
+    def dispatch(tool, _action, params):
+        node_id = "write" if tool == "excel_analyzer" else params["marker"]
+        calls.append(node_id)
+        return {"success": node_id != "failed", "result": node_id}
+
+    plan = _plan(nodes)
+    result = WorkflowEngine(dispatch).run(
+        plan, parallel=parallel, checkpointer=checkpoint, max_retries=0
+    )
+    expected = ["failed"] if write_boundary == "batch" else ["failed", "independent"]
+    if write_boundary == "completed":
+        expected.insert(0, "write")
+    assert result.success is False and calls == expected
+    assert set(result.final_context["blocked"]) == {item.node_id for item in nodes} - set(expected)
+    completed = set(expected) - {"failed"}
+    if completed:
+        assert set(checkpoint.latest_checkpoint(plan.plan_id)["executed_nodes"]) == completed
+        assert result.final_context["workflow_status"]["partial_completion"] is True
+    else:
+        assert checkpoint.list_checkpoints(plan.plan_id) == []
+    if write_boundary == "completed":
+        assert result.final_context["node_outputs"]["write"] == {"success": True, "result": "write"}
+
+
+@pytest.mark.parametrize("risk,idempotent", [("high", True), ("low", False)])
+def test_stricter_read_node_policy_keeps_failure_global(risk, idempotent):
+    failed = _read_node("failed", "failed")
+    failed.risk, failed.idempotent = risk, idempotent
+    calls = []
+
+    def dispatch(_tool, _action, params):
+        calls.append(params["marker"])
+        return {"success": params["marker"] != "failed"}
+
+    result = WorkflowEngine(dispatch).run(
+        _plan([failed, _read_node("independent", "independent")]), max_retries=0
+    )
+    assert result.success is False and calls == ["failed"]
+    assert result.final_context["failure"]["halt"] is True
+
+
 @pytest.mark.parametrize(
     "failure",
     [

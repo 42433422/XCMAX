@@ -288,20 +288,17 @@ def classify_runtime_result(
             )
         )
     ):
-        settled = all(receipt_settled_failure(row) for row in terminal_failures)
+        # No-effect receipts alone do not authorize recovery of an unverified goal.
+        # Receipt projection separately fences continuation on newly settled children.
         result.update(
             exit_status="partial",
             execution_state="partial",
-            reconciliation_required=not settled,
-            retryable=settled,
+            reconciliation_required=True,
+            retryable=False,
             runtime_status=runtime_status,
             runtime_completed=False,
-            error="部分业务写入已确认，后续操作未完成",
-            output=(
-                "部分业务已核验，失败子任务已确认未执行；成功结果已保留，剩余目标尚未完成。"
-                if settled
-                else "部分业务写入已确认，后续操作未完成；请核对原任务回执，勿重复提交。"
-            ),
+            error="部分业务写入已确认，后续操作未完成，须核对原任务回执",
+            output="部分业务写入已确认，后续操作未完成；请核对原任务回执，勿重复提交。",
         )
         return "blocked"
     mode = str(coverage["mode"])
