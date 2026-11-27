@@ -36,10 +36,14 @@ _MODEL_IDENTITY: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _MODEL_TENANT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "xcagi_model_rate_limit_tenant", default=None
 )
+_MODEL_CONCURRENCY_IDENTITY: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "xcagi_model_concurrency_identity", default=None
+)
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9_.:@-]")
 _MODEL_GATE_LOCK = threading.Lock()
 _MODEL_INFLIGHT = 0
 _MODEL_ROUTE_INFLIGHT: dict[str, int] = {}
+_MODEL_ACTOR_INFLIGHT: dict[str, int] = {}
 
 
 @dataclass
@@ -75,13 +79,23 @@ def _limit_tenant(context: Mapping[str, Any] | None) -> str | None:
 @contextmanager
 def model_rate_limit_scope(context: Mapping[str, Any] | None) -> Iterator[None]:
     """Bind the authenticated chat/tool actor across nested model calls."""
-    identity = _limit_identity(context) or _MODEL_IDENTITY.get()
+    bound_identity = _limit_identity(context)
+    identity = bound_identity or _MODEL_IDENTITY.get()
     tenant = _limit_tenant(context) or _MODEL_TENANT.get()
+    local_user = context.get("local_user_id") if isinstance(context, Mapping) else None
+    # Local users have host-wide IDs; other actors keep their tenant namespace.
+    concurrency_identity = (
+        _SAFE_KEY.sub("_", f"local-user:{local_user}")[:180]
+        if local_user not in (None, "")
+        else bound_identity
+    ) or _MODEL_CONCURRENCY_IDENTITY.get()
     token = _MODEL_IDENTITY.set(identity)
     tenant_token = _MODEL_TENANT.set(tenant)
+    concurrency_token = _MODEL_CONCURRENCY_IDENTITY.set(concurrency_identity)
     try:
         yield
     finally:
+        _MODEL_CONCURRENCY_IDENTITY.reset(concurrency_token)
         _MODEL_TENANT.reset(tenant_token)
         _MODEL_IDENTITY.reset(token)
 
@@ -223,6 +237,15 @@ def model_call_slot(
         )
     except ValueError:
         route_limit = min(8, concurrency)
+    try:
+        actor_limit = int(os.environ.get("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", "4"))
+    except ValueError:
+        actor_limit = 4
+    # Keep room for another actor when capacity permits. A capacity-one model
+    # remains serial. The actor total also spans routes to protect global slots.
+    actor_limit = max(1, min(actor_limit, concurrency - 1, route_limit - 1))
+    # Request kwargs/provider metadata are not an authenticated actor binding.
+    actor = _MODEL_CONCURRENCY_IDENTITY.get() or "anonymous"
     now = time.monotonic()
     with _MODEL_GATE_LOCK:
         circuit = _MODEL_BREAKERS.get(key) or _ModelCircuit()
@@ -230,7 +253,12 @@ def model_call_slot(
         if probe and (now - circuit.opened_at < cooldown or circuit.probing):
             raise ModelCircuitOpenError(max(1, int(cooldown - (now - circuit.opened_at))))
         route_inflight = _MODEL_ROUTE_INFLIGHT.get(route_key, 0)
-        if concurrency <= _MODEL_INFLIGHT or route_limit <= route_inflight:
+        actor_inflight = _MODEL_ACTOR_INFLIGHT.get(actor, 0)
+        if (
+            concurrency <= _MODEL_INFLIGHT
+            or route_limit <= route_inflight
+            or actor_limit <= actor_inflight
+        ):
             raise ModelConcurrencyLimitError()
         if key not in _MODEL_BREAKERS and len(_MODEL_BREAKERS) >= 10_000:
             expired = next(
@@ -250,6 +278,7 @@ def model_call_slot(
         circuit.inflight += 1
         _MODEL_INFLIGHT += 1
         _MODEL_ROUTE_INFLIGHT[route_key] = route_inflight + 1
+        _MODEL_ACTOR_INFLIGHT[actor] = actor_inflight + 1
     succeeded = False
     try:
         yield
@@ -258,11 +287,15 @@ def model_call_slot(
         exc = sys.exc_info()[1] if not succeeded else None
         with _MODEL_GATE_LOCK:
             _MODEL_INFLIGHT = max(0, _MODEL_INFLIGHT - 1)
-            remaining = _MODEL_ROUTE_INFLIGHT[route_key] - 1
-            if remaining:
-                _MODEL_ROUTE_INFLIGHT[route_key] = remaining
-            else:
-                _MODEL_ROUTE_INFLIGHT.pop(route_key, None)
+            for counts, identity in (
+                (_MODEL_ROUTE_INFLIGHT, route_key),
+                (_MODEL_ACTOR_INFLIGHT, actor),
+            ):
+                remaining = counts[identity] - 1
+                if remaining:
+                    counts[identity] = remaining
+                else:
+                    counts.pop(identity, None)
             circuit.inflight -= 1
             if _MODEL_BREAKERS.get(key) is circuit and generation == circuit.generation:
                 circuit.probing = False

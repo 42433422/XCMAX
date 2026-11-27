@@ -2,6 +2,7 @@
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from threading import Barrier, Event, Lock
 from types import SimpleNamespace
 
@@ -19,15 +20,18 @@ def gates(monkeypatch):
     monkeypatch.setattr(admission, "_MODEL_BREAKERS", {})
     monkeypatch.setattr(admission, "_MODEL_INFLIGHT", 0)
     monkeypatch.setattr(admission, "_MODEL_ROUTE_INFLIGHT", {})
+    monkeypatch.setattr(admission, "_MODEL_ACTOR_INFLIGHT", {})
     monkeypatch.setenv("XCAGI_MODEL_BREAKER_THRESHOLD", "2")
     monkeypatch.setenv("XCAGI_MODEL_BREAKER_COOLDOWN", "10")
     monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT", "4")
-    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "2")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "4")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", "4")
     clock = [100.0]
     monkeypatch.setattr(admission.time, "monotonic", lambda: clock[0])
     yield clock
     assert admission._MODEL_INFLIGHT == 0
     assert admission._MODEL_ROUTE_INFLIGHT == {}
+    assert admission._MODEL_ACTOR_INFLIGHT == {}
 
 
 def provider(model="unavailable"):
@@ -156,9 +160,13 @@ def test_single_half_open_probe_and_cancel_preserve_the_open_circuit(gates):
             pass
 
 
-def test_slow_model_cannot_take_all_global_slots():
-    with admission.model_call_slot(provider()):
-        with admission.model_call_slot(provider()):
+def test_slow_model_cannot_take_all_global_slots(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "2")
+    with ExitStack() as held:
+        for actor in ("a1", "a2"):
+            with admission.model_rate_limit_scope({"actor_id": actor}):
+                held.enter_context(admission.model_call_slot(provider()))
+        with admission.model_rate_limit_scope({"actor_id": "a3"}):
             with pytest.raises(admission.ModelConcurrencyLimitError):
                 with admission.model_call_slot(provider()):
                     pass
@@ -166,7 +174,8 @@ def test_slow_model_cannot_take_all_global_slots():
                 pass
 
 
-def test_route_capacity_is_shared_across_actors_without_blocking_other_models():
+def test_route_capacity_is_shared_across_actors_without_blocking_other_models(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "2")
     with admission.model_rate_limit_scope({"actor_id": "a1"}):
         with admission.model_call_slot(provider()):
             with admission.model_rate_limit_scope({"actor_id": "a2"}):
@@ -305,3 +314,185 @@ def test_route_observation_never_resolves_a_lazy_client(model):
     with llm_client_factory_scope(forbidden):
         with admission.model_call_slot(OpenAISdkProvider(), model=model):
             assert _scoped_client.get() == (forbidden, None)
+
+
+@pytest.mark.parametrize("same_route", [True, False])
+def test_one_actor_cannot_monopolize_shared_route_or_global_capacity(monkeypatch, same_route):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT", "8")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "8")
+    monkeypatch.delenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", raising=False)
+    start, ready, release = Barrier(8), Event(), Event()
+    lock, outcomes = Lock(), []
+
+    def record(outcome):
+        with lock:
+            outcomes.append(outcome)
+            if len(outcomes) == 8:
+                ready.set()
+
+    def attempt(index):
+        selected = provider("shared" if same_route else f"route-{index}")
+        start.wait(timeout=3)
+        with admission.model_rate_limit_scope({"tenant_id": "t1", "actor_id": "a1"}):
+            try:
+                with admission.model_call_slot(selected, kwargs={"user_id": f"claimed-{index}"}):
+                    record("admitted")
+                    assert release.wait(timeout=3)
+            except admission.ModelConcurrencyLimitError:
+                record("refused")
+
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        pending = [workers.submit(attempt, index) for index in range(8)]
+        try:
+            assert ready.wait(timeout=3)
+            with admission.model_rate_limit_scope({"tenant_id": "t1", "actor_id": "a2"}):
+                with admission.model_call_slot(provider("shared" if same_route else "available")):
+                    pass
+            assert outcomes.count("admitted") == outcomes.count("refused") == 4
+        finally:
+            release.set()
+        for future in pending:
+            future.result(timeout=3)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancel"])
+async def test_actor_capacity_is_released_after_every_request_exit(monkeypatch, outcome):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", "1")
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def occupy():
+        with admission.model_rate_limit_scope({"actor_id": "a1"}):
+            with admission.model_call_slot(provider()):
+                started.set()
+                await release.wait()
+                if outcome == "failure":
+                    raise httpx.ConnectError("provider failed")
+
+    task = asyncio.create_task(occupy())
+    try:
+        await started.wait()
+        with admission.model_rate_limit_scope({"actor_id": "a1"}):
+            with pytest.raises(admission.ModelConcurrencyLimitError):
+                with admission.model_call_slot(provider("another-route")):
+                    pytest.fail("Changing the model must not create a new actor budget")
+        if outcome == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            release.set()
+            if outcome == "failure":
+                with pytest.raises(httpx.ConnectError):
+                    await task
+            else:
+                await task
+        with admission.model_rate_limit_scope({"actor_id": "a1"}):
+            with admission.model_call_slot(provider()):
+                pass
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def test_anonymous_actor_capacity_cannot_be_split_by_untrusted_identity(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT", "8")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "8")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", "2")
+    with ExitStack() as held:
+        for user_id in ("claimed-a", "claimed-b"):
+            selected = SimpleNamespace(provider_id=user_id, model_name="shared")
+            selected._adapter = SimpleNamespace(user_id=user_id)
+            held.enter_context(
+                admission.model_call_slot(
+                    selected, kwargs={"user_id": user_id, "tenant_id": user_id}
+                )
+            )
+        with pytest.raises(admission.ModelConcurrencyLimitError):
+            with admission.model_call_slot(
+                provider("new-route"),
+                kwargs={"local_user_id": "claimed-c", "tenant_id": "claimed-c"},
+            ):
+                pytest.fail("Unbound identity claims must share one anonymous actor budget")
+        with admission.model_rate_limit_scope({"actor_id": "authenticated"}):
+            with admission.model_call_slot(provider()):
+                pass
+
+
+def test_same_local_actor_does_not_gain_capacity_by_changing_scope_tenant(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", "1")
+    with admission.model_rate_limit_scope({"tenant_id": "t1", "local_user_id": 42}):
+        with admission.model_call_slot(provider("chat")):
+            for context in (
+                {"local_user_id": 42},
+                {"tenant_id": "t2", "local_user_id": 42},
+                {},
+                {"tenant_id": "t2"},
+            ):
+                with admission.model_rate_limit_scope(context):
+                    with pytest.raises(admission.ModelConcurrencyLimitError):
+                        with admission.model_call_slot(provider("elt")):
+                            pytest.fail("The same local owner must retain one actor budget")
+            with admission.model_rate_limit_scope({"tenant_id": "t1", "local_user_id": 43}):
+                with admission.model_call_slot(provider("chat")):
+                    pass
+
+
+def test_actor_only_identity_remains_scoped_to_its_tenant(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", "1")
+    with admission.model_rate_limit_scope({"tenant_id": "t1", "actor_id": "same-name"}):
+        with admission.model_call_slot(provider()):
+            with admission.model_rate_limit_scope({"tenant_id": "t2", "actor_id": "same-name"}):
+                with admission.model_call_slot(provider()):
+                    pass
+            with pytest.raises(admission.ModelConcurrencyLimitError):
+                with admission.model_call_slot(provider("another-route")):
+                    pytest.fail("Exiting the nested scope must restore the original actor")
+
+
+def test_actor_subquota_preserves_global_and_route_totals(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "2")
+    with ExitStack() as held:
+        for actor, model in (("a1", "first"), ("a2", "first")):
+            with admission.model_rate_limit_scope({"actor_id": actor}):
+                held.enter_context(admission.model_call_slot(provider(model)))
+        with admission.model_rate_limit_scope({"actor_id": "a3"}):
+            with pytest.raises(admission.ModelConcurrencyLimitError):
+                with admission.model_call_slot(provider("first")):
+                    pytest.fail("Different actors cannot exceed the route capacity")
+        for actor in ("a3", "a4"):
+            with admission.model_rate_limit_scope({"actor_id": actor}):
+                held.enter_context(admission.model_call_slot(provider("second")))
+        with admission.model_rate_limit_scope({"actor_id": "a5"}):
+            with pytest.raises(admission.ModelConcurrencyLimitError):
+                with admission.model_call_slot(provider("third")):
+                    pytest.fail("Different routes cannot exceed the global capacity")
+
+
+@pytest.mark.parametrize("configured", ["invalid", "1000"])
+def test_actor_limit_cannot_occupy_every_slot_when_other_capacity_exists(monkeypatch, configured):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT", "3")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "3")
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR", configured)
+    with admission.model_rate_limit_scope({"actor_id": "a1"}), ExitStack() as held:
+        for _ in range(2):
+            held.enter_context(admission.model_call_slot(provider()))
+        with pytest.raises(admission.ModelConcurrencyLimitError):
+            with admission.model_call_slot(provider()):
+                pytest.fail("One actor must leave capacity for another actor")
+        with admission.model_rate_limit_scope({"actor_id": "a2"}):
+            with admission.model_call_slot(provider()):
+                pass
+
+
+def test_single_capacity_route_remains_serial(monkeypatch):
+    monkeypatch.setenv("XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL", "1")
+    with admission.model_rate_limit_scope({"actor_id": "a1"}):
+        with admission.model_call_slot(provider()):
+            with admission.model_rate_limit_scope({"actor_id": "a2"}):
+                with pytest.raises(admission.ModelConcurrencyLimitError):
+                    with admission.model_call_slot(provider()):
+                        pytest.fail("A capacity-one route cannot promise parallel fairness")
+    with admission.model_rate_limit_scope({"actor_id": "a2"}):
+        with admission.model_call_slot(provider()):
+            pass
