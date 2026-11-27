@@ -399,7 +399,9 @@ def test_waiting_parent_exposes_original_child_grant_without_recreating_action(
     assert grant["run_id"] == child.run_id and grant["step_id"] == child.steps[0].step_id
     validate_approval_grant(grant["grant"], run=child, principal_id=principal.user_id)
     for unsafe in ("cancelled", "paused"):
-        state.store.update(state.parent.run_id, lambda run, metadata: setattr(run, "status", unsafe))
+        state.store.update(
+            state.parent.run_id, lambda run, metadata: setattr(run, "status", unsafe)
+        )
         blocked = state.repository.get(state.parent.run_id)
         assert "approval" not in route_support.run_response(blocked, principal=principal)
 
