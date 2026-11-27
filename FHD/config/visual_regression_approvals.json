@@ -1,5 +1,5 @@
 {
-  "base_sha": "fe7580bdb2f16a09f4494c806a888155bff4c0e4",
+  "base_sha": "1c0baf582ef6c64160a098d40532beda64f59d9d",
   "surfaces": {
     "desktop": {
       "a11y-composer-focused-dark-1024.png": {"baseline": "392e9b706975fcc1298ce1ad11993a2fe9a5a7bc148c3d114a333ec3ae685feb", "candidate": "8808c009d9ac49fc0157d48af869f6644ee660ec93a83e601e4b125c95946219"},
