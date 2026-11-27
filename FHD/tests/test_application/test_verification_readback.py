@@ -119,6 +119,64 @@ def test_finance_creation_checks_committed_approved_transaction(trusted_actor):
     assert verify(case, output)["status"] == "failed"
 
 
+def test_finance_update_and_delete_verify_committed_tenant_state(trusted_actor):
+    from app.application.finance_app_service import FinanceAppService
+    from app.db.models import FinancialTransaction
+    from app.infrastructure.tenant_scope import owned_tenant_scope
+
+    actor = trusted_actor(role="finance", permissions=["tool.finance.ledger_query"])
+    other = trusted_actor(role="finance", tenant_id=8, permissions=["tool.finance.ledger_query"])
+    svc = FinanceAppService()
+    with owned_tenant_scope(actor.tenant_id):
+        created = svc.create_transaction(
+            {"transaction_type": "revenue", "amount": 500, "counterparty_name": "Alpha"}
+        )
+    assert created["success"] is True
+    txn_id = created["data"]["id"]
+
+    update_params = {
+        "transaction_id": txn_id,
+        "amount": 650.25,
+        "counterparty_name": "Beta",
+        "description": "adjusted",
+    }
+    update_case = invocation(actor, "finance", "update_transaction", update_params)
+    with owned_tenant_scope(actor.tenant_id):
+        updated = svc.update_transaction(
+            txn_id,
+            {"amount": 650.25, "counterparty_name": "Beta", "description": "adjusted"},
+        )
+    assert updated["success"] is True
+    assert verify(update_case, updated)["status"] == "verified"
+    assert verify(invocation(actor, "finance", "update_transaction", update_params), updated)[
+        "code"
+    ] == "result_finance_effect_mismatch"
+    assert verify(invocation(other, "finance", "update_transaction", update_params), updated)[
+        "code"
+    ] == "result_finance_record_unavailable"
+    with owned_tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        db.get(FinancialTransaction, txn_id).counterparty_name = "Tampered"
+    assert verify(update_case, updated)["status"] == "failed"
+
+    delete_params = {"transaction_id": txn_id}
+    delete_case = invocation(actor, "finance", "delete_transaction", delete_params)
+    assert verify(delete_case, {"success": True, "message": "spoofed"})["status"] == "failed"
+    with owned_tenant_scope(actor.tenant_id):
+        deleted = svc.delete_transaction(txn_id)
+    assert deleted["success"] is True
+    assert verify(delete_case, deleted)["status"] == "verified"
+    assert verify(invocation(actor, "finance", "delete_transaction", {}), deleted)["code"] == (
+        "result_finance_identity_missing"
+    )
+    unprivileged = trusted_actor(role="viewer", permissions=[])
+    assert (
+        verify(invocation(unprivileged, "finance", "delete_transaction", delete_params), deleted)[
+            "status"
+        ]
+        == "inconclusive"
+    )
+
+
 @pytest.mark.parametrize("via_executor", [False, True])
 def test_customer_export_uses_original_owned_file_and_rejects_changed_receipts(
     owner, trusted_actor, tmp_path, monkeypatch, via_executor
