@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Java 支付服务补齐原路渠道退款闭环：`AlipayService` 新增基于 `AlipayTradeRefundRequest` 与 `out_request_no` 幂等键的 `refundOrder`，`Refund` 与 Flyway `V21` 新增渠道退款元数据字段，`RefundService` 支持按 `refund_target=original|alipay|wallet` 执行原路退款并在渠道失败时回滚不误退钱包，补充 3 项原路退款正负向单测（36 项退款单测与契约测试全绿）。
 - 视觉回归的基线与候选统一按已合入的多行输入和自主任务确认场景采图，保留原像素比较及交互断言；不重试的模拟后端 E2E 在首次失败时保留 trace，便于定位交互问题。
 - 重新核验 #3680 squash 提交中的三项公开模型 SHA256 误报，补齐精确到提交、文件、规则和行号的独立证据记录；其他提交和位置继续扫描。
 - Redis Streams 保留进程内命令在发起 worker 执行并完成原回执，普通事件继续由共享消费组处理，避免业务已成功却请求超时后重复提交；桥接验收同步已审阅的总线字节基准，保留完整摘要断言及原行为回归。
