@@ -394,6 +394,8 @@ def test_waiting_parent_exposes_original_child_grant_without_recreating_action(
     assert parent.steps == []
     projected = route_support.run_response(parent, principal=principal)
     grant = projected["approval"]
+    assert projected["capabilities"]["approve"] is True
+    assert projected["capabilities"]["resume"] is False
     assert grant["run_id"] == child.run_id and grant["step_id"] == child.steps[0].step_id
     validate_approval_grant(grant["grant"], run=child, principal_id=principal.user_id)
     for unsafe in ("cancelled", "paused"):
