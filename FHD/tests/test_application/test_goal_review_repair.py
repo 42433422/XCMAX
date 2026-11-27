@@ -146,6 +146,13 @@ def test_attachment_format_repair_reports_missing_contract_field_without_file_va
 
     assert report["status"] == "needs_work" and not report["accepted"]
     assert len(verifier.requests) == 2
+    body = json.loads(verifier.requests[0].content)
+    assert body["text"]["format"] == {
+        "type": "json_schema",
+        "name": "runtime_goal_review",
+        "schema": _payload(verifier.requests[0])["output_schema"],
+        "strict": False,
+    }
     assert report["attempts"][0]["validation_errors"][0] == {
         "path": ["goals", 0],
         "rule": "required",

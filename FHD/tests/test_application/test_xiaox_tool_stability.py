@@ -67,6 +67,27 @@ def test_schema_feedback_includes_all_matching_variant_defects_without_values():
     assert "PRIVATE" not in json.dumps(violations)
 
 
+def test_changing_invalid_plans_is_not_progress_and_rejection_survives_sql_reload(bridge_setup):
+    from app.domain.task_lifecycle.react_progress import pending_tool_rejection
+
+    state = bridge_setup
+    for index in range(8):
+        state.bridge.reject_invalid_arguments(
+            state.grant.mcp_token,
+            "execute_action",
+            {"call_id": str(index), "params": {"revision": index}},
+            [{"path": f"$.params.field{index}", "validator": "type"}],
+        )
+    reopened = XiaoxBindingStore(state.store.repository)
+    saved = reopened.get(state.run.run_id)
+    assert saved.metadata["tool_call_limit"]["reason"] == "tool_loop_detected"
+    rejection = pending_tool_rejection(saved.run, saved.metadata, [])
+    assert rejection["diagnostic"]["error_code"] == "invalid_arguments"
+    assert "params" not in rejection and "revision" not in str(rejection)
+    saved.run.metadata["runtime_goal_digest"] = "different-goal"
+    assert not pending_tool_rejection(saved.run, saved.metadata, [])
+
+
 @pytest.mark.parametrize("period", [1, 2, 4])
 def test_repeated_discovery_stops_without_claiming_business_success(
     bridge_setup, monkeypatch, period

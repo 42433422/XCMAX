@@ -151,6 +151,19 @@ def input_revision(run: Any) -> str:
     )
 
 
+def pending_tool_rejection(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) -> dict:
+    """A rejected proposal is repair feedback, never a new goal or authorization."""
+    rejection = metadata.get("tool_rejection") or {}
+    if (
+        not run.metadata.get("runtime_goal_digest")
+        or rejection.get("goal_digest") != run.metadata.get("runtime_goal_digest")
+        or rejection.get("answers_digest") != canonical_digest(goal_answers(run))
+        or rejection.get("facts") != receipt_facts(rows)
+    ):
+        return {}
+    return rejection
+
+
 def requires_actions(state: dict[str, Any]) -> bool:
     return any(
         task["evidence"] == "host_receipt" and not task["completed"]

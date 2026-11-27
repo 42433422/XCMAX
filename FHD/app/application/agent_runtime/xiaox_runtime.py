@@ -74,6 +74,7 @@ from app.domain.task_lifecycle.react_progress import (
     ensure_control,
     note_no_progress,
     output_channel,
+    pending_tool_rejection,
     receipt_facts,
     replan_invalid_review,
     requires_actions,
@@ -517,6 +518,10 @@ async def run_xiaox_agent(
 
         def record_stall(run, metadata):
             nonlocal decision
+            if rejection := pending_tool_rejection(run, metadata, rows):
+                # These reads predate the rejected action; they cannot turn its
+                # recovery attempt into progress or consume a verification slot.
+                metadata[CONTROL_KEY]["facts"] = rejection["facts"]
             decision = note_no_progress(run, metadata, rows, channel)
             state = metadata[CONTROL_KEY]
             if channel != "reply":
@@ -581,6 +586,7 @@ async def run_xiaox_agent(
                 "strategy": STRATEGIES[state["strategy"]],
                 "required_channel": "host_tools" if requires_actions(state) else "reply",
                 "rejected_output_channel": channel,
+                "rejected_action": pending_tool_rejection(current.run, current.metadata, rows),
                 "preserve_original_authority": True,
             },
             ensure_ascii=False,
@@ -1333,9 +1339,17 @@ async def run_xiaox_agent(
 
                             mutate(enter_repair)
                             runtime_status = "completed"
-                            if not receipt_facts(handoff_rows):
+                            current = store.get(run_id)
+                            if not receipt_facts(handoff_rows) or (
+                                completion_mode != "reply"
+                                and pending_tool_rejection(
+                                    current.run, current.metadata, handoff_rows
+                                )
+                                and not _has_blocking_receipt(handoff_rows)
+                            ):
+                                texts.clear()
                                 goal_feedback = await recover_without_review(
-                                    "", handoff_rows, "no_business_evidence"
+                                    "", handoff_rows, "rejected_action"
                                 )
                                 continue
                         if stalled_turn:

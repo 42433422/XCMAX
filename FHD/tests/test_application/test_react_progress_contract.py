@@ -202,7 +202,9 @@ def test_native_tool_loop_interrupt_changes_strategy_without_resetting_invocatio
     assert events.count("runtime.recovery.strategy_changed") == 1
 
 
-@pytest.mark.parametrize("original_state", ["completed", "none", "unknown", "waiting_approval"])
+@pytest.mark.parametrize(
+    "original_state", ["completed", "rejected", "none", "unknown", "waiting_approval"]
+)
 def test_execution_handoff_preserves_repair_allowance_and_reviews_only_actual_evidence(
     setup_runtime, original_state
 ):
@@ -234,13 +236,26 @@ def test_execution_handoff_preserves_repair_allowance_and_reviews_only_actual_ev
                     if original_state == "none"
                     else [
                         receipt(
-                            status=original_state,
-                            verified=original_state == "completed",
-                            success=original_state == "completed",
+                            status="completed" if original_state == "rejected" else original_state,
+                            verified=original_state in {"completed", "rejected"},
+                            success=original_state in {"completed", "rejected"},
                         )
                     ]
                 )
+                if original_state == "rejected":
+                    store.run.metadata["xiaox_runtime"]["tool_rejection"] = {
+                        "goal_digest": store.run.metadata["runtime_goal_digest"],
+                        "answers_digest": canonical_digest([]),
+                        "facts": receipt_facts(store.rows),
+                        "diagnostic": {"error_code": "workbook_plan_invalid"},
+                    }
             else:
+                if original_state == "rejected":
+                    assert "workbook_plan_invalid" in goal_feedback
+                    assert not any(
+                        e.event_type == "runtime.goal.verification.started"
+                        for e in store.run.events
+                    )
                 fresh = receipt(child_run_id="fresh-child", child_task_id="fresh-task")
                 fresh["call_id"] = "fresh-call"
                 fresh["receipt"]["tool_calls"][0]["output"]["row_count"] = 4
@@ -267,6 +282,8 @@ def test_execution_handoff_preserves_repair_allowance_and_reviews_only_actual_ev
     state = store.run.metadata["xiaox_runtime"][CONTROL_KEY]
     assert state["repair_turns"] == 1 and state["limits"]["repair"] == 6
     assert "model_call_limit" not in store.run.metadata["xiaox_runtime"]
+    if original_state == "rejected":
+        assert state["strategy_switches"] == 1
     assert sum(e.event_type == "runtime.goal.verification.started" for e in store.run.events) == (
         2 if original_state == "completed" else 1
     )

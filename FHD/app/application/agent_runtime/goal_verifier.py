@@ -655,6 +655,14 @@ def verify_runtime_goal(
                     response = client.responses.create(
                         model=config.model,
                         input=cast(ResponseInputParam, messages),
+                        text={
+                            "format": {
+                                "type": "json_schema",
+                                "name": "runtime_goal_review",
+                                "schema": schema,
+                                "strict": False,
+                            }
+                        },
                         tools=[],
                         store=False,
                         max_output_tokens=output_budget,
