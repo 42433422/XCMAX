@@ -32,9 +32,9 @@
     "@electron/notarize": "3.1.2",
     "@noble/hashes": "^2.4.0",
     "@playwright/test": "^1.65.1",
-    "@types/node": "26.6.6",
-    "@vitest/coverage-v8": "^5.1.0",
-    "electron": "45.3.4",
+    "@types/node": "26.6.7",
+    "@vitest/coverage-v8": "^5.1.1",
+    "electron": "45.5.0",
     "electron-builder": "26.18.0",
     "typescript": "6.0.3",
     "vitest": "^5.0.4"
