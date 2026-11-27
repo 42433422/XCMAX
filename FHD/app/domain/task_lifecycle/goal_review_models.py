@@ -107,6 +107,23 @@ def goal_source_catalogue(
     sources = {
         "request": {"text": contract["request"]["text"], "role": "user", "allowed_kinds": kinds}
     }
+    for item in contract["request"].get("attachments") or []:
+        metadata, preview = item.get("metadata") or {}, item.get("preview") or {}
+        digest, text = metadata.get("sha256"), preview.get("text")
+        if (
+            item.get("source") == "owned_elt_upload"
+            and isinstance(digest, str)
+            and len(digest) == 64
+            and isinstance(text, str)
+            and text.strip()
+        ):
+            # A document specifies acceptance criteria, never permission to act.
+            # Only the frozen user request can authorize a read/write objective.
+            sources["attachment:" + digest] = {
+                "text": text,
+                "role": "attachment",
+                "allowed_kinds": ["constraint"],
+            }
     for row in answers:
         identity, text = row.get("source_id"), row.get("answer")
         if (
@@ -138,6 +155,54 @@ def goal_source_catalogue(
                 "allowed_kinds": ["reply", "constraint"],
             }
     return sources
+
+
+def review_provenance_defects(raw: Any, sources: dict[str, dict[str, Any]]) -> list[str]:
+    """Check source bindings even when unrelated optional wire fields are missing."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("goals"), list):
+        return []
+    seen: set[str] = set()
+    errors = []
+    for goal in raw["goals"][:64]:
+        if not isinstance(goal, dict):
+            continue
+        identity, origin, quote = (goal.get(key) for key in ("goal_id", "source_id", "source"))
+        if (
+            not isinstance(identity, str)
+            or not isinstance(origin, str)
+            or not isinstance(quote, str)
+        ):
+            continue
+        source = sources.get(origin)
+        texts = (
+            [row["text"] for key, row in sources.items() if key.startswith("history:")]
+            if origin == "history"
+            else []
+        )
+        known = bool(texts) if origin == "history" else source is not None
+        matches = (
+            any(quote in text for text in texts)
+            if origin == "history"
+            else source is not None and quote in source["text"]
+        )
+        if identity in seen:
+            errors.append(f"goal_id_duplicate: 目标 {identity} 的唯一标识重复")
+        if not known:
+            errors.append(
+                f"goal_source_unknown: 目标 {identity} 的来源 {origin} 不存在，缺少原始请求证据"
+            )
+        elif not matches:
+            errors.append(
+                f"goal_source_mismatch: 目标 {identity} 的引用不匹配来源 {origin}，缺少原始请求证据"
+            )
+        if (
+            source
+            and goal.get("kind") not in source["allowed_kinds"]
+            and origin.startswith("attachment:")
+        ):
+            errors.append(f"goal_source_kind_invalid: 附件条件 {identity} 不得创建业务操作")
+        seen.add(identity)
+    return errors
 
 
 def normalize_review_provenance(raw: Any, contract: dict[str, Any]) -> Any:

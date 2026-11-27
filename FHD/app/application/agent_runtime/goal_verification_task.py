@@ -34,6 +34,7 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     verified_receipt_artifacts,
 )
 from app.domain.task_lifecycle.goal_review_models import GoalReview
+from app.domain.task_lifecycle.react_progress import invalid_review_recoverable
 from app.infrastructure.xiaox.binding import XiaoxBindingError
 
 _RECOVERABLE = frozenset(
@@ -265,7 +266,10 @@ def compensable_verification(run: Any, rows: list[dict]) -> bool:
         job.get("state") != "needs_work"
         or job.get("version") != VERIFIER_VERSION
         or report.get("verifier_version") != VERIFIER_VERSION
-        or report.get("status") != "needs_work"
+        or (
+            report.get("status") != "needs_work"
+            and not invalid_review_recoverable(run, metadata, rows)
+        )
         or report.get("accepted") is not False
         or not isinstance(report.get("review"), dict)
         or model_unsettled(metadata)
@@ -293,13 +297,19 @@ def compensable_verification(run: Any, rows: list[dict]) -> bool:
                 report.get(key) == job.get(key) == identity[key]
                 for key in ("goal_digest", "evidence_digest", "response_digest")
             )
-            and valid_compensation_review(
-                report["review"],
-                run.metadata["runtime_goal_contract"],
-                goal_evidence_snapshot(
-                    run.metadata["runtime_goal_contract"], rows, job["output"], goal_answers(run)
-                ),
-                job["output"],
+            and (
+                invalid_review_recoverable(run, metadata, rows)
+                or valid_compensation_review(
+                    report["review"],
+                    run.metadata["runtime_goal_contract"],
+                    goal_evidence_snapshot(
+                        run.metadata["runtime_goal_contract"],
+                        rows,
+                        job["output"],
+                        goal_answers(run),
+                    ),
+                    job["output"],
+                )
             )
         )
     except (KeyError, TypeError, ValueError):

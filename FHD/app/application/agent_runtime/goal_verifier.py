@@ -43,7 +43,11 @@ from app.domain.task_lifecycle.agent_runtime_contract import (
     validate_goal_review,
     validate_runtime_goal,
 )
-from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
+from app.domain.task_lifecycle.agent_runtime_results import (
+    model_unsettled,
+    receipt_state,
+    receipt_verified,
+)
 
 if TYPE_CHECKING:
     from app.application.agent_runtime.plan_delivery import PlanVerdict
@@ -518,6 +522,7 @@ def verify_runtime_goal(
         action_catalog=action_catalog,
         file_evidence=file_evidence,
         receipt_ids=tuple(row["evidence_id"] for row in snapshot["evidence"]),
+        verified_receipt_ids=tuple(row["child_run_id"] for row in rows if receipt_verified(row)),
         source_block_ids=tuple(source_blocks),
         response_block_ids=tuple(response_blocks),
     )
@@ -762,7 +767,12 @@ def verify_runtime_goal(
                         wire_validator.iter_errors(decoded)
                     )
                     if wire_defects:
-                        diagnostic["validation_errors"] = wire_defects
+                        diagnostic["validation_errors"] = [
+                            *wire_defects,
+                            *review_protocol.review_provenance_defects(
+                                decoded, payload["source_catalogue"]
+                            ),
+                        ]
                         raise ValueError("Invalid goal review schema")
                     _resolve_file_citations(decoded, source_blocks, response_blocks)
                 review, errors = validate_goal_review(

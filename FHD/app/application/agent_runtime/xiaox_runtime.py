@@ -75,6 +75,7 @@ from app.domain.task_lifecycle.react_progress import (
     note_no_progress,
     output_channel,
     receipt_facts,
+    replan_invalid_review,
     requires_actions,
     review_signature,
 )
@@ -277,6 +278,14 @@ def _compensation_feedback(binding: Any, rows: list[dict[str, Any]]) -> str | No
             "goal_verification_invalid_gap", "原核验缺口来源、证据或执行条件尚不满足补偿要求"
         )
     report = binding.run.metadata["runtime_goal_verification"]
+    if report.get("status") == "unavailable":
+        return json.dumps(
+            {
+                "repair_task": binding.metadata[CONTROL_KEY]["repair"],
+                "constraints": "仅按原用户目标恢复；无效核验不是执行授权，不重放成功或未知写入。",
+            },
+            ensure_ascii=False,
+        )
     assessed = report.get("review") or {}
     goals = assessed.get("goals") or []
     return json.dumps(
@@ -496,6 +505,9 @@ async def run_xiaox_agent(
                 # The signature is computed after the reviewer establishes whether
                 # this is a business repair or a text revision.
                 state["last_review_signature"] = review_signature(run, rows, reviewed_output)
+            elif not _has_blocking_receipt(rows) and replan_invalid_review(run, metadata, rows):
+                state["last_review_signature"] = review_signature(run, rows, reviewed_output)
+                run.metadata[JOB_KEY].update(state="needs_work", terminal_code="")
 
         mutate(checkpoint_review)
         return review
@@ -1405,6 +1417,15 @@ async def run_xiaox_agent(
                             review.get("status") != "needs_work"
                             or binding.run.metadata[JOB_KEY].get("state") != "needs_work"
                         ):
+                            control = binding.metadata[CONTROL_KEY]
+                            if control.get("invalid_review", {}).get("report_digest") == review.get(
+                                "report_digest"
+                            ) and requires_actions(control):
+                                texts.clear()
+                                goal_feedback = await recover_without_review(
+                                    output, rows, "verification"
+                                )
+                                continue
                             break
                         goal_feedback = _compensation_feedback(binding, rows)
                         if goal_feedback is None:

@@ -767,14 +767,23 @@ async def forward_responses(request: Request):
             route_index = authorized.index(target)
             route = routes[route_index]
             body = _prepare_body({**requested_body, "model": route.model}, route)
+    if not verification_job:
+        from app.domain.task_lifecycle.agent_runtime_results import (
+            receipt_settled_failure,
+            receipt_verified,
+        )
+
         rows = [
             {"call_id": key, **value}
             for key, value in (binding.metadata.get("calls") or {}).items()
         ]
         if (
-            control.get("strategy", 0) >= 1
-            and requires_actions(control)
-            and not (set(receipt_facts(rows)) - set(control.get("facts", [])))
+            requires_actions(control)
+            or binding.run.metadata.get("runtime_completion_mode") == "business"
+        ) and not (
+            binding.metadata.get("waiting_input")
+            or any(not (receipt_verified(row) or receipt_settled_failure(row)) for row in rows)
+            or (set(receipt_facts(rows)) - set(control.get("facts", [])))
         ):
             if not body.get("tools"):
                 raise HTTPException(409, "The current repair requires authorized host tools")

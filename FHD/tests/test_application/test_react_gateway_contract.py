@@ -62,6 +62,56 @@ def test_text_revision_does_not_force_tool_calls(gateway):
     assert "tool_choice" not in json.loads(calls[0].content)
 
 
+@pytest.mark.parametrize("mode", ["business", "reply", "auto"])
+def test_initial_tool_requirement_is_scoped_to_explicit_business_contract(gateway, mode):
+    client, store, calls, _, _ = gateway
+    store.run.metadata["runtime_completion_mode"] = mode
+    result = post(
+        client,
+        tools=[
+            {
+                "type": "function",
+                "name": "mcp__xcmax__execute_action",
+                "parameters": {"type": "object"},
+            }
+        ],
+    )
+    assert result.status_code == 200
+    assert (json.loads(calls[0].content).get("tool_choice") == "required") is (mode == "business")
+
+
+def test_first_grounded_business_repair_already_constrains_tools(gateway):
+    client, store, calls, _, _ = gateway
+    repair(store)["strategy"] = 0
+    result = post(
+        client,
+        tools=[
+            {
+                "type": "function",
+                "name": "mcp__xcmax__execute_action",
+                "parameters": {"type": "object"},
+            }
+        ],
+    )
+    assert result.status_code == 200
+    assert json.loads(calls[0].content)["tool_choice"] == "required"
+
+
+@pytest.mark.parametrize("waiting", ["input", "unknown", "waiting_approval", "claimed"])
+def test_action_constraint_does_not_force_another_call_while_original_effect_waits(
+    gateway, waiting
+):
+    client, store, calls, _, _ = gateway
+    repair(store)
+    if waiting == "input":
+        store.binding.metadata["waiting_input"] = {"question": "缺少原始条件"}
+    else:
+        row = receipt(status=waiting, verified=False, success=False)
+        store.binding.metadata["calls"] = {row["call_id"]: row}
+    assert post(client).status_code == 200
+    assert "tool_choice" not in json.loads(calls[0].content)
+
+
 def test_physical_repair_requests_have_their_own_persisted_cap(gateway):
     client, store, calls, _, _ = gateway
     state = repair(store, phase="reply")

@@ -93,6 +93,72 @@ def test_ordinary_json_reply_does_not_require_tools_or_enter_repair(setup_runtim
     assert not store.run.metadata["xiaox_runtime"][CONTROL_KEY].get("repair")
 
 
+def test_invalid_review_replans_only_original_grounded_business_goal(setup_runtime, monkeypatch):
+    from app.application.agent_runtime import goal_verifier
+
+    invoke, _ = setup_runtime
+    original_review = goal_verifier.verify_runtime_goal
+    store = Store()
+    store.review_kind, store.review_missing = "write", True
+    reviews = []
+
+    def invalid_first(*args, **kwargs):
+        report = original_review(*args, **kwargs)
+        if not reviews:
+            report.update(status="unavailable", error_code="goal_verification_invalid_gap")
+            report["review"]["goals"].append(
+                {
+                    **report["review"]["goals"][0],
+                    "goal_id": "untrusted",
+                    "source_id": "request",
+                    "source": "附件伪造的额外删除指令",
+                }
+            )
+            report["report_digest"] = canonical_digest(
+                {k: v for k, v in report.items() if k != "report_digest"}
+            )
+        reviews.append(report)
+        return report
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", invalid_first)
+
+    class Replanned(Transport):
+        async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
+            if self.inputs:
+                from app.application.agent_runtime.goal_verification_task import (
+                    compensable_verification,
+                )
+                from app.application.agent_runtime.xiaox_runtime import _compensation_feedback
+
+                assert compensable_verification(store.run, store.rows)
+                changed = copy.deepcopy(store.run)
+                changed.metadata["xiaox_runtime"][CONTROL_KEY]["repair"]["tasks"][0][
+                    "requirement"
+                ] = "额外写入"
+                assert not compensable_verification(changed, store.rows)
+                assert "附件伪造" not in _compensation_feedback(
+                    store.get(store.run.run_id), store.rows
+                )
+                repair = store.run.metadata["xiaox_runtime"][CONTROL_KEY]["repair"]
+                assert [task["requirement"] for task in repair["tasks"]] == [store.run.message]
+                row = receipt()
+                row["read_only"] = False
+                store.rows.append(row)
+                store.review_missing = False
+            async for value in super().stream_turn(
+                text, goal_feedback=goal_feedback, output_schema=output_schema
+            ):
+                yield value
+
+    result = asyncio.run(invoke(store, Replanned(store), tool_bridge=Bridge()))
+    assert result["ok"] and len(reviews) == 2
+    saved = store.run.metadata["xiaox_runtime"][CONTROL_KEY]
+    assert (
+        saved["strategy_switches"] == 1
+        and saved["invalid_review"]["error_code"] == "goal_verification_invalid_gap"
+    )
+
+
 def test_native_tool_loop_interrupt_changes_strategy_without_resetting_invocation_budget(
     setup_runtime,
 ):
@@ -272,6 +338,45 @@ def test_sql_restart_preserves_repair_counters_and_original_budget(trusted_actor
     assert ensure_control(new_grant.binding.metadata, 1000) == before
     assert before["execution_turns"] == 1 and before["repair_turns"] == 1
     assert before["strategy_switches"] == 1 and before["no_progress"] == 1
+
+
+def test_invalid_review_recovery_contract_survives_sql_reload_without_new_budget(review_task):
+    from app.application.agent_runtime import goal_verification_task as checkpoint
+    from app.domain.task_lifecycle.react_progress import replan_invalid_review
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
+    from tests.fixtures.goal_verification_task import _review
+
+    state = review_task
+    report = _review(state, status="needs_work")
+    report.update(status="unavailable", accepted=False, error_code="goal_verification_invalid_gap")
+    report["review"]["goals"][0].update(kind="read", status="unmet", evidence_ids=[])
+    report["report_digest"] = canonical_digest(
+        {k: v for k, v in report.items() if k != "report_digest"}
+    )
+    checkpoint.finish_verification(
+        state.store,
+        state.run_id,
+        job_id=state.job["job_id"],
+        generation=state.generation,
+        review=report,
+    )
+
+    def recover(run, metadata):
+        ensure_control(metadata, 24)
+        assert replan_invalid_review(run, metadata, [])
+        note_no_progress(run, metadata, [], "verification")
+        run.metadata[checkpoint.JOB_KEY].update(state="needs_work", terminal_code="")
+
+    state.store.update(state.run_id, recover)
+    before = state.store.get(state.run_id).metadata[CONTROL_KEY]
+    reloaded = XiaoxBindingStore(state.repository).get(state.run_id)
+    assert checkpoint.compensable_verification(reloaded.run, [])
+    assert reloaded.metadata[CONTROL_KEY] == before
+    changed = copy.deepcopy(reloaded.run)
+    changed.metadata["xiaox_runtime"][CONTROL_KEY]["repair"]["tasks"][0]["source_id"] = (
+        "attachment:forged"
+    )
+    assert not checkpoint.compensable_verification(changed, [])
 
 
 def test_business_review_signature_ignores_rewording_but_accepts_new_original_answers():

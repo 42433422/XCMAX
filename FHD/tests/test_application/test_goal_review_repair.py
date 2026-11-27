@@ -28,6 +28,99 @@ def _complete_review():
     return review(goal(), goal("再查询second", goal_id="second"))
 
 
+def test_shape_and_source_defects_are_reported_in_the_same_original_repair(verifier):
+    verifier.run.message = "读取附件并概述"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "note.docx",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "note", "sha256": "c" * 64},
+                "preview": {"text": "标题使用加粗", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows = []
+    verifier.output = "尚未完成"
+    corrected = review(goal("读取附件", status="unmet", evidence_ids=[]))
+    corrected["goals"][0]["file_basis"] = "complete"
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][0].update(source="原文中没有的要求")
+    rejected["goals"][0].pop("file_basis")
+    verifier.replies = [response(rejected), response(corrected)]
+    assert verifier.verify()["status"] == "needs_work"
+    repair = json.loads(verifier.requests[1].content)["input"][-1]["content"]
+    assert "file_basis" in repair and "goal_source_mismatch" in repair
+
+
+def test_file_write_without_host_evidence_cannot_become_a_completed_repair_task(verifier):
+    verifier.run.message = "生成副本"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "source.csv",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "source", "sha256": "b" * 64},
+                "preview": {"text": "标题", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows, verifier.output = [], "文件已经完成"
+    corrected = review(goal("生成副本", kind="write", status="unmet", evidence_ids=[]))
+    corrected["goals"][0]["file_basis"] = "independent"
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][0].update(status="satisfied", evidence_ids=["response"])
+    verifier.replies = [response(rejected), response(corrected)]
+    report = verifier.verify()
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert report["review"]["goals"][0]["status"] == "unmet"
+    assert len(verifier.requests) == 2
+
+
+def test_frozen_document_criteria_have_provenance_without_granting_write_authority(verifier):
+    from app.domain.task_lifecycle.goal_review_models import goal_source_catalogue
+
+    verifier.run.message = "按附件要求生成副本"
+    contract = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "requirements.docx",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "requirements", "sha256": "b" * 64},
+                "preview": {"text": "标题使用加粗", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    sources = goal_source_catalogue(contract)
+    document = sources["attachment:" + "b" * 64]
+    assert document["text"] == "标题使用加粗"
+    assert document["allowed_kinds"] == ["constraint"]
+    verifier.run.metadata["runtime_goal_contract"] = contract
+    verifier.rows = []
+    verifier.output = "尚未生成副本"
+    pending = review(
+        goal("生成副本", kind="write", status="unmet", evidence_ids=[]),
+        goal(
+            "标题使用加粗",
+            goal_id="criterion",
+            kind="constraint",
+            status="unmet",
+            evidence_ids=[],
+            source_id="attachment:" + "b" * 64,
+        ),
+    )
+    for item in pending["goals"]:
+        item["file_basis"] = "independent"
+    verifier.replies = [response(pending)]
+    assert verifier.verify()["status"] == "needs_work"
+    pending["goals"][1]["kind"] = "write"
+    verifier.replies = [response(pending)] * 2
+    assert not verifier.verify()["accepted"]
+
+
 def test_attachment_format_repair_reports_missing_contract_field_without_file_values(verifier):
     verifier.run.message = "读取附件"
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(

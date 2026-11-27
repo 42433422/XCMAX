@@ -6,6 +6,7 @@ this module owns neither execution, authorization, billing nor another scheduler
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any, Literal, cast
 
@@ -13,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest, goal_answers
 from app.domain.task_lifecycle.agent_runtime_results import receipt_verified
-from app.domain.task_lifecycle.goal_review_models import GoalReview
+from app.domain.task_lifecycle.goal_review_models import GoalReview, goal_source_catalogue
 
 CONTROL_KEY = "react_progress"
 STRATEGIES = ("native_repair", "tool_constraint", "context_repair", "compatible_route")
@@ -78,6 +79,7 @@ class RepairContract(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     protocol: Literal["xcagi.react-repair.v1"] = "xcagi.react-repair.v1"
     goal_digest: str
+    original_request: str = ""
     review_digest: str
     tasks: list[RepairTask]
     preserved_receipts: list[str]
@@ -196,9 +198,15 @@ def ensure_control(metadata: dict[str, Any], max_calls: int) -> dict[str, Any]:
     return cast(dict[str, Any], metadata[CONTROL_KEY])
 
 
-def bind_repair(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def bind_repair(
+    run: Any,
+    metadata: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    grounded_review: GoalReview | None = None,
+) -> dict[str, Any]:
     report = run.metadata.get("runtime_goal_verification") or {}
-    review = GoalReview.model_validate(report["review"])
+    review = grounded_review or GoalReview.model_validate(report["review"])
     state = metadata[CONTROL_KEY]
     tasks = [
         RepairTask(
@@ -227,6 +235,7 @@ def bind_repair(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) 
     ]
     contract = RepairContract(
         goal_digest=run.metadata["runtime_goal_digest"],
+        original_request=run.metadata["runtime_goal_contract"]["request"]["text"],
         review_digest=report["report_digest"],
         tasks=tasks,
         preserved_receipts=receipt_facts(rows),
@@ -242,6 +251,74 @@ def bind_repair(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) 
         input_revision=input_revision(run),
     )
     return contract
+
+
+def _grounded_invalid_review(run: Any) -> GoalReview | None:
+    """Recover execution, never accept a broken review as a completion verdict.
+
+    Only unmet operations quoted from the frozen user's authority may drive
+    recovery. Attachment, history and invented goals remain non-authoritative;
+    the complete invalid report stays in SQL for the next independent review.
+    """
+    report = run.metadata.get("runtime_goal_verification") or {}
+    if (
+        report.get("error_code") != "goal_verification_invalid_gap"
+        or report.get("accepted") is not False
+        or not isinstance(report.get("review"), dict)
+        or report.get("goal_digest") != run.metadata.get("runtime_goal_digest")
+    ):
+        return None
+    try:
+        review = GoalReview.model_validate(report["review"])
+    except ValueError:
+        return None
+    sources = goal_source_catalogue(run.metadata["runtime_goal_contract"], goal_answers(run))
+    grounded = [
+        goal
+        for goal in review.goals
+        if goal.status == "unmet"
+        and goal.kind in {"read", "write"}
+        and (goal.source_id in {"request", "objective"} or goal.source_id.startswith("answer:"))
+        and goal.source_id in sources
+        and goal.source in sources[goal.source_id]["text"]
+        and goal.kind in sources[goal.source_id]["allowed_kinds"]
+    ]
+    if not grounded:
+        return None
+    return review.model_copy(update={"goals": grounded})
+
+
+def replan_invalid_review(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) -> bool:
+    review = _grounded_invalid_review(run)
+    if review is None:
+        return False
+    report = run.metadata["runtime_goal_verification"]
+    bind_repair(run, metadata, rows, grounded_review=review)
+    metadata[CONTROL_KEY]["invalid_review"] = {
+        "report_digest": report["report_digest"],
+        "error_code": report["error_code"],
+    }
+    return True
+
+
+def invalid_review_recoverable(
+    run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]
+) -> bool:
+    """Re-derive the saved recovery contract on restart; never trust extra tasks."""
+    report = run.metadata.get("runtime_goal_verification") or {}
+    state = metadata.get(CONTROL_KEY) or {}
+    if report.get("status") != "unavailable" or state.get("invalid_review") != {
+        "report_digest": report.get("report_digest"),
+        "error_code": "goal_verification_invalid_gap",
+    }:
+        return False
+    try:
+        expected = copy.deepcopy(metadata)
+        return replan_invalid_review(run, expected, rows) and expected[CONTROL_KEY][
+            "repair"
+        ] == state.get("repair")
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def admit_turn(metadata: dict[str, Any]) -> None:
