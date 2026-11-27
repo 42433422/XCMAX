@@ -1,5 +1,5 @@
 {
-  "lines": 2801569,
+  "lines": 2801571,
   "updated": "2026-11-27",
-  "note": "用户批准商业成熟度第02项（系统性能优化 P95 <=500ms）：增强 probe.py 并接入 performance-smoke.yml CI 门禁（合入最新 main fe7580bd 对齐基线）"
+  "note": "PR #3724 ruff format 换行后刷新基线 (+2 行)"
 }
