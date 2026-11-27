@@ -39,6 +39,10 @@ from app.application.employee_runtime.continuity_tool_wait import (
 )
 from app.application.employee_runtime.handoff_identity import load_identity_card
 from app.application.employee_runtime.workspace_io import workspace_directory, workspace_file
+from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
+    execution_result_pending_state,
+)
 
 SOURCE = "employee_runtime.task_continuity"
 CONTINUE_TEXT = "继续执行剩余任务"
@@ -1272,7 +1276,9 @@ class TaskContinuityRuntime:
                 },
             )
             call_id = _new_id("tool")
-            call_status = "success" if result.get("ok") else "failed"
+            pending = execution_result_pending_state(result)
+            call_status = "success" if result.get("ok") else pending or "failed"
+            record["result_payload"] = _clone(result)
             self.state["tool_calls"][call_id] = {
                 "tool_call_id": call_id,
                 "task_id": task["task_id"],
@@ -1287,10 +1293,10 @@ class TaskContinuityRuntime:
                 "submit_pid": os.getpid(),
             }
             if not result.get("ok"):
-                record["status"] = "failed"
+                record["status"] = call_status
                 record["error_code"] = str(result.get("error_code") or "handoff_tool_failed")
                 record["error_message"] = str(result.get("error_message") or "交接工具没有成功记录")
-                task["status"] = "failed"
+                task["status"] = "recovering" if pending == "unknown" else call_status
                 task["error_code"] = record["error_code"]
                 task["error_message"] = record["error_message"]
                 self._recovery(
@@ -1303,7 +1309,6 @@ class TaskContinuityRuntime:
                     "task_id": task["task_id"],
                 }
                 record["status"] = _TERMINAL_OK
-                record["result_payload"] = result
                 if target not in task["authorized_employees"]:
                     task["authorized_employees"].append(target)
                 task["grants"][target] = list(permissions)
@@ -1324,7 +1329,13 @@ class TaskContinuityRuntime:
                     task["status"] = _TERMINAL_OK
                     task["error_code"] = ""
                     task["error_message"] = ""
-                elif task["status"] == "failed":
+                elif task["status"] in {
+                    "failed",
+                    "recovering",
+                    "waiting_input",
+                    "waiting_approval",
+                    "waiting_auth",
+                }:
                     task["status"] = "running"
                     task["error_code"] = ""
                     task["error_message"] = ""
@@ -1828,7 +1839,9 @@ class TaskContinuityRuntime:
             return {"ok": False, "error_code": "tool_missing", "error_message": f"没有工具 {name}"}
         if data.get("ok") is False or data.get("success") is False or data.get("error"):
             return {
+                **data,
                 "ok": False,
+                **({"outcome_unknown": True} if execution_result_outcome_unknown(data) else {}),
                 "error_code": str(data.get("error_code") or data.get("error") or "tool_failed"),
                 "error_message": str(
                     data.get("error_message") or data.get("message") or data.get("error") or ""

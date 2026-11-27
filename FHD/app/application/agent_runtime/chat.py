@@ -12,7 +12,10 @@ from filelock import FileLock, Timeout
 from app.application.agent_runtime.configuration import RuntimePolicyError
 from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
 from app.application.agent_task_context import authenticated_task_owner
-from app.domain.task_lifecycle.agent_runtime_results import released_runtime_artifacts
+from app.domain.task_lifecycle.agent_runtime_results import (
+    receipt_verified,
+    released_runtime_artifacts,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_outcome_unknown,
     execution_result_states,
@@ -61,6 +64,10 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         or result.get("error_code") == "reconciliation_required"
         or execution_result_outcome_unknown(result, include_execution=True)
     )
+    retained_reconciliation = reconciling and any(
+        isinstance(row, dict) and row.get("read_only") is not True and receipt_verified(row)
+        for row in result.get("business_receipts") or []
+    )
     waiting = state in {"waiting_user", "waiting_approval"}
     queued = state == "queued"
     retained = (
@@ -68,9 +75,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         or queued
         or bool(result.get("run_id"))
         and (
-            state in {"running", "paused"}
-            or state == "blocked"
-            and result.get("retryable") is True
+            state in {"running", "paused"} or state == "blocked" and result.get("retryable") is True
         )
     )
     text = str(result.get("output") or result.get("error") or "本轮执行未完成")
@@ -108,10 +113,16 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
     ]
     card = next((item for item in cards if isinstance(item, dict) and item.get("run_id")), None)
     output_files = runtime_chat_files(result)
-    sources = result.get("file_sources") if (
-        state == "completed" and result.get("ok") is True and not reconciling
-        and text == result.get("output")
-    ) else None
+    sources = (
+        result.get("file_sources")
+        if (
+            state == "completed"
+            and result.get("ok") is True
+            and not reconciling
+            and text == result.get("output")
+        )
+        else None
+    )
     return {
         "success": bool(result.get("ok")),
         "response": text,
@@ -129,11 +140,11 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "needs_user_input": result.get("needs_user_input") is True,
         "runtime_context_update": {
             "agent_runtime_run_id": result.get("run_id")
-            if not reconciling and (waiting or retained)
+            if retained_reconciliation or not reconciling and (waiting or retained)
             else None,
             "conversation_id": conversation_id,
-            # Reconciliation keeps the receipt identity above without admitting
-            # a continuation. Queued work keeps its id for observation only.
+            # A verified write keeps its original task pointer for reconciliation,
+            # never a continuation. Queued work keeps its id for observation only.
             "status": "reconciliation_required"
             if reconciling
             else ("waiting_user" if retained and not (queued or waiting) else state),

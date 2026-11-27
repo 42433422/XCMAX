@@ -576,10 +576,12 @@ class XiaoxBindingStore:
             previous_receipt = call.get("receipt") or {}
             if (
                 receipt is not None
-                and receipt.get("status") != "unknown"
+                and (receipt.get("status") != "unknown" or receipt.get("child_updated_at"))
                 and (previous_receipt.get("child_updated_at") or "")
                 > (receipt.get("child_updated_at") or "")
             ):
+                # A delayed observation cannot reverse newer child evidence.
+                # Unversioned unknowns (for example a missing child) still block.
                 return
             if child_run_id:
                 if call["child_run_id"] not in ("", child_run_id):

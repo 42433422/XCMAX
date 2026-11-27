@@ -78,6 +78,45 @@ def _desktop_single_process() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _parked_xiaox_parent(payload: dict[str, Any], execution: Any) -> bool:
+    """Recognize an unleased original parent waiting on its durable child ledger."""
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+    from app.infrastructure.xiaox.receipt_projection import projection_allowed
+
+    if (
+        execution is None
+        or execution.state not in {"waiting_approval", "waiting_input", "waiting_auth"}
+        or execution.lease_owner
+        or execution.lease_expires_at
+        or execution.heartbeat_at
+        or execution.finished_at
+        or execution.last_error_code == "needs_verification"
+    ):
+        return False
+    run = agent_run_from_dict(payload)
+    task_id, tenant_id = _task_identity(payload, run.run_id)
+    binding = run.metadata.get("xiaox_runtime") or {}
+    result = run.final_output.get("xiaox_result") or {}
+    if (
+        (execution.run_id, execution.user_id, execution.task_id, execution.tenant_id or "")
+        != (run.run_id, run.user_id, task_id, tenant_id)
+        or run.intent != "xiaox.runtime"
+        or not projection_allowed(run)
+        or binding.get("coordinator_active") is not False
+        or run.metadata.get("non_retryable")
+        or (run.metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+        or result.get("reconciliation_required")
+        or result.get("execution_state") not in {"running", "waiting_user"}
+        or result.get("exit_status") not in {"running", "waiting_user", "continuation_pending"}
+    ):
+        return False
+    try:
+        XiaoxBindingStore._validate_goal(run, binding)
+    except XiaoxBindingError:
+        return False
+    return True
+
+
 def _approved_unsubmitted_step(db: Any, run: AgentRun) -> str:
     """Recognize a committed queue approval that never reached its tool."""
     from app.application.agent_orchestrator.approval_grant import _params_hash
@@ -171,13 +210,10 @@ def reconcile_stale_running_runs(
         records = db.query(AgentRunRecord).filter(*filters).all()
         for record in records:
             execution = db.get(AgentTaskExecutionRecord, record.run_id)
-            if execution is not None and execution.state == "waiting_approval":
-                payload = _load_payload(record.payload_json)
-                if (payload.get("metadata") or {}).get("runtime_type") == "xiaox":
-                    # An approved child can finish after the model turn. The
-                    # original parent is parked on its durable queue receipt,
-                    # not owned by the exited process.
-                    continue
+            if _parked_xiaox_parent(_load_payload(record.payload_json), execution):
+                # The coordinator has exited intentionally; receipt reconciliation
+                # owns the next transition, independently of this process restart.
+                continue
             if (
                 not desktop
                 and execution is not None

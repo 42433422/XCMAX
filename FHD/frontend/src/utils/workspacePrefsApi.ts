@@ -65,6 +65,16 @@ export async function fetchWorkspacePrefs(): Promise<WorkspacePrefsResponse> {
   return (await r.json()) as WorkspacePrefsResponse
 }
 
+/** Accept only an explicitly reconciled, current-account read as the next CAS baseline. */
+export function confirmWorkspacePrefsSnapshot(
+  response: WorkspacePrefsResponse,
+  scope = resolveTenantStorageScopeFromRuntime(true),
+): void {
+  assertScopeUnchanged(scope)
+  if (response.success !== true || !response.owner_id) throw new Error('workspace_prefs_owner_missing')
+  observedSnapshot = { scope, owner: response.owner_id, revision: readRevision(response) }
+}
+
 export async function patchWorkspacePrefs(
   partial: WorkspacePrefs,
   scope = resolveTenantStorageScopeFromRuntime(true),

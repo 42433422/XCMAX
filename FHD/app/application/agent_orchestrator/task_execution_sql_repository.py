@@ -436,7 +436,10 @@ class SQLAlchemyTaskExecutionRepository:
             SQLAlchemyAgentRunRepository,
         )
         from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentTaskRecord
-        from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_verified
+        from app.domain.task_lifecycle.agent_runtime_results import (
+            model_unsettled,
+            receipt_verified,
+        )
         from app.domain.task_lifecycle.control import SessionBook, remember
         from app.infrastructure.xiaox.binding import (
             XiaoxBinding,
@@ -469,11 +472,11 @@ class SQLAlchemyTaskExecutionRepository:
                 children[child_id] = child
         previous_result = previous.final_output.get("xiaox_result") or {}
         prior = {
-            str(row.get("call_id")): row
-            for row in previous_result.get("business_receipts") or []
+            str(row.get("call_id")): row for row in previous_result.get("business_receipts") or []
         }
         recovered_writes = [
-            row for row in rows
+            row
+            for row in rows
             if row.get("read_only") is not True
             and (prior.get(str(row["call_id"])) or {}).get("state")
             in {"waiting_user", "waiting_approval", "running"}
@@ -564,11 +567,16 @@ class SQLAlchemyTaskExecutionRepository:
                 for row in recovered_writes:
                     child_id, task_id = row["child_run_id"], row["child_task_id"]
                     child = children[child_id]
-                    tasks = db.query(AgentTaskRecord).filter(
-                        AgentTaskRecord.task_id == task_id,
-                        AgentTaskRecord.user_id == previous.user_id,
-                        AgentTaskRecord.tenant_id == tenant_id_of_run(previous),
-                    ).limit(2).all()
+                    tasks = (
+                        db.query(AgentTaskRecord)
+                        .filter(
+                            AgentTaskRecord.task_id == task_id,
+                            AgentTaskRecord.user_id == previous.user_id,
+                            AgentTaskRecord.tenant_id == tenant_id_of_run(previous),
+                        )
+                        .limit(2)
+                        .all()
+                    )
                     if (
                         len(tasks) != 1
                         or tasks[0].active_run_id != child_id
@@ -581,12 +589,15 @@ class SQLAlchemyTaskExecutionRepository:
                     ):
                         return None
             if not run_repository.save_if_unchanged_in_session(
-                db, projected, previous,
+                db,
+                projected,
+                previous,
                 allow_verified_xiaox_recovery=verified_child_recovery,
             ):
                 return None
             if projected.status != result["execution_state"] and not (
-                projected.status == "blocked" and result["execution_state"] == "unknown"
+                projected.status == "blocked"
+                and result["execution_state"] in {"unknown", "partial"}
             ):
                 raise XiaoxBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
             if execution is not None:

@@ -1,0 +1,37 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 34,
+  "disposition": "false-positive",
+  "rule": "generic-api-key",
+  "path": "FHD/scripts/dev/provision_memory_model.py",
+  "line": 25,
+  "commit_sha": "d33f2f938e3f3bcbd4df49baf74fa5ace88796b2",
+  "fingerprint": "d33f2f938e3f3bcbd4df49baf74fa5ace88796b2:FHD/scripts/dev/provision_memory_model.py:generic-api-key:25",
+  "note": "The detected literal is the SHA256 of a public model file at a fixed upstream revision, used only by verify_model_files for integrity comparison. It is not a service credential.",
+  "scope": "Only this exact historical commit, file, rule and line. No path, rule or future-commit exemption.",
+  "public_artifact": {
+    "sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a",
+    "size_bytes": 367,
+    "repository": "Qdrant/bge-small-zh-v1.5",
+    "revision": "46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59",
+    "file": "tokenizer_config.json",
+    "url": "https://huggingface.co/Qdrant/bge-small-zh-v1.5/resolve/46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59/tokenizer_config.json",
+    "http_status": 200,
+    "fetched_without_credentials": true,
+    "source_digest_matches_download": true
+  },
+  "ci_job": "https://github.com/xcagi/XCMAX/actions/runs/45891219126/job/140154099143",
+  "scanner_version": "8.18.4",
+  "author": "dot-agent:root",
+  "reviewer": "dot-agent:erp_fixes",
+  "review_method": "Root independently reran Gitleaks 8.18.4 over 6ea2bc36..d33f2f93 using the original configuration, fetched the fixed public URLs without credentials and matched their digests. A separate AI agent, erp_fixes, independently compared both exact Git blobs, recomputed the previously downloaded immutable public files and reviewed integrity-only source use. This is not a human or GitHub owner approval.",
+  "reviewed_at": "2026-11-26T20:48:44Z",
+  "review_due": "2027-02-24T00:00:00Z",
+  "source_equivalence": {
+    "original_commit": "4b41f8e418ccd46510395a1f0f023543590c97f4",
+    "original_blob": "be281cd8319dbf684cd70360a41be4efd04fd901",
+    "squash_commit": "d33f2f938e3f3bcbd4df49baf74fa5ace88796b2",
+    "squash_blob": "be281cd8319dbf684cd70360a41be4efd04fd901",
+    "prior_evidence": "n31.json"
+  }
+}
