@@ -10,7 +10,7 @@ on:
     tags:
       - "FHD/v*"
   pull_request:
-    branches: [ main, develop, master ]
+    branches: [ main, develop, master, codex/agent-exam-integration ]
   schedule:
     # Nightly 全量（每日 16:00 UTC = 北京 00:00）：PR 上被目标化跳过的重活在此全跑。
     # 镜像构建/推送（docker-build-fhd-api）已显式排除 schedule，避免夜间误推制品。
