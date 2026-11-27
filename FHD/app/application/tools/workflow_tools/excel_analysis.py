@@ -27,6 +27,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
 _EXCEL_ANALYSIS_MAX_PAGE_ROWS = 5000
+_EXCEL_ANALYSIS_MAX_DENSE_CELLS = 500_000
 # 依赖列语义的动作和自然语言问题需要确认表头；原始读取和显式筛选沿用指定表头。
 _AUTO_HEADER_ACTIONS = frozenset({"statistics", "structure", "aggregate"})
 _TOTAL_ROW_MARKERS = ("合计", "总计", "小计", "累计")
@@ -61,9 +62,72 @@ def page_budget(args: Payload) -> tuple[int, int]:
     return offset, page_rows(args.get("max_rows"))
 
 
+class _DenseWorkbookBudgetExceeded(ValueError):
+    def __init__(self, sheet: str, rows: int, columns: int):
+        super().__init__(
+            "工作表坐标范围超过稠密读取预算；请使用 read 的 view=cells 分页读取原生单元格"
+        )
+        self.details = {
+            "sheet_name": sheet,
+            "observed_rows": rows,
+            "observed_columns": columns,
+            "minimum_rectangular_cells": rows * columns,
+            "max_rectangular_cells": _EXCEL_ANALYSIS_MAX_DENSE_CELLS,
+            "readback": {"action": "read", "view": "cells", "sheet_name": sheet},
+        }
+
+
+def _guard_dense_workbook_read(path: Path, sheet_name: Any) -> None:
+    """Bound pandas' padded rectangle using the pinned parser's actual row/cell positions."""
+    suffix = path.suffix.lower()
+    if suffix == ".csv" or (
+        suffix not in {".xlsx", ".xlsm", ".xltx", ".xltm"} and not zipfile.is_zipfile(path)
+    ):
+        return
+    if sheet_name and not isinstance(sheet_name, (str, int)):
+        raise ValueError("A single worksheet name or index is required")
+    from openpyxl import load_workbook
+
+    from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
+    from app.infrastructure.excel.sparse_rows import _native_rows
+
+    inspect_office_archive(path)
+    # pandas detects OOXML bytes independently of the filename suffix.
+    try:
+        with (
+            path.open("rb") as source,
+            closing(
+                load_workbook(source, read_only=True, data_only=False, keep_links=False)
+            ) as workbook,
+        ):
+            sheets = workbook.worksheets
+            if isinstance(sheet_name, str) and sheet_name:
+                sheet = next((item for item in sheets if item.title == sheet_name), None)
+                if sheet is None:
+                    raise ValueError(f"Worksheet named '{sheet_name}' not found")
+            else:
+                try:
+                    sheet = sheets[sheet_name if isinstance(sheet_name, int) else 0]
+                except IndexError as exc:
+                    raise ValueError("Worksheet index is out of range") from exc
+            rows = columns = 0
+            for row_number, cells in _native_rows(sheet):
+                # pandas places rows by row@r, even if a contained c@r disagrees.
+                # The native parser also resolves omitted row/cell coordinates.
+                rows = max(rows, row_number)
+                for cell in cells:
+                    rows = max(rows, cell["row"])
+                    columns = max(columns, cell["column"])
+                if rows * max(columns, 1) > _EXCEL_ANALYSIS_MAX_DENSE_CELLS:
+                    raise _DenseWorkbookBudgetExceeded(sheet.title, rows, max(columns, 1))
+    except KeyError as exc:
+        raise ValueError("invalid_ooxml_package") from exc
+
+
 def read_excel_dataframe(
     p: Path, *, sheet_name: Any, header_row_1based: int | None
 ) -> pd.DataFrame:
+    _guard_dense_workbook_read(p, sheet_name)
     if p.suffix.lower() == ".csv":
         df = pd.read_csv(p, header=None if header_row_1based == 0 else (header_row_1based or 1) - 1)
     else:
@@ -563,7 +627,6 @@ class ExcelAnalysis:
     logger: logging.Logger
 
     def analyze(self, args: Payload, workspace_root: str | None = None) -> Payload:
-        from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
         from app.infrastructure.excel.header_detection import (
             HeaderConfirmationRequired,
             HeaderDetectionFailed,
@@ -627,14 +690,20 @@ class ExcelAnalysis:
             except (ValueError, OSError, zipfile.BadZipFile) as exc:
                 return {"success": False, "error": "native_facts_read_failed", "message": str(exc)}
         try:
-            if path.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
-                inspect_office_archive(path)
+            _guard_dense_workbook_read(path, sheet)
             infer_header = action in _AUTO_HEADER_ACTIONS or (
                 action == "query" and isinstance(question, str) and bool(question.strip())
             )
             if header is None and infer_header:
                 header = auto_header_row(path, str(sheet).strip() if sheet else None)
             df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
+        except _DenseWorkbookBudgetExceeded as exc:
+            return {
+                "success": False,
+                "error": "excel_dense_materialization_budget_exceeded",
+                "message": str(exc),
+                **exc.details,
+            }
         except HeaderConfirmationRequired as exc:
             return {
                 "success": False,

@@ -324,20 +324,49 @@ def test_dynamic_dedupe_requires_complete_unique_composite():
 
 
 def test_dynamic_incomplete_key_does_not_drop_changed_rows_between_batches(monkeypatch):
-    adapter = DynamicTableAdapter()
+    import json
+
+    from app.application.elt import llm_assist
+    from app.application.elt.targets.dynamic import PARTITION_MARKER
+    from app.db.models.elt import EltDynamicRow
+
+    proposed_keys = ["warehouse", "sku"]
     monkeypatch.setattr(
-        adapter,
-        "_table_spec",
-        lambda _context: (["sku", "quantity"], {"dedupe_keys": ["warehouse", "sku"]}),
+        llm_assist,
+        "_complete",
+        lambda *_args, **_kwargs: _result(
+            {
+                "is_table": True,
+                "table_name": "Inventory",
+                "confidence": 0.99,
+                "columns": [
+                    {"source": "sku", "type": "string", "role": "key"},
+                    {"source": "quantity", "type": "integer", "role": "measure"},
+                ],
+                "dedupe_keys": proposed_keys,
+            }
+        ),
     )
+    schema = llm_assist.advise_table_schema(
+        headers=["sku", "quantity"], samples={"sku": ["same"], "quantity": ["10"]}
+    ).data
+    adapter = DynamicTableAdapter()
+    monkeypatch.setattr(adapter, "_table_spec", lambda _context: (["sku", "quantity"], schema))
     context = {"run_id": "incomplete-key", "owner_user_id": 7}
+    row = {"sku": "same", PARTITION_MARKER: {"sheet": "Sheet1", "row": 2}}
     with tenant_scope(1):
-        first = adapter.execute_batch([{"sku": "same", "quantity": 10}], context)
-        second = adapter.execute_batch([{"sku": "same", "quantity": 20}], context)
-        replay = adapter.execute_batch([{"sku": "same", "quantity": 20}], context)
+        first = adapter.execute_batch([{**row, "quantity": 10}], context)
+        second_context = {**context, "run_id": "incomplete-key-second"}
+        second = adapter.execute_batch([{**row, "quantity": 20}], second_context)
+        replay = adapter.execute_batch([{**row, "quantity": 20}], second_context)
+        with SessionLocal() as db:
+            stored = db.query(EltDynamicRow).filter_by(owner_user_id=7).all()
+            quantities = sorted(json.loads(item.payload_json)["quantity"] for item in stored)
     assert first["executed"] == second["executed"] == 1
     assert second["receipt"]["row_count"] == 2
     assert replay["executed"] == 0
+    assert quantities == [10, 20]
+    assert schema["dedupe_keys"] == proposed_keys
 
 
 @pytest.mark.parametrize(

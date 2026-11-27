@@ -8,7 +8,6 @@ which openpyxl normalizes (empty strings, formula caches and merged cell content
 from __future__ import annotations
 
 import hashlib
-import posixpath
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
 from typing import Any
@@ -28,9 +27,9 @@ from app.infrastructure.excel.cell_visual_facts import (
     worksheet_visual_facts,
 )
 from app.infrastructure.excel.sparse_rows import iter_present_cells
+from app.infrastructure.excel.workbook_parts import worksheet_parts
 
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-_RID = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
 
 
 def _xml(value: Any) -> str | None:
@@ -51,24 +50,6 @@ def _value(value: Any) -> tuple[Any, str]:
     if isinstance(value, (str, CellRichText)):
         return str(value), "rich_text" if isinstance(value, CellRichText) else "text"
     return None, "unknown"
-
-
-def _worksheet_parts(archive: ZipFile) -> dict[str, str]:
-    targets = {}
-    for rel in SafeET.fromstring(archive.read("xl/_rels/workbook.xml.rels")):
-        if rel.attrib.get("TargetMode") == "External":
-            continue
-        target = rel.attrib.get("Target", "")
-        if not target or ":" in target:
-            continue
-        targets[rel.attrib.get("Id")] = posixpath.normpath(
-            target.lstrip("/") if target.startswith("/") else posixpath.join("xl", target)
-        )
-    return {
-        sheet.attrib["name"]: targets[sheet.attrib[_RID]]
-        for sheet in SafeET.fromstring(archive.read("xl/workbook.xml")).iter(_NS + "sheet")
-        if sheet.attrib.get(_RID) in targets and sheet.attrib.get("name")
-    }
 
 
 def _raw_cells(archive: ZipFile, path: str):
@@ -267,7 +248,7 @@ def build_workbook_facts(
             "visual_context": workbook_visual_context(workbook),
         }
         with ZipFile(BytesIO(body)) as archive:
-            parts = _worksheet_parts(archive)
+            parts = worksheet_parts(archive)
             document["native_parts"] = [
                 {"path": item.filename, "size": item.file_size} for item in archive.infolist()
             ]

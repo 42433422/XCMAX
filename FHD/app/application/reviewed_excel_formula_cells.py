@@ -12,6 +12,7 @@ from openpyxl.utils import column_index_from_string
 from openpyxl.utils.cell import coordinate_from_string
 
 from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
+from app.infrastructure.excel.workbook_parts import worksheet_parts
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 FormulaFacts = dict[tuple[str, str], dict[str, Any]]
@@ -54,13 +55,11 @@ def formula_facts(body: bytes) -> FormulaFacts:
 
     inspect_office_archive(body)
     ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-    rid_attr = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
     facts: FormulaFacts = {}
     try:
         with ZipFile(BytesIO(body)) as archive:
             names = set(archive.namelist())
-            if "xl/workbook.xml" not in names or "xl/_rels/workbook.xml.rels" not in names:
-                return facts
+            parts = worksheet_parts(archive)
             shared: list[str] = []
             if "xl/sharedStrings.xml" in names:
                 root = SafeET.fromstring(archive.read("xl/sharedStrings.xml"))
@@ -68,23 +67,8 @@ def formula_facts(body: bytes) -> FormulaFacts:
                     "".join(node.text or "" for node in item.iter(ns + "t"))
                     for item in root.iter(ns + "si")
                 ]
-            targets: dict[str, str] = {}
-            for rel in SafeET.fromstring(archive.read("xl/_rels/workbook.xml.rels")):
-                target = rel.attrib.get("Target", "")
-                rel_id = rel.attrib.get("Id")
-                if not rel_id or not target or "://" in target:
-                    continue
-                path = target.split("#", 1)[0].lstrip("/")
-                if path.startswith("../"):
-                    path = path[3:]
-                if not path.startswith("xl/"):
-                    path = "xl/" + path
-                targets[rel_id] = path
-            book = SafeET.fromstring(archive.read("xl/workbook.xml"))
-            for sheet in book.iter(ns + "sheet"):
-                sheet_path = targets.get(sheet.attrib.get(rid_attr, ""))
-                title = sheet.attrib.get("name")
-                if not title or not sheet_path or sheet_path not in names:
+            for title, sheet_path in parts.items():
+                if sheet_path not in names:
                     continue
                 for cell in SafeET.fromstring(archive.read(sheet_path)).iter(ns + "c"):
                     formula = next((child for child in cell if child.tag == ns + "f"), None)

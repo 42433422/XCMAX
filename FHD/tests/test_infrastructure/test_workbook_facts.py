@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import posixpath
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -10,7 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from defusedxml import ElementTree as SafeET
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl.cell.text import InlineFont
 from openpyxl.styles import PatternFill
@@ -49,6 +50,90 @@ def _rewrite_sheet(body, edit):
 
 def _facts(document, sheet=0):
     return {cell["address"]: cell for cell in document["sheets"][sheet]["cells"]}
+
+
+@pytest.mark.parametrize(
+    ("workbook_part", "relative_targets"),
+    [("xl/renamed-book.payload", False), ("documents/nested/book.payload", True)],
+)
+def test_native_reader_resolves_the_real_workbook_part(tmp_path, workbook_part, relative_targets):
+    from app.application.reviewed_excel_formula_cells import formula_facts
+    from app.application.tools.workflow import handle_excel_analysis
+
+    book = Workbook()
+    book.active.append([0, False, "=A1+3"])
+
+    def formula_cache(root):
+        cell = next(cell for cell in root.iter(_NS + "c") if cell.attrib["r"] == "C1")
+        cell.find(_NS + "v").text = "3"
+
+    renamed = BytesIO()
+    relationships = posixpath.join(
+        posixpath.dirname(workbook_part), "_rels", posixpath.basename(workbook_part) + ".rels"
+    )
+    with (
+        ZipFile(BytesIO(_rewrite_sheet(_body(book), formula_cache))) as original,
+        ZipFile(renamed, "w") as target,
+    ):
+        for item in original.infolist():
+            data, name = original.read(item.filename), item.filename
+            if name in {"[Content_Types].xml", "_rels/.rels"}:
+                data = data.replace(b"xl/workbook.xml", workbook_part.encode())
+            elif name == "xl/workbook.xml":
+                name = workbook_part
+            elif name == "xl/_rels/workbook.xml.rels":
+                name = relationships
+                if relative_targets:
+                    root = SafeET.fromstring(data)
+                    for relation in root:
+                        value = relation.attrib["Target"]
+                        absolute = value.lstrip("/") if value.startswith("/") else "xl/" + value
+                        relation.set(
+                            "Target", posixpath.relpath(absolute, posixpath.dirname(workbook_part))
+                        )
+                    data = SafeET.tostring(root, encoding="utf-8")
+            target.writestr(name, data)
+    body = renamed.getvalue()
+    native = load_workbook(BytesIO(body))
+    assert native.active["A1"].value == 0 and native.active["B1"].value is False
+    assert native.active["C1"].value == "=A1+3"
+    native.close()
+    assert formula_facts(body)[("Sheet", "C1")] == {
+        "formula": "=A1+3",
+        "cached": "3",
+        "cache_missing": False,
+    }
+
+    digest = hashlib.sha256(body).hexdigest()
+    document = read_workbook_facts(
+        body, authorization_scope="tenant-a:user-1", expected_sha256=digest
+    )
+    assert document["status"] == "complete"
+    assert document["archive_audit"]["worksheet_cell_elements"] == 3
+    assert document["resource_budget"]["materialized_cells_upper_bound"] == 3
+    assert document["source_ref"]["authorization_scope"] == "tenant-a:user-1"
+    assert document["source_ref"]["source_sha256"] == digest
+    assert document["sheets"][0]["native_part"] == "xl/worksheets/sheet1.xml"
+    assert _facts(document)["A1"]["value"] == 0 and _facts(document)["B1"]["value"] is False
+    formula = _facts(document)["C1"]
+    assert formula["formula"] == "=A1+3" and formula["cached_value"] == 3
+    assert formula["cache_state"] == "present_validity_unknown"
+    assert formula["source_ref"] == {
+        "document_id": document["document_id"],
+        "sheet": "Sheet",
+        "address": "C1",
+    }
+
+    source = tmp_path / "renamed.xlsx"
+    source.write_bytes(body)
+    result = handle_excel_analysis(
+        {"file_path": source.name, "action": "read", "view": "cells", "sheet_name": "Sheet"},
+        workspace_root=str(tmp_path),
+    )
+    assert result["success"] is True and result["source_status"] == "complete"
+    assert [cell["value"] for cell in result["cells"]] == [0, False, "=A1+3"]
+    assert result["cells"][2]["cached_value"] == 3
+    assert result["source_sha256"] == digest
 
 
 def test_native_cells_match_original_xml_and_preserve_values_without_dense_scan(monkeypatch):
