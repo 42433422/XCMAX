@@ -116,7 +116,8 @@ def test_native_tool_loop_interrupt_changes_strategy_without_resetting_invocatio
             step = len(self.inputs)
             if step == 1:
                 store.run.metadata["xiaox_runtime"].update(
-                    tool_call_limit={"reason": "tool_loop_detected"}, tool_invocation_count=100
+                    tool_call_limit={"reason": "tool_loop_detected", "period": 1, "repetitions": 8},
+                    tool_invocation_count=100,
                 )
             elif step == 2:
                 store.rows.append(receipt())

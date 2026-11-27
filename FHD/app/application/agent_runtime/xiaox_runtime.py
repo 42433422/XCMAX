@@ -653,6 +653,8 @@ async def run_xiaox_agent(
                     "model_call_budget_exhausted": "本轮模型调用次数已达上限，任务未完成。",
                     "tool_call_budget_exhausted": "本轮工具调用次数已达上限，任务未完成。",
                     "tool_loop_detected": "工具调用重复且结果无进展，任务已停止。",
+                    "react_repair_budget_exhausted": "原任务修复模型预算已耗尽。",
+                    "react_execution_budget_exhausted": "原任务执行模型预算已耗尽。",
                 }[budget_stop]
                 status = "failed"
                 result.update(
@@ -1107,7 +1109,10 @@ async def run_xiaox_agent(
                             mutate(lambda run, metadata: admit_turn(metadata))
                         except ValueError as exc:
                             raise XiaoxBindingError(
-                                "react_repair_budget_exhausted", "原任务修复执行预算已耗尽"
+                                str(exc)
+                                if str(exc).startswith("react_")
+                                else "react_repair_budget_exhausted",
+                                "原任务恢复已停止，原预算及阻断原因保留",
                             ) from exc
                         texts.clear()
                         result.pop("goal_response", None)
@@ -1133,15 +1138,36 @@ async def run_xiaox_agent(
                                     {pending}, timeout=_CONTROL_POLL_SECONDS
                                 )
                                 observed = store.get(run_id)
+                                # Human stop, lease generation and revoked authority
+                                # take precedence over any automatic recovery decision.
+                                if observed.metadata.get("generation") != generation:
+                                    raise XiaoxBindingError("token_invalid", "原运行授权已被更新")
+                                store._validate_current(observed.run, observed.metadata, generation)
                                 phase_stop = _budget_stop_reason(observed)
                                 if phase_stop.startswith("react_"):
                                     raise XiaoxBindingError(
                                         phase_stop, "原任务的执行或修复模型预算已耗尽，未确认完成"
                                     )
-                                repeated = (observed.metadata.get("tool_call_limit") or {}).get(
-                                    "reason"
-                                ) == "tool_loop_detected"
+                                loop_stop = observed.metadata.get("tool_call_limit") or {}
+                                repeated = loop_stop.get("reason") == "tool_loop_detected"
                                 if repeated and not stalled_turn:
+                                    live_rows = store.receipt_snapshot(run_id)
+                                    if (
+                                        loop_stop.get("repetitions") != 8
+                                        or loop_stop.get("period") not in {1, 2, 3, 4}
+                                        or observed.metadata.get("waiting_input")
+                                        or any(
+                                            _receipt_state(row)
+                                            in (_WAITING | _ACTIVE | {"unknown"})
+                                            for row in live_rows
+                                        )
+                                    ):
+                                        # An old/incomplete stop or unsettled side effect is
+                                        # not authority to reopen execution after an interrupt.
+                                        raise XiaoxBindingError(
+                                            "tool_loop_detected",
+                                            "原调用仍待核对，保留停止原因和回执",
+                                        )
                                     # Stop the SDK turn before changing strategy. Existing
                                     # bridge limits keep business dispatch closed meanwhile.
                                     await active.interrupt()
@@ -1319,6 +1345,17 @@ async def run_xiaox_agent(
                         unchanged = control.get("last_review_signature") == review_signature(
                             binding.run, rows, output
                         )
+                        if (
+                            channel == "reply"
+                            and unchanged
+                            and (binding.run.metadata.get("runtime_goal_verification") or {}).get(
+                                "status"
+                            )
+                            == "verified"
+                        ):
+                            # A resumed identical candidate keeps its already-bound verdict.
+                            # Changed input/receipts alter the signature and require review.
+                            break
                         if channel != "reply" or (
                             control.get("last_review_signature") and unchanged
                         ):
@@ -1346,6 +1383,10 @@ async def run_xiaox_agent(
                         # answer JSON into a host-executed business or memory action.
                         if not structured_plan:
                             action_schema = None
+                    else:
+                        raise XiaoxBindingError(
+                            "react_repair_budget_exhausted", "原任务修复轮次预算已耗尽，未确认完成"
+                        )
                     if runtime_status != "completed":
                         await stop(runtime_status)
 

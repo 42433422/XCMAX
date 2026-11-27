@@ -240,6 +240,8 @@ def bind_repair(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) 
 
 def admit_turn(metadata: dict[str, Any]) -> None:
     state = metadata[CONTROL_KEY]
+    if state.get("blocked_reason"):
+        raise ValueError(state["blocked_reason"])
     key = "repair_turns" if state.get("repairing") else "execution_turns"
     budget = "repair" if state.get("repairing") else "execution"
     if state[key] >= state["limits"][budget]:
