@@ -7,8 +7,9 @@ the caller keeps the existing text-line clustering fallback.
 Environment:
 
 * ``FHD_ETL_TABLE_STRUCTURE``: ``auto`` (default), ``off`` or ``required``.
-* ``PADDLEOCR_LAYOUT_MODEL_DIR``, ``PADDLEOCR_TABLE_STRUCTURE_MODEL_DIR``,
-  ``PADDLEOCR_TABLE_CLASSIFICATION_MODEL_DIR``: local PaddleX inference dirs.
+* ``FHD_ETL_TABLE_STRUCTURE_MODEL_MANIFEST``: complete local model manifest.
+* See ``_MODEL_ENV`` for model-directory configuration; package version and
+  directory digests are checked before default offline initialization.
 
 The pipeline output is converted from HTML tables into a grid plus 1-based
 merged ranges, which is exactly what ``cell_tidy`` and the workbook bridge
@@ -17,6 +18,8 @@ already understand.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 import os
@@ -24,10 +27,12 @@ import re
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from importlib.metadata import version
+from pathlib import Path
 from html.parser import HTMLParser
 from typing import Any
 
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,7 @@ class TableGrid:
     bbox: list[float] | None = None
     # Engine-reported boxes may be crop-relative. Never synthesize page positions.
     cell_boxes: list[Any] = field(default_factory=list)
+    table_ocr_blocks: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -75,17 +81,23 @@ def check_table_structure_available() -> bool:
     return True
 
 
+_MODEL_ENV = {
+    "layout_detection_model_dir": "PADDLEOCR_LAYOUT_MODEL_DIR",
+    "text_detection_model_dir": "PADDLEOCR_TEXT_DETECTION_MODEL_DIR",
+    "text_recognition_model_dir": "PADDLEOCR_TEXT_RECOGNITION_MODEL_DIR",
+    "table_classification_model_dir": "PADDLEOCR_TABLE_CLASSIFICATION_MODEL_DIR",
+    "wired_table_structure_recognition_model_dir": "PADDLEOCR_WIRED_TABLE_STRUCTURE_MODEL_DIR",
+    "wireless_table_structure_recognition_model_dir": "PADDLEOCR_WIRELESS_TABLE_STRUCTURE_MODEL_DIR",
+    "wired_table_cells_detection_model_dir": "PADDLEOCR_WIRED_TABLE_CELL_MODEL_DIR",
+    "wireless_table_cells_detection_model_dir": "PADDLEOCR_WIRELESS_TABLE_CELL_MODEL_DIR",
+    "table_orientation_classify_model_dir": "PADDLEOCR_TABLE_ORIENTATION_MODEL_DIR",
+}
+
+
 def _model_kwargs() -> dict[str, str]:
-    mapping = {
-        "layout_detection_model_dir": "PADDLEOCR_LAYOUT_MODEL_DIR",
-        "table_structure_recognition_model_dir": "PADDLEOCR_TABLE_STRUCTURE_MODEL_DIR",
-        "table_classification_model_dir": "PADDLEOCR_TABLE_CLASSIFICATION_MODEL_DIR",
-        "wired_table_cell_detection_model_dir": "PADDLEOCR_WIRED_TABLE_CELL_MODEL_DIR",
-        "wireless_table_cell_detection_model_dir": "PADDLEOCR_WIRELESS_TABLE_CELL_MODEL_DIR",
-    }
     return {
         keyword: value
-        for keyword, variable in mapping.items()
+        for keyword, variable in _MODEL_ENV.items()
         if (value := (os.environ.get(variable) or "").strip())
     }
 
@@ -95,34 +107,67 @@ def _allow_download() -> bool:
     return value in {"1", "true", "yes"}
 
 
+def _directory_sha256(directory: Path) -> str:
+    """Hash a local model tree using sorted relative paths and content hashes."""
+    if not directory.is_dir() or directory.is_symlink():
+        raise ValueError("invalid_local_model_directory")
+    entries = []
+    for path in sorted(directory.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("model_symlink_not_allowed")
+        if path.is_file():
+            with path.open("rb") as handle:
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            entries.append([path.relative_to(directory).as_posix(), digest.hexdigest()])
+    if not entries:
+        raise ValueError("empty_local_model_directory")
+    return hashlib.sha256(
+        json.dumps(entries, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _verify_local_models(model_kwargs: dict[str, str]) -> bool:
+    manifest_path = (os.environ.get("FHD_ETL_TABLE_STRUCTURE_MODEL_MANIFEST") or "").strip()
+    if not manifest_path or set(model_kwargs) != set(_MODEL_ENV):
+        return False
+    with Path(manifest_path).open(encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    if not isinstance(manifest, dict) or manifest.get("paddleocr_version") != version("paddleocr"):
+        return False
+    models = manifest.get("models")
+    if not isinstance(models, dict) or set(models) != set(_MODEL_ENV):
+        return False
+    for keyword, directory in model_kwargs.items():
+        expected = models[keyword]
+        if not isinstance(expected, dict) or not isinstance(expected.get("source"), str):
+            return False
+        if not expected["source"].strip() or expected.get("sha256") != _directory_sha256(Path(directory)):
+            return False
+    return True
+
+
 def _build_pipeline() -> Any | None:
     from paddleocr import PPStructureV3
 
     model_kwargs = _model_kwargs()
-    if not model_kwargs and not _allow_download():
-        logger.info(
-            "table structure model dirs are not configured; "
-            "set PADDLEOCR_*_MODEL_DIR or FHD_ETL_TABLE_STRUCTURE_ALLOW_DOWNLOAD=1"
-        )
+    if not _allow_download() and not _verify_local_models(model_kwargs):
+        logger.warning("PP-StructureV3 requires complete, versioned local model manifest")
         return None
-    options: dict[str, Any] = {
-        "use_doc_orientation_classify": False,
-        "use_doc_unwarping": False,
-        "use_textline_orientation": False,
-        "use_formula_recognition": False,
-        "use_seal_recognition": False,
+    # Missing model directories can trigger vendor downloads. They are allowed
+    # only on explicit operator opt-in; the default requires a verified manifest.
+    return PPStructureV3(
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=False,
+        use_formula_recognition=False,
+        use_seal_recognition=False,
+        use_chart_recognition=False,
+        use_region_detection=False,
+        use_table_recognition=True,
         **model_kwargs,
-    }
-    try:
-        return PPStructureV3(**options)
-    except TypeError as exc:
-        # Older 3.x releases do not accept every optional switch.
-        logger.debug("PPStructureV3 rejected optional switches (%s); retrying minimal", exc)
-        return PPStructureV3(
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            **model_kwargs,
-        )
+    )
 
 
 def get_table_structure_pipeline() -> Any | None:
@@ -135,7 +180,7 @@ def get_table_structure_pipeline() -> Any | None:
             _PIPELINE_READY = True
             try:
                 _PIPELINE = _build_pipeline()
-            except RECOVERABLE_ERRORS:
+            except BOUNDARY_ERRORS:
                 logger.warning("PP-StructureV3 pipeline unavailable", exc_info=True)
                 _PIPELINE = None
         return _PIPELINE
@@ -403,6 +448,9 @@ def recognize_table_pages(
                             _numbers(box) or [_numbers(point) for point in _sequence(box)]
                             for box in _sequence(entry.get("cell_box_list"))
                         ],
+                        table_ocr_blocks=_page_blocks({
+                            "overall_ocr_res": entry.get("table_ocr_pred"),
+                        }),
                     ))
             if report.tables and report.status != "failed":
                 report.status = "recognized"

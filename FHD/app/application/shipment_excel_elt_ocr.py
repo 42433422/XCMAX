@@ -133,6 +133,11 @@ def grid_to_workbook_path(
     return path
 
 
+def _table_sheet_name(sheet_name: str, index: int) -> str:
+    suffix = f"_{index}"
+    return f"{(sheet_name or 'OCR')[:31 - len(suffix)]}{suffix}"
+
+
 def tables_to_workbook_path(
     tables: list[Any],
     *,
@@ -144,13 +149,13 @@ def tables_to_workbook_path(
     from openpyxl import Workbook
 
     path = _workbook_output_path(output_path)
-    base_name = (sheet_name or "OCR")[:28]
+    base_name = sheet_name or "OCR"
     wb = Workbook()
     default_sheet = wb.active
     assert default_sheet is not None
     wb.remove(default_sheet)
     for index, table in enumerate(tables, start=1):
-        ws = wb.create_sheet(f"{base_name}_{index}"[:31])
+        ws = wb.create_sheet(_table_sheet_name(base_name, index))
         row_idx = 1
         lines = meta_lines if index == 1 and meta_lines is not None else table.meta_lines
         for line in lines or []:
@@ -172,7 +177,7 @@ def tables_to_workbook_path(
                 end_column=max_col,
             )
     if not wb.worksheets:
-        wb.create_sheet(base_name or "OCR")
+        wb.create_sheet(base_name[:31])
     with elt_security.open_elt_output_file(path) as output_file:
         wb.save(output_file)
     wb.close()
@@ -194,7 +199,8 @@ def _load_image_arrays(
     if not suffix:
         raise ValueError("suffix is required when loading an OCR stream")
     max_pixels = 16_000_000
-    max_pages = max(1, int(elt_getenv("FHD_EXCEL_ELT_OCR_MAX_PAGES") or 5))
+    max_pages = min(20, max(1, int(elt_getenv("FHD_EXCEL_ELT_OCR_MAX_PAGES") or 5)))
+    max_total_pixels = 32_000_000
     if suffix in _IMAGE_SUFFIXES:
         import numpy as np
         from PIL import Image, ImageSequence
@@ -202,12 +208,14 @@ def _load_image_arrays(
         with Image.open(source) as image:
             if not strict_limits:
                 return [np.array(image.convert("RGB"))]
-            if image.n_frames > max_pages:
+            if getattr(image, "n_frames", 1) > max_pages:
                 raise OcrInputLimitError("ocr_page_limit")
             pages = []
             for frame in ImageSequence.Iterator(image):
                 if frame.width * frame.height > max_pixels:
                     raise OcrInputLimitError("ocr_pixel_limit")
+                if sum(page.shape[0] * page.shape[1] for page in pages) + frame.width * frame.height > max_total_pixels:
+                    raise OcrInputLimitError("ocr_total_pixel_limit")
                 pages.append(np.array(frame.convert("RGB")))
             return pages
 
@@ -226,8 +234,13 @@ def _load_image_arrays(
                 for i in range(min(len(pdf), max_pages)):
                     page = pdf[i]
                     try:
-                        if strict_limits and page.get_width() * page.get_height() * 4 > max_pixels:
+                        pixels = page.get_width() * page.get_height() * 4
+                        if strict_limits and pixels > max_pixels:
                             raise OcrInputLimitError("ocr_pixel_limit")
+                        if strict_limits and (
+                            sum(item.shape[0] * item.shape[1] for item in pages) + pixels > max_total_pixels
+                        ):
+                            raise OcrInputLimitError("ocr_total_pixel_limit")
                         bitmap = page.render(scale=2)
                         try:
                             pages.append(np.array(bitmap.to_pil().convert("RGB")))
@@ -311,7 +324,8 @@ def ocr_source_to_workbook(
         tables = []
         page_evidence = []
         failures = []
-        source_name = path.stem[:28] or "OCR"
+        block_count = 0
+        source_name = re.sub(r'[\\/*?:\[\]]', "_", path.stem)[:28] or "OCR"
         legacy_ocr = None
         for image, report in zip(images, reports, strict=True):
             blocks = report.blocks
@@ -341,13 +355,16 @@ def ocr_source_to_workbook(
             else:
                 backend = "pp-structure-v3"
                 status = "candidate"
+            block_count += len(blocks)
+            image_sha256 = hashlib.sha256(memoryview(image)).hexdigest()
             for table in candidates:
                 tables.append(table)
                 page_evidence.append({
-                    "sheet_name": f"{source_name}_{len(tables)}"[:31],
+                    "sheet_name": _table_sheet_name(source_name, len(tables)),
                     "page_number": report.page,
                     "table_index": table.index,
                     "source_sha256": source_sha256,
+                    "image_sha256": image_sha256,
                     "image_width": int(image.shape[1]),
                     "image_height": int(image.shape[0]),
                     "structure_status": status,
@@ -357,6 +374,7 @@ def ocr_source_to_workbook(
                     "bbox": table.bbox,
                     "cell_boxes": table.cell_boxes,
                     "cell_box_coordinate_space": "backend_reported_unknown",
+                    "table_ocr_blocks": table.table_ocr_blocks,
                     "source_html": table.source_html,
                     "merges": table.merges,
                     "blocks": blocks,
@@ -382,7 +400,8 @@ def ocr_source_to_workbook(
             "structure_status": "partial" if partial else "candidate",
             "requires_confirmation": True,
             "pages": page_evidence,
-            "block_count": sum(len(report.blocks) for report in reports),
+            "block_count": block_count,
+            "backend": "mixed" if len({page["backend"] for page in page_evidence}) > 1 else page_evidence[0]["backend"],
             "row_count": sum(len(table.grid) for table in tables),
             "col_count": max((len(row) for table in tables for row in table.grid), default=0),
             "meta_lines": [line for table in tables for line in table.meta_lines],

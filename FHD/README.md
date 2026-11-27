@@ -132,6 +132,8 @@ AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolAct
 
 扫描件与图片兜底复用 [RapidOCR](https://github.com/RapidAI/RapidOCR) `rapidocr-onnxruntime` `1.4.4`（Apache-2.0，ONNX，无 torch）：仅在 pdfplumber 提取不到文本的页面渲染后识别，`XCAGI_PDF_OCR=off` 可关闭，默认最多处理 30 个空页；同时支持直接导入 png/jpg/webp/bmp 图片。文本版 PDF 仍走 pdfplumber 的文本与表格。
 
+ELT 图片表格候选复用 [PaddleOCR PP-StructureV3](https://github.com/PaddlePaddle/PaddleOCR)（Apache-2.0；模型许可须另验）。默认离线初始化要求 `FHD_ETL_TABLE_STRUCTURE_MODEL_MANIFEST`，JSON 包含 `paddleocr_version` 与 `models`（键为 `table_structure_ocr._MODEL_ENV` 的模型参数名，每项含来源 `source` 和目录 `sha256`）。目录摘要为排序后相对路径及各文件 SHA256 二元组的紧凑 UTF-8 JSON 再取 SHA256；缺少任何目录、版本不符或摘要不符时不启用结构模型。只有运维显式设置 `FHD_ETL_TABLE_STRUCTURE_ALLOW_DOWNLOAD=1` 才允许供应方下载模型，不属于已验收离线配置。实际 PaddleOCR/PaddleX/权重版本仍须按部署资格锁定。RapidOCR 只提供文本证据，结构降级结果需人工确认；不把候选标为已验证表格。
+
 知识库网页导入复用 [trafilatura](https://github.com/adbar/trafilatura) `2.3.1`（Apache-2.0，纯 Python）提取正文与标题，URL 导入与本地 `.html/.htm` 文件共用同一实现；联网复用锁定的 [urllib3](https://github.com/urllib3/urllib3/tree/2.8.0) `2.8.0`（MIT）连接池，把经全部 DNS 结果校验的数字 IP 作为连接目标，保留原域名的 Host、TLS SNI 与证书校验，不继承环境代理。产品侧只保留 SSRF 防护（拒绝内网/回环/保留地址、逐跳校验重定向、5MB/15s 限制）与租户隔离胶水；真实传输层回归确认路径中的地址不能更改连接目标。`XCAGI_KB_ALLOW_PRIVATE_URLS=1` 仅用于受控内网调试。
 
 知识库对象存储导入复用 [boto3](https://github.com/boto/boto3) `1.44.4`（Apache-2.0）读取 `s3://bucket/key`：产品侧只做 URI 校验、可选桶白名单 `XCAGI_S3_ALLOWED_BUCKETS`、大小上限 `XCAGI_KB_MAX_OBJECT_BYTES`（默认 25MB）与错误归一化；S3 兼容存储用 `XCAGI_S3_ENDPOINT_URL` / `XCAGI_S3_REGION` 指向，凭证沿用标准 AWS 环境。

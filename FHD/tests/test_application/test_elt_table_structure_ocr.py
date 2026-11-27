@@ -157,3 +157,73 @@ def test_ocr_workbook_preserves_formula_like_text(tmp_path, monkeypatch):
         assert workbook.active["A1"].data_type == "s"
     finally:
         workbook.close()
+
+
+def test_local_model_manifest_rejects_tampered_weight(tmp_path, monkeypatch):
+    import json
+
+    from app.application.elt import table_structure_ocr as structure
+
+    dirs = {}
+    models = {}
+    for key in structure._MODEL_ENV:
+        directory = tmp_path / key
+        directory.mkdir()
+        (directory / "weights").write_bytes(b"local model")
+        dirs[key] = str(directory)
+        models[key] = {
+            "source": "test fixture, not production model",
+            "sha256": structure._directory_sha256(directory),
+        }
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"paddleocr_version": "test", "models": models}))
+    monkeypatch.setattr(structure, "version", lambda name: "test")
+    monkeypatch.setenv("FHD_ETL_TABLE_STRUCTURE_MODEL_MANIFEST", str(manifest))
+    assert structure._verify_local_models(dirs)
+    (tmp_path / next(iter(dirs)) / "weights").write_bytes(b"changed")
+    assert not structure._verify_local_models(dirs)
+
+
+def test_elt_ocr_bridge_keeps_pages_and_table_candidates(tmp_path, monkeypatch):
+    from PIL import Image
+
+    from app.application.elt import table_structure_ocr as structure
+    from app.application.shipment_excel_elt_ocr import ocr_source_to_workbook
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FHD_EXCEL_ELT_OCR_MAX_PAGES", "5")
+    monkeypatch.setenv("FHD_ETL_TABLE_STRUCTURE", "required")
+    source = tmp_path / "two-pages.tiff"
+    first = Image.new("RGB", (40, 30), "white")
+    second = Image.new("RGB", (40, 30), "black")
+    first.save(source, save_all=True, append_images=[second])
+    pipeline = _FakePipeline({"table_res_list": [{"pred_html": _TABLE_HTML}]})
+    monkeypatch.setattr(structure, "get_table_structure_pipeline", lambda: pipeline)
+    result = ocr_source_to_workbook(source, output_path=tmp_path / "output.xlsx")
+    assert result["success"]
+    assert result["structure_status"] == "candidate"
+    assert [page["page_number"] for page in result["pages"]] == [1, 2]
+    assert len({page["image_sha256"] for page in result["pages"]}) == 2
+    assert pipeline.calls == 2
+    workbook = load_workbook(result["file_path"])
+    try:
+        assert workbook.sheetnames == [page["sheet_name"] for page in result["pages"]]
+    finally:
+        workbook.close()
+
+
+def test_elt_ocr_bridge_does_not_silently_truncate_pages(tmp_path, monkeypatch):
+    from PIL import Image
+
+    from app.application.shipment_excel_elt_ocr import ocr_source_to_workbook
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FHD_EXCEL_ELT_OCR_MAX_PAGES", "1")
+    source = tmp_path / "two-pages.tiff"
+    Image.new("RGB", (8, 8), "white").save(
+        source, save_all=True, append_images=[Image.new("RGB", (8, 8), "black")]
+    )
+    result = ocr_source_to_workbook(source, output_path=tmp_path / "output.xlsx")
+    assert not result["success"]
+    assert result["error_code"] == "ocr_page_limit"
+    assert not (tmp_path / "output.xlsx").exists()
