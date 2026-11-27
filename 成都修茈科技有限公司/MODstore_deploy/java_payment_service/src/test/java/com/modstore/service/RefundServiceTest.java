@@ -25,6 +25,7 @@ class RefundServiceTest {
     @Mock EntitlementService entitlementService;
     @Mock AccountLevelService accountLevelService;
     @Mock AssetInstallCommandService assetInstallCommandService;
+    @Mock AlipayService alipayService;
 
     @InjectMocks RefundService refundService;
 
@@ -287,6 +288,155 @@ class RefundServiceTest {
             Refund result = refundService.review(admin, 15L, "approve", "审核通过");
 
             assertThat(result.getStatus()).isEqualTo("approved");
+        }
+
+        @Test
+        void approveOriginalChannelRefundsViaAlipayWithoutCreditingWallet() {
+            Order order = buildFulfilledPaidOrder("OT-RV6", "item", new BigDecimal("88.00"));
+            order.setPayType("alipay");
+            order.setTradeNo("2026112700001");
+            Refund refund = new Refund();
+            refund.setId(16L);
+            refund.setRefundNo("RF-ALIPAY-16");
+            refund.setOrder(order);
+            refund.setUser(user);
+            refund.setAmount(new BigDecimal("88.00"));
+            refund.setReason("用户申请原路退回");
+            refund.setStatus("pending");
+
+            when(refundRepository.findByIdForUpdate(16L)).thenReturn(Optional.of(refund));
+            when(orderRepository.findByOutTradeNoForUpdate("OT-RV6")).thenReturn(Optional.of(order));
+            when(alipayService.refundOrder("OT-RV6", "2026112700001", "RF-ALIPAY-16", new BigDecimal("88.00"), "用户申请原路退回"))
+                    .thenReturn(java.util.Map.of("ok", true, "channel_refund_no", "RF-ALIPAY-16", "fund_change", "Y"));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(refundRepository.save(any(Refund.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            Refund result = refundService.review(admin, 16L, "approve", "同意原路退款", "original");
+
+            assertThat(result.getStatus()).isEqualTo("approved");
+            assertThat(result.getRefundChannel()).isEqualTo("alipay");
+            assertThat(result.getChannelRefundNo()).isEqualTo("RF-ALIPAY-16");
+            assertThat(result.getChannelRefundStatus()).isEqualTo("succeeded");
+            assertThat(result.getWalletTransactionId()).isNull();
+            verify(walletService, never()).refundToWallet(any(), any());
+            verify(entitlementService).revokeOrderEntitlements(user, "OT-RV6");
+        }
+
+        @Test
+        void approveOriginalChannelFailureAbortsWithoutApprovingOrCreditingWallet() {
+            Order order = buildFulfilledPaidOrder("OT-RV7", "item", new BigDecimal("88.00"));
+            order.setPayType("alipay");
+            Refund refund = new Refund();
+            refund.setId(17L);
+            refund.setRefundNo("RF-ALIPAY-17");
+            refund.setOrder(order);
+            refund.setUser(user);
+            refund.setAmount(new BigDecimal("88.00"));
+            refund.setReason("渠道失败回滚测试");
+            refund.setStatus("pending");
+
+            when(refundRepository.findByIdForUpdate(17L)).thenReturn(Optional.of(refund));
+            when(orderRepository.findByOutTradeNoForUpdate("OT-RV7")).thenReturn(Optional.of(order));
+            when(alipayService.refundOrder(any(), any(), eq("RF-ALIPAY-17"), any(), any()))
+                    .thenReturn(java.util.Map.of("ok", false, "message", "ACQ.TRADE_STATUS_ERROR"));
+
+            assertThatThrownBy(() -> refundService.review(admin, 17L, "approve", "尝试原路退款", "original"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("ACQ.TRADE_STATUS_ERROR");
+            assertThat(refund.getStatus()).isEqualTo("pending");
+            verify(walletService, never()).refundToWallet(any(), any());
+            verify(refundRepository, never()).save(any());
+        }
+
+        @Test
+        void approveOriginalChannelRejectsUnsupportedWechatChannelExplicitly() {
+            Order order = buildFulfilledPaidOrder("OT-RV8", "item", new BigDecimal("50.00"));
+            order.setPayType("wechat_native");
+            Refund refund = new Refund();
+            refund.setId(18L);
+            refund.setRefundNo("RF-WX-18");
+            refund.setOrder(order);
+            refund.setUser(user);
+            refund.setAmount(new BigDecimal("50.00"));
+            refund.setReason("微信原路退款测试");
+            refund.setStatus("pending");
+
+            when(refundRepository.findByIdForUpdate(18L)).thenReturn(Optional.of(refund));
+            when(orderRepository.findByOutTradeNoForUpdate("OT-RV8")).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> refundService.review(admin, 18L, "approve", "尝试微信原路", "original"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("微信原路退款通道暂未启用");
+            verify(walletService, never()).refundToWallet(any(), any());
+            verify(alipayService, never()).refundOrder(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void approveOriginalChannelForWalletPaidOrderRefundsToWalletAndRejectsInvalidTarget() {
+            Order order = buildFulfilledPaidOrder("OT-RV9", "item", new BigDecimal("30.00"));
+            order.setPayType("wallet");
+            Refund refund = new Refund();
+            refund.setId(19L);
+            refund.setRefundNo("RF-W-19");
+            refund.setOrder(order);
+            refund.setUser(user);
+            refund.setAmount(new BigDecimal("30.00"));
+            refund.setReason("钱包原路退回测试");
+            refund.setStatus("pending");
+
+            Transaction walletTxn = new Transaction();
+            walletTxn.setId(201L);
+            when(refundRepository.findByIdForUpdate(19L)).thenReturn(Optional.of(refund));
+            when(orderRepository.findByOutTradeNoForUpdate("OT-RV9")).thenReturn(Optional.of(order));
+            when(walletService.refundToWallet(order, refund)).thenReturn(walletTxn);
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(refundRepository.save(any(Refund.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            Refund result = refundService.review(admin, 19L, "approve", "钱包原路", "original");
+            assertThat(result.getRefundChannel()).isEqualTo("wallet");
+            assertThat(result.getChannelRefundStatus()).isEqualTo("settled");
+
+            refund.setStatus("pending");
+            assertThatThrownBy(() -> refundService.review(admin, 19L, "approve", "非法目标", "crypto"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("不支持的退款目标");
+        }
+
+        @Test
+        void approveAlipayChannelHandlesNullServiceAndNullChannelResponse() {
+            Order order = buildFulfilledPaidOrder("OT-RV10", "item", new BigDecimal("40.00"));
+            order.setPayType(null);
+            Refund refund = new Refund();
+            refund.setId(20L);
+            refund.setRefundNo("RF-A-20");
+            refund.setOrder(order);
+            refund.setUser(user);
+            refund.setAmount(new BigDecimal("40.00"));
+            refund.setReason("渠道边界测试");
+            refund.setStatus("pending");
+
+            when(refundRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(refund));
+            when(orderRepository.findByOutTradeNoForUpdate("OT-RV10")).thenReturn(Optional.of(order));
+
+            RefundService withoutAlipay = new RefundService(
+                    refundRepository, orderRepository, walletService,
+                    entitlementService, accountLevelService, assetInstallCommandService
+            );
+            assertThatThrownBy(() -> withoutAlipay.review(admin, 20L, "approve", "无渠道", "alipay"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("不可用");
+
+            when(alipayService.refundOrder(any(), any(), eq("RF-A-20"), any(), any())).thenReturn(null);
+            assertThatThrownBy(() -> refundService.review(admin, 20L, "approve", "空响应", "alipay"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("渠道无响应");
+
+            when(alipayService.refundOrder(any(), any(), eq("RF-A-20"), any(), any()))
+                    .thenReturn(java.util.Map.of("ok", true));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(refundRepository.save(any(Refund.class))).thenAnswer(inv -> inv.getArgument(0));
+            Refund ok = refundService.review(admin, 20L, "approve", "回退单号", "alipay");
+            assertThat(ok.getChannelRefundNo()).isEqualTo("RF-A-20");
         }
     }
 }

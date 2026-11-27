@@ -1,5 +1,5 @@
 {
-  "lines": 2801656,
+  "lines": 2801760,
   "updated": "2026-11-27",
-  "note": "PR #3721 同步最新 main（含 #3725）并更新 finance eval 契约"
+  "note": "PR #3722 同步最新 main（含 #3725）对齐基线"
 }

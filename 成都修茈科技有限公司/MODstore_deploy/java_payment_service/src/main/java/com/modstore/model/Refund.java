@@ -52,6 +52,15 @@ public class Refund {
     @Column(name = "wallet_transaction_id")
     private Long walletTransactionId;
 
+    @Column(name = "refund_channel", nullable = false, length = 32, columnDefinition = "VARCHAR(32) DEFAULT 'wallet'")
+    private String refundChannel = "wallet";
+
+    @Column(name = "channel_refund_no", length = 128)
+    private String channelRefundNo;
+
+    @Column(name = "channel_refund_status", length = 32)
+    private String channelRefundStatus;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 
