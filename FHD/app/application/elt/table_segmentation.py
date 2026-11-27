@@ -14,6 +14,7 @@ from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from itertools import groupby
 from typing import Any
 
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
@@ -930,12 +931,12 @@ def worksheet_native_regions(worksheet: Any) -> tuple[tuple[Merge, str, str], ..
     for owner in (worksheet.parent, worksheet):
         for name in getattr(owner, "defined_names", {}).values():
             try:
-                if name.type != "RANGE":
+                if not name.attr_text or name.type != "RANGE":
                     continue
                 for sheet, ref in name.destinations:
                     if sheet == worksheet.title:
                         add(ref, "defined_name", name.name)
-            except (ValueError, TypeError, TokenizerError):
+            except (ValueError, TypeError, IndexError, TokenizerError):
                 # Dynamic/unparseable names are not finite region evidence.
                 continue
     return tuple(sorted(result))
@@ -992,17 +993,20 @@ def iter_structure_candidates(segmentation: SheetSegmentation):
             runs.append((row, col, row, col))
     # Combine identical column spans on consecutive rows, without creating blank-gap rows.
     active: dict[tuple[int, int], Merge] = {}
-    for r1, c1, r2, c2 in runs:
-        for key in [key for key, rect in active.items() if rect[2] < r1 - 1]:
-            yield candidate(active.pop(key), "unresolved_occupied", "")
-        key = (c1, c2)
-        previous = active.get(key)
-        if previous is not None and previous[2] == r1 - 1:
-            active[key] = (previous[0], c1, r2, c2)
-        else:
-            if previous is not None:
-                yield candidate(previous, "unresolved_occupied", "")
-            active[key] = (r1, c1, r2, c2)
+    for row, row_runs in groupby(runs, key=lambda rect: rect[0]):
+        current: dict[tuple[int, int], Merge] = {}
+        for r1, c1, r2, c2 in row_runs:
+            key = (c1, c2)
+            previous = active.pop(key, None)
+            if previous is not None and previous[2] == row - 1:
+                current[key] = (previous[0], c1, r2, c2)
+            else:
+                if previous is not None:
+                    yield candidate(previous, "unresolved_occupied", "")
+                current[key] = (r1, c1, r2, c2)
+        for bounds in active.values():
+            yield candidate(bounds, "unresolved_occupied", "")
+        active = current
     for bounds in active.values():
         yield candidate(bounds, "unresolved_occupied", "")
 
@@ -1012,7 +1016,9 @@ def validate_candidate_selection(
 ) -> list[dict[str, Any]]:
     """Validate only candidate IDs actually offered to a model; never accept new coordinates."""
     by_id = {item["candidate_id"]: item for item in offered}
-    if len(by_id) != len(offered) or any(not isinstance(item, str) for item in selected_ids):
+    if not isinstance(selected_ids, list) or len(by_id) != len(offered) or any(
+        not isinstance(item, str) for item in selected_ids
+    ):
         raise ValueError("invalid structure candidate contract")
     if len(set(selected_ids)) != len(selected_ids) or any(
         item not in by_id for item in selected_ids
