@@ -154,7 +154,9 @@ def test_claimed_queue_worker_settles_chat_without_a_view(runtime_entry, monkeyp
             ]
             == "queued"
         )
-        state.queue.finish(run_id, "legacy-worker", "failed")
+        state.queue.finish(
+            run_id, "legacy-worker", "failed", execution_count=execution.execution_count
+        )
         assert not reconcile_queued_chat_reply(
             {**context, "tenant_id": 999}, context["turn_id"], run_id
         )
@@ -398,8 +400,9 @@ def test_lost_worker_with_unconfirmed_receipt_never_replays(runtime_entry, unset
     saved = state.repository.get(run_id)
     assert saved.status == "blocked" and saved.metadata["non_retryable"] is True
     assert saved.final_output["xiaox_result"]["reconciliation_required"] is True
-    assert state.queue.get(run_id).state == "failed"
+    assert state.queue.get(run_id).state == "unknown"
     assert state.queue.get(run_id).last_error_code == "needs_verification"
+    assert state.queue.claim("another-worker", lease_seconds=120) is None
     assert state.calls == state.servers == []
 
 

@@ -20,8 +20,12 @@ from app.application.agent_orchestrator.unified_task import create_unified_task
 
 
 def run_customer_export_task(tmp_path: Path, *, context: dict, expected_ids: set[int]) -> dict:
+    from app.db import HostSessionLocal
+
     children_before = {child.pid for child in multiprocessing.active_children()}
-    engine = create_engine(f"sqlite:///{tmp_path / 'export-task.sqlite'}")
+    # Spawn validates the claim in HOST; keep this helper's independent connection pool.
+    with HostSessionLocal() as host:
+        engine = create_engine(host.get_bind().url)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     runs = SQLAlchemyAgentRunRepository(session_factory=factory)
     queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -113,3 +114,61 @@ def test_alert_drill_records_full_timeline_and_always_cleans_up() -> None:
         assert f'"{step}"' in script
     assert "trap 'rm -f \"$sd_file\"' EXIT" in script
     assert '"environment": "drill"' in script
+
+
+def test_metrics_endpoint_exports_committed_agent_metrics_and_existing_http_metrics(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from prometheus_client.parser import text_string_to_metric_families
+
+    from app.fastapi_app.middleware_extra import register_prometheus_metrics
+    from app.infrastructure.observability import metrics
+    from app.utils.metrics import record_api_request
+
+    monkeypatch.delenv("XCAGI_METRICS", raising=False)
+    app = FastAPI()
+    register_prometheus_metrics(app)
+    with TestClient(app) as client:
+        before = client.get("/metrics")
+        assert before.status_code == 200
+        metrics.observe_run_terminal(status="failed")
+        record_api_request("GET", "/api/health", 200)
+        after = client.get("/metrics")
+        repeat = client.get("/metrics")
+    assert after.status_code == repeat.status_code == 200
+    assert after.headers["content-type"].startswith("text/plain")
+
+    def samples(body):
+        values = {}
+        for family in text_string_to_metric_families(body):
+            for sample in family.samples:
+                key = (sample.name, tuple(sorted(sample.labels.items())))
+                assert key not in values, f"duplicate exported metric: {key}"
+                values[key] = sample.value
+        return values
+
+    prior, latest, repeated = map(samples, (before.text, after.text, repeat.text))
+    agent = ("xcagi_run_terminal_total", (("status", "failed"),))
+    assert latest[agent] == prior.get(agent, 0) + 1
+    assert repeated[agent] == latest[agent], "scraping must not create task outcomes"
+    assert any(key[0] == "api_requests_total" for key in latest)
+    assert any(key[0] == "process_start_time_seconds" for key in latest)
+
+
+def test_agent_dashboard_uses_file_provisioning_model_and_isolated_scrape_job():
+    dashboard = json.loads(
+        (FHD_ROOT / "ops/monitoring/grafana/provisioning/dashboards/fhd.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "dashboard" not in dashboard, "HTTP API envelopes are not file provisioning models"
+    assert dashboard["uid"] == "fhd-performance", "retain the existing dashboard URL"
+    assert dashboard["title"] and dashboard["refresh"] == "15s"
+    assert len({panel["id"] for panel in dashboard["panels"]}) == len(dashboard["panels"])
+    job = next(item for item in dashboard["templating"]["list"] if item["name"] == "job")
+    assert job["current"]["value"] == "fhd-api-stable"
+    assert not job["multi"] and not job["includeAll"], "production and staging must not be pooled"
+    for panel in dashboard["panels"]:
+        assert panel["type"] in {"timeseries", "stat"}
+        assert panel["fieldConfig"]["defaults"]["noValue"]
+        assert all('job="$job"' in target["expr"] for target in panel["targets"])

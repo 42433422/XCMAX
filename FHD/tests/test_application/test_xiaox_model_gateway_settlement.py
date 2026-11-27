@@ -349,7 +349,9 @@ def test_model_request_deadline_is_one_clock_for_headers_retries_and_reads(monke
     monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180")
     now = [1_000.0]
     monkeypatch.setattr("app.infrastructure.xiaox.model_gateway.time.monotonic", lambda: now[0])
-    binding = SimpleNamespace(metadata={"deadline_at": time.time() + 90})
+    binding = SimpleNamespace(
+        run=SimpleNamespace(metadata={}), metadata={"deadline_at": time.time() + 90}
+    )
     deadline = model_request_deadline(binding)
     assert deadline == pytest.approx(1_090.0)
     now[0] = 1_089.0
@@ -361,7 +363,9 @@ def test_model_request_deadline_is_one_clock_for_headers_retries_and_reads(monke
 
 def test_model_request_deadline_requires_a_live_task_deadline(monkeypatch):
     monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180")
-    binding = SimpleNamespace(metadata={"deadline_at": time.time() - 1})
+    binding = SimpleNamespace(
+        run=SimpleNamespace(metadata={}), metadata={"deadline_at": time.time() - 1}
+    )
     with pytest.raises(HTTPException) as caught:
         model_request_deadline(binding)
     assert caught.value.status_code == 408
@@ -682,6 +686,96 @@ def test_backup_capacity_does_not_expand_the_original_output_or_call_budget(gate
     assert [item["max_output_tokens"] for item in calls] == [primary.max_output_tokens] * 2
     assert post(client).status_code == 429
     assert len(calls) == 2
+
+
+def test_fallback_retry_leaves_verification_inside_original_call_ceiling(gateway, monkeypatch):
+    from app.application.agent_runtime.verification_budget import initialize_verification_budget
+    from app.infrastructure.xiaox import model_gateway
+    from tests.test_application.test_goal_verification_budget import post_review, reviewing
+
+    client, store, calls, response, app = gateway
+    primary, backup = authorize_backup(app, store)
+    backup = replace(backup, max_model_calls=100)
+    app.state.xiaox_model_routes = (primary, backup)
+    metadata = store.binding.metadata
+    metadata["runtime_config"].update(
+        authorized_model_routes=[primary.identity, backup.identity], max_model_calls=4
+    )
+    metadata["model_requests"] = {
+        str(index): {"state": "completed", "purpose": "execution"} for index in range(2)
+    }
+    initialize_verification_budget(
+        store.run, metadata, context_window=32000, max_model_calls=4, total_seconds=60
+    )
+
+    async def no_wait(*args):
+        return True
+
+    monkeypatch.setattr(model_gateway, "_wait_for_model_retry", no_wait)
+
+    def respond(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        return httpx.Response(429) if len(calls) == 1 else httpx.Response(200, json=response)
+
+    app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), **kwargs
+    )
+    refused = post(client)
+    assert refused.status_code == 429 and "reserved" in refused.text
+    assert len(calls) == 1 and len(metadata["model_requests"]) == 3
+    assert store.run.metadata["runtime_effective_model_route"] == primary.identity
+    reviewing(store.run, metadata)
+    assert post_review(client).status_code == 200
+    assert len(calls) == 2 and len(metadata["model_requests"]) == 4
+    receipt = list(metadata["model_requests"].values())[-1]
+    assert receipt["purpose"] == "verification" and receipt["state"] == "completed"
+    assert receipt["verification_response"] == response
+    assert post_review(client).status_code == 429 and len(calls) == 2
+
+
+def test_verification_fallback_keeps_job_receipt_and_actual_route_observation(gateway, monkeypatch):
+    from app.application.agent_runtime.verification_budget import initialize_verification_budget
+    from app.infrastructure.xiaox import model_gateway
+    from tests.test_application.test_goal_verification_budget import post_review, reviewing
+
+    client, store, calls, response, app = gateway
+    primary, backup = authorize_backup(app, store)
+    metadata = store.binding.metadata
+    initialize_verification_budget(
+        store.run, metadata, context_window=32000, max_model_calls=8, total_seconds=60
+    )
+    reviewing(store.run, metadata)
+
+    async def no_wait(*args):
+        return True
+
+    monkeypatch.setattr(model_gateway, "_wait_for_model_retry", no_wait)
+
+    def respond(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        if len(calls) == 1:
+            return httpx.Response(429)
+        return httpx.Response(200, json={**response, "model": backup.response_model})
+
+    app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(respond), **kwargs
+    )
+    assert post_review(client).status_code == 200
+    attempts = list(metadata["model_requests"].values())
+    assert [row["model"] for row in attempts] == [primary.model, backup.model]
+    assert [row["state"] for row in attempts] == ["failed", "completed"]
+    assert all(row["purpose"] == "verification" for row in attempts)
+    assert all(row["verification_job_id"] == "verify-original" for row in attempts)
+    assert len({row["request_group"] for row in attempts}) == 1
+    assert [row["observation"]["route_identity"] for row in attempts] == [
+        primary.identity,
+        backup.identity,
+    ]
+    assert "verification_response" not in attempts[0]
+    assert attempts[1]["verification_response"]["model"] == backup.response_model
+    assert ledger.get_model_wallet("71")["balance_units"] == 98
 
 
 def test_effective_route_change_during_backoff_cannot_move_another_requests_context(

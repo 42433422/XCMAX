@@ -23,15 +23,20 @@ class ChatFileSource(TypedDict):
 
 
 _FILE_NAME = re.compile(r"[^/\\:\x00-\x1f\x7f]{1,255}\Z")
-_PATH_TEXT = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|[a-z]:[\\/]|(?<![\w/])(?:[~/\\]|\.{1,2}[\\/])[\w.]")
+_PATH_TEXT = re.compile(
+    r"(?i)[a-z][a-z0-9+.-]*://|[a-z]:[\\/]|(?<![\w/])(?:[~/\\]|\.{1,2}[\\/])[\w.]"
+)
 
 
 def released_chat_file_sources(run: AgentRun, result: dict[str, Any]) -> list[ChatFileSource]:
     """Present only references from the exact completed result and its frozen proof."""
     if (
-        run.status != "completed" or result.get("run_id") != run.run_id
-        or result.get("ok") is not True or result.get("execution_state") != "completed"
-        or not isinstance(output := result.get("output"), str) or not output.strip()
+        run.status != "completed"
+        or result.get("run_id") != run.run_id
+        or result.get("ok") is not True
+        or result.get("execution_state") != "completed"
+        or not isinstance(output := result.get("output"), str)
+        or not output.strip()
     ):
         return []
     report = run.metadata.get("runtime_goal_verification") or {}
@@ -65,7 +70,11 @@ def released_chat_file_sources(run: AgentRun, result: dict[str, Any]) -> list[Ch
             name, passage = source["name"].strip(), citation["source_excerpt"]
             if name in {".", ".."} or not _FILE_NAME.fullmatch(name) or redact(name) != name:
                 continue
-            if _PATH_TEXT.search(passage) or redact(passage) != passage or _storage_safe(passage) != passage:
+            if (
+                _PATH_TEXT.search(passage)
+                or redact(passage) != passage
+                or _storage_safe(passage) != passage
+            ):
                 continue
             key = (name, source["sha256"])
             if key not in public and len(public) == 6:

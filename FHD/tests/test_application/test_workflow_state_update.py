@@ -191,7 +191,13 @@ class TestPublicRunState:
         assert events[-1].event_type == "run.observed"
         assert events[-1].data["status"] == "completed"
         assert sum(event.event_type == "run.completed" for event in events) == 1
-        assert [event.event_type for event in events[-2:]] == ["run.completed", "run.observed"]
+        assert [event.event_type for event in events[-3:]] == [
+            "run.completed",
+            "run.state_changed",
+            "run.observed",
+        ]
+        assert events[-2].data["reason_event_id"] == events[-3].event_id
+        assert events[-2].data["to_status"] == "completed"
         observed = events[-1].data
         assert observed["status"] == "completed" and observed["phase"] == "execution"
         assert observed["duration_scope"] == "active"

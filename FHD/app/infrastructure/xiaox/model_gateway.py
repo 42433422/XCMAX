@@ -27,6 +27,13 @@ from httpx_sse import EventSource
 from sqlalchemy.exc import DBAPIError
 from starlette.types import Receive, Scope, Send
 
+from app.application.agent_runtime.verification_budget import (
+    JOB_HEADER,
+    JOB_KEY,
+    active_verification_job_id,
+    phase_deadline,
+    verification_reserve,
+)
 from app.infrastructure.llm.retry_policy import retry_after_seconds, retry_delay
 from app.infrastructure.xiaox.policy import ModelRoute
 
@@ -354,8 +361,8 @@ class _ModelCallLimitReached(Exception):
 
 
 def _remaining(binding: Any) -> float:
-    value = binding.metadata.get("deadline_at")
-    if not isinstance(value, (int, float)) or not math.isfinite(value):
+    value = phase_deadline(binding.run, binding.metadata)
+    if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
         raise HTTPException(409, "Task model deadline is missing")
     remaining = float(value) - time.time()
     if remaining <= 0:
@@ -372,6 +379,8 @@ def _claim(
     request_group: str = "",
     attempt: int = 1,
     expected_route_identity: str | None = None,
+    observation: dict[str, Any] | None = None,
+    verification_job: str = "",
 ) -> tuple[Any, int]:
     from app.application.agent_orchestrator.budget import budget_exceeded_payload
     from app.application.agent_orchestrator.task_context import ensure_run_trace
@@ -401,6 +410,11 @@ def _claim(
                 != expected_route_identity
             ):
                 raise HTTPException(409, "The task's effective model changed during this request")
+            expected_job = active_verification_job_id(run, metadata)
+            if (verification_job or metadata.get("active_phase") == "verification") and (
+                not verification_job or verification_job != expected_job
+            ):
+                raise HTTPException(403, "Model request is not bound to the host verification task")
             if metadata.get("model_reconciliation_required"):
                 raise HTTPException(409, "Previous model usage requires reconciliation")
             calls = metadata.setdefault("model_requests", {})
@@ -411,9 +425,19 @@ def _claim(
                 raise HTTPException(409, "Task model-call limit is invalid")
             if len(calls) >= maximum_calls:
                 raise _ModelCallLimitReached(maximum_calls, len(calls))
+            reserved_calls, reserved_cost = verification_reserve(metadata)
+            if verification_job:
+                if metadata.get("verification_budget") and reserved_calls <= 0:
+                    raise HTTPException(429, "Independent verification call budget is exhausted")
+            elif len(calls) + reserved_calls >= maximum_calls:
+                raise HTTPException(
+                    429, "Remaining model calls are reserved for independent verification"
+                )
             held = int(run.metadata.get("reserved_cost_units") or 0)
             if budget_exceeded_payload(
-                run, additional_cost_units=held + reserve, scope="xiaox_model"
+                run,
+                additional_cost_units=held + reserve + (0 if verification_job else reserved_cost),
+                scope="xiaox_model",
             ):
                 raise HTTPException(402, "Task model budget is insufficient")
             run.metadata["reserved_cost_units"] = held + reserve
@@ -429,6 +453,19 @@ def _claim(
                 "started_at": time.time(),
                 "trace_id": ensure_run_trace(run, live=False)["trace_id"],
                 "route_identity": route.identity,
+                **({"observation": observation} if observation else {}),
+                "purpose": "verification" if verification_job else "execution",
+                **(
+                    {
+                        "verification_job_id": verification_job,
+                        "verification_input_digest": (run.metadata.get(JOB_KEY) or {}).get(
+                            "input_digest"
+                        ),
+                        "verification_version": (run.metadata.get(JOB_KEY) or {}).get("version"),
+                    }
+                    if verification_job
+                    else {}
+                ),
             }
             # The SDK thread keeps its original logical model. Persist the
             # actual route so its later opaque history never goes back to the
@@ -465,6 +502,8 @@ def _finish(
     state: str = "completed",
     market_route: ModelRoute | None = None,
     platform_receipt: Any = None,
+    observation: dict[str, Any] | None = None,
+    verification_response: dict[str, Any] | None = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
@@ -492,6 +531,8 @@ def _finish(
 
     def finish(run: Any, metadata: dict[str, Any]) -> None:
         call = metadata["model_requests"][request_id]
+        if observation:
+            call["observation"] = observation
         terminal = call.get("state") in {"completed", "failed"}
         if not terminal:
             call.update(
@@ -509,6 +550,26 @@ def _finish(
             item.get("state") in {"reserved", "unknown"}
             for item in metadata["model_requests"].values()
         )
+        if (
+            verification_response is not None
+            and call.get("purpose") == "verification"
+            and call.get("state") == state == "completed"
+        ):
+            from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+            # Keep a settled read-only response before publishing to the caller.
+            # Losing that connection never requires a second metered request.
+            digest = canonical_digest(verification_response)
+            if "verification_response" in call and (
+                call.get("verification_response_digest") != digest
+                or canonical_digest(call["verification_response"]) != digest
+            ):
+                raise ModelGatewayContractError(
+                    "verification_response_conflict",
+                    "A settled verification response cannot change",
+                )
+            call.setdefault("verification_response", verification_response)
+            call.setdefault("verification_response_digest", digest)
         if terminal:
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
@@ -643,13 +704,78 @@ async def forward_responses(request: Request):
         body = _prepare_body({**requested_body, "model": route.model}, route)
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
+    verification_job = request.headers.get(JOB_HEADER, "")
+    if verification_job or binding.metadata.get("active_phase") == "verification":
+        if not verification_job or verification_job != active_verification_job_id(
+            binding.run, binding.metadata
+        ):
+            raise HTTPException(403, "Model request is not bound to the host verification task")
+        if body.get("tools") or body.get("stream"):
+            raise HTTPException(
+                400, "Independent verification must be a non-streaming tool-free request"
+            )
     route.token()  # Validate the account credential without persisting it.
     request_group = "request_" + uuid.uuid4().hex
     request_id = "model_" + uuid.uuid4().hex
     usage_key = f"xiaox:{binding.run_id}:{request_id}"
-    # One absolute clock for this request: header wait, retries and terminal
-    # body/settlement reads all spend it; none may reset it.
-    deadline = model_request_deadline(binding)
+    observation = None
+    try:
+        from app.application.agent_orchestrator.task_context import ensure_run_trace
+        from app.infrastructure.llm.genai_telemetry import ModelRequestObservation
+
+        observation = ModelRequestObservation(
+            context=ensure_run_trace(binding.run, live=False),
+            run_id=binding.run_id,
+            provider_id=route.provider_id,
+            model=route.model,
+            request_group=request_group,
+        )
+    except BOUNDARY_ERRORS as exc:
+        logger.warning("model trace initialization unavailable (%s)", type(exc).__name__)
+
+    def observe(method: str, *args: Any, **kwargs: Any) -> Any:
+        try:
+            if observation is not None:
+                if method == "attempt":
+                    # One span owns this request group; each physical attempt
+                    # records its actual qualified route, including fallback.
+                    observation.span.attributes.update(
+                        {
+                            "gen_ai.system": route.provider_id,
+                            "gen_ai.request.model": route.model,
+                            "xcagi.route_identity": route.identity,
+                        }
+                    )
+                    observation.span.add_event(
+                        "gen_ai.request.route",
+                        {
+                            "request_id": args[0],
+                            "attempt": args[1],
+                            "provider_id": route.provider_id,
+                            "model": route.model,
+                            "route_identity": route.identity,
+                        },
+                    )
+                value = getattr(observation, method)(*args, **kwargs)
+                if method == "snapshot" and isinstance(value, dict):
+                    return {
+                        **value,
+                        "provider_id": route.provider_id,
+                        "model": route.model,
+                        "route_identity": route.identity,
+                    }
+                return value
+        except BOUNDARY_ERRORS as exc:
+            logger.warning("model observation %s unavailable (%s)", method, type(exc).__name__)
+        return None
+
+    async def transport_trace(name: str, info: dict[str, Any]) -> None:
+        try:
+            if observation is not None:
+                await observation.transport_trace(name, info)
+        except BOUNDARY_ERRORS as exc:
+            logger.warning("model transport observation unavailable (%s)", type(exc).__name__)
+
     stack = ExitStack()
     client = None
     upstream = None
@@ -662,7 +788,7 @@ async def forward_responses(request: Request):
     slot_failure: BaseException | None = None
     platform_receipt: Any = None
     request_phase = "admission"
-    inference_deadline = deadline
+    observed_requests: set[str] = set()
 
     def finish_usage(*args: Any, **kwargs: Any) -> None:
         _finish(
@@ -670,7 +796,9 @@ async def forward_responses(request: Request):
             **kwargs,
             market_route=route if route.gateway_kind == "market" else None,
             platform_receipt=platform_receipt,
+            observation=observe("snapshot"),
         )
+        observe("settle", usage=kwargs.get("usage"), state=kwargs.get("state", "completed"))
 
     def close_slot(error: BaseException | None = None) -> None:
         stack.__exit__(
@@ -722,6 +850,39 @@ async def forward_responses(request: Request):
                 logger.warning("Xiaox model settlement cleanup remains unconfirmed")
                 return  # Keep the original HTTP refusal and its diagnostic.
             raise
+        finally:
+            observe("finish", error or interrupted or sys.exception())
+            final_observation = observe("snapshot")
+            if observed_requests and final_observation:
+
+                def record_observation(_run: Any, metadata: dict[str, Any]) -> None:
+                    # Group timing is shared; each durable attempt retains its
+                    # own route. Observation never changes usage or task state.
+                    for key, call in metadata.get("model_requests", {}).items():
+                        if key in observed_requests and call.get("request_group") == request_group:
+                            call["observation"] = {
+                                **final_observation,
+                                "provider_id": call.get("provider_id"),
+                                "model": call.get("model"),
+                                "route_identity": call.get("route_identity"),
+                                "request_id": key,
+                                "attempt": call.get("attempt"),
+                            }
+
+                try:
+                    with anyio.move_on_after(
+                        max(0.0, cleanup_deadline - time.monotonic()), shield=True
+                    ) as observation_cleanup:
+                        await anyio.to_thread.run_sync(
+                            lambda: store.update(binding.run_id, record_observation),
+                            abandon_on_cancel=True,
+                        )
+                    if observation_cleanup.cancel_called:
+                        logger.warning("model observation persistence cleanup deadline exceeded")
+                except BOUNDARY_ERRORS as exc:
+                    logger.warning(
+                        "model observation persistence unavailable (%s)", type(exc).__name__
+                    )
 
     def choose_next_route() -> None:
         nonlocal route_index, route, body
@@ -732,6 +893,9 @@ async def forward_responses(request: Request):
             route.token()
 
     try:
+        # All attempts share one absolute clock. An expired task still closes
+        # its observation, without admitting a model call or resetting budget.
+        inference_deadline = deadline = model_request_deadline(binding)
         from app.infrastructure.llm.retry_policy import (
             is_safe_transport_retry,
             model_failure_details,
@@ -860,6 +1024,7 @@ async def forward_responses(request: Request):
             attempt_started = time.monotonic()
             request_id = "model_" + uuid.uuid4().hex
             usage_key = f"xiaox:{binding.run_id}:{request_id}"
+            observe("attempt", request_id, attempt)
             claimed = reserved = network_started = finished = False
             platform_receipt = None
             slot_failure = None
@@ -867,16 +1032,22 @@ async def forward_responses(request: Request):
                 lambda: store.authenticate(token, audience="model")
             )
             _remaining(binding)
-            with model_rate_limit_scope(binding.context):
-                stack.enter_context(
-                    model_call_slot(
-                        SimpleNamespace(
-                            provider_id=route.provider_id,
-                            model=route.model,
-                            route_identity=route.identity,
-                        ),
-                        profile="xiaox",
+            admission_started = time.perf_counter()
+            try:
+                with model_rate_limit_scope(binding.context):
+                    stack.enter_context(
+                        model_call_slot(
+                            SimpleNamespace(
+                                provider_id=route.provider_id,
+                                model=route.model,
+                                route_identity=route.identity,
+                            ),
+                            profile="xiaox",
+                        )
                     )
+            finally:
+                observe(
+                    "add_duration", "admission", (time.perf_counter() - admission_started) * 1000
                 )
             await anyio.to_thread.run_sync(
                 lambda: _claim(
@@ -887,9 +1058,12 @@ async def forward_responses(request: Request):
                     request_group=request_group,
                     attempt=attempt,
                     expected_route_identity=expected_active_route,
+                    observation=observe("snapshot"),
+                    verification_job=verification_job,
                 )
             )
             claimed = True
+            observed_requests.add(request_id)
             expected_active_route = route.identity
             if route.gateway_kind != "market":
                 await anyio.to_thread.run_sync(
@@ -928,12 +1102,14 @@ async def forward_responses(request: Request):
             client = client_factory(**client_options)
             headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
             headers.update(route.headers(request_id))
+            headers.update(observe("headers") or {})
             outbound = client.build_request(
                 "POST",
                 route.base_url + "/responses",
                 headers=headers,
                 json=body,
             )
+            outbound.extensions["trace"] = transport_trace
             network_started = True
             request_phase = "response"
             try:
@@ -1094,6 +1270,7 @@ async def forward_responses(request: Request):
                     usage=usage,
                     usage_key=usage_key,
                     state="completed" if status == "completed" else "failed",
+                    verification_response=response if verification_job else None,
                 )
             )
             finished = True

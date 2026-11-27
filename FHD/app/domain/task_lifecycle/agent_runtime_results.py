@@ -108,16 +108,6 @@ def receipt_verified(row: dict[str, Any]) -> bool:
     )
 
 
-def receipt_settled_failure(row: dict[str, Any]) -> bool:
-    """A failed child may release its parent only with a settled original effect."""
-    receipt = row.get("receipt") or {}
-    return (
-        receipt_state(row) in {"failed", "not_started", "not_executed"}
-        and receipt.get("success") is False
-        and (row.get("read_only") is True or execution_result_proven_not_executed(receipt))
-    )
-
-
 def released_runtime_artifacts(result: dict[str, Any]) -> list[dict[str, Any]]:
     """Project only downloadable files proven by the original child readback."""
     if result.get("ok") is not True or result.get("execution_state") != "completed":
@@ -183,6 +173,16 @@ def verified_receipt_artifacts(rows: list[dict[str, Any]]) -> list[dict[str, Any
     return list(files.values())
 
 
+def receipt_settled_failure(row: dict[str, Any]) -> bool:
+    """A failed child may release its parent only with a settled original effect."""
+    receipt = row.get("receipt") or {}
+    return (
+        receipt_state(row) in {"failed", "not_started", "not_executed"}
+        and receipt.get("success") is False
+        and (row.get("read_only") is True or execution_result_proven_not_executed(receipt))
+    )
+
+
 def model_unsettled(metadata: dict[str, Any]) -> bool:
     return bool(metadata.get("model_reconciliation_required")) or any(
         isinstance(request, dict) and request.get("state") in {"reserved", "unknown"}
@@ -202,10 +202,14 @@ def classification_metadata(run: Any) -> dict[str, Any]:
 def failure_diagnostics(run: Any, result: dict[str, Any]) -> dict[str, str]:
     """Describe the current failure; recovered attempts remain in their own ledger."""
     stage = kind = reason = ""
-    if result.get("exit_status") == "goal_verification_required":
+    if result.get("exit_status") in {"goal_verification_required", "goal_verification_invalid_gap"}:
         report = run.metadata.get("runtime_goal_verification") or {}
         stage = "goal_verification"
-        kind = str(report.get("error_code") or "goal_verification_required")
+        kind = str(
+            result["exit_status"]
+            if result["exit_status"] == "goal_verification_invalid_gap"
+            else report.get("error_code") or "goal_verification_required"
+        )
         reason = str(report.get("feedback") or result.get("error") or "")
     elif result.get("execution_state") == "unknown":
         model_unknown = any(

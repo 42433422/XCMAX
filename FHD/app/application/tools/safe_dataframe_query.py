@@ -58,7 +58,9 @@ def _apply_operator(operation: Callable[[Any, Any], Any], left: Any, right: Any)
     try:
         return operation(left, right)
     except TypeError as exc:
-        raise ValueError("query operands have incompatible types; use an explicit conversion") from exc
+        raise ValueError(
+            "query operands have incompatible types; use an explicit conversion"
+        ) from exc
 
 
 def _evaluate(node: ast.AST, df: pd.DataFrame) -> Any:
@@ -97,7 +99,9 @@ def _evaluate(node: ast.AST, df: pd.DataFrame) -> Any:
         arithmetic_operation = _ARITHMETIC_OPERATORS.get(type(node.op))
         if arithmetic_operation is None:
             raise ValueError("unsupported arithmetic operator")
-        return _apply_operator(arithmetic_operation, _evaluate(node.left, df), _evaluate(node.right, df))
+        return _apply_operator(
+            arithmetic_operation, _evaluate(node.left, df), _evaluate(node.right, df)
+        )
     if isinstance(node, ast.Compare):
         left = _evaluate(node.left, df)
         compare_result: Any = True

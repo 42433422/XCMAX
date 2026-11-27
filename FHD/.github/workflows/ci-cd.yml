@@ -8,7 +8,7 @@ on:
     tags:
       - "FHD/v*"
   pull_request:
-    branches: [ main, develop, master ]
+    branches: [ main, develop, master, codex/agent-exam-integration ]
   schedule:
     # Nightly 全量（每日 16:00 UTC = 北京 00:00）：PR 上被目标化跳过的重活在此全跑。
     # 镜像构建/推送（docker-build-fhd-api）已显式排除 schedule，避免夜间误推制品。
@@ -156,8 +156,11 @@ jobs:
         run: |
           test -n "$XCAGI_TEST_AGENT_POSTGRES_URL"
           uv run --no-sync pytest \
+            tests/test_db/test_agent_schema_concurrency.py \
+            tests/test_application/test_tool_cross_node_effects.py \
             tests/test_application/test_agent_task_admission.py \
             tests/test_application/test_task_execution_repository.py \
+            tests/test_application/test_task_event_durability.py \
             tests/test_application/test_task_dispatcher.py \
             tests/test_application/test_agent_loop.py \
             tests/application/test_employee_runtime_write_approval.py \

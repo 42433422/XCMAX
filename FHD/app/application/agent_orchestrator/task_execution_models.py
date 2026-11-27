@@ -79,7 +79,7 @@ def xiaox_queue_outcome(result: dict[str, Any]) -> tuple[str, str]:
             return "succeeded", ""
         return "unknown", "needs_verification"
     if state in {"paused", "blocked", "waiting_input", "waiting_auth", "waiting_approval"}:
-        return state, ""
+        return state, str(result.get("error_code") or "")
     if state == "waiting_user":
         if result.get("requires_token") is True:
             return "waiting_auth", ""
@@ -188,6 +188,7 @@ class TaskExecutionRepository(Protocol):
         run_id: str,
         owner_id: str,
         *,
+        execution_count: int,
         lease_seconds: float,
         now: str | None = None,
     ) -> bool: ...
@@ -198,8 +199,18 @@ class TaskExecutionRepository(Protocol):
         owner_id: str,
         state: str,
         *,
+        execution_count: int,
         error_code: str = "",
     ) -> AgentTaskExecution | None: ...
+
+    def mark_open_effect(
+        self,
+        run_id: str,
+        effect_id: str = "dispatch",
+        *,
+        owner_id: str,
+        execution_count: int,
+    ) -> bool: ...
 
     def transition(
         self,

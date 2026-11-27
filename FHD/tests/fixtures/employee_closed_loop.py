@@ -161,6 +161,7 @@ class Acceptance:
             "user_id": "11",
             "employee_id": "employee-a",
             "task_id": task_id,
+            "idempotency_key": f"closed-loop:{task_id}",
         }
         body.update(extra)
         return body

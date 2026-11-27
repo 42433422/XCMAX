@@ -63,20 +63,23 @@ _RANGE = {
     "type": "string",
     "pattern": r"^\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6}(:\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})?$",
 }
-_SHEET_AREA = {"sheet": _TEXT, "range": _RANGE}
+_SHEET_AREA: dict[str, dict[str, Any]] = {"sheet": _TEXT, "range": _RANGE}
 _TABLE = _flat_phase(
     "create_table",
     sheet=_TEXT,
     range={**_RANGE, "description": "含标题和数据行；sum_column 另占下一行"},
     name={
-        **_TEXT, "maxLength": 255,
+        **_TEXT,
+        "maxLength": 255,
         "description": "Excel 表名以字母、下划线或反斜杠开头，其余可用字母、数字、下划线和点",
     },
     optional={
         "sum_column": {**_TEXT, "description": "需要合计行时提供求和列标题"},
         "calculated_column": {**_TEXT, "description": "需要计算列时提供列标题"},
         "calculated_formula": {
-            "type": "string", "pattern": "^=.", "maxLength": 8192,
+            "type": "string",
+            "pattern": "^=.",
+            "maxLength": 8192,
             "description": "计算列公式；没有 calculated_column 时沿用 sum_column",
         },
         "banded_rows": {"type": "boolean", "description": "开启可打印且随表格扩展的隔行底纹"},
@@ -193,7 +196,14 @@ _PRINT_LAYOUT = _flat_phase(
 WORKBOOK_CONTROL_PHASES = frozenset({"conditional_format", "data_validation", "print_layout"})
 WORKBOOK_NATIVE_PHASES = WORKBOOK_CONTROL_PHASES | {"create_table", "create_combo_chart"}
 WORKBOOK_STRUCTURAL_PHASES = frozenset(
-    {"create_sheet", "insert_rows", "merge_cells", "set_row_height", "set_column_width", "freeze_panes"}
+    {
+        "create_sheet",
+        "insert_rows",
+        "merge_cells",
+        "set_row_height",
+        "set_column_width",
+        "freeze_panes",
+    }
 )
 
 
@@ -257,7 +267,25 @@ WORKBOOK_WRITE_INPUT = {
                 },
                 "expected": {
                     "type": "object",
-                    "description": "原 QC 独立比对的计划格数/数值合计；不声明公式已重算",
+                    "description": "原 QC 比对计划格数/数值合计；formula_values 只填写原目标给出的独立数值要求，冻结后由真实计算引擎核对，不能以执行者自述证明正确",
+                    "properties": {
+                        "formula_values": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 10000,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["sheet", "ref", "value"],
+                                "properties": {
+                                    "sheet": _TEXT,
+                                    "ref": _REF,
+                                    "value": {"type": ["string", "number", "boolean"]},
+                                    "abs_tolerance": {"type": "number", "minimum": 0},
+                                },
+                            },
+                        },
+                    },
                 },
             },
         },

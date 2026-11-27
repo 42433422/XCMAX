@@ -7,6 +7,7 @@ transaction, and the handoff that must not block the approval request thread.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import logging
 import os
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Session
 from app.application.agent_orchestrator.business_harness import BUSINESS_HARNESS_PROTOCOL
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.task_execution_models import AgentTaskExecution
+from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.application.elt.errors import EltError
 from app.application.elt.targets.helpers import assert_created_row_unchanged
 from app.application.elt.targets.products import ProductAdapter
@@ -228,20 +231,56 @@ def execute_claimed_cross_module(
     run: AgentRun,
     *,
     owner: str,
+    execution: AgentTaskExecution,
     queue: Any,
     request_id: str,
     finish: bool,
 ) -> dict[str, Any]:
+    from app.application.agent_orchestrator.business_write_guard import (
+        recheck_worker_claim,
+        worker_claim_scope,
+    )
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.worker_repository import (
+        ClaimedRunRepository,
+        WorkerLeaseLost,
+    )
     from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
+    repository = orchestrator._repo
+    if isinstance(repository, ClaimedRunRepository):
+        repository = repository._repository
+    if not isinstance(repository, SQLAlchemyAgentRunRepository) or (
+        execution.run_id,
+        execution.user_id,
+        execution.tenant_id,
+        execution.lease_owner,
+    ) != (run.run_id, run.user_id, tenant_id_of_run(run), owner):
+        raise WorkerLeaseLost("cross-module execution requires its original durable claim")
+    claimed_orchestrator = copy.copy(orchestrator)
+    claimed_orchestrator._repo = ClaimedRunRepository(repository, execution, owner)
     try:
-        with _cross_module_scope(run.metadata.get("runtime_context") or {}):
-            return _execute_claimed_cross_module(
-                orchestrator, run, owner=owner, queue=queue, request_id=request_id, finish=finish
-            )
+        with worker_claim_scope(repository, execution, owner):
+            recheck_worker_claim()
+            with _cross_module_scope(run.metadata.get("runtime_context") or {}):
+                return _execute_claimed_cross_module(
+                    claimed_orchestrator,
+                    run,
+                    owner=owner,
+                    execution_count=execution.execution_count,
+                    queue=queue,
+                    request_id=request_id,
+                    finish=finish,
+                )
     except AgentModAuthorizationError:
         if finish:
-            queue.finish(run.run_id, owner, "failed", error_code="tool_identity_required")
+            queue.finish(
+                run.run_id,
+                owner,
+                "failed",
+                execution_count=execution.execution_count,
+                error_code="tool_identity_required",
+            )
         raise
 
 
@@ -250,6 +289,7 @@ def _execute_claimed_cross_module(
     run: AgentRun,
     *,
     owner: str,
+    execution_count: int,
     queue: Any,
     request_id: str,
     finish: bool,
@@ -257,6 +297,7 @@ def _execute_claimed_cross_module(
     """Run one already-claimed queue row. Callers finish the lease unless faulted."""
     from app.application.agent_orchestrator import cross_module_chain as chain
     from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+    from app.application.agent_orchestrator.business_write_guard import worker_write_guard
     from app.application.agent_orchestrator.run_models import artifact_from_dict
     from app.db.session import get_db
 
@@ -264,7 +305,13 @@ def _execute_claimed_cross_module(
     checkpoint = context.get("cross_module_checkpoint")
     if not isinstance(checkpoint, dict) or run.status == "rejected":
         if finish:
-            queue.finish(run.run_id, owner, "failed", error_code="approval_rejected")
+            queue.finish(
+                run.run_id,
+                owner,
+                "failed",
+                execution_count=execution_count,
+                error_code="approval_rejected",
+            )
         return chain._workflow_receipt(request_id, success=False, loaded_from_storage=True)
     products = list(checkpoint.get("qualifying") or [])
     source = Path(checkpoint["source_path"])
@@ -274,12 +321,13 @@ def _execute_claimed_cross_module(
     tenant_text = str(checkpoint["tenant_id"])
     try:
         raise_if_tx_fault("crash_before_import")
-        with get_db() as db, tenant_scope(int(tenant_text)):
+        with get_db() as db, worker_write_guard(db), tenant_scope(int(tenant_text)):
             imported, stored_count = _execute_elt_import(db, checkpoint, products, context)
             _, source_body = chain._source_bytes(source, user_id=user_id, db=db)
             if hashlib.sha256(source_body).hexdigest() != original_hash:
                 raise ValueError("上传文件已变化，已回滚导入")
             raise_if_tx_fault("rollback_before_commit")
+            db.commit()
         raise_if_tx_fault("crash_after_commit")
         with tenant_scope(int(tenant_text)):
             employee = chain._run_employee(
@@ -364,7 +412,7 @@ def _execute_claimed_cross_module(
             },
             "workflow": receipt,
         }
-        with get_db() as db:
+        with get_db() as db, worker_write_guard(db):
             _persist_http_result(
                 db,
                 checkpoint,
@@ -373,8 +421,14 @@ def _execute_claimed_cross_module(
                 body=response_body,
                 overwrite=True,
             )
+            db.commit()
         if finish:
-            queue.finish(run.run_id, owner, "completed" if accepted else "failed")
+            queue.finish(
+                run.run_id,
+                owner,
+                "completed" if accepted else "failed",
+                execution_count=execution_count,
+            )
         for event, details in (
             (
                 "approval.decided",
@@ -403,6 +457,7 @@ def _execute_claimed_cross_module(
                 run.run_id,
                 owner,
                 "failed",
+                execution_count=execution_count,
                 error_code="invalid_approved_input"
                 if isinstance(exc, (ValueError, EltError))
                 else "upstream_unavailable",
@@ -547,7 +602,13 @@ def drive_cross_module_execution(
     if claimed is None or claimed.run_id != run.run_id:
         return _handoff_receipt(run, queue, request_id)
     return execute_claimed_cross_module(
-        orchestrator, run, owner=owner, queue=queue, request_id=request_id, finish=True
+        orchestrator,
+        run,
+        owner=owner,
+        execution=claimed,
+        queue=queue,
+        request_id=request_id,
+        finish=True,
     )
 
 

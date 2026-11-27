@@ -619,11 +619,14 @@ factory = sessionmaker(bind=create_engine(os.environ["DATABASE_URL"]))
 repo = SQLAlchemyAgentRunRepository(session_factory=factory)
 queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
 run = repo.get(sys.argv[1])
-assert queue.claim("crashed", lease_seconds=60).run_id == run.run_id
+claim = queue.claim("crashed", lease_seconds=60)
+assert claim.run_id == run.run_id
 run.status = run.metadata["dispatch"]["state"] = "running"
 if sys.argv[2] == "True":
     run.steps[0].status = "running"
-    queue.mark_open_effect(run.run_id, run.steps[0].step_id)
+    assert queue.mark_open_effect(
+        run.run_id, run.steps[0].step_id,
+        owner_id=claim.lease_owner, execution_count=claim.execution_count)
 repo.save(run)
 os._exit(23)
 """,

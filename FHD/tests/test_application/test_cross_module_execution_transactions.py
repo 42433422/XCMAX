@@ -132,6 +132,46 @@ def _business_lifecycle(env) -> tuple[list[str], int]:
         session.close()
 
 
+@pytest.mark.parametrize("takeover", [False, True])
+def test_stale_cross_module_claim_cannot_reach_business_writes(tmp_path, monkeypatch, takeover):
+    from app.application.agent_orchestrator.cross_module_execution import (
+        execute_claimed_cross_module,
+    )
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+    from app.db.models.agent import AgentTaskExecutionRecord
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        run = _queue_for_execution(env, _post_task(env, "expired-cross-module"))
+        claim = env["queue"].claim("same-worker", lease_seconds=60, run_id=run.run_id)
+        assert claim is not None
+        with env["factory"].begin() as db:
+            db.query(AgentTaskExecutionRecord).filter_by(run_id=run.run_id).update(
+                {"lease_expires_at": "2000-01-01T00:00:00+00:00"}
+            )
+        if takeover:
+            replacement = env["queue"].claim("same-worker", lease_seconds=60, run_id=run.run_id)
+            assert (
+                replacement is not None and replacement.execution_count == claim.execution_count + 1
+            )
+        before = env["queue"].get(run.run_id).to_dict()
+        history = env["queue"].lifecycle(run.run_id)
+        with pytest.raises(WorkerLeaseLost):
+            execute_claimed_cross_module(
+                AgentOrchestrator(),
+                run,
+                owner=claim.lease_owner,
+                execution=claim,
+                queue=env["queue"],
+                request_id=str(run.metadata["approval_request_id"]),
+                finish=True,
+            )
+        assert _product_models(env) == []
+        assert _business_lifecycle(env) == ([], 0)
+        assert env["queue"].get(run.run_id).to_dict() == before
+        assert env["queue"].lifecycle(run.run_id) == history
+
+
 @pytest.mark.parametrize(
     "damage",
     [
@@ -214,7 +254,7 @@ def test_owned_import_rechecks_authority_before_first_write(tmp_path, monkeypatc
     with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
         created = _post_task(env, "revoked-before-write")
         run = _queue_for_execution(env, created)
-        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        assert (claim := env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id))
         with env["factory"]() as db:
             if damage == "revoked":
                 role = db.query(Role).filter_by(name="admin").one()
@@ -234,6 +274,7 @@ def test_owned_import_rechecks_authority_before_first_write(tmp_path, monkeypatc
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claim,
             )
         assert _product_models(env) == []
         assert _business_lifecycle(env) == ([], 0)
@@ -253,7 +294,7 @@ def test_unclassified_import_error_preserves_the_claim(tmp_path, monkeypatch, af
     with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
         created = _post_task(env, "unclassified-import", _models("UNKNOWN"))
         run = _queue_for_execution(env, created)
-        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        assert (claim := env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id))
         error = RuntimeError("unclassified execution failure")
 
         def fail(*_args, **_kwargs):
@@ -271,6 +312,7 @@ def test_unclassified_import_error_preserves_the_claim(tmp_path, monkeypatch, af
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claim,
             )
         assert raised.value is error
         pending = env["queue"].get(run.run_id)
@@ -291,8 +333,10 @@ def test_known_import_error_keeps_open_effect_unresolved(tmp_path, monkeypatch):
 
     with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
         run = _queue_for_execution(env, _post_task(env, "unresolved-import"))
-        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
-        assert env["queue"].mark_open_effect(run.run_id, "original-write", owner_id="worker")
+        assert (claim := env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id))
+        assert env["queue"].mark_open_effect(
+            run.run_id, "original-write", owner_id="worker", execution_count=claim.execution_count
+        )
         error = EltConflict("ELT_PREVIEW_CHANGED", "changed preview")
 
         def fail(*_args, **_kwargs):
@@ -307,6 +351,7 @@ def test_known_import_error_keeps_open_effect_unresolved(tmp_path, monkeypatch):
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claim,
             )
         assert raised.value is error
         pending = env["queue"].get(run.run_id)
@@ -448,7 +493,7 @@ def test_owned_import_restores_original_mod_for_execution_and_committed_receipt(
                 assert _product_models(mod) == []
             elif scenario == "revoked":
                 run = _queue_for_execution(host, created)
-                assert host["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+                assert (claim := host["queue"].claim("worker", lease_seconds=60, run_id=run.run_id))
                 with host["factory"].begin() as db:
                     db.query(UserSession).one().entitled_mod_ids_json = "[]"
                 with pytest.raises(AgentModAuthorizationError):
@@ -459,6 +504,7 @@ def test_owned_import_restores_original_mod_for_execution_and_committed_receipt(
                         queue=host["queue"],
                         request_id=str(run.metadata["approval_request_id"]),
                         finish=True,
+                        execution=claim,
                     )
                 assert _product_models(mod) == []
             else:
@@ -628,6 +674,7 @@ def test_rejected_approval_finishes_the_claim_without_import(tmp_path, monkeypat
             queue=env["queue"],
             request_id=str(run.metadata["approval_request_id"]),
             finish=True,
+            execution=claimed,
         )
         assert receipt["success"] is False
         assert receipt["loaded_from_storage"] is True
@@ -726,6 +773,7 @@ def test_rollback_before_commit_leaves_no_rows_and_recovery_inserts_once(
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claimed,
             )
         assert _product_models(env) == []
         assert _business_lifecycle(env) == ([], 0)
@@ -747,6 +795,7 @@ def test_rollback_before_commit_leaves_no_rows_and_recovery_inserts_once(
             queue=env["queue"],
             request_id=str(run.metadata["approval_request_id"]),
             finish=True,
+            execution=recovered,
         )
         assert receipt["success"] is True
         assert receipt["replayed"] is False
@@ -783,6 +832,7 @@ def test_crash_after_commit_replays_the_stored_response(tmp_path, monkeypatch, d
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claimed,
             )
         assert _product_models(env) == ["CRASH-1", "CRASH-2"]
         committed_records, committed_keys = _lifecycle_counts(env)
@@ -814,6 +864,7 @@ def test_crash_after_commit_replays_the_stored_response(tmp_path, monkeypatch, d
             queue=env["queue"],
             request_id=str(run.metadata["approval_request_id"]),
             finish=True,
+            execution=recovered,
         )
         assert receipt["success"] is True
         assert receipt["replayed"] is True

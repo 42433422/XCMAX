@@ -25,6 +25,9 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 from app.db.db_base import Base
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
+from tests.test_application.test_agent_task_admission import (
+    admission_sessions as admission_sessions,
+)
 from tests.test_routes.test_xiaox_receipt_projection import receipt_task as receipt_task
 
 reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
@@ -67,7 +70,13 @@ def _make_repo(tmp_path, name: str):
     return engine, factory, SQLAlchemyAgentRunRepository(session_factory=factory)
 
 
-def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
+def test_interrupted_running_run_and_task_are_converged(tmp_path, monkeypatch) -> None:
+    from app.application.agent_orchestrator import run_terminal_metrics
+
+    terminal = []
+    monkeypatch.setattr(
+        run_terminal_metrics, "observe_run_terminal", lambda **kw: terminal.append(kw)
+    )
     engine, factory, repo = _make_repo(tmp_path, "stale.db")
     try:
         set_agent_run_repository_for_tests(repo)
@@ -90,6 +99,18 @@ def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
         assert stored.status == "failed"
         assert stored.metadata["interrupted"]["error_code"] == "interrupted_by_restart"
         assert stored.metadata["interrupted"]["previous_status"] == "running"
+        transition = stored.events[-1]
+        assert transition.event_type == "run.state_changed"
+        assert (transition.data["from_status"], transition.data["to_status"]) == (
+            "running",
+            "failed",
+        )
+        assert transition.data["reason_code"] == "interrupted_by_restart"
+        assert transition.data["reason_event_id"] == stored.events[-2].event_id
+        assert stored.events[-2].event_type == "run.interrupted"
+        assert terminal == [{"status": "failed"}]
+        assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 0
+        assert terminal == [{"status": "failed"}]
         task = repo.get_task(user_id="u1", task_id="task-stale", tenant_id="")
         assert task is not None
         assert task.status == "failed"
@@ -243,21 +264,135 @@ def test_desktop_restart_preserves_xiaox_parent_parked_on_child_receipt(
 
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     state = receipt_task
-    # Preserve an actual frozen parent, original child receipt and released queue
-    # claim. A runtime_type label alone cannot establish a delegated task.
     state.complete_child()
     parent = refresh_xiaox_receipts(
         state.repository.get(state.parent_id), repository=state.repository
     )
     assert parent.status == "running"
+    assert parent.final_output["xiaox_result"]["exit_status"] == "continuation_pending"
     _backdate_run(state.actor.factory, parent.run_id, status="running", updated_at=_iso(-300))
     before = state.repository.get(parent.run_id).to_dict()
+    journal = state.queue.lifecycle(parent.run_id)
 
     assert reconciler.reconcile_stale_running_runs(now=_iso()) == 0
-    assert state.repository.get(parent.run_id).status == "running"
-    assert state.queue.get(parent.run_id).state == "waiting_approval"
     assert state.repository.get(parent.run_id).to_dict() == before
+    assert state.queue.get(parent.run_id).state == "waiting_approval"
+    assert state.queue.lifecycle(parent.run_id) == journal
+    assert state.queue.claim("must-not-replay", lease_seconds=30) is None
     assert state.effect_count() == 1 and state.resume_count == 0
+
+
+@pytest.mark.parametrize("new_status", ["running", "waiting_user", "paused"])
+def test_old_attempt_reconciliation_preserves_current_task_projection(tmp_path, new_status):
+    engine, factory, repo = _make_repo(tmp_path, "old-attempt.db")
+    try:
+        set_agent_run_repository_for_tests(repo)
+        old = AgentRun(user_id="owner", message="original attempt", status="running")
+        old.metadata["task_context"] = {"task_id": "same-task", "attempt": 1}
+        old.add_event("run.created", "original attempt")
+        repo.save(old)
+        _backdate_run(factory, old.run_id, status="running", updated_at=_iso(-300))
+        current = AgentRun(user_id="owner", message="current attempt", status=new_status)
+        current.metadata["task_context"] = {"task_id": "same-task", "attempt": 2}
+        repo.save(current)
+        before = repo.get_task(user_id="owner", task_id="same-task", tenant_id="").to_dict()
+
+        assert reconciler.reconcile_stale_running_runs() == 1
+        assert repo.get(old.run_id).status == "failed"
+        assert repo.get(current.run_id).status == new_status
+        assert repo.get_task(user_id="owner", task_id="same-task", tenant_id="").to_dict() == before
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+def test_restart_event_and_task_commit_atomically_and_survive_reopen(tmp_path, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    path = tmp_path / "restart-event.db"
+    engine, factory, repo = _make_repo(tmp_path, path.name)
+    try:
+        set_agent_run_repository_for_tests(repo)
+        run = AgentRun(user_id="owner", message="interrupted before planning", status="running")
+        run.add_event("run.created", "original request")
+        repo.save(run)
+        _backdate_run(factory, run.run_id, status="running", updated_at=_iso(-300))
+        before = repo.get(run.run_id).to_dict()
+        original_save = repo.save_in_session
+
+        def interrupt_commit(db, candidate, **kwargs):
+            original_save(db, candidate, **kwargs)
+            if any(event.event_type == "run.interrupted" for event in candidate.events):
+                raise OperationalError("injected commit interruption", {}, RuntimeError("lost"))
+
+        with monkeypatch.context() as context:
+            context.setattr(repo, "save_in_session", interrupt_commit)
+            with pytest.raises(OperationalError, match="injected commit interruption"):
+                reconciler.reconcile_stale_running_runs()
+        assert repo.get(run.run_id).to_dict() == before
+        assert repo.get_task(user_id="owner", task_id=run.run_id, tenant_id="").status == "running"
+
+        assert reconciler.reconcile_stale_running_runs() == 1
+        assert reconciler.reconcile_stale_running_runs() == 0
+        reopened = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+        stored = reopened.get(run.run_id)
+        assert stored.status == "failed"
+        original_events = before["events"]
+        assert [
+            event.to_dict() for event in stored.events[: len(original_events)]
+        ] == original_events
+        assert [event.event_type for event in stored.events[len(original_events) :]] == [
+            "run.interrupted",
+            "run.state_changed",
+        ]
+        interruption, transition = stored.events[-2:]
+        assert transition.data["reason_event_id"] == interruption.event_id
+        assert transition.data["reason_code"] == "interrupted_by_restart"
+        assert (transition.data["from_status"], transition.data["to_status"]) == (
+            "running",
+            "failed",
+        )
+        assert transition.data["sequence"] == 2
+        assert interruption.data["error_code"] == "interrupted_by_restart"
+        assert (interruption.data["previous_status"], interruption.data["status"]) == (
+            "running",
+            "failed",
+        )
+        assert interruption.data["reconciled_at"] == stored.metadata["interrupted"]["reconciled_at"]
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+def test_long_xiaox_child_wait_is_not_an_expired_human_approval(tmp_path):
+    engine, factory, repo = _make_repo(tmp_path, "waiting-dependency.db")
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory, approval_timeout_seconds=1)
+    try:
+        parent = AgentRun(user_id="owner", message="original delegated task", status="running")
+        parent.metadata["runtime_type"] = "xiaox"
+        repo.save(parent)
+        queue.enqueue(parent)
+        claim = queue.claim("parent-worker", lease_seconds=60)
+        parked = queue.finish(
+            parent.run_id,
+            claim.lease_owner,
+            "waiting_approval",
+            execution_count=claim.execution_count,
+        )
+        child = AgentRun(user_id="owner", message="human approval", status="waiting_user")
+        child.metadata["runtime_context"] = {"parent_run_id": parent.run_id}
+        repo.save(child)
+        queue.enqueue_waiting_approval(child, approver="owner")
+        future = (datetime.fromisoformat(parked.updated_at) + timedelta(days=2)).isoformat()
+
+        assert queue.claim("next-worker", lease_seconds=30, now=future) is None
+        assert queue.get(parent.run_id).state == "waiting_approval"
+        assert not queue.get(parent.run_id).finished_at
+        assert queue.get(child.run_id).state == "rejected"
+        assert queue.get(child.run_id).last_error_code == "approval_timeout"
+        assert repo.get(parent.run_id).status == "running"
+    finally:
+        engine.dispose()
 
 
 def test_dispatcher_reconciles_before_it_starts_dispatching(monkeypatch) -> None:
@@ -475,4 +610,110 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
     finally:
         dispatcher.stop()
         set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+def test_safe_old_attempt_cannot_requeue_beside_the_current_task_worker(tmp_path):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    engine, factory, repo = _make_repo(tmp_path, "superseded-safe-attempt.db")
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    try:
+        set_agent_run_repository_for_tests(repo)
+        plan = PlanGraph(
+            plan_id="original-safe-plan",
+            intent="query",
+            nodes=[
+                WorkflowNode(
+                    node_id="read-customers",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "customers"},
+                    risk="low",
+                    idempotent=True,
+                )
+            ],
+        )
+        old = AgentRun(
+            user_id="owner", message="original read", status="running", plan_id=plan.plan_id
+        )
+        old.steps = [AgentOrchestrator._step_from_node(node) for node in plan.nodes]
+        old.metadata.update(
+            plan=plan_to_dict(plan),
+            runtime_context={"tenant_id": "7"},
+            task_context={"task_id": "same-task", "attempt": 1},
+        )
+        assert safe_continuation_error(old) == ""
+        repo.save(old)
+        _backdate_run(factory, old.run_id, status="running", updated_at=_iso(-300))
+        current = AgentRun(user_id="owner", message="replacement", status="running")
+        current.metadata.update(
+            runtime_context={"tenant_id": "7"},
+            task_context={"task_id": "same-task", "attempt": 2},
+        )
+        repo.save(current)
+        queue.enqueue(current)
+        claim = queue.claim("current-worker", run_id=current.run_id, lease_seconds=300)
+        assert claim is not None
+        task_before = repo.get_task(user_id="owner", tenant_id="7", task_id="same-task").to_dict()
+
+        assert reconciler.reconcile_stale_running_runs() == 1
+        assert queue.claim("obsolete-worker", run_id=old.run_id, lease_seconds=300) is None
+        assert repo.get(old.run_id).status != "queued"
+        assert queue.get(current.run_id).to_dict() == claim.to_dict()
+        assert (
+            repo.get_task(user_id="owner", tenant_id="7", task_id="same-task").to_dict()
+            == task_before
+        )
+        assert not any(
+            event.event_type == "run.continuation_queued" for event in repo.get(old.run_id).events
+        )
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+def test_expiry_snapshot_cannot_overwrite_a_concurrent_approval_and_claim(tmp_path, monkeypatch):
+    from sqlalchemy.orm import Query
+
+    from app.db.models.agent import AgentTaskExecutionRecord
+
+    engine, factory, repo = _make_repo(tmp_path, "approval-expiry-race.db")
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory, approval_timeout_seconds=1)
+    try:
+        run = AgentRun(user_id="owner", message="original approval", status="waiting_user")
+        repo.save(run)
+        queue.enqueue_waiting_approval(run, approver="owner")
+        original_all = Query.all
+        raced = False
+        approved_execution = None
+        approved_history = None
+
+        def after_waiting_snapshot(query):
+            nonlocal raced, approved_execution, approved_history
+            rows = original_all(query)
+            if not raced and any(
+                isinstance(row, AgentTaskExecutionRecord)
+                and row.run_id == run.run_id
+                and row.state == "waiting_approval"
+                for row in rows
+            ):
+                raced = True
+                # SQLite ignores FOR UPDATE. A second connection commits the
+                # approval and obtains its lease after the sweeper's SELECT.
+                assert queue.resolve_approval(run.run_id, "approve", "owner").state == "queued"
+                claim = queue.claim("approved-worker", run_id=run.run_id, lease_seconds=300)
+                assert claim is not None
+                approved_execution = claim.to_dict()
+                approved_history = queue.lifecycle(run.run_id)
+            return rows
+
+        monkeypatch.setattr(Query, "all", after_waiting_snapshot)
+        assert queue.claim("expiry-sweeper", now=_iso(3), lease_seconds=30) is None
+        assert raced
+        assert queue.get(run.run_id).to_dict() == approved_execution
+        assert queue.lifecycle(run.run_id) == approved_history
+    finally:
         engine.dispose()

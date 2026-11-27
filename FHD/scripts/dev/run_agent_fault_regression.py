@@ -50,8 +50,11 @@ CASES = {
     ),
     "J09": (
         APP + "test_stale_run_reconciler.py",
+        APP + "test_stale_handoff_recovery.py",
         APP + "test_xiaox_queued_runtime.py",
         APP + "test_xiaox_goal_verifier.py",
+        APP + "test_xiaox_goal_source_evidence.py",
+        APP + "test_xiaox_goal_verifier_transport.py",
         APP + "test_conversation_turn_receipts.py",
         APP
         + "test_native_task_recovery_receipts.py::test_concurrent_retry_preserves_original_write_receipt_and_atomically_requeues_same_run",

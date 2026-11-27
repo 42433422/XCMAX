@@ -167,6 +167,7 @@ class InMemoryAgentRunRepository:
 
         with self._lock:
             previous = self._runs.get(run.run_id)
+            requested_status = run.status
             preserve_run_evidence(
                 run,
                 previous,
@@ -174,6 +175,12 @@ class InMemoryAgentRunRepository:
                 allow_planning_replacement=allow_planning_replacement,
             )
             ensure_terminal_business_result(run)
+            from app.application.agent_orchestrator.run_terminal_metrics import (
+                record_state_transition,
+                record_terminal_transition,
+            )
+
+            record_state_transition(run, previous, requested_status=requested_status)
             run.touch()
             self._runs[run.run_id] = copy.deepcopy(run)
             key = self._task_key(
@@ -182,10 +189,6 @@ class InMemoryAgentRunRepository:
                 self._run_task_id(run),
             )
             self._tasks[key] = copy.deepcopy(task_from_run(run, existing=self._tasks.get(key)))
-            from app.application.agent_orchestrator.run_terminal_metrics import (
-                record_terminal_transition,
-            )
-
             record_terminal_transition(run, previous)
             return copy.deepcopy(run)
 

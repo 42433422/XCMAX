@@ -139,7 +139,21 @@ def test_random_checkpoint_kill_preserves_progress_and_has_one_takeover(
         assert (recovered.execution_count, recovered.recovery_count) == (2, 1)
         assert recovered.lease_owner == next(owner for owner in outcomes if owner)
         assert runs.get(run.run_id).to_dict() == saved.to_dict()
-        assert queue.finish(run.run_id, "departed", "completed") is None
+        journal = queue.lifecycle(run.run_id)
+        assert (
+            queue.finish(
+                run.run_id, "departed", "completed", execution_count=original.execution_count
+            )
+            is None
+        )
+        assert not queue.mark_open_effect(
+            run.run_id,
+            "departed-write",
+            owner_id="departed",
+            execution_count=original.execution_count,
+        )
+        assert queue.get(run.run_id) == recovered
+        assert queue.lifecycle(run.run_id) == journal
         with pytest.raises(WorkerLeaseLost):
             ClaimedRunRepository(runs, original, "departed").save(saved)
         assert runs.get(run.run_id).to_dict() == saved.to_dict()

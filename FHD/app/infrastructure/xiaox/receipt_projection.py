@@ -49,6 +49,7 @@ def projection_allowed(run: AgentRun) -> bool:
         and metadata.get("calls")
         and not metadata.get("coordinator_active")
         and metadata.get("revoked") is True
+        and metadata.get("close_reason") not in {"cancelled", "paused"}
         and not model_unsettled(metadata)
         and queued.get("state") != "queued"
     )
@@ -181,7 +182,8 @@ def refresh_xiaox_receipts(
         return current or run
     execution = queue.get(run.run_id)
     if execution is not None and (
-        execution.state not in {"waiting_approval", "waiting_input", "waiting_auth", "paused", "blocked"}
+        execution.state
+        not in {"waiting_approval", "waiting_input", "waiting_auth", "paused", "blocked"}
         or execution.lease_owner
         or execution.lease_expires_at
     ):

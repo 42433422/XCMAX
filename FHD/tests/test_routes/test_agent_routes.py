@@ -322,7 +322,13 @@ def _drain_background_run(run_id: str) -> AgentRun:
     )
 
     state, error_code = dispatched_run_state(run)
-    queue.finish(run_id, "route-test-worker", state, error_code=error_code)
+    queue.finish(
+        run_id,
+        "route-test-worker",
+        state,
+        error_code=error_code,
+        execution_count=claimed.execution_count,
+    )
     return run
 
 
@@ -464,10 +470,17 @@ def test_get_and_list_historical_agent_run(local_tools, trusted_actor, monkeypat
     assert events_payload["data"][-1]["event_type"] == "run.observed"
     assert events_payload["data"][-1]["data"]["status"] == "completed"
     assert sum(event["event_type"] == "run.completed" for event in events_payload["data"]) == 1
-    assert [event["event_type"] for event in events_payload["data"][-2:]] == [
+    assert [event["event_type"] for event in events_payload["data"][-3:]] == [
         "run.completed",
+        "run.state_changed",
         "run.observed",
     ]
+    completion, audit, _ = events_payload["data"][-3:]
+    assert audit["data"]["from_status"] == "running"
+    assert audit["data"]["to_status"] == "completed"
+    assert audit["data"]["reason_event_id"] == completion["event_id"]
+    assert audit["data"]["reason_code"] == "run.completed"
+    assert audit["data"]["trace_id"] == run["trace_id"]
     observed = events_payload["data"][-1]["data"]
     assert observed["status"] == "completed" and observed["phase"] == "execution"
     assert observed["duration_scope"] == "active"
@@ -607,7 +620,13 @@ def test_observed_receipt_classification_survives_sql_storage_and_bounded_view(t
         assert stored.steps[0].output["success"] is False
         assert stored.tool_calls[0].status == "failed"
         assert stored.final_output["response"] != "已全部完成"
-        assert stored.events[-1].event_type == f"run.{stored.status}"
+        cause, audit = stored.events[-2:]
+        assert cause.event_type == f"run.{stored.status}"
+        assert audit.event_type == "run.state_changed"
+        assert audit.data["reason_event_id"] == cause.event_id
+        assert audit.data["from_status"] is None
+        assert audit.data["to_status"] == stored.status
+        assert audit.data["trace_id"] == cause.data["trace_id"]
         if unknown:
             assert stored.steps[0].output["outcome"] == "unknown"
             assert stored.steps[0].output["retryable"] is False
@@ -1584,12 +1603,23 @@ def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
     now = datetime.fromisoformat(queued.available_at)
     lease_seconds = 30 if error_code == "worker_incomplete_state" else 1
     assert (
-        queue.claim("expired-worker", lease_seconds=lease_seconds, now=now.isoformat()) is not None
-    )
+        claim := queue.claim("expired-worker", lease_seconds=lease_seconds, now=now.isoformat())
+    ) is not None
     if error_code == "worker_incomplete_state":
-        assert queue.finish(run.run_id, "expired-worker", "unknown", error_code=error_code)
+        assert queue.finish(
+            run.run_id,
+            "expired-worker",
+            "unknown",
+            error_code=error_code,
+            execution_count=claim.execution_count,
+        )
     elif error_code == "needs_verification":
-        queue.mark_open_effect(run.run_id, "unconfirmed-next-write")
+        queue.mark_open_effect(
+            run.run_id,
+            "unconfirmed-next-write",
+            execution_count=claim.execution_count,
+            owner_id="expired-worker",
+        )
     else:
         for attempt in range(1, DEFAULT_MAX_ATTEMPTS):
             assert (
@@ -1849,7 +1879,9 @@ def test_generated_shipment_download_contains_real_business_cells(
 
     init_template_tables(str(tmp_path / "shipment.db"))
     if registered_template:
-        template = tmp_path / "registered-shipment.xlsx"
+        # Registered files must remain within the configured application data root.
+        template = tmp_path / "data" / "registered-shipment.xlsx"
+        template.parent.mkdir(parents=True, exist_ok=True)
         book = Workbook()
         book.active.title = "发货单"
         book.active["K1"] = "synthetic registered template identity"

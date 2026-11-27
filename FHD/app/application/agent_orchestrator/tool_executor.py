@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import os
 import time
@@ -33,6 +32,7 @@ from app.application.tool_execution_deadline import (
 from app.domain.task_lifecycle.results import (
     execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
+    execution_result_wait_reason,
     normalize_execution_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -556,11 +556,10 @@ class AgentToolExecutor:
                     "retryable": False,
                     "message": "此工具需通过已授权的 AIOPEN 入口执行",
                 }
-        from app.application.chat_turn_guard import _is_mutation
-
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
         guard_action = validation.action or step.action
-        if _is_mutation(f"{validation.tool_id} {guard_action}", json.dumps(params, default=str)):
+        call_read_only = bool(validation.spec and validation.spec.is_read_only_call(params))
+        if not call_read_only:
             if guard_policy in {"block", "model_only"} or (
                 guard_policy == "allow_once"
                 and (validation.tool_id, guard_action)
@@ -682,8 +681,22 @@ class AgentToolExecutor:
                     finish_idempotent_replay,
                 )
 
-                context_key = str(params["_runtime_context"].get("idempotency_key") or "")
-                client_key = str(params.get("idempotency_key") or "")
+                context_key = str(params["_runtime_context"].get("idempotency_key") or "").strip()
+                client_key = str(params.get("idempotency_key") or "").strip()
+                if (
+                    not (context_key or client_key)
+                    and validation.spec is not None
+                    and not call_read_only
+                ):
+                    return _pre_dispatch_refusal(
+                        {
+                            "success": False,
+                            "error_code": "task_identity_required",
+                            "execution_status": "not_started",
+                            "retryable": False,
+                            "message": "写操作缺少稳定的业务调用标识，本次未执行。",
+                        }
+                    )
                 idem_key, replay = (
                     begin_idempotent_replay(
                         params["_runtime_context"], validation.tool_id, action, params
@@ -758,10 +771,23 @@ class AgentToolExecutor:
                                 "tool": validation.tool_id,
                                 "digest": digest,
                             }
+                            from app.application.agent_orchestrator.task_dispatcher import (
+                                note_open_effect,
+                            )
+
+                            note_open_effect(str(context.get("run_id") or ""), step.step_id)
                             result = execute_guarded_batch_delete(
                                 tool_id=validation.tool_id, action=action, params=params
                             )
                         else:
+                            if not call_read_only:
+                                from app.application.agent_orchestrator.task_dispatcher import (
+                                    note_open_effect,
+                                )
+
+                                # An idempotent contract does not prove a different
+                                # worker can see this node's local tool receipt.
+                                note_open_effect(str(context.get("run_id") or ""), step.step_id)
                             result = (
                                 _dispatch_reviewed_query(step.tool_id, action, params)
                                 if reviewed_query
@@ -773,8 +799,7 @@ class AgentToolExecutor:
                     from app.infrastructure.llm.retry_policy import is_transport_error
 
                     safe_read_retry = (
-                        validation.spec is not None
-                        and validation.spec.read_only
+                        call_read_only
                         and is_transport_error(exc)
                         and not isinstance(
                             exc, (FileNotFoundError, IsADirectoryError, NotADirectoryError)
@@ -837,7 +862,7 @@ class AgentToolExecutor:
             result = {**result, **classify_http_status(status_value)}
         empty = reject_empty_business_result(
             result,
-            action="read" if validation.spec is not None and validation.spec.read_only else action,
+            action="read" if call_read_only else action,
         )
         if empty is not None:
             result = {**empty, "outcome": "unknown", "reconciliation_required": True}
@@ -847,9 +872,9 @@ class AgentToolExecutor:
             # A completed read with an invalid response is a contract failure.
             # Mutations and any pre-existing uncertainty must retain their claim.
             requires_reconciliation = (
-                validation.spec is None
-                or not validation.spec.read_only
+                not call_read_only
                 or invocation_requires_reconciliation()
+                or execution_result_outcome_unknown(result, include_execution=True)
                 or execution_result_requires_reconciliation(result)
                 or result.get("outcome_unknown") is True
                 or str(result.get("execution_status") or "").lower()
@@ -878,15 +903,22 @@ class AgentToolExecutor:
         from app.application.agent_orchestrator.result_verification import pending_execution_receipt
 
         admitted_child = verified_plan_admission(step, result, dict(runtime_context or {}))
-        acknowledged_pending = pending_execution_receipt(result)
-        if invocation_requires_reconciliation() or (
-            not admitted_child
-            and not acknowledged_pending
-            and (
-                execution_result_requires_reconciliation(result)
-                or (
-                    result.get("success") is not True
-                    and (validation.spec is None or not validation.spec.read_only)
+        result_unknown = (
+            execution_result_outcome_unknown(result, include_execution=True)
+            or "unknown" in str(result.get("error_code") or "").lower()
+        )
+        acknowledged_pending = not result_unknown and (
+            pending_execution_receipt(result) or bool(execution_result_wait_reason(result))
+        )
+        if (
+            invocation_requires_reconciliation()
+            or result_unknown
+            or (
+                not admitted_child
+                and not acknowledged_pending
+                and (
+                    execution_result_requires_reconciliation(result)
+                    or (result.get("success") is not True and not call_read_only)
                 )
             )
         ):
@@ -916,7 +948,10 @@ def _normalize_timely_tool_receipt(
     if (
         (step.tool_id, step.action) != ("enterprise_cognition", "plan")
         and not plan_admission_receipt(result)
-        and pending_execution_receipt(result, include_blocked=True)
+        and (
+            pending_execution_receipt(result, include_blocked=True)
+            or execution_result_wait_reason(result)
+        )
     ):
         normalized_result = {**result, "success": False, "retryable": False}
     else:
@@ -1038,7 +1073,11 @@ def execute_with_tool_deadline(
                         "outcome": "not_started",
                         "retryable": False,
                     }
-                if not step.idempotent:
+                spec = get_tool_action_spec(step.tool_id, step.action)
+                if not step.idempotent or (
+                    type(executor) is not AgentToolExecutor
+                    and (spec is None or not spec.is_read_only_call(step.params or {}))
+                ):
                     from app.application.agent_orchestrator.task_dispatcher import note_open_effect
 
                     note_open_effect(str(context.get("run_id") or ""), step.step_id)

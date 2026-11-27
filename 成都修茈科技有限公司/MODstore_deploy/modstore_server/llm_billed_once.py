@@ -310,7 +310,17 @@ async def _execute_billed_chat(
                 )
                 if recovered is not None:
                     return recovered
-        if settlement_started or journaled or (upstream_started and not definite_rejection):
+        if (
+            settlement_started
+            or journaled
+            or (
+                upstream_started
+                and (
+                    not definite_rejection
+                    or getattr(request.state, "llm_pat_user_id", None) is not None
+                )
+            )
+        ):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
                 request_id,

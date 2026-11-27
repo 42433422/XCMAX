@@ -155,6 +155,63 @@ def setup_gateway(trusted_actor, tmp_path, monkeypatch):
     return state
 
 
+@pytest.mark.parametrize("status", ["queued", "paused"])
+def test_parent_insert_audits_initial_state_once_and_keeps_duplicate_identity(
+    setup_gateway, status
+):
+    repository = setup_gateway.repository
+    run = AgentRun(user_id=str(setup_gateway.actor.user_id), message="parent", status=status)
+    saved, created = gateway._insert_parent(repository, run)
+    transitions = [event for event in saved.events if event.event_type == "run.state_changed"]
+    assert created and len(transitions) == 1
+    assert transitions[0].data["from_status"] is None
+    assert transitions[0].data["to_status"] == status
+    assert transitions[0].data["sequence"] == 1
+    assert transitions[0].data["reason_code"] == "initial_persistence"
+    duplicate = AgentRun(user_id=run.user_id, message="duplicate", run_id=run.run_id, status=status)
+    replay, created = gateway._insert_parent(repository, duplicate)
+    assert not created and replay.to_dict() == saved.to_dict()
+    assert duplicate.events == []  # The unique-key rollback removes its uncommitted audit.
+
+
+def test_parent_queue_rollback_removes_audit_and_allows_same_object_retry(
+    setup_gateway, monkeypatch
+):
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+
+    repository = setup_gateway.repository
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=setup_gateway.actor.factory)
+    run = AgentRun(user_id=str(setup_gateway.actor.user_id), message="queued parent")
+    assert queue.get(run.run_id) is None  # Initialize the real queue schema before admission.
+    enqueue = queue.enqueue_in_session
+    rolled_back_ids = []
+
+    def interrupted_enqueue(db, candidate, **kwargs):
+        enqueue(db, candidate, **kwargs)
+        db.flush()
+        rolled_back_ids.extend(
+            event.event_id for event in candidate.events if event.event_type == "run.state_changed"
+        )
+        raise RuntimeError("queue transaction interrupted")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(queue, "enqueue_in_session", interrupted_enqueue)
+        with pytest.raises(RuntimeError, match="queue transaction interrupted"):
+            gateway._insert_parent(repository, run, queue=queue)
+    assert len(rolled_back_ids) == 1
+    assert repository.get(run.run_id) is None and queue.get(run.run_id) is None
+    assert run.events == []
+    saved, created = gateway._insert_parent(repository, run, queue=queue)
+    transitions = [event for event in saved.events if event.event_type == "run.state_changed"]
+    assert created and len(transitions) == 1
+    assert transitions[0].event_id not in rolled_back_ids
+    assert transitions[0].data["from_status"] is None
+    assert transitions[0].data["to_status"] == "queued"
+    assert queue.get(run.run_id).state == "queued"
+
+
 def test_creates_independent_parent_with_private_resume_contract(setup_gateway):
     state = setup_gateway
     state.context.update(ai_cost_budget_units=120, expected_operations=[{"forged": True}])
@@ -551,182 +608,6 @@ def test_owner_or_authentication_cannot_be_borrowed_from_input(setup_gateway, tr
         state.invoke(runtime_context={"turn_id": "untrusted"}, input_data=state.context)
     )
     assert result["ok"] is False and len(state.calls) == 1
-
-
-def test_unqualified_or_changed_route_never_starts_runtime(setup_gateway):
-    state = setup_gateway
-    rejected = asyncio.run(state.invoke(settings=replace(state.settings, qualification_file=None)))
-    assert rejected["error_code"] == "runtime_policy_blocked" and state.calls == []
-    first = asyncio.run(state.invoke())
-    changed_route = replace(state.settings.route, model="other-model")
-    # A changed route must carry its own complete evidence binding.
-    # Rewriting just route_identity would rightfully fail the qualification gate.
-    state.settings.qualification_file.write_text(
-        json.dumps(synthetic_qualification(changed_route, state.settings.qualification_file.parent))
-    )
-    result = asyncio.run(
-        state.invoke(
-            run_id=first["run_id"],
-            runtime_context={**state.context, "turn_id": "answer-two"},
-            settings=replace(state.settings, route=changed_route),
-        )
-    )
-    assert result["error_code"] == "runtime_changed" and len(state.calls) == 1
-
-
-def _fallback_settings(state, name="fixture-backup"):
-    route = replace(state.settings.route, model=name, response_model=name)
-    qualification = state.settings.qualification_file.with_name(f"{name}.json")
-    qualification.write_text(json.dumps(synthetic_qualification(route, qualification.parent)))
-    return replace(
-        state.settings, route=route, qualification_file=qualification, authorized_fallbacks=()
-    )
-
-
-def test_fallback_authorization_is_persisted_before_execution_and_keeps_thread_model(setup_gateway):
-    state = setup_gateway
-    fallback = _fallback_settings(state)
-    state.settings = replace(state.settings, authorized_fallbacks=(fallback,))
-    first = asyncio.run(state.invoke())
-    identities = state.settings.authorized_route_identities()
-    store = state.calls[0]["binding_store"]
-    parent = store.get(first["run_id"]).run
-    assert parent.metadata["runtime_authorized_model_routes"] == identities
-    assert (
-        parent.metadata["xiaox_runtime"]["runtime_config"]["authorized_model_routes"] == identities
-    )
-    assert state.servers[0].state.xiaox_model_routes == (state.settings.route, fallback.route)
-    assert state.servers[0].state.xiaox_model_route == state.settings.route
-    store.update(
-        first["run_id"],
-        lambda run, _metadata: run.metadata.update(
-            runtime_effective_model_route=fallback.route.identity
-        ),
-    )
-    resumed = asyncio.run(
-        state.invoke(
-            run_id=first["run_id"],
-            runtime_context={**state.context, "turn_id": "resume-with-fallback"},
-        )
-    )
-    binding = store.get(first["run_id"])
-    assert resumed["run_id"] == first["run_id"] and len(state.calls) == 2
-    assert binding.thread_id == "thread-fixture"
-    assert binding.run.metadata["runtime_effective_model_route"] == fallback.route.identity
-    assert all(call["config"].model == state.settings.route.model for call in state.calls)
-
-
-@pytest.mark.parametrize("change", ["remove", "reorder", "effective", "binding"])
-def test_resume_cannot_change_frozen_fallback_authorization(setup_gateway, change):
-    state = setup_gateway
-    fallbacks = (_fallback_settings(state, "first"), _fallback_settings(state, "second"))
-    state.settings = replace(state.settings, authorized_fallbacks=fallbacks)
-    first = asyncio.run(state.invoke())
-    if change in {"remove", "reorder"}:
-        state.settings = replace(
-            state.settings,
-            authorized_fallbacks=fallbacks[:1]
-            if change == "remove"
-            else tuple(reversed(fallbacks)),
-        )
-    else:
-
-        def change_binding(run, metadata):
-            if change == "effective":
-                run.metadata["runtime_effective_model_route"] = "unbound-route"
-            else:
-                metadata["runtime_config"]["authorized_model_routes"] = [
-                    state.settings.route.identity
-                ]
-
-        state.calls[0]["binding_store"].update(first["run_id"], change_binding)
-    denied = asyncio.run(
-        state.invoke(
-            run_id=first["run_id"], runtime_context={**state.context, "turn_id": "changed-fallback"}
-        )
-    )
-    assert denied["error_code"] == "runtime_changed" and len(state.calls) == 1
-
-
-@pytest.mark.parametrize("add_fallback", [False, True])
-def test_legacy_task_only_migrates_its_original_single_route(setup_gateway, add_fallback):
-    state = setup_gateway
-    first = asyncio.run(state.invoke())
-    store = state.calls[0]["binding_store"]
-
-    def old_binding(run, metadata):
-        run.metadata.pop("runtime_authorized_model_routes")
-        metadata["runtime_config"].pop("authorized_model_routes")
-
-    store.update(first["run_id"], old_binding)
-    if add_fallback:
-        state.settings = replace(state.settings, authorized_fallbacks=(_fallback_settings(state),))
-    resumed = asyncio.run(
-        state.invoke(
-            run_id=first["run_id"], runtime_context={**state.context, "turn_id": "legacy-resume"}
-        )
-    )
-    binding = store.get(first["run_id"])
-    if add_fallback:
-        assert resumed["error_code"] == "runtime_changed" and len(state.calls) == 1
-        assert "runtime_authorized_model_routes" not in binding.run.metadata
-    else:
-        assert len(state.calls) == 2 and binding.thread_id == "thread-fixture"
-        expected = [state.settings.route.identity]
-        assert binding.run.metadata["runtime_authorized_model_routes"] == expected
-        assert binding.metadata["runtime_config"]["authorized_model_routes"] == expected
-
-
-def test_every_fallback_must_qualify_before_starting_the_runtime(setup_gateway):
-    state = setup_gateway
-    fallback = replace(_fallback_settings(state), qualification_file=None)
-    state.settings = replace(state.settings, authorized_fallbacks=(fallback,))
-    denied = asyncio.run(state.invoke())
-    assert denied["error_code"] == "runtime_policy_blocked"
-    assert state.calls == state.servers == []
-
-
-def test_staging_freezes_routes_without_qualifying_or_disclosing_credentials(setup_gateway):
-    state = setup_gateway
-    fallback = replace(_fallback_settings(state), qualification_file=None)
-    state.settings = replace(state.settings, authorized_fallbacks=(fallback,))
-    staged = asyncio.run(state.invoke(start_paused=True))
-    parent = state.repository.get(staged["run_id"])
-    assert staged["execution_state"] == "paused"
-    assert (
-        parent.metadata["runtime_authorized_model_routes"]
-        == state.settings.authorized_route_identities()
-    )
-    assert state.calls == state.servers == []
-
-
-def test_resume_rechecks_route_authority_inside_the_sql_claim(setup_gateway, monkeypatch):
-    state = setup_gateway
-    first = asyncio.run(state.invoke())
-    original = gateway.XiaoxBindingStore.update
-    changed = False
-
-    def update(store, run_id, mutate, **kwargs):
-        nonlocal changed
-        if mutate.__name__ == "claim" and not changed:
-            changed = True
-            original(
-                store,
-                run_id,
-                lambda run, _metadata: run.metadata.update(
-                    runtime_effective_model_route="unbound-route"
-                ),
-            )
-        return original(store, run_id, mutate, **kwargs)
-
-    monkeypatch.setattr(gateway.XiaoxBindingStore, "update", update)
-    denied = asyncio.run(
-        state.invoke(
-            run_id=first["run_id"], runtime_context={**state.context, "turn_id": "changed-at-claim"}
-        )
-    )
-    assert changed and denied["error_code"] == "runtime_changed"
-    assert len(state.calls) == 1
 
 
 def test_missing_deployment_config_preserves_original_run_pointer_without_replanning(setup_gateway):

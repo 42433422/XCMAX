@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from mimetypes import guess_type
 from dataclasses import dataclass
+from mimetypes import guess_type
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -57,9 +57,7 @@ class UnavailablePlan(BaseModel):
 
 class PlanDelivery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    plan: Annotated[
-        ActionSteps | NarrativePlan | UnavailablePlan, Field(discriminator="kind")
-    ]
+    plan: Annotated[ActionSteps | NarrativePlan | UnavailablePlan, Field(discriminator="kind")]
 
 
 @dataclass(frozen=True)
@@ -115,21 +113,16 @@ def _unbound_product_symbol(texts: list[str], contract: dict[str, Any]) -> bool:
     """Guard explicit, code-styled references in the product's tool namespace."""
     from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
 
-    quoted = {
-        part.strip() for text in texts for part in text.split("`")[1::2] if "." in part
-    }
+    quoted = {part.strip() for text in texts for part in text.split("`")[1::2] if "." in part}
     if not quoted:
         return False
     file_names = {
-        attachment.get("name")
-        for attachment in contract["request"].get("attachments") or []
+        attachment.get("name") for attachment in contract["request"].get("attachments") or []
     }
     actions = build_tool_specs_v2()
     fields: dict[str, set[str]] = {}
     for (tool_id, _action), spec in actions.items():
-        fields.setdefault(tool_id, set()).update(
-            spec.input_schema.get("properties", {}).keys()
-        )
+        fields.setdefault(tool_id, set()).update(spec.input_schema.get("properties", {}).keys())
     for symbol in quoted - file_names:
         tool_id, _, action = symbol.rpartition(".")
         if tool_id not in fields or not action.isidentifier():
@@ -142,9 +135,9 @@ def _unbound_product_symbol(texts: list[str], contract: dict[str, Any]) -> bool:
 
 
 def _plan_arguments(value: dict[str, Any]) -> str:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, allow_nan=False
-    ).replace("`", "\\u0060")
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False).replace(
+        "`", "\\u0060"
+    )
 
 
 def render_action_plan(binding: Any, output: str) -> PlanVerdict:
@@ -182,9 +175,7 @@ def render_action_plan(binding: Any, output: str) -> PlanVerdict:
     else:
         nav = {item["id"]: item for item in plan_navigation_entries(contract)}
         calls = [
-            step.model_dump(exclude={"kind"})
-            for step in plan.steps
-            if isinstance(step, ToolStep)
+            step.model_dump(exclude={"kind"}) for step in plan.steps if isinstance(step, ToolStep)
         ]
         proofs, error = (
             _verify_plan_capabilities(binding, calls, require_documented_params=True)
@@ -199,9 +190,7 @@ def render_action_plan(binding: Any, output: str) -> PlanVerdict:
             if isinstance(step, ToolStep):
                 args = _plan_arguments(step.params)
                 approvable = "需要审批" if step.approval_required else "无需业务审批"
-                dependency = (
-                    f"。依赖 {', '.join(step.depends_on)}" if step.depends_on else ""
-                )
+                dependency = f"。依赖 {', '.join(step.depends_on)}" if step.depends_on else ""
                 lines.append(
                     f"{i}. `{step.tool_id}.{step.action}`，参数 `{args}`，{approvable}{dependency}。"
                 )

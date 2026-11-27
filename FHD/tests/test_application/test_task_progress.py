@@ -178,7 +178,8 @@ def test_verified_read_only_reply_does_not_inherit_business_write_warning() -> N
     run.final_output = {
         "xiaox_result": {"ok": True, "execution_state": "completed", "output": "两份有差异"},
         "business_result": {
-            "status": "reply_completed", "success": False,
+            "status": "reply_completed",
+            "success": False,
             "summary": "尚未核验业务写入",
         },
     }

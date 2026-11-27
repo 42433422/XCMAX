@@ -330,7 +330,9 @@ def test_worker_assertion_persists_matching_run_task_and_queue(monkeypatch, acto
 
     def fail_before_tool(*_args, **_kwargs):
         if open_effect:
-            assert queue.mark_open_effect(run.run_id, "external", owner_id="worker")
+            assert queue.mark_open_effect(
+                run.run_id, "external", owner_id="worker", execution_count=claim.execution_count
+            )
         raise AssertionError("workflow initialization failed")
 
     monkeypatch.setattr(AgentOrchestrator, "_execute_ready_steps", fail_before_tool)
@@ -444,6 +446,14 @@ def test_real_step_preserves_accepted_wait_without_inventing_unknown(actor, stat
     [
         ({"execution_state": "paused"}, ("paused", "")),
         ({"execution_state": "blocked"}, ("blocked", "")),
+        (
+            {"execution_state": "blocked", "error_code": "runtime_policy_blocked"},
+            ("blocked", "runtime_policy_blocked"),
+        ),
+        (
+            {"execution_state": "blocked", "error_code": "owner_changed"},
+            ("blocked", "owner_changed"),
+        ),
         ({"execution_state": "waiting_user", "needs_user_input": True}, ("waiting_input", "")),
         ({"execution_state": "waiting_user", "requires_token": True}, ("waiting_auth", "")),
         ({"execution_state": "waiting_user", "pending_approval": True}, ("waiting_approval", "")),
@@ -455,9 +465,15 @@ def test_real_step_preserves_accepted_wait_without_inventing_unknown(actor, stat
         ({"execution_state": "rejected"}, ("rejected", "")),
         ({"execution_state": "unknown"}, ("unknown", "needs_verification")),
         ({"execution_state": "partial"}, ("unknown", "needs_verification")),
-        ({"execution_state": "blocked", "reconciliation_required": True}, ("unknown", "needs_verification")),
+        (
+            {"execution_state": "blocked", "reconciliation_required": True},
+            ("unknown", "needs_verification"),
+        ),
         ({"execution_state": "completed", "ok": False}, ("unknown", "needs_verification")),
-        ({"execution_state": "completed", "ok": True, "reconciliation_required": True}, ("unknown", "needs_verification")),
+        (
+            {"execution_state": "completed", "ok": True, "reconciliation_required": True},
+            ("unknown", "needs_verification"),
+        ),
         ({"execution_state": "completed", "ok": True}, ("succeeded", "")),
         ({"execution_state": "failed", "error_code": "model_error"}, ("failed", "model_error")),
         ({"execution_state": "unexpected"}, ("unknown", "needs_verification")),

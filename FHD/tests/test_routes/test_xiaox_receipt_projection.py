@@ -33,12 +33,13 @@ from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.fixture
-def receipt_task(runtime_entry, local_tools, monkeypatch):
+def receipt_task(runtime_entry, local_tools, monkeypatch, request):
     from app.application.agent_orchestrator.approval_consumption_repository import (
         SQLAlchemyApprovalConsumptionRepository,
     )
 
     state = runtime_entry
+    scenario = getattr(request, "param", {})
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setattr(
         "app.application.agent_orchestrator.approval_grant._consumption_repository",
@@ -79,7 +80,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     }
     parent = AgentRun(
         user_id=str(state.actor.user_id),
-        message="创建客户",
+        message=scenario.get("request", "创建客户"),
         status="running",
         intent="xiaox.runtime",
     )
@@ -146,7 +147,12 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
 
     store.update(parent.run_id, wait)
     store.close(parent.run_id, "completed")
-    state.queue.finish(parent.run_id, "original-parent-worker", "waiting_approval")
+    state.queue.finish(
+        parent.run_id,
+        "original-parent-worker",
+        "waiting_approval",
+        execution_count=claim.execution_count,
+    )
     state.parent_id, state.child_id, state.store = parent.run_id, receipt["run_id"], store
 
     def complete_child():
@@ -200,7 +206,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
                 assert "创建客户" in text
             else:
                 assert text is None and "原目标仍有一项条件待核对" in goal_feedback
-            for event in completed("原客户已创建并核验"):
+            for event in completed(getattr(state, "corrected_answer", "原客户已创建并核验")):
                 yield {**event, "thread_id": "original-thread"}
 
         async def interrupt(self):
@@ -209,7 +215,16 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     async def resumed_runtime(**kwargs):
         return await run_xiaox_agent(**kwargs, transport_factory=Transport)
 
-    def review(binding, _config, *, rows, output, consume_format_retry):
+    def review(
+        binding,
+        _config,
+        *,
+        rows,
+        output,
+        consume_format_retry,
+        on_progress=None,
+        replay_response=None,
+    ):
         assert callable(consume_format_retry)
         contract = binding.run.metadata["runtime_goal_contract"]
         snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
@@ -229,10 +244,23 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
             "uncovered_sources": [],
             "feedback": "",
         }
+        if scenario.get("reply_goal"):
+            raw["goals"].append(
+                {
+                    "goal_id": "verification_explanation",
+                    "source_id": "request",
+                    "source": scenario["reply_goal"],
+                    "kind": "reply",
+                    "status": "satisfied",
+                    "evidence_ids": ["response"],
+                    "reason": "The remaining explanation is bound to the original request",
+                }
+            )
         reviewed, errors = validate_goal_review(raw, contract, snapshot, output)
         assert not errors, errors
         report = {
             "protocol": GOAL_PROTOCOL,
+            "verifier_version": 1,
             "goal_digest": contract["digest"],
             "evidence_digest": snapshot["digest"],
             "response_digest": canonical_digest(output),
@@ -342,7 +370,18 @@ def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent
     assert state.queue.get(parent.run_id).state == "succeeded"
 
 
-def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same_task(
+@pytest.mark.parametrize(
+    "receipt_task",
+    [
+        {
+            "request": "创建客户，并说明原客户的独立核验依据",
+            "reply_goal": "说明原客户的独立核验依据",
+        }
+    ],
+    indirect=True,
+    ids=["missing_original_explanation"],
+)
+def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answer(
     receipt_task, monkeypatch
 ):
     from app.application.agent_runtime import goal_verifier
@@ -352,13 +391,25 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     state.complete_child()
     review = goal_verifier.verify_runtime_goal
 
-    def missing_goal(binding, config, *, rows, output, consume_format_retry):
+    def missing_goal(
+        binding,
+        config,
+        *,
+        rows,
+        output,
+        consume_format_retry,
+        on_progress=None,
+        replay_response=None,
+    ):
         report = review(
             binding, config, rows=rows, output=output, consume_format_retry=consume_format_retry
         )
         report.pop("report_digest")
         report.update(status="needs_work", accepted=False, feedback="原目标仍有一项条件待核对")
-        report["review"]["goals"][0]["status"] = "unmet"
+        # Keep the completed write covered. Only the distinct, original reply
+        # obligation is missing; relabeling a successful write cannot authorize
+        # its compensation or manufacture a new goal.
+        report["review"]["goals"][1]["status"] = "unmet"
         return {**report, "report_digest": canonical_digest(report)}
 
     monkeypatch.setattr(goal_verifier, "verify_runtime_goal", missing_goal)
@@ -396,6 +447,9 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     goal_digest = refreshed.metadata["runtime_goal_digest"]
     generation = refreshed.metadata["xiaox_runtime"]["generation"]
     monkeypatch.setattr(goal_verifier, "verify_runtime_goal", review)
+    # Compensation changes the candidate, not the completed business action.
+    # An unchanged candidate cannot gain a fourth review of the same evidence.
+    state.corrected_answer = "原客户已创建并核验；依据是原审批客户的 SQL 独立回读与回执一致。"
     options = {
         "run_id": state.parent_id,
         "task": "继续原任务",
@@ -499,10 +553,13 @@ def test_child_failure_and_unknown_are_never_promoted(receipt_task, outcome):
     parent = state.repository.get(state.parent_id)
     assert parent.status == "blocked", parent.to_dict()
     assert parent.final_output["xiaox_result"]["business_completed"] is False
-    assert state.queue.get(parent.run_id).state == "failed"
-    if outcome == "unknown":
-        assert parent.final_output["xiaox_result"]["reconciliation_required"] is True
-        assert state.queue.get(parent.run_id).last_error_code == "needs_verification"
+    # A failed tool without an original no-effect receipt is uncertain even
+    # when this fixture knows no row was written. Neither case may be replayed.
+    assert parent.final_output["xiaox_result"]["execution_state"] == "unknown"
+    assert parent.final_output["xiaox_result"]["reconciliation_required"] is True
+    assert state.queue.get(parent.run_id).state == "unknown"
+    assert state.queue.get(parent.run_id).last_error_code == "needs_verification"
+    assert state.queue.claim("another-worker", lease_seconds=120) is None
     assert state.effect_count() == (1 if outcome == "unknown" else 0)
 
 
@@ -575,3 +632,104 @@ def test_waiting_input_rows_do_not_starve_later_approval_continuations(receipt_t
     assert resume_ready_xiaox_runs(repository=state.repository, limit=1, cursor=cursor) == 1
     assert state.queue.get(state.parent_id).state == "queued"
     assert state.effect_count() == 1
+
+
+def test_late_unknown_snapshot_cannot_erase_newer_verified_child_receipt(receipt_task, monkeypatch):
+    from app.application.agent_orchestrator import verification_readback
+    from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
+    from app.infrastructure.xiaox.receipts import read_call_receipt
+
+    state = receipt_task
+    readback = verification_readback.verify_independent_result
+    source_available = False
+
+    def delayed_readback(**kwargs):
+        if not source_available:
+            return {"status": "inconclusive", "code": "source_pending", "checks": []}
+        return readback(**kwargs)
+
+    monkeypatch.setattr(verification_readback, "verify_independent_result", delayed_readback)
+    state.complete_child()
+    binding = state.store.get(state.parent_id)
+    call = binding.metadata["calls"]["only-write"]
+    # The first reader observes a stopped, still unverified write, then stalls
+    # before publishing its observation. It has no authority to retry the write.
+    older = read_call_receipt(state.store, binding, call)
+    assert older["status"] == "unknown" and older["child_updated_at"]
+    assert state.effect_count() == 1
+    source_available = True
+    response = state.client.post(f"/api/agent/runs/{state.child_id}/verify")
+    assert response.status_code == 200, response.text
+    assert response.json()["verification"]["accepted"] is True
+    state.drain(state.child_id)
+    current = state.store.receipt_snapshot(state.parent_id)[0]["receipt"]
+    assert current["status"] == "completed" and current["verified"] is True
+    assert older["child_updated_at"] < current["child_updated_at"]
+
+    # Another process has committed the newer receipt. The delayed reader must
+    # preserve it even though its own earlier observation was conservative.
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
+    reopened.record_call(state.parent_id, "only-write", receipt=older)
+    parent = reopened.get(state.parent_id)
+    assert parent.metadata["calls"]["only-write"]["receipt"] == current
+    assert not parent.run.metadata.get("non_retryable")
+    assert resume_ready_xiaox_runs(repository=reopened.repository) == 1
+    assert state.queue.get(state.parent_id).state == "queued"
+    assert state.effect_count() == 1
+
+
+@pytest.mark.parametrize("reason", ["cancelled", "paused"])
+def test_durable_revocation_survives_a_missing_final_state_write(receipt_task, reason):
+    from app.infrastructure.xiaox.receipt_projection import (
+        refresh_xiaox_receipts,
+        resume_ready_xiaox_runs,
+    )
+
+    state = receipt_task
+    # Runtime cleanup revokes first and releases ownership even if the final run
+    # write fails. The older waiting status is not authority to undo that stop.
+    state.complete_child()
+    state.store.close(state.parent_id, reason)
+    stopped = state.repository.get(state.parent_id)
+    assert stopped.status in {"waiting_user", "running"}
+    assert stopped.metadata["xiaox_runtime"]["close_reason"] == reason
+    assert resume_ready_xiaox_runs(repository=state.repository) == 0
+    assert (
+        refresh_xiaox_receipts(stopped, repository=state.repository).to_dict() == stopped.to_dict()
+    )
+    assert state.queue.get(state.parent_id).state == "waiting_approval"
+    assert state.resume_count == 0 and state.effect_count() == 1
+
+
+def test_failed_wakeup_transaction_recovers_after_reopen_without_losing_child(
+    receipt_task, monkeypatch
+):
+    from sqlalchemy.exc import OperationalError
+
+    from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
+
+    state = receipt_task
+    state.complete_child()
+    enqueue = state.queue.enqueue_in_session
+
+    def interrupt_after_enqueue(*args, **kwargs):
+        enqueue(*args, **kwargs)
+        raise OperationalError("commit continuation", {}, OSError("connection interrupted"))
+
+    monkeypatch.setattr(state.queue, "enqueue_in_session", interrupt_after_enqueue)
+    assert resume_ready_xiaox_runs(repository=state.repository) == 0
+    previous = state.repository.get(state.parent_id)
+    assert previous.final_output["xiaox_result"]["exit_status"] == "continuation_pending"
+    assert previous.metadata["runtime_requests"] == {}
+    assert state.queue.get(state.parent_id).state == "waiting_approval"
+    monkeypatch.setattr(state.queue, "enqueue_in_session", enqueue)
+    reopened = SQLAlchemyAgentRunRepository(session_factory=state.actor.factory)
+    assert resume_ready_xiaox_runs(repository=reopened) == 1
+    assert resume_ready_xiaox_runs(repository=reopened) == 0
+    resumed = reopened.get(state.parent_id)
+    assert len(resumed.metadata["runtime_requests"]) == 1
+    assert (
+        resumed.metadata["xiaox_runtime"]["calls"]["only-write"]["child_run_id"] == state.child_id
+    )
+    assert state.queue.get(state.parent_id).state == "queued"
+    assert state.resume_count == 0 and state.effect_count() == 1

@@ -125,14 +125,23 @@ def begin(
     return "run", row
 
 
-def _lock_owned_attempt(db: Session, row: LlmClientRequest) -> LlmClientRequest:
+def _lock_owned_attempt(
+    db: Session, row: LlmClientRequest, *, read_only: bool = False
+) -> LlmClientRequest:
     # Keep the begin-time generation outside ORM expiration. A stale handler
     # must not gain the new owner's attempt simply by refreshing its row.
     with db.no_autoflush:
         attempt = inspect(row).info.get("claimed_attempt")
         if attempt is None:
             attempt = row.attempts
-        locked = lock_request(db, row.user_id, row.client_request_id)
+        locked = (
+            db.query(LlmClientRequest)
+            .filter_by(user_id=row.user_id, client_request_id=row.client_request_id)
+            .populate_existing()
+            .one_or_none()
+            if read_only
+            else lock_request(db, row.user_id, row.client_request_id)
+        )
     if locked is None or locked.attempts != attempt:
         db.rollback()
         raise HTTPException(409, {"message": "原模型请求执行权已转移", "state": "ownership_lost"})
@@ -186,6 +195,12 @@ def lock_request(db: Session, user_id: int, client_request_id: str) -> LlmClient
 
 def finish(db: Session, row: LlmClientRequest, done: dict[str, Any] | None) -> None:
     """Record the receipt, or an unsettled failure; ``settling`` and done keys never revert."""
+    # An already durable uncertain/completed receipt requires no write. SQLite's
+    # locking no-op UPDATE can itself fail a storage trigger after dispatch.
+    row = _lock_owned_attempt(db, row, read_only=True)
+    if row.state == "completed" or (done is None and row.state == "settling"):
+        db.commit()
+        return
     row = _lock_owned_attempt(db, row)
     if row.state == "completed" or (done is None and row.state == "settling"):
         db.commit()

@@ -69,11 +69,13 @@ def build_http_request(
         budget = min(owner.deadline for owner in owners) - time.monotonic() if owners else None
         if budget is not None and budget <= 0:
             return {"ok": False, "error": "invocation deadline expired", "outcome": "not_started"}
+        dispatched = False
         try:
             async with asyncio.timeout(budget):
                 async with (client_factory or httpx.AsyncClient)(
                     timeout=kw.pop("timeout", 30)
                 ) as client:
+                    dispatched = True
                     resp = await client.request(method, url, **kw)
                     try:
                         body = resp.json()
@@ -97,16 +99,26 @@ def build_http_request(
                         result.update(outcome="unknown", retryable=False)
                     return result
         except asyncio.CancelledError:
-            for owner in owners:
+            for owner in owners if dispatched else ():
                 marker = {"kind": "http_cancelled", "method": method}
                 if marker not in owner.uncertain:
                     owner.uncertain.append(marker)
             raise
-        except (TimeoutError, httpx.TransportError, OSError) as exc:
+        except RECOVERABLE_ERRORS as exc:
             timed_out = isinstance(exc, (TimeoutError, httpx.TimeoutException))
-            for owner in owners:
+            kind = (
+                "http_timeout"
+                if timed_out
+                else "http_transport_error"
+                if isinstance(exc, (httpx.TransportError, OSError))
+                else "http_response_error"
+            )
+            # HTTP decoding/redirect/status errors and response-processing errors
+            # can follow a committed remote write just like a lost connection.
+            # Only failures before entering request() prove it was not dispatched.
+            for owner in owners if dispatched else ():
                 marker = {
-                    "kind": "http_timeout" if timed_out else "http_transport_error",
+                    "kind": kind,
                     "method": method,
                 }
                 if marker not in owner.uncertain:
@@ -114,13 +126,15 @@ def build_http_request(
             return {
                 "ok": False,
                 "error": (
-                    "invocation deadline exceeded" if timed_out else "HTTP response unavailable"
+                    "HTTP request unavailable before dispatch"
+                    if not dispatched
+                    else "invocation deadline exceeded"
+                    if timed_out
+                    else "HTTP response unavailable"
                 ),
-                "outcome": "unknown",
+                "outcome": "unknown" if dispatched else "not_started",
                 "retryable": False,
             }
-        except RECOVERABLE_ERRORS as exc:
-            return {"ok": False, "error": repr(exc)}
 
     return request
 

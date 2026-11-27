@@ -1132,6 +1132,13 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
 
 _SPECIAL_TOOL_CONTRACTS.update(
     {
+        ("excel_analysis", "export"): [
+            _sample(
+                "export_workbook",
+                {"file_path": "sample.xlsx", "rows": [{"amount": 1}]},
+                _success(),
+            )
+        ],
         ("excel_analysis", "aggregate"): [
             {
                 "name": "workbook_aggregate_contract",

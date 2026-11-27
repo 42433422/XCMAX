@@ -28,21 +28,40 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
+_open_effect: contextvars.ContextVar[tuple[object, str, str, int] | None] = contextvars.ContextVar(
     "task_open_effect", default=None
 )
 
 
 def note_open_effect(run_id: str, effect_id: str) -> None:
     """Record a side effect only while a worker is inside a real tool call."""
+    from app.application.agent_orchestrator.business_write_guard import capture_worker_claim
+
+    worker = capture_worker_claim()
     claim = _open_effect.get()
+    if claim is None and worker is not None:
+        from app.application.agent_orchestrator.task_execution_sql_repository import (
+            SQLAlchemyTaskExecutionRepository,
+        )
+
+        # Spawn restores only the server-captured HOST claim, never a caller's
+        # runtime fields or the independently routed Mod business database.
+        claim = (
+            SQLAlchemyTaskExecutionRepository(auto_create=False),
+            worker[0],
+            worker[1],
+            worker[2],
+        )
     if claim is None:
         return
-    repo, claimed_run_id, owner_id = claim
+    repo, claimed_run_id, owner_id, execution_count = claim
     marker = getattr(repo, "mark_open_effect", None)
     if marker is not None:
         effect = effect_id if run_id == claimed_run_id else f"child:{run_id}:{effect_id}"
-        if marker(claimed_run_id, effect, owner_id=owner_id) is False:
+        if (
+            marker(claimed_run_id, effect, owner_id=owner_id, execution_count=execution_count)
+            is False
+        ):
             from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
             raise WorkerLeaseLost("worker lease expired before opening a side effect")
@@ -98,6 +117,11 @@ class AgentTaskDispatcher:
         self._last_outcome_recovery = float("-inf")
         self._xiaox_resume_cursor: dict[str, str] = {}
         self._chat_delivery_cursor: dict[str, str] = {}
+        self._diagnostic_worker: threading.Thread | None = None
+        self._last_diagnostic_scan = float("-inf")
+        self._diagnostic_cursor: dict = {}
+        self._diagnostic_continue = False
+        self._goal_verification_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -130,6 +154,8 @@ class AgentTaskDispatcher:
             worker.join(timeout=remaining)
         if self._outcome_worker is not None:
             self._outcome_worker.join(timeout=max(0.0, deadline - time.monotonic()))
+        if self._diagnostic_worker is not None:
+            self._diagnostic_worker.join(timeout=max(0.0, deadline - time.monotonic()))
 
     def notify(self) -> None:
         self._wake.set()
@@ -168,6 +194,7 @@ class AgentTaskDispatcher:
     def _dispatch_available(self) -> None:
         self._prune_and_heartbeat()
         self._recover_outcomes()
+        self._diagnose_runs()
         while not self._stop.is_set() and self._active_count() < self._max_workers:
             owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
             execution = self._execution_repo.claim(
@@ -191,6 +218,56 @@ class AgentTaskDispatcher:
                 )
             worker.start()
 
+    def _diagnose_runs(self) -> None:
+        """Observe independently; a slow support service cannot delay heartbeats or QC."""
+        now = time.monotonic()
+        if (
+            self._stop.is_set()
+            or (self._diagnostic_worker is not None and self._diagnostic_worker.is_alive())
+            or now - self._last_diagnostic_scan < (1.0 if self._diagnostic_continue else 30.0)
+        ):
+            return
+        self._last_diagnostic_scan = now
+        try:
+            from app.application.agent_orchestrator.run_diagnostics import scan_agent_diagnostics
+
+            def observe() -> None:
+                before = self._diagnostic_cursor.get("after")
+                progressed = False
+                try:
+                    scan_agent_diagnostics(
+                        repository=self._run_repo,
+                        cursor=self._diagnostic_cursor,
+                        stopped=self._stop.is_set,
+                    )
+                    progressed = bool(
+                        self._diagnostic_cursor and self._diagnostic_cursor.get("after") != before
+                    )
+                finally:
+                    # Continue a bounded unfinished sweep promptly. Idle/error
+                    # retries wait from completion, not from a slow scan's start.
+                    self._diagnostic_continue = progressed
+                    self._last_diagnostic_scan = time.monotonic()
+
+            self._diagnostic_worker = threading.Thread(
+                target=observe,
+                name=f"{self._instance_id}-diagnostics",
+                daemon=True,
+            )
+            self._diagnostic_worker.start()
+        except BOUNDARY_ERRORS as exc:
+            # Optional observer startup is an isolation boundary. In particular,
+            # thread exhaustion must not kill the business coordinator/leases.
+            self._diagnostic_worker = None
+            self._diagnostic_continue = False
+            logger.warning("agent diagnostic observer unavailable (%s)", type(exc).__name__)
+            try:
+                from app.infrastructure.observability.metrics import observe_diagnostic_scan
+
+                observe_diagnostic_scan(outcome="error")
+            except BOUNDARY_ERRORS:
+                logger.warning("agent diagnostic startup metric unavailable")
+
     def _recover_outcomes(self) -> None:
         """Reconcile evidence independently so readback cannot delay worker leases."""
         now = time.monotonic()
@@ -206,10 +283,21 @@ class AgentTaskDispatcher:
             from app.application.agent_orchestrator.verification_recovery import (
                 reconcile_pending_verifications,
             )
+            from app.application.agent_runtime.goal_verification_task import (
+                enqueue_pending_goal_verifications,
+            )
             from app.application.ai_chat.queued_chat_delivery import reconcile_pending_chat_replies
             from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
             from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
 
+            try:
+                enqueue_pending_goal_verifications(
+                    repository=self._run_repo,
+                    stopped=self._stop.is_set,
+                    cursor=self._goal_verification_cursor,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("independent goal verification remains pending", exc_info=True)
             try:
                 reconcile_pending_verifications(
                     repository=self._run_repo, stopped=self._stop.is_set
@@ -254,19 +342,21 @@ class AgentTaskDispatcher:
         for run_id, item in active:
             if not item.thread.is_alive():
                 with self._active_lock:
-                    self._active.pop(run_id, None)
+                    if self._active.get(run_id) is item:
+                        self._active.pop(run_id, None)
                 continue
             if now - item.last_heartbeat < self._heartbeat_seconds:
                 continue
             renewed = self._execution_repo.heartbeat(
                 run_id,
                 item.owner_id,
+                execution_count=item.execution.execution_count,
                 lease_seconds=self._lease_seconds,
             )
             if renewed:
                 with self._active_lock:
                     current = self._active.get(run_id)
-                    if current is not None:
+                    if current is item:
                         current.last_heartbeat = now
 
     def _execute_claim(self, execution: AgentTaskExecution, owner_id: str) -> None:
@@ -296,7 +386,9 @@ class AgentTaskDispatcher:
         state = "failed"
         abandon = False
         xiaox_run = False
-        effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
+        effect_token = _open_effect.set(
+            (self._execution_repo, execution.run_id, owner_id, execution.execution_count)
+        )
         try:
             from app.infrastructure.xiaox.binding import has_legacy_runtime_binding
 
@@ -323,6 +415,7 @@ class AgentTaskDispatcher:
                     orchestrator,
                     preview,
                     owner=owner_id,
+                    execution=execution,
                     queue=self._execution_repo,
                     request_id=str(preview.metadata.get("approval_request_id") or ""),
                     finish=False,
@@ -347,7 +440,12 @@ class AgentTaskDispatcher:
         except EltCheckpointWorkerExited:
             abandon = True
             try:
-                self._execution_repo.heartbeat(execution.run_id, owner_id, lease_seconds=1.0)
+                self._execution_repo.heartbeat(
+                    execution.run_id,
+                    owner_id,
+                    execution_count=execution.execution_count,
+                    lease_seconds=1.0,
+                )
             except RECOVERABLE_ERRORS:
                 logger.info("ELT worker claim will expire normally for %s", execution.run_id)
             logger.warning(
@@ -388,6 +486,7 @@ class AgentTaskDispatcher:
                     execution.run_id,
                     owner_id,
                     state,
+                    execution_count=execution.execution_count,
                     error_code=error_code,
                 )
                 if finished is not None and finished.state == "succeeded":
@@ -397,7 +496,12 @@ class AgentTaskDispatcher:
 
                     recover_terminal_outcome(execution.run_id, repository=self._run_repo)
             with self._active_lock:
-                self._active.pop(execution.run_id, None)
+                current = self._active.get(execution.run_id)
+                if current is not None and (
+                    current.owner_id,
+                    current.execution.execution_count,
+                ) == (owner_id, execution.execution_count):
+                    self._active.pop(execution.run_id, None)
             self._wake.set()
 
 

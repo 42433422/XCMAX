@@ -182,9 +182,9 @@ export function chatMarkdownFromContent(raw: string | undefined | null): string 
   const text = mapOutsideChatCode(String(raw ?? ''), prose => {
     if (CHAT_HTML_FRAGMENT.test(prose)) return plainTextFromChatHtml(prose)
     if (!prose.includes('&')) return prose
-    const decoder = document.createElement('textarea')
-    decoder.innerHTML = prose.replaceAll('<', '&lt;')
-    return decoder.value
+    return DOMPurify.sanitize(prose.replaceAll('<', '&lt;'), {
+      ALLOWED_TAGS: [], ALLOWED_ATTR: [], RETURN_DOM_FRAGMENT: true,
+    }).textContent ?? ''
   })
   // Older clients escaped already-encoded quotation marks. Only normalize the
   // legacy quote entities in prose so code can display and copy literal entities.

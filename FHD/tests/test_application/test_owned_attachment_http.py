@@ -41,7 +41,9 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
         (goal,) = assessment["goals"]
         document = prompt["file_evidence"][state.upload["upload_id"]]
         source_id = next(key for key, value in document["blocks"].items() if "paint,120" in value)
-        response_id = next(key for key, value in prompt["response_blocks"].items() if value == state.reply)
+        response_id = next(
+            key for key, value in prompt["response_blocks"].items() if value == state.reply
+        )
         goal.update(
             file_basis="passages",
             file_citations=[{"source_block_id": source_id, "response_block_id": response_id}],

@@ -31,6 +31,10 @@ from tenacity import (
 )
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
+from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
+    execution_result_pending_state,
+)
 from app.infrastructure.mcp.config import McpServerConfig
 from app.infrastructure.mcp.persistent_sessions import (
     McpSessionError,
@@ -323,9 +327,16 @@ def _result_error(result: Any, tool_name: str) -> str:
     # Empty lists are valid MCP results; missing envelopes are not completion.
     if not isinstance(getattr(result, collection, None), list) or type(is_error) is not bool:
         return "mcp_result_invalid"
+    if is_error:
+        return "mcp_tool_error"
     if business.get("success") is False:
-        return "mcp_business_error"
-    return "mcp_tool_error" if is_error else ""
+        envelope = {"data": business}
+        pending = execution_result_pending_state(envelope)
+        if not pending or execution_result_outcome_unknown(envelope, include_execution=True):
+            return "mcp_business_error"
+        # A valid acknowledged wait is delivered successfully by MCP; the
+        # application adapter projects it as pending, never as business success.
+    return ""
 
 
 async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -> Any:
@@ -440,16 +451,8 @@ def call_tool(
                 retry_safe=safe_read,
             )
         text = _result_text(result)
-        is_error = bool(_field(result, "is_error", "isError", False))
         structured = _field(result, "structured_content", "structuredContent")
-        invalid = (
-            isinstance(structured, dict)
-            and "success" in structured
-            and type(structured["success"]) is not bool
-        )
-        business_error = isinstance(structured, dict) and structured.get("success") is False
         result_type = _field(result, "result_type", "resultType", "complete")
-        derived_error = _result_error(result, tool_name)
         blocks = getattr(result, "content", None)
         evidence = {
             **({"result_type": result_type} if result_type != "complete" else {}),
@@ -464,7 +467,7 @@ def call_tool(
                 else {}
             ),
         }
-        derived_error = _result_error(result, tool_name)
+        error_code = _result_error(result, tool_name)
     except McpSessionError as exc:
         lost = exc.code == "mcp_session_lost"
         return {
@@ -497,17 +500,6 @@ def call_tool(
             "retryable": safe_read and _retryable_transport_error(exc),
             **uncertain,
         }
-    error_code = (
-        "mcp_result_invalid"
-        if invalid
-        else "mcp_result_incomplete"
-        if result_type != "complete"
-        else "mcp_business_error"
-        if business_error
-        else "mcp_tool_error"
-        if is_error
-        else derived_error or ""
-    )
     return {
         "success": not bool(error_code),
         "tool": tool_name,

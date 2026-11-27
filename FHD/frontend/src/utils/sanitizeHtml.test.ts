@@ -1,6 +1,35 @@
 import { describe, expect, it, vi } from 'vitest'
 import DOMPurify from 'dompurify'
-import { plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, sanitizeTaskSummaryHtml } from './sanitizeHtml'
+import { chatMarkdownFromContent, plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, sanitizeTaskSummaryHtml } from './sanitizeHtml'
+
+describe('chatMarkdownFromContent', () => {
+  it('decodes named and numeric entities while preserving literal text', () => {
+    expect(chatMarkdownFromContent('C++ <vector> &amp; &copy; &nbsp;&#x1f680; &#128; &unknown;'))
+      .toBe('C++ <vector> & © \u00a0🚀 € &unknown;')
+  })
+
+  it.each([
+    '&lt;script&gt;alert(1)&lt;/script&gt;',
+    '&lt;/textarea&gt;&lt;img src=x onerror=alert(1)&gt;',
+    '&#60;svg onload=alert(1)&#62;',
+    '<img src=x onerror=alert(1)> &amp; literal',
+  ])('keeps decoded markup as literal text through Markdown rendering: %s', (raw) => {
+    const markdown = chatMarkdownFromContent(raw)
+    const body = new DOMParser().parseFromString(sanitizeChatBubbleMarkdown(markdown), 'text/html').body
+    expect(body.querySelector('script, img, svg, textarea')).toBeNull()
+    expect(body.textContent?.trim()).toBe(markdown)
+  })
+
+  it('decodes storage escaping once except for legacy double-escaped quotes', () => {
+    expect(chatMarkdownFromContent('&amp;lt;tag&amp;gt; &amp;quot;正常&amp;quot;'))
+      .toBe('&lt;tag&gt; "正常"')
+  })
+
+  it.each(['\n```', ''])('preserves entity spelling in complete and streaming code fences', (closing) => {
+    const code = '```html\n&lt;img&gt; &amp;quot; <tag>' + closing
+    expect(chatMarkdownFromContent('before &amp;\n' + code)).toBe('before &\n' + code)
+  })
+})
 
 describe('plainTextFromChatHtml', () => {
   it.each(['<script', '<script>alert(1)</script>', '<br><br />&nbsp;'])('treats non-visible shell content %s as empty', (html) => {

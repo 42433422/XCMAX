@@ -101,7 +101,6 @@ def apply_turn_execution_mode(
     """Resolve the persisted mode; request fields may tighten, only the user may release."""
     from app.domain.task_lifecycle.execution_mode import (
         CONTEXT_KEY,
-        CONVERSATION_KEY,
         ExecutionModeError,
         normalize_mode,
         requested_mode_from_text,
@@ -131,7 +130,6 @@ def set_execution_mode(context: MutableMapping[str, Any], mode: str) -> str:
     """Explicit host action for entering plan mode or releasing it for one conversation."""
     from app.domain.task_lifecycle.execution_mode import (
         CONTEXT_KEY,
-        CONVERSATION_KEY,
         normalize_mode,
     )
 
@@ -148,7 +146,7 @@ def set_execution_mode(context: MutableMapping[str, Any], mode: str) -> str:
 
 def attach_execution_mode(context: MutableMapping[str, Any]) -> str:
     """Read-only binding for entry points that do not persist a chat turn."""
-    from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY, CONVERSATION_KEY, tighten
+    from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY, tighten
 
     key = conversation_key(context)
     if not key:
@@ -161,7 +159,6 @@ def attach_execution_mode(context: MutableMapping[str, Any]) -> str:
 
 def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """同一轮重复提交不再执行。进行中的轮次不会被另一条消息覆盖。"""
-    from app.domain.task_lifecycle.execution_mode import CONVERSATION_KEY
 
     key = conversation_key(context)
     if not key:

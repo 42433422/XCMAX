@@ -1294,6 +1294,13 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             # back to the base ToolSpec risk after the plan audit.
             server_risk = "high" if step.node_id in approval_ids else contract_risk
             server_idempotent = bool(validation.spec.idempotent)
+            if (tool_id, action) == ("employee", "execute") and step.node_id not in approval_ids:
+                from app.application.agent_orchestrator.verification_workbook import (
+                    trusted_workbook_reader,
+                )
+
+                if trusted_workbook_reader(step.params):
+                    server_risk, server_idempotent = "low", True
             if step.risk != server_risk or step.idempotent != server_idempotent:
                 run.add_event(
                     "workflow.plan_policy_normalized",

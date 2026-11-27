@@ -14,6 +14,7 @@ import os
 import re
 from typing import TYPE_CHECKING, Any, cast
 
+from app.domain.neuro.cognition.llm_port import get_llm_port
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.performance.cache_manager import get_intent_deepseek_cache
 
@@ -188,30 +189,23 @@ class DeepSeekIntentRecognizer:
             history = "\n".join([f"{m['role']}: {m['content']}" for m in context[-3:]])
             user_message = f"对话历史：\n{history}\n\n当前消息：{message}"
 
-        from app.infrastructure.llm.structured_output import (
-            StructuredOutputError,
-            complete_structured,
+        structured = await get_llm_port().complete_structured(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            schema=_INTENT_SCHEMA,
+            max_repairs=self.max_retries - 1,
+            profile="intent",
+            temperature=0.1,
+            max_tokens=300,
         )
-
-        try:
-            structured = await complete_structured(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                schema=_INTENT_SCHEMA,
-                max_repairs=self.max_retries - 1,
-                profile="intent",
-                temperature=0.1,
-                max_tokens=300,
-            )
-        except StructuredOutputError as exc:
-            logger.error("DeepSeek 意图识别最终失败: %s", exc.last_errors)
+        if structured is None:
             fallback = self._fallback_result(message)
             _intent_recognition_cache.set(cache_key, fallback)
             return fallback
 
-        parsed = self._normalize_intent_payload(structured.data, message)
+        parsed = self._normalize_intent_payload(structured, message)
         _intent_recognition_cache.set(cache_key, parsed)
         return parsed
 

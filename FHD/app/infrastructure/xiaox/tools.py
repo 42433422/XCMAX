@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
+import re
 import time
-from collections.abc import Callable
-from contextlib import nullcontext
-from typing import Any
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, nullcontext
+from typing import TYPE_CHECKING, Any
 
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import utc_now_iso
@@ -23,15 +25,58 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_call,
 )
 from app.application.agent_orchestrator.unified_task import create_unified_task
+from app.domain.workbook_write_contract import (
+    WORKBOOK_READER,
+    WORKBOOK_WRITE_REVIEW,
+    WORKBOOK_WRITER,
+)
 from app.infrastructure.xiaox.binding import (
     XiaoxBinding,
     XiaoxBindingError,
     XiaoxBindingStore,
+    canonical_digest,
 )
 from app.infrastructure.xiaox.receipts import read_call_receipt
-from app.infrastructure.xiaox.tool_names import XIAOX_TOOL_NAMES
+from app.infrastructure.xiaox.tool_names import DIRECT_ACTION_TOOLS, XIAOX_TOOL_NAMES
+from app.infrastructure.xiaox.tool_schemas import (
+    action_schema_violation,
+)
+from app.infrastructure.xiaox.tool_schemas import (
+    mcp_tool_definitions as mcp_tool_definitions,
+)
+from app.infrastructure.xiaox.tool_schemas import (
+    schema_violation as schema_violation,
+)
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
+if TYPE_CHECKING:
+    from mcp.types import Tool
 
 _CONTROL_TOOLS = frozenset({"conversation", "clarify"})
+logger = logging.getLogger(__name__)
+_NAVIGATION_ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}")
+_NAVIGATION_LABEL = re.compile(r"[\w ·&/()（）【】、，+\-]{1,80}")
+
+
+def desktop_navigation_items(value: object) -> list[dict[str, Any]]:
+    """Bound display metadata from this renderer turn before saving the run."""
+    items: dict[str, dict[str, Any]] = {}
+    for row in value[:128] if isinstance(value, list) else ():
+        if not isinstance(row, dict) or row.keys() != {"id", "label", "kind", "breadcrumb"}:
+            continue
+        key, label, kind, parents = (row[k] for k in ("id", "label", "kind", "breadcrumb"))
+        if not isinstance(key, str) or not _NAVIGATION_ID.fullmatch(key) or key in items:
+            continue
+        if kind not in ("page", "user_action") or not isinstance(parents, list) or len(parents) > 6:
+            continue
+        if all(
+            isinstance(s, str) and s.strip() and _NAVIGATION_LABEL.fullmatch(s) and "//" not in s
+            for s in [label, *parents]
+        ):
+            items[key] = {"id": key, "kind": kind, "label": label, "breadcrumb": parents.copy()}
+    return list(items.values())
+
+
 # These contracts use run_id to select an existing business object. The host's
 # current execution identity remains exclusively in the bound runtime context.
 _BUSINESS_RUN_TARGETS = frozenset(
@@ -124,6 +169,17 @@ class XiaoxToolBridge:
     def _allowed(spec: ToolActionSpecV2, binding: XiaoxBinding, params=None) -> bool:
         if spec.tool_id in _CONTROL_TOOLS:
             return False
+        if (spec.tool_id, spec.action) == ("conversation_history", "read_attachment"):
+            from app.application.agent_runtime.conversation_attachments import (
+                recalled_conversation_uploads,
+            )
+
+            goal = binding.run.metadata.get("runtime_goal_contract") or {}
+            request = goal.get("request") or {}
+            if not any(
+                item.get("source") == "owned_elt_upload" for item in request.get("attachments", [])
+            ) and not recalled_conversation_uploads(request):
+                return False
         if spec.tool_id == "aiopen":
             from app.application.aiopen.agent_bridge import supports_aiopen_step
 
@@ -134,6 +190,45 @@ class XiaoxToolBridge:
             return False
         return actor_tool_denial(spec.tool_id, spec.action, binding.context, params or {}) is None
 
+    @contextmanager
+    def _scope(self, token: str) -> Iterator[XiaoxBinding]:
+        with self.store.scope(token, "mcp") as binding:
+            if self.run_id is not None and binding.run_id != self.run_id:
+                raise XiaoxBindingError("scope_conflict", "运行凭据不属于此工具入口")
+            yield binding
+
+    @classmethod
+    def visible_actions(cls, binding: XiaoxBinding, words: list[str]) -> Iterator[ToolActionSpecV2]:
+        from app.application.capability_catalog import authorized_tool_specs
+
+        allowed_actions = binding.metadata.get("allowed_actions")
+        candidates = None
+        if allowed_actions is not None:
+            from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+            allowed = set(allowed_actions)
+            candidates = {
+                key: spec
+                for key, spec in build_tool_specs_v2().items()
+                if f"{key[0]}.{key[1]}" in allowed
+            }
+            if not candidates:
+                return
+        specs = authorized_tool_specs(binding.context, include_aiopen=True, specs=candidates)
+        for _, spec in sorted(specs.items()):
+            if words:
+                text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
+                if not any(word in text for word in words):
+                    continue
+            if cls._allowed(spec, binding):
+                yield spec
+
+    def list_tool_definitions(self, token: str) -> list[Tool]:
+        with self._scope(token) as binding:
+            return mcp_tool_definitions(
+                (spec.tool_id, spec.action) for spec in self.visible_actions(binding, [])
+            )
+
     def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(arguments, dict):
             raise XiaoxBindingError("invalid_arguments", "工具参数必须是对象")
@@ -143,17 +238,39 @@ class XiaoxToolBridge:
             raise XiaoxBindingError("invalid_arguments", "工具参数必须是有效的 JSON 对象") from exc
         if size > 256_000:
             raise XiaoxBindingError("invalid_arguments", "业务参数过大，请使用已归档文件引用")
-        with self.store.scope(token, "mcp") as binding:
-            if self.run_id is not None and binding.run_id != self.run_id:
-                raise XiaoxBindingError("scope_conflict", "运行凭据不属于此工具入口")
+        with self._scope(token) as binding:
             if name not in XIAOX_TOOL_NAMES:
                 raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
             binding = self.store.admit_tool_invocation(
                 binding.run_id, name, arguments, generation=binding.metadata["generation"]
             )
+            if name == "execute_employee" or name in DIRECT_ACTION_TOOLS:
+                tool_id, action = (
+                    ("employee", "execute")
+                    if name == "execute_employee"
+                    else DIRECT_ACTION_TOOLS[name]
+                )
+                arguments = {
+                    "tool_id": tool_id,
+                    "action": action,
+                    "call_id": arguments.get("call_id"),
+                    "schema_digest": arguments.get("schema_digest"),
+                    "params": {
+                        key: value
+                        for key, value in arguments.items()
+                        if key not in {"call_id", "schema_digest"}
+                    },
+                }
+                name = "execute_action"
+            # Execute and observe the same canonical action. Switching between
+            # native and generic envelopes cannot disguise unchanged business results.
             result = self._invoke_bound(binding, name, arguments)
             self.store.observe_tool_result(
-                binding.run_id, name, arguments, result, generation=binding.metadata["generation"]
+                binding.run_id,
+                name,
+                arguments,
+                result,
+                generation=binding.metadata["generation"],
             )
             return result
 
@@ -161,38 +278,55 @@ class XiaoxToolBridge:
         self, binding: XiaoxBinding, name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
         if name == "capability_search":
-            from app.application.capability_catalog import authorized_tool_specs
-
-            query = str(arguments.get("query") or "").strip().casefold()[:200]
+            words = str(arguments.get("query") or "").strip().casefold()[:200].split()
             limit = arguments.get("limit", 12)
             offset = arguments.get("offset", 0)
             if type(limit) is not int or not 1 <= limit <= 30:
                 raise XiaoxBindingError("invalid_arguments", "能力检索数量必须为 1 至 30")
             if type(offset) is not int or offset < 0:
                 raise XiaoxBindingError("invalid_arguments", "能力检索起点必须为非负整数")
-            matches = []
-            for _, spec in sorted(
-                authorized_tool_specs(binding.context, include_aiopen=True).items()
-            ):
-                text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
-                if all(word in text for word in query.split()) and self._allowed(spec, binding):
-                    matches.append(
-                        {
-                            "tool_id": spec.tool_id,
-                            "action": spec.action,
-                            "description": spec.description,
-                            "read_only": spec.read_only,
-                        }
+            matches = [
+                {
+                    "tool_id": spec.tool_id,
+                    "action": spec.action,
+                    "description": spec.description,
+                    "read_only": spec.read_only,
+                }
+                for spec in self.visible_actions(binding, words)
+            ]
+            if words:
+                matches.sort(
+                    key=lambda row: (
+                        -sum(
+                            word
+                            in f"{row['tool_id']}.{row['action']} {row['description']}".casefold()
+                            for word in words
+                        ),
+                        row["tool_id"],
+                        row["action"],
                     )
+                )
             end = offset + limit
+            # These are display-only rows from this run's renderer. Describe and
+            # _execute resolve exclusive authority from the server tool catalog.
+            navigation = [
+                row
+                for row in desktop_navigation_items(binding.context.get("desktop_navigation"))
+                if all(
+                    word in " ".join([row["id"], *row["breadcrumb"], row["label"]]).casefold()
+                    for word in words
+                )
+            ]
             return {
                 "success": True,
                 "capabilities": matches[offset:end],
                 "total": len(matches),
                 "next_offset": end if end < len(matches) else None,
+                "desktop_navigation": navigation[offset:end],
+                "navigation_next_offset": end if end < len(navigation) else None,
             }
         if name == "capability_describe":
-            spec = self._spec(binding, arguments)
+            spec = self.authorized_action_spec(binding, arguments)
             return {
                 "success": True,
                 "capability": {
@@ -208,7 +342,7 @@ class XiaoxToolBridge:
                     "idempotent": spec.idempotent,
                     "required_params": spec.required_params,
                     "timeout_seconds": spec.timeout_seconds,
-                    "approval_required": not (spec.read_only and spec.risk == "low"),
+                    "approval_required": spec.approval_required,
                 },
             }
         if name == "request_input":
@@ -250,7 +384,9 @@ class XiaoxToolBridge:
                 return self._execute(binding, arguments)
         raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
 
-    def _spec(self, binding: XiaoxBinding, args: dict[str, Any]) -> ToolActionSpecV2:
+    @staticmethod
+    def authorized_action_spec(binding: XiaoxBinding, args: dict[str, Any]) -> ToolActionSpecV2:
+        """Resolve the same live actor contract for discovery, plan review and execution."""
         from app.application.capability_catalog import authorized_tool_specs
 
         spec = get_tool_action_spec(str(args.get("tool_id") or ""), str(args.get("action") or ""))
@@ -259,7 +395,7 @@ class XiaoxToolBridge:
             spec = authorized_tool_specs(
                 binding.context, include_aiopen=True, specs={action_key: spec}
             ).get(action_key)
-        if spec is None or not self._allowed(spec, binding, args.get("params")):
+        if spec is None or not XiaoxToolBridge._allowed(spec, binding, args.get("params")):
             raise XiaoxBindingError("permission_denied", "当前账号或员工未获授权使用该能力")
         return spec
 
@@ -271,14 +407,16 @@ class XiaoxToolBridge:
         if call is None:
             raise XiaoxBindingError("call_missing", "本次运行没有该工具调用")
         if (call.get("tool_id"), call.get("action")) != ("xcmax_workflow", "execute"):
-            self._spec(binding, call)
+            self.authorized_action_spec(binding, call)
         receipt = read_call_receipt(self.store, binding, call)
         saved = self.store.record_call(
             binding.run_id, call_id, child_run_id=receipt.get("run_id", ""), receipt=receipt
         )
         return dict(saved.metadata["calls"][call_id]["receipt"])
 
-    def _execute(self, binding: XiaoxBinding, args: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def action_parameters(args: dict[str, Any]) -> dict[str, Any]:
+        """Reject caller-supplied authority on both proposed and executable actions."""
         params = args.get("params")
         if not isinstance(params, dict):
             raise XiaoxBindingError("invalid_arguments", "业务参数必须是对象")
@@ -292,7 +430,11 @@ class XiaoxToolBridge:
             for key in params
         ):
             raise XiaoxBindingError("identity_override", "模型不得提交身份、授权或执行控制字段")
-        spec = self._spec(binding, args)
+        return params
+
+    def _execute(self, binding: XiaoxBinding, args: dict[str, Any]) -> dict[str, Any]:
+        params = self.action_parameters(args)
+        spec = self.authorized_action_spec(binding, args)
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
         from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY, deny_reason
 
@@ -315,14 +457,21 @@ class XiaoxToolBridge:
             }
         self._check_schema(spec, args)
         validation = validate_tool_call(spec.tool_id, spec.action, params)
-        schema_valid, schema_message = validate_schema_object(spec.input_schema, params)
-        if not validation.ok or not schema_valid:
+        schema_valid, _ = validate_schema_object(spec.input_schema, params)
+        violation = action_schema_violation(spec, params)
+        if not validation.ok or not schema_valid or violation:
+            error_code = validation.error_code or "schema_validation_failed"
             return {
                 "success": False,
                 "verified": False,
                 "status": "not_started",
-                "error_code": validation.error_code or "schema_validation_failed",
-                "message": validation.message or schema_message,
+                "error_code": error_code,
+                "message": (
+                    "参数未通过校验，请按当前 input_schema 修正。"
+                    if error_code == "schema_validation_failed"
+                    else validation.message
+                ),
+                **({"schema_violation": violation} if violation else {}),
             }
         if spec.tool_id == "aiopen" and not spec.is_read_only_call(params):
             from app.application.aiopen.agent_bridge import inline_verification
@@ -337,9 +486,84 @@ class XiaoxToolBridge:
                 }
         self._check_gate(binding, spec, params)
         call_id = args.get("call_id")
-        if not isinstance(call_id, str) or not call_id.strip():
+        if not isinstance(call_id, str) or not call_id.strip() or len(call_id) > 160:
             raise XiaoxBindingError("invalid_call", "工具调用标识无效")
         safe_read = spec.is_read_only_call(params) and spec.risk == "low"
+        review, approval_preview = {}, ""
+        isolated_artifact = False
+        if (spec.tool_id, spec.action) == ("employee", "execute"):
+            from app.application.agent_orchestrator.verification_workbook import (
+                WorkbookFormulaSyntaxError,
+                WorkbookPlanError,
+                review_workbook_write,
+                scoped_workbook_employee,
+                trusted_workbook_reader,
+            )
+
+            workbook_employee = scoped_workbook_employee(params)
+            if workbook_employee == WORKBOOK_READER:
+                isolated_artifact = trusted_workbook_reader(params)
+                # The signed reader only inspects the caller-owned upload; it
+                # creates no business write and needs no write approval card.
+                safe_read = isolated_artifact
+            fingerprint = canonical_digest(
+                {"tool_id": spec.tool_id, "action": spec.action, "params": params}
+            )
+            if workbook_employee == WORKBOOK_WRITER and not any(
+                call.get("fingerprint") == fingerprint
+                for call in binding.metadata.get("calls", {}).values()
+            ):
+                context = self._child_context(binding, {"child_task_id": ""})
+                try:
+                    reviewed, changes = review_workbook_write(params, context)
+                except WorkbookFormulaSyntaxError as exc:
+                    return {
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
+                        "error_code": "workbook_formula_syntax_invalid",
+                        "field_path": exc.field_path,
+                        "message": "工作簿公式未通过语法校验；请修正指定写入项后重试。",
+                    }
+                except WorkbookPlanError as exc:
+                    return {
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
+                        "error_code": "workbook_plan_invalid",
+                        "message": str(exc),
+                    }
+                except (OSError, ValueError):
+                    return {
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
+                        "error_code": "workbook_plan_review_failed",
+                        "message": "无法在原工作簿中核验这份计划。请检查附件和相应工作表范围。",
+                    }
+                review[WORKBOOK_WRITE_REVIEW] = reviewed
+                isolated_artifact = True
+                if changes and str(context.get("chat_approval_mode") or "").strip() == "auto":
+                    return {
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
+                        "error_code": "workbook_manual_approval_required",
+                        "message": "计划会修改原始数据。请保留这些原值，或由用户切换到手动审批后核对变更。",
+                        "required_approval": "manual",
+                        "change_count": len(changes),
+                        "changes": [
+                            {key: change[key] for key in ("sheet", "ref", "source_ref", "kind")}
+                            for change in changes[:20]
+                        ],
+                    }
+                if changes:
+                    approval_preview = "确认工作簿数据修改\n" + "\n".join(
+                        f"{change['sheet']} · {change['ref']}  "
+                        f"{json.dumps(change['before'][1], ensure_ascii=False, default=str)} → "
+                        f"{json.dumps(change['after'][1], ensure_ascii=False, default=str)}"
+                        for change in changes
+                    )
         call, created = self.store.claim_call(
             binding.run_id,
             call_id,
@@ -349,10 +573,12 @@ class XiaoxToolBridge:
             read_only=safe_read,
             generation=binding.metadata["generation"],
             cost_units=spec.cost_units,
+            isolated_artifact=isolated_artifact,
         )
         if not created:
             return self._evidence(self.store.get(binding.run_id), call_id)
         context = self._child_context(binding, call)
+        context.update(review)
         context["task_title"] = f"{spec.tool_id}.{spec.action}"
         context["tool_schema_digest"] = spec.schema_digest
         # This child proves exactly one registered action. The original user
@@ -397,20 +623,33 @@ class XiaoxToolBridge:
                 action=spec.action,
                 params=copy.deepcopy(params),
                 runtime_context=context,
+                approval_preview=approval_preview,
             ).run
         # The child id is durable before dispatch. A lost response can only read
         # this task; it cannot mint a new approved operation and execute twice.
         self.store.record_call(binding.run_id, call_id, child_run_id=child.run_id)
         try:
             self.store.check_current(binding.run_id, generation=binding.metadata["generation"])
-            self._check_schema(self._spec(binding, args), args)
+            self._check_schema(self.authorized_action_spec(binding, args), args)
             self._check_gate(binding, spec, params)
         except XiaoxBindingError:
             self.orchestrator.cancel_run(child.run_id, requested_by=binding.run.user_id)
             raise
         if child.status in {"queued", "running"}:
             # 只读子任务必须派发；自动审批模式下的写子任务也不再停在审批断点。
-            self.orchestrator.execute_dispatched_run(child.run_id)
+            try:
+                self.orchestrator.execute_dispatched_run(child.run_id)
+            except BOUNDARY_ERRORS:
+                logger.exception("Xiaox child dispatch failed: %s", child.run_id)
+                # Reuse the orchestrator's durable failure transition. A started
+                # effect remains blocked for reconciliation; an untouched read
+                # can fail without stranding the parent's call reservation.
+                self.orchestrator.fail_dispatched_run(child.run_id, open_effects=not safe_read)
+                # Settle only the original persisted call before surfacing the
+                # original fault to the MCP request boundary. Programming errors
+                # must not be translated into an ordinary business failure.
+                self._evidence(self.store.get(binding.run_id), call_id)
+                raise
         return self._evidence(self.store.get(binding.run_id), call_id)
 
     @staticmethod
@@ -426,6 +665,7 @@ class XiaoxToolBridge:
         from app.application.agent_orchestrator.budget import AI_COST_BUDGET_KEYS
 
         context = binding.context
+        context.pop("desktop_navigation", None)
         for key in (
             *AI_COST_BUDGET_KEYS,
             "run_id",
@@ -437,6 +677,8 @@ class XiaoxToolBridge:
             "plan_id",
             "node_outputs",
             "_tool_approval_grants",
+            "_tool_approval_scope",
+            WORKBOOK_WRITE_REVIEW,
             "tool_schema_digest",
         ):
             context.pop(key, None)
@@ -461,70 +703,3 @@ class XiaoxToolBridge:
             source="xiaox_runtime",
         )
         return context
-
-
-def mcp_tool_definitions():
-    """Use MCP SDK types; schema is glue around the existing capability catalog."""
-    from mcp.types import Tool
-
-    fields = {"tool_id": {"type": "string"}, "action": {"type": "string"}}
-    definitions = [
-        (
-            "capability_search",
-            "检索当前账号获授权的企业能力。",
-            {
-                "query": {"type": "string"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 30},
-                "offset": {"type": "integer", "minimum": 0},
-            },
-            [],
-        ),
-        (
-            "capability_describe",
-            "读取当前能力的精确参数和结果契约、风险及 schema_digest；执行动作必须使用此摘要。",
-            fields,
-            ["tool_id", "action"],
-        ),
-        (
-            "execute_action",
-            "提交企业动作到受控任务链。待审批或未知结果不是完成，不可更换调用标识重复提交。",
-            {
-                **fields,
-                "call_id": {"type": "string"},
-                "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-                "params": {"type": "object"},
-            },
-            ["tool_id", "action", "call_id", "schema_digest", "params"],
-        ),
-        (
-            "task_evidence",
-            "读取本次运行已提交动作的真实任务状态和证据。",
-            {"call_id": {"type": "string"}},
-            ["call_id"],
-        ),
-        (
-            "request_input",
-            "仅当缺失信息确实阻断当前交付或业务操作缺关键参数时登记问题并等待；"
-            "可在对话内完成的草案和修订应先直接交付，不得为对话内修订索要任务或目标内部 ID。"
-            "提问不等于任务完成，也不构成审批或执行授权。",
-            {"question": {"type": "string"}},
-            ["question"],
-        ),
-    ]
-    definitions_by_name = {
-        name: (description, props, required) for name, description, props, required in definitions
-    }
-    return [
-        Tool(
-            name=name,
-            description=description,
-            inputSchema={
-                "type": "object",
-                "properties": props,
-                "required": required,
-                "additionalProperties": False,
-            },
-        )
-        for name in XIAOX_TOOL_NAMES
-        for description, props, required in [definitions_by_name[name]]
-    ]

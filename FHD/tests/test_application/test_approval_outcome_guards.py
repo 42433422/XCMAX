@@ -24,8 +24,10 @@ def test_plain_failure_is_not_treated_as_unknown():
 @pytest.mark.parametrize(
     "event_type", ["approval.resume_plan_rejected", "approval.resume_proof_missing"]
 )
-def test_rejected_resume_is_not_an_accepted_execution(event_type):
+@pytest.mark.parametrize("persisted", [False, True])
+def test_rejected_resume_is_not_an_accepted_execution(event_type, persisted):
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.approval_workspace.outcomes import execution_outcome, run_execution_receipt
 
     run = AgentRun(
@@ -39,9 +41,13 @@ def test_rejected_resume_is_not_an_accepted_execution(event_type):
         ],
     )
     run.add_event(event_type, data={"execution_started": False, "step_id": run.steps[0].step_id})
+    if persisted:
+        run = InMemoryAgentRunRepository().save(run)
+        assert [event.event_type for event in run.events] == [event_type, "run.state_changed"]
     receipt = run_execution_receipt(run)
     assert receipt["execution_state"] == "blocked"
     assert receipt["execution_accepted"] is False
+    assert receipt["execution_started"] is False
     assert receipt["workflow_executed"] is False
     assert execution_outcome(receipt)["status"] == "cancelled"
 
@@ -50,5 +56,16 @@ def test_rejected_resume_is_not_an_accepted_execution(event_type):
     run.steps[0].output = {"outcome": "unknown", "reconciliation_required": True}
     receipt = run_execution_receipt(run)
     assert receipt["code"] == "outcome_unknown"
+    assert receipt["workflow_executed"] is False
+    assert execution_outcome(receipt)["status"] == "approved"
+
+    # A later business event is decisive; do not scan past it to revive an old
+    # rejection merely because the run is blocked again.
+    run.steps[0].output = None
+    run.add_event("tool.started", data={"execution_started": True})
+    receipt = run_execution_receipt(run)
+    assert receipt["execution_state"] == "blocked"
+    assert receipt["execution_accepted"] is True
+    assert "execution_started" not in receipt
     assert receipt["workflow_executed"] is False
     assert execution_outcome(receipt)["status"] == "approved"

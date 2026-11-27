@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -40,3 +41,42 @@ class TestStructuredRepair:
             result = await recognizer.recognize("REPAIR_UNIQUE_002 开一张发货单")
         assert result["intent"] is None
         assert result["source"] == "deepseek"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "entrypoint",
+    [
+        "app.mod_sdk.services",
+        "app.services",
+        "app.neuro_bus.integrations.intent_integration",
+    ],
+)
+async def test_non_http_entrypoints_wire_structured_completion(monkeypatch, entrypoint):
+    from app.domain.neuro.cognition import llm_port
+    from app.domain.shared_services import unified_intent_recognizer
+    from app.infrastructure.llm import invoke
+
+    recognizer = DeepSeekIntentRecognizer(api_key="k")
+    monkeypatch.setattr(
+        unified_intent_recognizer, "get_unified_intent_recognizer", lambda: recognizer
+    )
+    complete = AsyncMock(
+        return_value=_payload(
+            '{"intent": "shipment_generate", "confidence": 0.9, "slots": {}, "reasoning": "r"}'
+        )
+    )
+    monkeypatch.setattr(invoke, "chat_completion_openai_format", complete)
+    module = import_module(entrypoint)
+    # Exercise explicit composition even when infrastructure modules are already cached.
+    monkeypatch.setattr(llm_port, "_source", None)
+    if entrypoint.endswith("intent_integration"):
+        entry = module.NeuroIntentRecognizer(reflex_arc=object())._base
+    else:
+        entry = module.get_unified_intent_recognizer()
+
+    result = await entry.recognize(f"COLD_START_{entrypoint} 开一张发货单")
+
+    assert result["intent"] == "shipment_generate"
+    assert result["source"] == "deepseek"
+    complete.assert_awaited_once()

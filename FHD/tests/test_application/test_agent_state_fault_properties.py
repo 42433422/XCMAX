@@ -39,7 +39,6 @@ class DurableLifecycleFaultMachine(RuleBasedStateMachine):
         self.url = f"sqlite:///{Path(self.directory.name) / 'tasks.sqlite'}"
         self.frozen = {}
         self.serial = 0
-        self.owner = "never-claimed"
         self._connect()
         self._new_task()
 
@@ -51,6 +50,8 @@ class DurableLifecycleFaultMachine(RuleBasedStateMachine):
 
     def _new_task(self):
         self.serial += 1
+        self.owner = "never-claimed"
+        self.claims = {}
         self.run = AgentRun(
             run_id=f"state-task-{self.serial}", user_id="owner", message="preserve task progress"
         )
@@ -74,6 +75,7 @@ class DurableLifecycleFaultMachine(RuleBasedStateMachine):
             assert claimed is not None
             assert claimed.execution_count == before.execution_count + 1
             self.owner = candidate
+            self.claims[self.owner] = claimed.execution_count
         else:
             assert claimed is None
 
@@ -91,6 +93,7 @@ class DurableLifecycleFaultMachine(RuleBasedStateMachine):
             self.run.run_id,
             self.owner,
             state,
+            execution_count=self.claims.get(self.owner, 0),
             error_code="business_rule" if state == "failed" else "",
         )
         if finished is None:
@@ -102,7 +105,10 @@ class DurableLifecycleFaultMachine(RuleBasedStateMachine):
     def open_effect(self):
         before = self._snapshot()
         accepted = self.queue.mark_open_effect(
-            self.run.run_id, "write-awaiting-receipt", owner_id=self.owner
+            self.run.run_id,
+            "write-awaiting-receipt",
+            owner_id=self.owner,
+            execution_count=self.claims.get(self.owner, 0),
         )
         assert accepted is (before[0]["state"] == "running")
         if not accepted:
@@ -111,11 +117,19 @@ class DurableLifecycleFaultMachine(RuleBasedStateMachine):
     @rule()
     def stale_receipt(self):
         before = self._snapshot()
-        assert self.queue.finish(self.run.run_id, "never-claimed", "completed") is None
-        assert not self.queue.mark_open_effect(
-            self.run.run_id, "late-write", owner_id="never-claimed"
+        stale_claims = [("never-claimed", 0)]
+        stale_claims.extend(
+            (owner, generation) for owner, generation in self.claims.items() if owner != self.owner
         )
-        assert self._snapshot() == before
+        for owner, generation in stale_claims:
+            assert (
+                self.queue.finish(self.run.run_id, owner, "completed", execution_count=generation)
+                is None
+            )
+            assert not self.queue.mark_open_effect(
+                self.run.run_id, "late-write", owner_id=owner, execution_count=generation
+            )
+            assert self._snapshot() == before
 
     @rule()
     def replay_admission(self):

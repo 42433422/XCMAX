@@ -40,7 +40,11 @@ def shift_formula_rows(
         if token.type != "OPERAND" or token.subtype != "RANGE":
             continue
         prefix, delimiter, ref = token.value.rpartition("!")
-        target = prefix.removeprefix("'").removesuffix("'").replace("''", "'") if delimiter else formula_sheet
+        target = (
+            prefix.removeprefix("'").removesuffix("'").replace("''", "'")
+            if delimiter
+            else formula_sheet
+        )
         if target.casefold() != inserted_sheet.casefold():
             continue
         updated = shift_row_reference(ref, row, count)

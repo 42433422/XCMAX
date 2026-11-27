@@ -225,9 +225,13 @@ def test_unexpected_keys_return_published_names_only():
     }
 
 
-@pytest.mark.parametrize(("keyword", "published", "value"), [
-    ("pattern", "^[A-Z]+$", "private-input"), ("maximum", 30, 500),
-])
+@pytest.mark.parametrize(
+    ("keyword", "published", "value"),
+    [
+        ("pattern", "^[A-Z]+$", "private-input"),
+        ("maximum", 30, 500),
+    ],
+)
 def test_invalid_parameter_reports_only_its_published_constraint(keyword, published, value):
     from jsonschema import Draft202012Validator
 

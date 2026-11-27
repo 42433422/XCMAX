@@ -22,8 +22,13 @@ from app.domain.task_lifecycle.agent_runtime_results import withhold_runtime_out
 @pytest.fixture(params=[False, True], ids=["uploaded", "recalled"])
 def verified_document(request):
     scope = {
-        "tenant_id": 17, "local_user_id": 11, "mod_id": "", "session_id": "scoped-chat",
-        "conversation_id": "scoped-chat", "turn_id": "original-turn", "_conversation_revision": 2,
+        "tenant_id": 17,
+        "local_user_id": 11,
+        "mod_id": "",
+        "session_id": "scoped-chat",
+        "conversation_id": "scoped-chat",
+        "turn_id": "original-turn",
+        "_conversation_revision": 2,
     }
     run = AgentRun("11", "Summarize the receipt", run_id="verified-run", status="completed")
     run.metadata.update(runtime_type="xiaox", runtime_context=scope)
@@ -34,40 +39,75 @@ def verified_document(request):
     name, sha256 = "Receipt.docx", "b" * 64
     if request.param:
         entry = {"name": name, "upload_id": reference, "source_run_id": "historical-source"}
-        contract = build_goal_contract(run, context_evidence=[{
-            "source": "conversation_uploads", "entries": [entry],
-            "verified_read": {**entry, "sha256": sha256, **preview},
-        }])
+        contract = build_goal_contract(
+            run,
+            context_evidence=[
+                {
+                    "source": "conversation_uploads",
+                    "entries": [entry],
+                    "verified_read": {**entry, "sha256": sha256, **preview},
+                }
+            ],
+        )
     else:
-        contract = build_goal_contract(run, attachments=[{
-            "name": name, "source": "owned_elt_upload", "preview": preview,
-            "metadata": {"upload_id": reference, "sha256": sha256},
-        }])
+        contract = build_goal_contract(
+            run,
+            attachments=[
+                {
+                    "name": name,
+                    "source": "owned_elt_upload",
+                    "preview": preview,
+                    "metadata": {"upload_id": reference, "sha256": sha256},
+                }
+            ],
+        )
     result = {
-        "ok": True, "run_id": run.run_id, "execution_state": "completed",
-        "output": '{"confirmed":true}', "business_receipts": [],
+        "ok": True,
+        "run_id": run.run_id,
+        "execution_state": "completed",
+        "output": '{"confirmed":true}',
+        "business_receipts": [],
     }
     snapshot = goal_evidence_snapshot(contract, [], result["output"])
     report = {
-        "protocol": GOAL_PROTOCOL, "status": "verified", "accepted": True,
-        "goal_digest": contract["digest"], "evidence_digest": snapshot["digest"],
+        "protocol": GOAL_PROTOCOL,
+        "status": "verified",
+        "accepted": True,
+        "goal_digest": contract["digest"],
+        "evidence_digest": snapshot["digest"],
         "response_digest": snapshot["response_digest"],
         "review": {
-            "goals": [{
-                "goal_id": "receipt", "source_id": "request", "source": run.message,
-                "kind": "reply", "status": "satisfied", "evidence_ids": ["response"],
-                "reason": "Verified the original upload", "file_basis": "complete",
-                "file_citations": [
-                    {"evidence_id": reference, "source_excerpt": excerpt, "response_excerpt": result["output"]}
-                    for excerpt in (passage, risky_passage)
-                ],
-            }],
-            "violations": [], "uncovered_sources": [], "feedback": "",
+            "goals": [
+                {
+                    "goal_id": "receipt",
+                    "source_id": "request",
+                    "source": run.message,
+                    "kind": "reply",
+                    "status": "satisfied",
+                    "evidence_ids": ["response"],
+                    "reason": "Verified the original upload",
+                    "file_basis": "complete",
+                    "file_citations": [
+                        {
+                            "evidence_id": reference,
+                            "source_excerpt": excerpt,
+                            "response_excerpt": result["output"],
+                        }
+                        for excerpt in (passage, risky_passage)
+                    ],
+                }
+            ],
+            "violations": [],
+            "uncovered_sources": [],
+            "feedback": "",
         },
     }
     report["report_digest"] = canonical_digest(report)
-    run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"],
-                        runtime_goal_verification=report)
+    run.metadata.update(
+        runtime_goal_contract=contract,
+        runtime_goal_digest=contract["digest"],
+        runtime_goal_verification=report,
+    )
     return run, scope, result, [{"name": name, "excerpts": [passage]}]
 
 
@@ -86,7 +126,9 @@ def test_public_file_sources_use_the_verified_body_and_retract_on_failure(verifi
     assert not released_chat_file_sources(run, result)
 
 
-def test_history_sources_require_same_account_tenant_revision_and_reply(verified_document, monkeypatch):
+def test_history_sources_require_same_account_tenant_revision_and_reply(
+    verified_document, monkeypatch
+):
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     run, scope, result, expected = verified_document
@@ -96,15 +138,26 @@ def test_history_sources_require_same_account_tenant_revision_and_reply(verified
     }
     repository = InMemoryAgentRunRepository()
     repository.save(run)
-    monkeypatch.setattr("app.application.agent_orchestrator.run_repository.get_agent_run_repository", lambda: repository)
-    binding = {"run_id": run.run_id, "turn_id": scope["turn_id"], "conversation_id": scope["session_id"]}
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: repository,
+    )
+    binding = {
+        "run_id": run.run_id,
+        "turn_id": scope["turn_id"],
+        "conversation_id": scope["session_id"],
+    }
     forged_ui = {"fileSources": [{"name": "unrelated.docx", "excerpts": ["forged"]}]}
     row = {
-        "role": "assistant", "content": result["output"],
-        "metadata": json.dumps({
-            "business_harness": {**binding, "recall_bound": True}, "ui": forged_ui,
-            "summary": {**binding, "status": "completed", "action": "runtime_reply"},
-        }),
+        "role": "assistant",
+        "content": result["output"],
+        "metadata": json.dumps(
+            {
+                "business_harness": {**binding, "recall_bound": True},
+                "ui": forged_ui,
+                "summary": {**binding, "status": "completed", "action": "runtime_reply"},
+            }
+        ),
     }
     assert "fileSources" not in json.loads(strip_client_recall_binding(row["metadata"]))["ui"]
     for context, text, expected_sources in (

@@ -21,6 +21,17 @@ def _shared_setup_attach_chat_trace_run_0(payload, case_value_1):
     return result
 
 
+def _assert_initial_audit_links_previous_event(run):
+    cause, audit = run.events[-2:]
+    assert audit.event_type == "run.state_changed"
+    assert audit.data["from_status"] is None
+    assert audit.data["to_status"] == run.status
+    assert audit.data["sequence"] == 1
+    assert audit.data["reason_recorded"] is True
+    assert audit.data["reason_event_id"] == cause.event_id
+    assert audit.data["trace_id"] == cause.data["trace_id"]
+
+
 @pytest.fixture(autouse=True)
 def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
@@ -49,7 +60,12 @@ def test_attach_chat_trace_run_persists_completed_run() -> None:
     assert run.metadata["source"] == "desktop"
     assert run.metadata["channel"] == "compat_chat"
     assert run.final_output["chat_payload"]["response"] == "done"
-    assert [event.event_type for event in run.events] == ["run.created", "run.completed"]
+    assert [event.event_type for event in run.events] == [
+        "run.created",
+        "run.completed",
+        "run.state_changed",
+    ]
+    _assert_initial_audit_links_previous_event(run)
 
 
 def test_attach_chat_trace_run_accepts_explicit_intent() -> None:
@@ -155,7 +171,9 @@ def test_attach_chat_trace_run_records_llm_calls(tmp_path, monkeypatch) -> None:
         "llm.completed",
         "billing.recorded",
         "run.completed",
+        "run.state_changed",
     ]
+    _assert_initial_audit_links_previous_event(run)
     assert model_usage.model_usage_database_path().is_file()
     ledger = model_usage._load_usage_state()
     assert ledger["summary"]["entry_count"] == 1
@@ -283,7 +301,9 @@ def test_attach_chat_trace_run_records_rag_retrieval() -> None:
         "run.created",
         "rag.retrieved",
         "run.completed",
+        "run.state_changed",
     ]
+    _assert_initial_audit_links_previous_event(run)
 
 
 @pytest.mark.parametrize("succeeded", [True, False])
@@ -375,7 +395,9 @@ def test_attach_chat_trace_run_records_user_memory_reference() -> None:
         "run.created",
         "memory.recalled",
         "run.completed",
+        "run.state_changed",
     ]
+    _assert_initial_audit_links_previous_event(run)
 
 
 def test_attach_chat_trace_run_records_ocr_artifact(tmp_path, monkeypatch) -> None:
@@ -440,7 +462,9 @@ def test_attach_chat_trace_run_records_ocr_artifact(tmp_path, monkeypatch) -> No
         "run.created",
         "artifact.attached",
         "run.completed",
+        "run.state_changed",
     ]
+    _assert_initial_audit_links_previous_event(run)
     reset_dataset_rag_app_service_for_tests()
 
 
@@ -609,7 +633,9 @@ def test_attach_chat_trace_run_records_generated_office_artifact() -> None:
         "run.created",
         "artifact.attached",
         "run.completed",
+        "run.state_changed",
     ]
+    _assert_initial_audit_links_previous_event(run)
 
 
 def test_attach_chat_trace_run_preserves_authorization_wait() -> None:
@@ -629,7 +655,12 @@ def test_attach_chat_trace_run_preserves_authorization_wait() -> None:
 
     run = repo.get(result["run_id"])
     assert run is not None and run.status == "waiting_user"
-    assert run.events[-1].event_type == "step.waiting_user"
+    assert [event.event_type for event in run.events] == [
+        "run.created",
+        "step.waiting_user",
+        "run.state_changed",
+    ]
+    _assert_initial_audit_links_previous_event(run)
 
 
 @pytest.mark.parametrize(

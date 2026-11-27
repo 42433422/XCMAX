@@ -37,11 +37,18 @@ def conversation_upload_scope(context: dict[str, Any]) -> RunContextScope | None
     tenant = str(context.get("tenant_id") or "")
     session = context.get("session_id") or context.get("conversation_id")
     revision = context.get("_conversation_revision")
-    if not tenant.isdecimal() or not isinstance(session, str) or not session or type(revision) is not int:
+    if (
+        not tenant.isdecimal()
+        or not isinstance(session, str)
+        or not session
+        or type(revision) is not int
+    ):
         return None
     if context.get("conversation_id") not in (None, "", session) or revision < 0:
         return None
-    return RunContextScope(tenant, str(context.get("mod_id") or context.get("active_mod_id") or ""), session, revision)
+    return RunContextScope(
+        tenant, str(context.get("mod_id") or context.get("active_mod_id") or ""), session, revision
+    )
 
 
 def original_conversation_uploads(run: AgentRun) -> list[ConversationUpload]:
@@ -63,9 +70,12 @@ def original_conversation_uploads(run: AgentRun) -> list[ConversationUpload]:
             continue
         name, upload_id, sha = item.get("name"), metadata.get("upload_id"), metadata.get("sha256")
         if (
-            isinstance(name, str) and 0 < len(name) <= 255
-            and isinstance(upload_id, str) and 0 < len(upload_id) <= 80
-            and isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha)
+            isinstance(name, str)
+            and 0 < len(name) <= 255
+            and isinstance(upload_id, str)
+            and 0 < len(upload_id) <= 80
+            and isinstance(sha, str)
+            and re.fullmatch(r"[0-9a-f]{64}", sha)
         ):
             entries.append(ConversationUpload(run.run_id, name, upload_id, sha))
     return entries
@@ -74,10 +84,14 @@ def original_conversation_uploads(run: AgentRun) -> list[ConversationUpload]:
 def conversation_upload_evidence(request: dict[str, Any]) -> dict[str, Any]:
     if request.get("attachments"):
         return {}
-    return next((
-        item for item in request.get("context_evidence") or []
-        if item.get("source") == EVIDENCE_SOURCE
-    ), {})
+    return next(
+        (
+            item
+            for item in request.get("context_evidence") or []
+            if item.get("source") == EVIDENCE_SOURCE
+        ),
+        {},
+    )
 
 
 def recalled_conversation_uploads(request: dict[str, Any]) -> list[dict[str, str]]:
@@ -97,8 +111,14 @@ def conversation_upload_directory(run: AgentRun, context: dict[str, Any]) -> lis
     originals = get_agent_run_repository().list_recent(
         user_id=run.user_id,
         runtime_scope=scope,
-        matches=lambda earlier: earlier.created_at < run.created_at
-        and bool((earlier.metadata.get("runtime_goal_contract") or {}).get("request", {}).get("attachments")),
+        matches=lambda earlier: (
+            earlier.created_at < run.created_at
+            and bool(
+                (earlier.metadata.get("runtime_goal_contract") or {})
+                .get("request", {})
+                .get("attachments")
+            )
+        ),
         limit=_MAX_REFERENCES * 2,
     )
     uploads: dict[str, ConversationUpload] = {}
@@ -108,14 +128,20 @@ def conversation_upload_directory(run: AgentRun, context: dict[str, Any]) -> lis
     if not uploads:
         return []
     with tenant_scope(int(scope.tenant_id)), get_db() as db:
-        rows = db.query(EltUpload.id, EltUpload.sha256).filter(
-            EltUpload.id.in_(uploads),
-            EltUpload.owner_user_id == int(run.user_id),
-            EltUpload.tenant_id == int(scope.tenant_id),
-            EltUpload.expires_at > utc_now_naive(),
-        ).all()
+        rows = (
+            db.query(EltUpload.id, EltUpload.sha256)
+            .filter(
+                EltUpload.id.in_(uploads),
+                EltUpload.owner_user_id == int(run.user_id),
+                EltUpload.tenant_id == int(scope.tenant_id),
+                EltUpload.expires_at > utc_now_naive(),
+            )
+            .all()
+        )
     available = dict(rows)
-    return [ref.descriptor() for key, ref in uploads.items() if available.get(key) == ref.sha256][:_MAX_REFERENCES]
+    return [ref.descriptor() for key, ref in uploads.items() if available.get(key) == ref.sha256][
+        :_MAX_REFERENCES
+    ]
 
 
 def _scoped_source(run: AgentRun, context: dict[str, Any], origin: str) -> AgentRun:
@@ -127,8 +153,10 @@ def _scoped_source(run: AgentRun, context: dict[str, Any], origin: str) -> Agent
         raise PermissionError("原会话已变化，无法继续读取附件")
     source = get_agent_run_repository().get(origin)
     if (
-        source is not None and source.user_id == run.user_id
-        and scope.matches(source) and source.created_at < run.created_at
+        source is not None
+        and source.user_id == run.user_id
+        and scope.matches(source)
+        and source.created_at < run.created_at
     ):
         return source
     raise PermissionError("本轮没有该附件引用，请在原会话重新选择附件")
@@ -154,14 +182,18 @@ def _preceding_source_matches(run: AgentRun, source: AgentRun, context: dict[str
     scope = conversation_upload_scope(context)
     rows, ids = context.get("_chat_history_messages"), context.get("_chat_history_ids")
     if (
-        scope is None or context.get("_chat_history_source") != "sql"
+        scope is None
+        or context.get("_chat_history_source") != "sql"
         or context.get("_chat_history_revision") != scope.revision
-        or not isinstance(rows, list) or not isinstance(ids, list) or len(rows) != len(ids)
+        or not isinstance(rows, list)
+        or not isinstance(ids, list)
+        or len(rows) != len(ids)
     ):
         return False
     prior_user_id = max(
         (
-            row_id for item, row_id in zip(rows, ids, strict=True)
+            row_id
+            for item, row_id in zip(rows, ids, strict=True)
             if isinstance(item, dict) and item.get("role") == "user" and type(row_id) is int
         ),
         default=0,
@@ -170,12 +202,16 @@ def _preceding_source_matches(run: AgentRun, source: AgentRun, context: dict[str
     if prior_user_id < 1 or not key:
         return False
     with tenant_scope(int(scope.tenant_id)), get_db() as db:
-        row = db.query(AIConversation.conversation_metadata).filter(
-            AIConversation.id == prior_user_id,
-            AIConversation.session_id == scope.session_id,
-            AIConversation.user_id == run.user_id,
-            AIConversation.role == "user",
-        ).first()
+        row = (
+            db.query(AIConversation.conversation_metadata)
+            .filter(
+                AIConversation.id == prior_user_id,
+                AIConversation.session_id == scope.session_id,
+                AIConversation.user_id == run.user_id,
+                AIConversation.role == "user",
+            )
+            .first()
+        )
     try:
         metadata = json.loads(row[0] or "{}") if row else {}
     except (TypeError, ValueError):
@@ -185,7 +221,9 @@ def _preceding_source_matches(run: AgentRun, source: AgentRun, context: dict[str
     binding, summary = (metadata.get(key) for key in ("business_harness", "summary"))
     source_turn = (source.metadata.get("runtime_context") or {}).get("turn_id")
     return bool(
-        isinstance(binding, dict) and isinstance(summary, dict) and source_turn
+        isinstance(binding, dict)
+        and isinstance(summary, dict)
+        and source_turn
         and source_turn != context.get("turn_id")
         and binding.get("recall_bound") is True
         and binding.get("conversation_key") == key

@@ -25,6 +25,7 @@ from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, get_t
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _IDEMPOTENCY: dict[str, dict[str, Any]] = {}
+_IDEMPOTENCY_BINDINGS: dict[str, str] = {}
 _IDEMPOTENCY_LOCK = threading.Lock()
 _LIVE_OWNERS: set[str] = set()
 _TENANT_TOOLS: dict[str, set[str]] = {}
@@ -59,6 +60,7 @@ _SERVER_FIELDS = frozenset(
         "parent_task_id",
         "parent_run_id",
         "idempotency_key",
+        "business_action_id",
         "system_instruction",
         "enterprise_cognition",
     }
@@ -535,9 +537,9 @@ def _fingerprint(params: dict[str, Any], context: dict[str, Any] | None = None) 
     )
 
 
-def idempotency_scope_key(
+def _idempotency_scope_keys(
     context: dict[str, Any], tool_id: str, action: str, params: dict[str, Any]
-) -> str:
+) -> tuple[str, str]:
     client_key = str(params.get("idempotency_key") or "").strip()
     server_key = str(context.get("idempotency_key") or "").strip()
     raw = client_key or server_key
@@ -546,12 +548,59 @@ def idempotency_scope_key(
     run_id = str(context.get("run_id") or "").strip()
     # A client key names one business attempt and must replay after a new run.
     # The per-run server key stays unique when the caller did not supply a key.
+    server_scope = (
+        f"{tenant}:{task or run_id}:{tool_id}:{action}:{server_key}" if server_key else ""
+    )
     if client_key:
         if not task or task == run_id:
             task = ""
     elif not task:
         task = run_id
-    return f"{tenant}:{task}:{tool_id}:{action}:{raw}"
+    return f"{tenant}:{task}:{tool_id}:{action}:{raw}", server_scope
+
+
+def _bound_idempotency_scope(conn: sqlite3.Connection | None, key: str, server_key: str) -> str:
+    if not server_key:
+        return key
+    if conn is None:
+        return _IDEMPOTENCY_BINDINGS.get(
+            server_key, server_key if server_key in _IDEMPOTENCY else key
+        )
+    # Readers also handle ledgers created before the identity index existed.
+    if conn.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'tool_idempotency_bindings'"
+    ).fetchone():
+        bound = conn.execute(
+            "select scope_key from tool_idempotency_bindings where server_scope_key = ?",
+            (server_key,),
+        ).fetchone()
+        if bound is not None:
+            return str(bound[0])
+    # A pre-upgrade server-only claim is already evidence for this intent. A
+    # newly supplied client key must not move it to a fresh execution claim.
+    legacy = conn.execute(
+        "select 1 from tool_idempotency where scope_key = ?", (server_key,)
+    ).fetchone()
+    return server_key if legacy is not None else key
+
+
+def idempotency_scope_key(
+    context: dict[str, Any], tool_id: str, action: str, params: dict[str, Any]
+) -> str:
+    """Return the original receipt address, including for independent readback."""
+    key, server_key = _idempotency_scope_keys(context, tool_id, action, params)
+    if not server_key:
+        return key
+    path = _idempotency_path(create_parent=False)
+    if path is None:
+        return _bound_idempotency_scope(None, key, server_key)
+    if not path.exists():
+        return key
+    conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)
+    try:
+        return _bound_idempotency_scope(conn, key, server_key)
+    finally:
+        conn.close()
 
 
 def _idempotency_path(*, create_parent: bool = True) -> Path | None:
@@ -581,6 +630,10 @@ def _idempotency_conn() -> sqlite3.Connection | None:
         "scope_key text primary key, fingerprint text, owner text, "
         "inflight integer, output_json text)"
     )
+    conn.execute(
+        "create table if not exists tool_idempotency_bindings("
+        "server_scope_key text primary key, scope_key text not null)"
+    )
     return conn
 
 
@@ -600,20 +653,33 @@ def _stored_claim(row: tuple[Any, ...]) -> dict[str, Any]:
     }
 
 
-def _try_claim(key: str, record: dict[str, Any]) -> dict[str, Any] | None:
-    """Atomically insert a claim, or read the record that already owns the key."""
+def _try_claim(
+    key: str, record: dict[str, Any], *, server_key: str = ""
+) -> tuple[str, dict[str, Any] | None]:
+    """Bind the server intent and claim its original receipt in one transaction."""
     conn = _idempotency_conn()
     if conn is None:
-        return _IDEMPOTENCY.get(key)
+        key = _bound_idempotency_scope(None, key, server_key)
+        if server_key:
+            _IDEMPOTENCY_BINDINGS.setdefault(server_key, key)
+        return key, _IDEMPOTENCY.get(key)
     try:
         with conn:
+            conn.execute("begin immediate")
+            key = _bound_idempotency_scope(conn, key, server_key)
+            if server_key:
+                conn.execute(
+                    "insert into tool_idempotency_bindings(server_scope_key, scope_key) "
+                    "values (?, ?) on conflict(server_scope_key) do nothing",
+                    (server_key, key),
+                )
             inserted = conn.execute(
                 "insert into tool_idempotency(scope_key, fingerprint, owner, inflight, output_json) "
                 "values (?, ?, ?, 1, '') on conflict(scope_key) do nothing",
                 (key, record["fingerprint"], record["owner"]),
             ).rowcount
             if inserted == 1:
-                return None
+                return key, None
             row = conn.execute(
                 "select fingerprint, owner, inflight, output_json "
                 "from tool_idempotency where scope_key = ?",
@@ -621,7 +687,7 @@ def _try_claim(key: str, record: dict[str, Any]) -> dict[str, Any] | None:
             ).fetchone()
             if row is None:
                 raise RuntimeError("工具幂等记录不可用，已拒绝重复执行")
-            return _stored_claim(row)
+            return key, _stored_claim(row)
     finally:
         conn.close()
 
@@ -658,19 +724,25 @@ def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
 
 def _retained_result(output: dict[str, Any]) -> dict[str, Any] | None:
     from app.application.agent_orchestrator.result_verification import pending_execution_receipt
-    from app.application.employee_runtime.result_verifier import (
+    from app.domain.task_lifecycle.results import (
+        execution_result_outcome_unknown,
         execution_result_requires_reconciliation,
+        execution_result_wait_reason,
     )
 
-    if pending_execution_receipt(output):
+    unknown = (
+        execution_result_outcome_unknown(output, include_execution=True)
+        or "unknown" in str(output.get("error_code") or "").lower()
+    )
+    if not unknown and (pending_execution_receipt(output) or execution_result_wait_reason(output)):
         # Acceptance pins the original claim just like uncertain effects, while
         # retaining the provider's known state for independent readback later.
         return {**output, "success": False, "retryable": False}
     if (
-        execution_result_requires_reconciliation(output)
+        unknown
+        or execution_result_requires_reconciliation(output)
         or str(output.get("execution_status") or "").lower()
         in {"unknown", "timeout", "timed_out", "interrupted"}
-        or "unknown" in str(output.get("error_code") or "").lower()
         or (output.get("success") is not True and output.get("success") is not False)
     ):
         return {
@@ -687,9 +759,12 @@ def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, 
     """按本轮幂等键汇总工具执行记录，回答「这一轮到底写没写」。
 
     只读取持久化的 tool_idempotency 记录，不触发任何工具调用。
-    ``effect`` 取值：none（未派发/已确认无写入）、committed（已写入）、
+    ``effect`` 取值：none（未派发/已确认无写入）、committed（已写入）、partial（部分失败）、
     unknown（有调用结果无法判定，需人工核对）。
     """
+    tenant = str(tenant_id or "").strip()
+    if not tenant:
+        raise ValueError("tenant_id is required to reconcile a tool effect")
     key = str(idempotency_key or "").strip()
     empty = {"effect": "none", "committed": False, "records": 0, "in_flight": 0, "unknown": 0}
     if not key:
@@ -699,20 +774,54 @@ def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, 
     )
 
     suffix = f":{key}"
-    prefix = f"{tenant_id}:" if str(tenant_id or "").strip() else ""
+    prefix = f"{tenant}:"
     matched: list[dict[str, Any]] = []
-    conn = _idempotency_conn()
+    path = _idempotency_path(create_parent=False)
+    # A missing/incompatible ledger is missing evidence, never a fresh empty
+    # ledger proving no effect. Propagate storage errors to the caller.
+    conn = (
+        sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)
+        if path is not None
+        else None
+    )
     try:
         if conn is not None:
+            conn.execute("begin")
+            bindings = (
+                conn.execute("select server_scope_key, scope_key from tool_idempotency_bindings")
+                if conn.execute(
+                    "select 1 from sqlite_master "
+                    "where type = 'table' and name = 'tool_idempotency_bindings'"
+                ).fetchone()
+                else ()
+            )
+            bound_scopes = {
+                str(scope)
+                for server, scope in bindings
+                if str(server).startswith(prefix)
+                and str(server).endswith(suffix)
+                and str(scope).startswith(prefix)
+            }
             rows = conn.execute(
                 "select scope_key, fingerprint, owner, inflight, output_json from tool_idempotency"
             )
             for scope_key, *rest in rows:
-                if str(scope_key).endswith(suffix) and str(scope_key).startswith(prefix):
+                if scope_key in bound_scopes or (
+                    str(scope_key).endswith(suffix) and str(scope_key).startswith(prefix)
+                ):
                     matched.append(_stored_claim(tuple(rest)))
         else:
+            bound_scopes = {
+                scope
+                for server, scope in list(_IDEMPOTENCY_BINDINGS.items())
+                if server.startswith(prefix)
+                and server.endswith(suffix)
+                and scope.startswith(prefix)
+            }
             for scope_key, record in list(_IDEMPOTENCY.items()):
-                if str(scope_key).endswith(suffix) and str(scope_key).startswith(prefix):
+                if scope_key in bound_scopes or (
+                    str(scope_key).endswith(suffix) and str(scope_key).startswith(prefix)
+                ):
                     matched.append(dict(record))
     finally:
         if conn is not None:
@@ -727,7 +836,9 @@ def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, 
         output = record.get("output")
         if record.get("inflight"):
             continue
-        if not isinstance(output, dict):
+        if not isinstance(output, dict) or not str(record.get("fingerprint") or "").startswith(
+            "scope-v2:"
+        ):
             unknown += 1
             continue
         retained = _retained_result(output)
@@ -737,17 +848,19 @@ def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, 
             and retained.get("success") is True
         ):
             committed += 1
-        elif output.get("success") is False and not execution_result_requires_reconciliation(
-            output
+        elif (
+            retained is None
+            and output.get("success") is False
+            and not execution_result_requires_reconciliation(output)
         ):
             failed += 1
         else:
             unknown += 1
     effect = "none"
-    if committed:
-        effect = "committed"
-    elif unknown or in_flight:
+    if unknown or in_flight:
         effect = "unknown"
+    elif committed:
+        effect = "partial" if failed else "committed"
     return {
         "effect": effect,
         "committed": bool(committed),
@@ -762,6 +875,7 @@ def drop_process_idempotency_memory() -> None:
     """Simulate a process restart: memory claims die, the sqlite record remains."""
     with _IDEMPOTENCY_LOCK:
         _IDEMPOTENCY.clear()
+        _IDEMPOTENCY_BINDINGS.clear()
         _LIVE_OWNERS.clear()
 
 
@@ -1046,7 +1160,7 @@ def _begin_idempotent_replay(
     claim_kind: str,
 ) -> tuple[str, dict[str, Any] | None]:
     """Return a stored result or atomically claim a new key. Unknown effects cannot replay."""
-    key = idempotency_scope_key(context, tool_id, action, params)
+    key, server_key = _idempotency_scope_keys(context, tool_id, action, params)
     if key.endswith(":"):
         return "", None
     try:
@@ -1069,7 +1183,7 @@ def _begin_idempotent_replay(
     )
     owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
     record = {"fingerprint": fingerprint, "inflight": True, "output": None, "owner": owner}
-    current = _try_claim(key, record)
+    key, current = _try_claim(key, record, server_key=server_key)
     if current is None:
         _IDEMPOTENCY[key] = record
         _LIVE_OWNERS.add(owner)
@@ -1216,11 +1330,13 @@ def finish_idempotent_replay(key: str, output: dict[str, Any]) -> None:
 def clear_idempotent_replay_for_tests() -> None:
     with _IDEMPOTENCY_LOCK:
         _IDEMPOTENCY.clear()
+        _IDEMPOTENCY_BINDINGS.clear()
         _LIVE_OWNERS.clear()
     conn = _idempotency_conn()
     if conn is None:
         return
     try:
+        conn.execute("delete from tool_idempotency_bindings")
         conn.execute("delete from tool_idempotency")
         conn.commit()
     finally:

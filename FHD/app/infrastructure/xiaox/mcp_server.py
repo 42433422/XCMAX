@@ -36,7 +36,9 @@ class _McpResponse(Response):
         # The per-request catalog improves selection. Calls still resolve the exact
         # pair against live authority rather than a snapshot sent to the model.
         definitions = mcp_tool_definitions()
-        input_validators = {tool.name: Draft202012Validator(tool.input_schema) for tool in definitions}
+        input_validators = {
+            tool.name: Draft202012Validator(tool.input_schema) for tool in definitions
+        }
 
         async def list_tools(
             _ctx: ServerRequestContext, _params: PaginatedRequestParams | None
@@ -50,7 +52,10 @@ class _McpResponse(Response):
             try:
                 arguments = params.arguments or {}
                 validator = input_validators.get(params.name)
-                if validator and (error := next(validator.iter_errors(arguments), None)) is not None:
+                if (
+                    validator
+                    and (error := next(validator.iter_errors(arguments), None)) is not None
+                ):
                     result = {
                         "success": False,
                         "verified": False,

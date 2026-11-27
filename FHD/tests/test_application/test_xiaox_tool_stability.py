@@ -7,9 +7,11 @@ import pytest
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.infrastructure.xiaox import binding as binding_module
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.test_application.test_xiaox_binding import make_binding
 from tests.test_application.test_xiaox_tools import bridge_setup as bridge_setup
+from tests.test_application.test_xiaox_workbook_write import workbook_runtime as workbook_runtime
 
 
 @pytest.mark.parametrize("period", [1, 2, 4])
@@ -109,6 +111,71 @@ def test_fresh_read_call_ids_cannot_disguise_repeated_unchanged_results(trusted_
     _observe(reopened, run, grant, 7)
     assert reopened.get(run.run_id).metadata["tool_call_limit"]["reason"] == "tool_loop_detected"
     assert not reopened.get(run.run_id).run.metadata.get("non_retryable")
+
+
+def test_native_and_generic_read_share_original_sql_progress_budget(workbook_runtime):
+    state = workbook_runtime
+    description = state.bridge.invoke(
+        state.grant.mcp_token,
+        "capability_describe",
+        {"tool_id": "excel_analysis", "action": "read"},
+    )["capability"]
+    params = {"file_path": state.upload["upload_id"], "header_row": 1}
+    bridge = state.bridge
+    for index in range(8):
+        if index == 4:
+            bridge = XiaoxToolBridge(
+                XiaoxBindingStore(
+                    SQLAlchemyAgentRunRepository(session_factory=state.actor.factory)
+                ),
+                state.bridge.orchestrator,
+            )
+        common = {"call_id": f"alias-read-{index}", "schema_digest": description["schema_digest"]}
+        name, arguments = (
+            ("execute_excel_read", {**common, **params})
+            if index % 2 == 0
+            else (
+                "execute_action",
+                {**common, "tool_id": "excel_analysis", "action": "read", "params": params},
+            )
+        )
+        result = bridge.invoke(state.grant.mcp_token, name, arguments)
+        assert result["success"] is True and result["verified"] is True, result
+        assert result["status"] == "completed"
+        child = state.repository.get(result["run_id"])
+        assert child.user_id == str(state.actor.user_id)
+        assert child.steps[0].tool_id == "excel_analysis" and child.steps[0].action == "read"
+        assert child.steps[0].params == params
+    saved = bridge.store.get(state.parent.run_id)
+    assert saved.metadata["tool_invocation_count"] == 9  # One description, eight actual reads.
+    assert saved.metadata["tool_call_limit"]["reason"] == "tool_loop_detected"
+    assert saved.metadata["tool_call_limit"]["period"] == 1
+    calls = saved.metadata["calls"]
+    with pytest.raises(XiaoxBindingError) as error:
+        bridge.invoke(
+            state.grant.mcp_token,
+            "execute_excel_read",
+            {**common, **params, "call_id": "ninth-read"},
+        )
+    assert error.value.code == "tool_loop_detected"
+    assert bridge.store.get(state.parent.run_id).metadata["calls"] == calls
+    assert bridge.store.get(state.parent.run_id).metadata["tool_invocation_count"] == 9
+
+
+@pytest.mark.parametrize(
+    "name", ["execute_excel_read", "execute_excel_structure", "execute_employee"]
+)
+def test_native_action_cannot_drop_caller_supplied_authority(bridge_setup, name):
+    state = bridge_setup
+    with pytest.raises(XiaoxBindingError) as error:
+        state.bridge.invoke(
+            state.grant.mcp_token, name, {"call_id": "identity-override", "tenant_id": 999}
+        )
+    assert error.value.code == "identity_override"
+    saved = state.store.get(state.run.run_id)
+    assert saved.metadata["tool_invocation_count"] == 1
+    assert saved.metadata["calls"] == {}
+    assert len(state.store.repository.list_recent()) == 1
 
 
 def test_changing_business_results_do_not_trigger_loop_detection(trusted_actor):

@@ -5,8 +5,10 @@ from __future__ import annotations
 import errno
 import math
 import os
+import shutil
 import signal
 import subprocess
+import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -31,6 +33,47 @@ class ToolNotStarted(TimeoutError):
 
 class ContinuityClaimChanged(RuntimeError):
     """Late results cannot overwrite a different durable claim."""
+
+
+class ProcessLimitsUnavailable(RuntimeError):
+    """A requested child resource boundary could not be established."""
+
+
+@dataclass(frozen=True)
+class ProcessLimits:
+    cpu_seconds: int
+    address_space_bytes: int
+    file_size_bytes: int
+    open_files: int = 256
+
+
+def _limited_command(command, limits: ProcessLimits):
+    # prlimit applies limits before exec without a preexec_fn in a threaded host.
+    # These are per-process/per-file limits, not aggregate PID or cgroup limits.
+    limiter = shutil.which("prlimit") if sys.platform == "linux" else None
+    if limiter is None:
+        raise ProcessLimitsUnavailable("Linux prlimit is required for bounded execution")
+    import resource
+
+    options = (
+        ("cpu", resource.RLIMIT_CPU, limits.cpu_seconds),
+        ("as", resource.RLIMIT_AS, limits.address_space_bytes),
+        ("fsize", resource.RLIMIT_FSIZE, limits.file_size_bytes),
+        ("nofile", resource.RLIMIT_NOFILE, limits.open_files),
+    )
+    bounded = [limiter]
+    try:
+        for name, kind, cap in options:
+            if type(cap) is not int or cap <= 0:
+                raise ValueError("invalid child resource limit")
+            inherited = resource.getrlimit(kind)
+            effective = min(
+                [cap, *(value for value in inherited if value != resource.RLIM_INFINITY)]
+            )
+            bounded.append(f"--{name}={effective}:{effective}")
+    except (OSError, ValueError) as exc:
+        raise ProcessLimitsUnavailable("cannot establish inherited child limits") from exc
+    return [*bounded, "--", *command]
 
 
 @dataclass
@@ -92,13 +135,15 @@ class ContinuityRequestContext:
                 del self._requests.frame
 
 
-def run_process(command, *, input, cwd, timeout):
+def run_process(command, *, input, cwd, timeout, env=None, limits: ProcessLimits | None = None):
     """Reap the process group on timeout/interruption; effects remain unknown."""
     # Reuse the server-bound budget, never a client-supplied duration. No new
     # arbitrary ceiling for legitimate large ELT files when no budget exists.
     budget = remaining_invocation_seconds(timeout if timeout is not None else math.inf)
     if budget <= 0:
         raise ToolNotStarted("invocation budget expired before process start")
+    if limits is not None:
+        command = _limited_command(command, limits)
     with subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
@@ -106,6 +151,7 @@ def run_process(command, *, input, cwd, timeout):
         stderr=subprocess.PIPE,
         text=True,
         cwd=cwd,
+        env=env,
         start_new_session=True,
     ) as process:
         completed = False
