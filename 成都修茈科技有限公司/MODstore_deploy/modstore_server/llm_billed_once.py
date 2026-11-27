@@ -229,7 +229,7 @@ async def _execute_billed_chat(
                 status_code = int(status) if status is not None else None
             except (TypeError, ValueError):
                 status_code = None
-            definite_rejection = status_code in {400, 401, 403, 404, 422, 429}
+            definite_rejection = status_code in {400, 401, 402, 403, 404, 422, 429}
             save_failure_log(
                 db,
                 user_id=user.id,

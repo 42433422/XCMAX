@@ -593,7 +593,7 @@ async def stream_billed_llm_chat(
                             status_code = int(status) if status is not None else None
                         except (TypeError, ValueError):
                             status_code = None
-                        if emitted_delta or status_code not in {400, 401, 403, 404, 422, 429}:
+                        if emitted_delta or status_code not in {400, 401, 402, 403, 404, 422, 429}:
                             yield _route_error(
                                 route,
                                 {

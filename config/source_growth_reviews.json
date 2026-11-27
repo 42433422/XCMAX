@@ -165,7 +165,7 @@
       "after_lines": 868,
       "reason": "用户明确授权工作组02 B05：在既有任务启动与SQL续跑认领中封存授权路由列表、核对实际路由，防止重启时扩权或覆盖已选择的备用模型。",
       "boundary": "仍是原Xiaox任务准入、配置绑定与恢复责任；不新增Runtime、任务账本或备用入口。旧任务只补原主模型列表，完整runtime_config等值门禁保留。",
-      "validation": "FHD 26个受影响测试模块整合1005 passed，包括真实固定Codex CLI和本机HTTP/MCP协议（模型输出为夹具）、配置、SQL绑定、恢复、预算及计费。真实主备模型和生产重启尚未验收。",
+      "validation": "早期26模块整合1005 passed；CI兼容补修后1004 passed/1 failed，真实固定CLI第二次续跑偶发失败仍未定位，后续单测和431项按序复现通过不替代原失败。本机HTTP/MCP的模型输出为夹具；真实主备模型及生产重启未验收。",
       "follow_up": "由 @42433422 在本PR核对精确base/head/blob、职责边界和CI后评审；后续只在明确业务边界可独立管理资源时拆分，避免机械分片或第二Runtime。此登记是审查请求，不代表已批准。",
       "review_owner": "@42433422"
     },
@@ -609,7 +609,7 @@
       "after_lines": 1328,
       "reason": "用户明确授权工作组02 B01-B06：适配#3682已有诊断与清理修复，补齐HTTPX阶段deadline、Tenacity退避、原SQL请求Trace与费用状态、授权备用路由和并发代际检查。",
       "boundary": "同一Responses HTTP请求的授权、发送、流式消费、结算及清理必须共享deadline和资源所有权，继续复用现有网关/准入/账本。没有新执行器、状态机或隐藏代理换模。",
-      "validation": "FHD整合1005 passed；包括真实本机HTTP慢响应故障、三次物理尝试上限、未知响应禁止重放、原预算不放大、opaque现场拒绝换模及迟到路由CAS。供应商真实限流、跨模型压缩/恢复及费用对账未取得资格。",
+      "validation": "早期26模块1005 passed；CI兼容补修后1004 passed/1 failed，原CLI第二次续跑偶发失败仍未定位，不以复跑通过消除原证据。本机HTTP慢响应、三次尝试上限、未知禁止重放、原预算、opaque拒绝换模和迟到CAS已有回归；真实限流、压缩恢复及账单未验收。",
       "follow_up": "由 @42433422 在本PR核对精确base/head/blob、职责边界和CI后评审；后续只在明确业务边界可独立管理资源时拆分，避免机械分片或第二Runtime。此登记是审查请求，不代表已批准。",
       "review_owner": "@42433422"
     },
@@ -976,12 +976,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py",
       "base_blob": "2a3c868f86e8f56067a59e0935e49b8029d95bae",
-      "head_blob": "27be98ad0f48d9de0241ae376d13f84a9a522e3a",
+      "head_blob": "b2d81eea023a452157a4a9ba95ecbad1877aa806",
       "before_lines": 838,
       "after_lines": 840,
-      "reason": "用户明确授权工作组02 B06：流式请求已输出后，即使末尾收到429，也不能认定为未开始并重新派发；在原计费入口识别已知终态可恢复的BYOK路径。",
+      "reason": "用户明确授权工作组02 B06：流式请求已输出后，即使末尾收到402/429，也不能认定为未开始并重新派发；明确无输出的402释放原hold，沿既有同授权来源候选切换；在原入口恢复已知BYOK终态。",
       "boundary": "仅沿现有流式聊天结算和失败收尾修改，复用llm_client_requests及原钱包hold；未知结果保留待核对，不引入第二计费协议。",
-      "validation": "Market七模块186 passed，原28个测试函数AST及断言不变，SQL认领测试与HTTP协议测试按职责分离；涵盖SQL独立会话认领、同步BYOK、已输出后429、旧attempt拒绝及账本恢复；提供商和钱包响应为受控夹具，实际账单仍待原部署验收。",
+      "validation": "Market七模块206 passed。新增20项验证无输出402释放原hold、既有BYOK主备切换、有无请求键，以及已输出文字/toolcall后402/429/503仍unknown且不重发；原SQL认领、旧attempt和账本恢复回归保留。提供商/钱包响应为夹具，真实账单待原部署验收。",
       "follow_up": "由 @42433422 在本PR核对精确base/head/blob、职责边界和CI后评审；后续只在明确业务边界可独立管理资源时拆分，避免机械分片或第二Runtime。此登记是审查请求，不代表已批准。",
       "review_owner": "@42433422"
     },

@@ -385,11 +385,14 @@ async def test_sync_receipt_replays_once_without_platform_wallet(sync_billed, db
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("funding", ["byok", "disabled"])
-async def test_sync_definite_rejection_can_release_the_original_request(sync_billed, db, funding):
-    sync_billed.send.return_value = {"ok": False, "status": 429, "error": "quota exhausted"}
+@pytest.mark.parametrize("status", [402, 429])
+async def test_sync_definite_rejection_can_release_the_original_request(
+    sync_billed, db, funding, status
+):
+    sync_billed.send.return_value = {"ok": False, "status": status, "error": "quota exhausted"}
     with pytest.raises(HTTPException) as rejected:
         await sync_billed.call(funding)
-    assert rejected.value.status_code == 429
+    assert rejected.value.status_code == status
     assert ledger.lookup(db, 7, KEY, 90) == "failed"
     sync_billed.send.return_value = {
         "ok": True,
