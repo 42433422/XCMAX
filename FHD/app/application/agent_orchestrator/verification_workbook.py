@@ -76,7 +76,9 @@ def known_workbook_expectation_failure(
     try:
         contract = call.metadata.get("verification_contract") or {}
         checks = report.get("checks") or []
-        files = _declared_files(call.output)
+        # Employee envelopes may project the same exact file at two levels.
+        # Deduplicate identical descriptors only; conflicting copies still fail.
+        files = list({canonical_hash(item): item for item in _declared_files(call.output)}.values())
         if (
             len(files) != 1
             or (files[0].get("metadata") or {}).get("run_id") != run.run_id

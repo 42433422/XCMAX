@@ -120,6 +120,19 @@ def test_failed_quality_is_settled_but_not_success_and_raw_receipt_stays(monkeyp
     assert before == (step.output, call.output, call.params, call.metadata["verification_contract"])
 
 
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_nested_employee_file_projection_requires_identical_descriptors(monkeypatch, conflicting):
+    run, step, call = bound_failure(monkeypatch)
+    duplicate = copy.deepcopy(call.output["artifacts"])
+    if conflicting:
+        duplicate[0]["metadata"]["sha256"] = "c" * 64
+    step.output["data"] = {"result": {"success": True, "artifacts": duplicate}}
+    call.output = copy.deepcopy(step.output)
+    bind_execution_receipt(call)
+    verify_step_result(run=run, step=step, call=call, context=run.metadata["runtime_context"])
+    assert known_workbook_expectation_failure(run, step, call) is not conflicting
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
