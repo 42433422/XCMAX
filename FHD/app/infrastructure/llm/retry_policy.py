@@ -10,12 +10,12 @@ from typing import Any
 
 import httpx
 from openai import APIConnectionError
-from tenacity import RetryCallState, Retrying, wait_exponential_jitter
+from tenacity import RetryCallState, Retrying, wait_exponential, wait_random
 
 from app.infrastructure.chat_stream_lifetime import StreamStopped
 
 _SAFE_TRANSPORT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
-_BACKOFF = wait_exponential_jitter(initial=0.25, max=5.0, jitter=0.25)
+_BACKOFF = wait_exponential(multiplier=0.25, max=5.0) + wait_random(0.0, 0.25)
 
 
 def retry_after_seconds(value: str | None, *, now: float | None = None) -> float | None:
@@ -41,7 +41,7 @@ def retry_delay(attempt: int, retry_after: str | None = None, *, now: float | No
     """
     state = RetryCallState(Retrying(), None, (), {})
     state.attempt_number = max(1, min(int(attempt), 32))
-    backoff = _BACKOFF(state)
+    backoff = min(5.0, _BACKOFF(state))
     return max(backoff, retry_after_seconds(retry_after, now=now) or 0.0)
 
 
