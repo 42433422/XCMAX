@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2
@@ -14,9 +15,8 @@ if TYPE_CHECKING:
     from mcp.types import Tool
 
 
-def schema_violation(error: ValidationError) -> dict[str, str | int | float | list[str]]:
-    """Show the matching variant's bad field without exposing its instance or message."""
-    while error.validator == "oneOf" and error.context and isinstance(error.instance, dict):
+def _matching_errors(error: ValidationError) -> Iterator[ValidationError]:
+    if error.validator == "oneOf" and error.context and isinstance(error.instance, dict):
         matching = []
         for index, branch in enumerate(error.validator_value):
             if not isinstance(branch, dict):
@@ -31,19 +31,22 @@ def schema_violation(error: ValidationError) -> dict[str, str | int | float | li
                 for name, value in checks.items()
             ):
                 matching.append(index)
-        if len(matching) != 1:
-            break
-        child = next(
-            (
+        if len(matching) == 1:
+            children = [
                 item
                 for item in error.context
                 if item.schema_path and item.schema_path[0] == matching[0]
-            ),
-            None,
-        )
-        if child is None:
-            break
-        error = child
+            ]
+            if children:
+                for child in children:
+                    yield from _matching_errors(child)
+                return
+    yield error
+
+
+def schema_violation(error: ValidationError) -> dict[str, str | int | float | list[str]]:
+    """Show matching contract fields, never instance values or raw error messages."""
+    error = next(_matching_errors(error))
     schema_path = list(error.absolute_schema_path)
     fields = {
         name
@@ -93,25 +96,40 @@ def schema_violation(error: ValidationError) -> dict[str, str | int | float | li
             name
             for name in error.validator_value
             if name not in error.instance and len(name) <= 48 and name.isidentifier()
-        ][:4]
+        ][:16]
         if missing:
             violation["missing"] = missing
     return violation
 
 
+def schema_violations(
+    errors: Iterable[ValidationError],
+) -> list[dict[str, str | int | float | list[str]]]:
+    return [
+        schema_violation(error)
+        for error in islice((child for error in errors for child in _matching_errors(error)), 16)
+    ]
+
+
 def action_schema_violation(
     spec: ToolActionSpecV2, params: dict[str, Any]
 ) -> dict[str, str | int | float | list[str]]:
+    violations = action_schema_violations(spec, params)
+    return violations[0] if violations else {}
+
+
+def action_schema_violations(
+    spec: ToolActionSpecV2, params: dict[str, Any]
+) -> list[dict[str, str | int | float | list[str]]]:
     from jsonschema import Draft202012Validator, SchemaError
     from referencing import Registry
     from referencing.exceptions import Unresolvable
 
     try:
         validator = Draft202012Validator(spec.input_schema, registry=Registry())
-        error = next(validator.iter_errors(params), None)
+        return schema_violations(validator.iter_errors(params))
     except (SchemaError, Unresolvable):
-        return {"path": "$", "validator": "schema"}
-    return schema_violation(error) if error is not None else {}
+        return [{"path": "$", "validator": "schema"}]
 
 
 def mcp_tool_definitions(

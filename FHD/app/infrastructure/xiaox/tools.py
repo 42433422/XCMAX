@@ -39,7 +39,10 @@ from app.infrastructure.xiaox.binding import (
 from app.infrastructure.xiaox.receipts import read_call_receipt
 from app.infrastructure.xiaox.tool_names import DIRECT_ACTION_TOOLS, XIAOX_TOOL_NAMES
 from app.infrastructure.xiaox.tool_schemas import (
-    action_schema_violation,
+    action_schema_violation as action_schema_violation,
+)
+from app.infrastructure.xiaox.tool_schemas import (
+    action_schema_violations,
 )
 from app.infrastructure.xiaox.tool_schemas import (
     mcp_tool_definitions as mcp_tool_definitions,
@@ -253,7 +256,8 @@ class XiaoxToolBridge:
                 dynamic_discovery=dynamic,
             )
 
-    def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _check_arguments(arguments: dict[str, Any]) -> None:
         if not isinstance(arguments, dict):
             raise XiaoxBindingError("invalid_arguments", "工具参数必须是对象")
         try:
@@ -262,6 +266,9 @@ class XiaoxToolBridge:
             raise XiaoxBindingError("invalid_arguments", "工具参数必须是有效的 JSON 对象") from exc
         if size > 256_000:
             raise XiaoxBindingError("invalid_arguments", "业务参数过大，请使用已归档文件引用")
+
+    def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        self._check_arguments(arguments)
         with self._scope(token) as binding:
             if name not in XIAOX_TOOL_NAMES:
                 raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
@@ -297,6 +304,36 @@ class XiaoxToolBridge:
                 generation=binding.metadata["generation"],
             )
             return result
+
+    def reject_invalid_arguments(
+        self,
+        token: str,
+        name: str,
+        arguments: dict[str, Any],
+        violations: list[dict[str, str | int | float | list[str]]],
+    ) -> dict[str, Any]:
+        """A preflight rejection still belongs to the original attempt/loop ledger."""
+        self._check_arguments(arguments)
+        if not violations:
+            raise XiaoxBindingError("invalid_arguments", "参数拒绝必须包含已验证的契约错误")
+        violations = violations[:16]
+        result = {
+            "success": False,
+            "verified": False,
+            "status": "not_started",
+            "error_code": "invalid_arguments",
+            "message": "工具参数不满足已发布的能力契约",
+            "schema_violation": violations[0],
+            "schema_violations": violations,
+        }
+        with self._scope(token) as binding:
+            binding = self.store.admit_tool_invocation(
+                binding.run_id, name, arguments, generation=binding.metadata["generation"]
+            )
+            self.store.observe_tool_result(
+                binding.run_id, name, arguments, result, generation=binding.metadata["generation"]
+            )
+        return result
 
     def _invoke_bound(
         self, binding: XiaoxBinding, name: str, arguments: dict[str, Any]
@@ -482,8 +519,8 @@ class XiaoxToolBridge:
         self._check_schema(spec, args)
         validation = validate_tool_call(spec.tool_id, spec.action, params)
         schema_valid, _ = validate_schema_object(spec.input_schema, params)
-        violation = action_schema_violation(spec, params)
-        if not validation.ok or not schema_valid or violation:
+        violations = action_schema_violations(spec, params)
+        if not validation.ok or not schema_valid or violations:
             error_code = validation.error_code or "schema_validation_failed"
             return {
                 "success": False,
@@ -495,7 +532,11 @@ class XiaoxToolBridge:
                     if error_code == "schema_validation_failed"
                     else validation.message
                 ),
-                **({"schema_violation": violation} if violation else {}),
+                **(
+                    {"schema_violation": violations[0], "schema_violations": violations}
+                    if violations
+                    else {}
+                ),
             }
         if spec.tool_id == "aiopen" and not spec.is_read_only_call(params):
             from app.application.aiopen.agent_bridge import inline_verification

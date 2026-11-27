@@ -222,7 +222,9 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
         assert malformed.status_code == 200
         tool_error = malformed.json()["result"]
         assert tool_error["isError"] is True
-        assert tool_error["structuredContent"] == {
+        assert {
+            k: v for k, v in tool_error["structuredContent"].items() if k != "schema_violations"
+        } == {
             "success": False,
             "verified": False,
             "status": "not_started",
@@ -234,6 +236,11 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
                 "missing": ["schema_digest"],
             },
         }
+        violations = tool_error["structuredContent"]["schema_violations"]
+        assert {item["validator"] for item in violations} == {"required", "additionalProperties"}
+        saved = setup.store.get(setup.run.run_id)
+        assert saved.metadata["tool_invocation_count"] == 1
+        assert len(saved.metadata["tool_observation_history"]) == 1
         assert json.loads(tool_error["content"][0]["text"]) == tool_error["structuredContent"]
         assert "fixture" not in malformed.text and "tampered" not in malformed.text
         assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
