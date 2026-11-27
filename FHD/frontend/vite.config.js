@@ -146,7 +146,14 @@ export default defineConfig(({ mode }) => {
     },
     build: createBuildOptions(),
     optimizeDeps: {
-      include: ['vue'],
+      // 预收集组件解析器的深层入口，避免懒加载视图触发重优化与整页刷新。
+      include: [
+        'vue',
+        'element-plus/es',
+        'element-plus/es/components/base/style/css',
+        'element-plus/es/components/dialog/style/css',
+        'element-plus/es/components/segmented/style/css',
+      ],
       exclude: ['vue-router'],
       esbuildOptions: {
         target: 'esnext',

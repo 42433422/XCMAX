@@ -311,6 +311,118 @@ def test_writer_rejects_table_overlap_with_protected_range(native_workbook):
         run([_sales_table_phase()], ["销售明细!D4"])
 
 
+@pytest.mark.parametrize(
+    ("formula", "next_formula"),
+    [
+        ("=B2*C2", "=B3*C3"),
+        ("=b2*c2", "=B3*C3"),
+        ("=$B2*C$2+$B$2", "=$B3*C$2+$B$2"),
+        ('=SUM(B2:C2)+N("B2")', '=SUM(B3:C3)+N("B2")'),
+        ("=ROUND([@数量]*[@单价],2)", "=ROUND([@数量]*[@单价],2)"),
+        ("='销售明细'!tblSales[@数量]*B2", "='销售明细'!tblSales[@数量]*B3"),
+    ],
+)
+def test_native_table_fills_formulas_relative_to_first_data_cell(
+    native_workbook, formula, next_formula
+):
+    from app.mod_sdk.workbook_qc_objects import check_native_table
+
+    run, template, qc, _ = native_workbook
+    out, plan = run([{**_sales_table_phase(), "calculated_formula": formula}])
+    book = load_workbook(out)
+    try:
+        sheet = book["销售明细"]
+        assert sheet["D2"].value == formula
+        assert sheet["D3"].value == next_formula
+        assert (
+            sheet.tables["tblSales"].tableColumns[3].calculatedColumnFormula.attr_text
+            == formula[1:]
+        )
+        assert sheet["D4"].value == "=SUBTOTAL(109,tblSales[金额])"
+        finding = qc._Finding("native_table")
+        check_native_table(sheet, plan["phases"][0], finding, set())
+        assert finding.issues == []
+    finally:
+        book.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+
+
+def test_native_table_qc_rejects_repeated_first_row_a1_formula(native_workbook):
+    from app.mod_sdk.workbook_qc_objects import check_native_table
+
+    run, template, qc, _ = native_workbook
+    out, plan = run([{**_sales_table_phase(), "calculated_formula": "=B2*C2"}])
+    book = load_workbook(out)
+    book["销售明细"]["D3"] = "=B2*C2"
+    finding = qc._Finding("native_table")
+    check_native_table(book["销售明细"], plan["phases"][0], finding, set())
+    assert [issue["ref"] for issue in finding.issues] == ["D3"]
+    book.save(out)
+    book.close()
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] == "FAIL"
+    assert [
+        (issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]
+    ] == [(3, 4)]
+
+
+def test_native_table_formula_anchor_can_start_away_from_a1(native_workbook):
+    run, template, qc, _ = native_workbook
+    book = load_workbook(template)
+    sheet = book["销售明细"]
+    sheet.delete_rows(1, sheet.max_row)
+    for row, values in enumerate(
+        [["产品", "数量", "单价", "金额"], ["甲", 2, 20, None], ["乙", 1, 10, None]], start=5
+    ):
+        for col, value in enumerate(values, start=2):
+            sheet.cell(row, col, value)
+    book.save(template)
+    book.close()
+    out, plan = run([{**_sales_table_phase(), "range": "B5:E7", "calculated_formula": "=C6*D6"}])
+    book = load_workbook(out)
+    try:
+        sheet = book["销售明细"]
+        table = sheet.tables["tblSales"]
+        assert table.ref == "B5:E8" and table.autoFilter.ref == "B5:E7"
+        assert table.headerRowCount == 1 and table.totalsRowCount == 1
+        assert [sheet[ref].value for ref in ("E6", "E7", "E8")] == [
+            "=C6*D6",
+            "=C7*D7",
+            "=SUBTOTAL(109,tblSales[金额])",
+        ]
+    finally:
+        book.close()
+    assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
+
+
+@pytest.mark.parametrize("failure", ["overflow", "translator", "implicit_intersection"])
+def test_native_table_formula_translation_failure_preserves_existing_output(
+    native_workbook, monkeypatch, failure
+):
+    from openpyxl.formula.translate import Translator, TranslatorError
+
+    run, template, _, writer = native_workbook
+    out, _ = run([_sales_table_phase()])
+    original = {
+        path: path.read_bytes() for path in (template, out, out.parent / "write_report.json")
+    }
+    if failure == "translator":
+        original_translate = Translator.translate_range
+
+        def fail_on_second_row(cls, value, row_delta, col_delta):
+            if row_delta:
+                raise TranslatorError("formula translation unavailable")
+            return original_translate(value, row_delta, col_delta)
+
+        monkeypatch.setattr(Translator, "translate_range", classmethod(fail_on_second_row))
+    formula = {"overflow": "=B1048576*C2", "implicit_intersection": "=@B2*C2"}.get(
+        failure, "=B2*C2"
+    )
+    with pytest.raises(writer.PlanError, match="计算列公式"):
+        run([{**_sales_table_phase(), "calculated_formula": formula}])
+    assert all(path.read_bytes() == content for path, content in original.items())
+
+
 @pytest.mark.parametrize("name", ["部品_台帳2", r"\Änderung.1"])
 def test_native_table_name_round_trips_unicode(native_workbook, name):
     run, template, qc, _ = native_workbook

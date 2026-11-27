@@ -1,4 +1,4 @@
-"""Sheet-scoped A1 reference transformation for row insertion.
+"""A1 formula filling and sheet-scoped reference transformation for row insertion.
 
 This module only translates formula operands; workbook mutation and plan error
 reporting remain in the template writer.
@@ -21,6 +21,52 @@ class ReferenceOverflowError(ValueError):
 
 class DefinedNameError(ValueError):
     """A named destination cannot be preserved safely by this insertion."""
+
+
+def fill_formula_rows(formula: str, *, origin: str, count: int) -> list[str]:
+    """Copy a first-data-row formula with openpyxl's relative A1 semantics."""
+    from openpyxl.formula.tokenizer import TokenizerError
+    from openpyxl.formula.translate import Translator, TranslatorError
+    from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
+
+    try:
+        translator = Translator(formula, origin=origin)
+        first_row, _ = coordinate_to_tuple(origin)
+        if (
+            not formula.startswith("=")
+            or not formula[1:].strip()
+            or not (count > 0 and 1 <= first_row <= first_row + count - 1 <= XLSX_MAX_ROW)
+        ):
+            raise ValueError("计算列公式或填充范围无效。")
+        formulas: list[str] = []
+        for offset in range(count):
+            parts: list[str] = []
+            for token in translator.get_tokens():
+                value = token.value
+                if (token.type, token.subtype) == ("OPERAND", "RANGE"):
+                    _, separator, address = value.rpartition("!")
+                    if address.startswith("@"):
+                        raise ValueError("计算列公式暂不支持隐式交集引用，请使用表格结构化引用。")
+                    translated = Translator.translate_range(value, offset, 0)
+                    # Translator drops the qualifier of symbolic/structured names.
+                    if separator and translated == address:
+                        translated = value
+                    if translated != value:
+                        for endpoint in translated.rpartition("!")[2].split(":"):
+                            try:
+                                left, top, right, bottom = range_boundaries(endpoint.upper())
+                            except ValueError:
+                                continue  # Symbolic and structured names retain their spelling.
+                            if any(col and col > XLSX_MAX_COL for col in (left, right)) or any(
+                                row and row > XLSX_MAX_ROW for row in (top, bottom)
+                            ):
+                                raise ReferenceOverflowError("计算列公式引用超出工作表范围。")
+                    value = translated
+                parts.append(value)
+            formulas.append("=" + "".join(parts) if offset else formula)
+        return formulas
+    except (TokenizerError, TranslatorError) as exc:
+        raise ValueError("计算列公式无法按相对 A1 引用填充。") from exc
 
 
 def validate_named_control_order(phases):

@@ -10,6 +10,7 @@ import re
 from typing import Any, Dict, List, Protocol, Tuple
 
 from app.mod_sdk.workbook_controls import WORKBOOK_BANDED_TABLE_STYLE
+from app.mod_sdk.workbook_reference_relocation import fill_formula_rows
 
 XLSX_MAX_ROW = 1_048_576
 XLSX_MAX_COL = 16_384
@@ -52,7 +53,6 @@ def _native_sheet(wb, name: str):
 
 
 def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, stats) -> None:
-    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
     from openpyxl.utils.cell import column_index_from_string, get_column_letter
     from openpyxl.worksheet.filters import AutoFilter
     from openpyxl.worksheet.table import Table, TableColumn, TableFormula, TableStyleInfo
@@ -117,6 +117,7 @@ def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, sta
         sum_heading not in headings or re.search(r"[\[\]#'@\r\n]", sum_heading)
     ):
         raise PlanError("合计列必须是存在的表格标题，且不含结构化引用转义字符。")
+    calculated_formulas = None
     if formula is not None or calc_heading is not None:
         if (
             calc_heading not in headings
@@ -125,9 +126,13 @@ def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, sta
         ):
             raise PlanError("计算列需要存在的标题和以 = 开头的非空公式。")
         try:
-            Tokenizer(formula)
-        except TokenizerError as exc:
-            raise PlanError("计算列公式无法解析。") from exc
+            calculated_formulas = fill_formula_rows(
+                formula,
+                origin=f"{get_column_letter(left + headings.index(calc_heading))}{top + 1}",
+                count=bottom - top,
+            )
+        except ValueError as exc:
+            raise PlanError(f"计算列公式无法填充：{exc}") from exc
     if sum_heading is not None and any(
         ws.cell(table_bottom, col).value is not None for col in range(left, right + 1)
     ):
@@ -159,8 +164,9 @@ def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, sta
         table.tableColumns.append(column)
     ws.add_table(table)
     if calculated is not None:
-        for row in range(top + 1, bottom + 1):
-            ws.cell(row, left + calculated).value = formula
+        assert calculated_formulas is not None
+        for row, row_formula in enumerate(calculated_formulas, start=top + 1):
+            ws.cell(row, left + calculated).value = row_formula
         stats["formulas_written"] += bottom - top
     if summed is not None:
         total = ws.cell(table_bottom, left + summed)

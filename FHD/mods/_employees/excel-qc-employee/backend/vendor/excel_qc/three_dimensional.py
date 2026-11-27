@@ -3,7 +3,9 @@
 import re
 
 from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-from openpyxl.utils.cell import range_boundaries
+from openpyxl.utils.cell import get_column_letter, range_boundaries
+
+from app.mod_sdk.workbook_reference_relocation import fill_formula_rows
 
 from .plan_coordinates import insertions, moved_row, plan_phases, shift_formula_rows, target
 
@@ -96,18 +98,21 @@ def _write_phase(values, phase):
         try:
             sheet = phase["sheet"]
             left, top, right, bottom = range_boundaries(phase["range"])
-            column = next(
-                col
-                for col in range(left, right + 1)
-                if values.get((sheet, top, col)) == phase["sum_column"]
-            )
-            for row in range(top + 1, bottom + 1):
-                values[sheet, row, column] = phase["calculated_formula"]
-            values[sheet, bottom + 1, column] = (
-                f"=SUBTOTAL(109,{phase['name']}[{phase['sum_column']}])"
-            )
-            values[sheet, bottom + 1, left if column != left else left + 1] = "合计"
-        except (KeyError, TypeError, ValueError, StopIteration):
+            formula, summed = phase.get("calculated_formula"), phase.get("sum_column")
+            calculated = phase.get("calculated_column", summed if formula is not None else None)
+            columns = {values.get((sheet, top, col)): col for col in range(left, right + 1)}
+            if calculated is not None:
+                column = columns[calculated]
+                formulas = fill_formula_rows(
+                    formula, origin=f"{get_column_letter(column)}{top + 1}", count=bottom - top
+                )
+                for row, expected in enumerate(formulas, start=top + 1):
+                    values[sheet, row, column] = expected
+            if summed is not None:
+                column = columns[summed]
+                values[sheet, bottom + 1, column] = f"=SUBTOTAL(109,{phase['name']}[{summed}])"
+                values[sheet, bottom + 1, left if column != left else left + 1] = "合计"
+        except (KeyError, TypeError, ValueError):
             pass  # Native-table conformance checks independently validate this phase.
 
 

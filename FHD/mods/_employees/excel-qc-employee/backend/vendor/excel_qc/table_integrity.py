@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Dict
 
 from app.mod_sdk.workbook_controls import WORKBOOK_BANDED_TABLE_STYLE
+from app.mod_sdk.workbook_reference_relocation import fill_formula_rows
 
 if TYPE_CHECKING:
     from .checks import _CellExpectations, _CellTarget, _Finding
@@ -194,8 +195,13 @@ def _check_native_table(
         ):
             f.fail("原生表格计算列或合计行元数据与计划不符", sheet=ws.title)
     if calculated is not None:
-        for row in range(top + 1, bottom + 1):
-            cells[(ws.title, row, left + calculated)] = ("table_formula", formula)
+        formulas = fill_formula_rows(
+            formula,
+            origin=f"{get_column_letter(left + calculated)}{top + 1}",
+            count=bottom - top,
+        )
+        for row, expected in enumerate(formulas, start=top + 1):
+            cells[(ws.title, row, left + calculated)] = ("table_formula", expected)
     if summed is None:
         return
     cells[(ws.title, bottom + 1, left + label)] = ("cell_writes", "合计")

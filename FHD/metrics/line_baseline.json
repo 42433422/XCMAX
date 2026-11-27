@@ -1,5 +1,5 @@
 {
-  "lines": 2836372,
+  "lines": 2836556,
   "updated": "2026-11-27",
-  "note": "PR #3682 follow-up fixes verified stale cached waiting states after cancel/pause and same-input resume; preserves original receipts and completed turns, adds 18 ownership/control regression cases, restores existing two-tone Tab focus and checks the real focused control, and replaces obsolete visual approvals with 12 independently reviewed exact pixel pairs. Four Tab pairs remain unapproved until fresh CI capture; no size gate or acceptance claim is relaxed."
+  "note": "继续完成用户授权的 #3682 WG01–WG11 集成。相对79d3追加已实证的原生表计算列相对引用修复与写入/QC回归、Vite懒路由预优化重载修复，以及4组已独立查看的Tab焦点精确像素配对；保留原测试断言、比较器和质量阈值。203项工作簿回归及定向mypy通过，优化器A/B实证消除full-reload；正式浏览器与全量CI仍须按新HEAD核验。按既有统计规则实测2836556行，相对main fe7580b的2801287行净增35269；相对79d3净增184。G11仍为186，19项精确源码增长请求保持匹配，登记不构成人工审批。"
 }
