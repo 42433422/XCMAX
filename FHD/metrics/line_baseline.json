@@ -1,5 +1,5 @@
 {
-  "lines": 2838526,
+  "lines": 2838811,
   "updated": "2026-11-27",
-  "note": "PR #3682 review follow-up: restore four lines asserting the original MCP uri/name required parameters after capability-negotiation parametrization; all 90 tests in the original MCP tool and SDK protocol modules pass. No production behavior or quality threshold change."
+  "note": "正常合并主线7b68ddad（#3724）并完整保留789ee248的工作组01–11集成和MCP原必填参数断言。新主线性能探针、真实本地HTTP门禁原测试和工作流P95步骤净增285维护行；合并实测2838526→2838811，main基线2802045，PR相对main净增仍36766。性能工作流同时保留原真实PG故障矩阵/严格证据门禁和新P95 500ms、零错误率步骤，未改探针或原测试语义。原探针2项测试通过，SSOT源/镜像73项一致；G11=186及覆盖率、视觉门槛不变，增长登记仍为审查请求而非人工批准。"
 }

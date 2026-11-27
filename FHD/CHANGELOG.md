@@ -40,6 +40,7 @@
 - 持续运行验收按基础任务、复杂任务、故障恢复、父子交接、业务重复和误报、8小时/72小时、30天及四端真机分别核对原始证据；缺失或旧版本证据明确阻断。修正30天生产指标仍按90天查询判定的问题，保留既有90天正式发布门槛；验收规则通过不代表真实生产运行已经通过。
 
 - 修复集成后员工工具边界与质量校验不一致的问题，文件来源名称安全校验保持原有规则。
+- 性能探针 `scripts/loadtest/probe.py` 新增 `--suite regular-pages`、`--max-p95-ms`（支持 500ms 常规页面 P95 门禁）、`--max-error-rate` 与 `--json-out`（绑定 `source_sha` 的结构化报告），并补充基于真实本地 HTTP 服务的正负向门禁单测。
 - Java 支付服务补齐原路渠道退款闭环：`AlipayService` 新增基于 `AlipayTradeRefundRequest` 与 `out_request_no` 幂等键的 `refundOrder`，`Refund` 与 Flyway `V21` 新增渠道退款元数据字段，`RefundService` 支持按 `refund_target=original|alipay|wallet` 执行原路退款并在渠道失败时回滚不误退钱包，补充 3 项原路退款正负向单测（36 项退款单测与契约测试全绿）。
 - 新用户引导 `onboardingTutorial` store 新增 10 分钟（600s）核心任务清单追踪（`startCoreChecklist` / `completeCoreTask` / `getCoreChecklistSummary` / `resetCoreChecklist`），支持 `localStorage` 持久化、完成度百分比与 10 分钟 SLA 达标判定，并补充 Vitest 单元测试（13/13 通过）。
 - 加快 Excel 原生读取和连续翻页，减少重复解析、临时对象与完整 JSON 输出开销；每页仍核对当前权限和文件摘要，文件变化、撤权或过期后不能使用旧缓存。
