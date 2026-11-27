@@ -1,5 +1,5 @@
 {
-  "lines": 2802252,
+  "lines": 2803092,
   "updated": "2026-11-27",
-  "note": "PR #3721 同步最新 main（含 #3724）对齐基线"
+  "note": "PR #3683 修复 test_phase41_routes.py 单步审批测试并同步最新 main"
 }
