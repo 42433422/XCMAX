@@ -148,6 +148,30 @@ def test_real_calc_does_not_certify_errors_or_wrong_values(
     assert report["source_unchanged"] is True
 
 
+@_REQUIRES_ENGINE
+def test_real_calc_boolean_serialization_preserves_formula_and_text(tmp_path, pinned_real_engine):
+    path = _workbook(tmp_path, "=VLOOKUP(A1,$A$1:$A$2,1,FALSE)")
+    book = load_workbook(path)
+    book["Data"]["B2"] = "=IF(TRUE,5,9)"
+    book["Data"]["B3"] = "=IF(FALSE,5,9)"
+    book["Data"]["B4"] = '=IF(TRUE,"FALSE()","TRUE()")'
+    book.save(path)
+    book.close()
+    original = path.read_bytes()
+    report = _verify(
+        path,
+        [
+            {"sheet": "Data", "ref": "B1", "value": 3},
+            {"sheet": "Data", "ref": "B2", "value": 5},
+            {"sheet": "Data", "ref": "B3", "value": 9},
+            {"sheet": "Data", "ref": "B4", "value": "FALSE()"},
+        ],
+    )
+    assert report["status"] == "verified" and report["expected_values_verified"], report
+    assert report["values"][0]["formula"].endswith(",FALSE)")
+    assert path.read_bytes() == original
+
+
 def test_missing_engine_does_not_relabel_formula_text_as_calculated(tmp_path, monkeypatch):
     path = _workbook(tmp_path)
     monkeypatch.setattr(recalc, "_engine_path", lambda: None)
@@ -581,12 +605,15 @@ def test_process_env_is_scoped_to_child_and_default_still_inherits(tmp_path, mon
         ("copy", "formula_recalculation_output_not_fresh"),
         ("no_cache", "formula_recalculation_cache_missing"),
         ("changed_literal_type", "formula_recalculation_input_cells_changed"),
+        ("changed_boolean", "formula_recalculation_input_cells_changed"),
     ],
 )
 def test_successful_engine_exit_is_not_proof_of_recalculation(tmp_path, monkeypatch, mode, code):
     path = _workbook(tmp_path)
     book = load_workbook(path)
     book["Data"]["A1"] = 1
+    if mode == "changed_boolean":
+        book["Data"]["B1"] = "=IF(FALSE,A1,A2)"
     book.save(path)
     book.close()
 
@@ -601,6 +628,11 @@ def test_successful_engine_exit_is_not_proof_of_recalculation(tmp_path, monkeypa
         elif mode == "changed_literal_type":
             changed = load_workbook(output)
             changed["Data"]["A1"] = True  # Python 1 == True must not mask a Calc input change.
+            changed.save(output)
+            changed.close()
+        elif mode == "changed_boolean":
+            changed = load_workbook(output)
+            changed["Data"]["B1"] = "=IF(TRUE(),A1,A2)"
             changed.save(output)
             changed.close()
         return subprocess.CompletedProcess(command, 0, "converted", "")

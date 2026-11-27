@@ -271,6 +271,31 @@ def _cells(content: bytes) -> tuple[list[str], dict, dict]:
         book.close()
 
 
+def _formula_semantics(formula: str) -> str:
+    # Calc serializes logical constants as zero-argument calls. Tokenize with
+    # openpyxl so text, cell/name references and calls with arguments stay exact.
+    tokens, values, index = Tokenizer(formula).items, [], 0
+    while index < len(tokens):
+        token = tokens[index]
+        if (
+            token.type == "FUNC"
+            and token.subtype == "OPEN"
+            and token.value.upper() in {"TRUE(", "FALSE("}
+            and index + 1 < len(tokens)
+            and (tokens[index + 1].type, tokens[index + 1].subtype) == ("FUNC", "CLOSE")
+        ):
+            values.append(token.value[:-1].upper())
+            index += 2
+        else:
+            values.append(
+                token.value.upper()
+                if (token.type, token.subtype) == ("OPERAND", "LOGICAL")
+                else token.value
+            )
+            index += 1
+    return "=" + "".join(values)
+
+
 def _table_semantics(node: Element) -> tuple:
     """Keep ordered columns, formulas and metadata without ZIP identity or XML spelling."""
     tag = node.tag.removeprefix(_NS)
@@ -632,7 +657,14 @@ def recalculate_workbook(
                 raise _Unavailable("formula_recalculation_output_not_fresh")
             _inspect_package(calculated, ".xlsx")
             actual_sheets, actual_formulas, actual_literals = _cells(calculated)
-            if (sheets, formulas, literals) != (actual_sheets, actual_formulas, actual_literals):
+            if (
+                (sheets, literals) != (actual_sheets, actual_literals)
+                or formulas.keys() != actual_formulas.keys()
+                or any(
+                    _formula_semantics(value) != _formula_semantics(actual_formulas[key])
+                    for key, value in formulas.items()
+                )
+            ):
                 raise _Unavailable("formula_recalculation_input_cells_changed")
             if _calculation_context(calculated) != calculation_context:
                 raise _Unavailable("formula_recalculation_input_context_changed")
