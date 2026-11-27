@@ -116,6 +116,8 @@ def action_schema_violation(
 
 def mcp_tool_definitions(
     visible_actions: Iterable[tuple[str, str]] | None = None,
+    *,
+    dynamic_discovery: bool = False,
 ) -> list[Tool]:
     """Use MCP SDK types; schema is glue around the existing capability catalog."""
     from mcp.types import Tool
@@ -125,7 +127,7 @@ def mcp_tool_definitions(
         "action": {"type": "string"},
     }
     visible = list(visible_actions) if visible_actions is not None else None
-    if visible:
+    if visible and not dynamic_discovery:
         # Keep the schema linear in catalog size. The bridge enforces valid pairs
         # and current permission on every call.
         fields = {
@@ -191,7 +193,9 @@ def mcp_tool_definitions(
         )
         for name in XIAOX_TOOL_NAMES
         if name not in {"execute_employee", *DIRECT_ACTION_TOOLS}
-        if visible != [] or name not in {"capability_describe", "execute_action"}
+        if dynamic_discovery
+        or visible != []
+        or name not in {"capability_describe", "execute_action"}
         for description, props, required in [definitions_by_name[name]]
     ]
     if visible is None or ("employee", "execute") in visible:

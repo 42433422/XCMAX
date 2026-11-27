@@ -198,35 +198,59 @@ class XiaoxToolBridge:
             yield binding
 
     @classmethod
-    def visible_actions(cls, binding: XiaoxBinding, words: list[str]) -> Iterator[ToolActionSpecV2]:
+    def visible_actions(
+        cls,
+        binding: XiaoxBinding,
+        words: list[str],
+        *,
+        only_actions: set[tuple[str, str]] | None = None,
+    ) -> Iterator[ToolActionSpecV2]:
         from app.application.capability_catalog import authorized_tool_specs
 
         allowed_actions = binding.metadata.get("allowed_actions")
         candidates = None
-        if allowed_actions is not None:
+        if allowed_actions is not None or only_actions is not None or words:
             from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
 
-            allowed = set(allowed_actions)
+            allowed = set(allowed_actions) if allowed_actions is not None else None
             candidates = {
                 key: spec
                 for key, spec in build_tool_specs_v2().items()
-                if f"{key[0]}.{key[1]}" in allowed
+                if (allowed is None or f"{key[0]}.{key[1]}" in allowed)
+                and (only_actions is None or key in only_actions)
+                and (
+                    not words
+                    or any(
+                        word in f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
+                        for word in words
+                    )
+                )
             }
             if not candidates:
                 return
         specs = authorized_tool_specs(binding.context, include_aiopen=True, specs=candidates)
         for _, spec in sorted(specs.items()):
-            if words:
-                text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
-                if not any(word in text for word in words):
-                    continue
             if cls._allowed(spec, binding):
                 yield spec
 
     def list_tool_definitions(self, token: str) -> list[Tool]:
         with self._scope(token) as binding:
+            # Generic discovery/dispatch already checks live authority on every
+            # call. Startup only needs the three native wrapper schemas, rather
+            # than authorizing the whole enterprise catalog inside thread/start.
+            dynamic = binding.metadata.get("allowed_actions") is None
             return mcp_tool_definitions(
-                (spec.tool_id, spec.action) for spec in self.visible_actions(binding, [])
+                (
+                    (spec.tool_id, spec.action)
+                    for spec in self.visible_actions(
+                        binding,
+                        [],
+                        only_actions={*DIRECT_ACTION_TOOLS.values(), ("employee", "execute")}
+                        if dynamic
+                        else None,
+                    )
+                ),
+                dynamic_discovery=dynamic,
             )
 
     def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:

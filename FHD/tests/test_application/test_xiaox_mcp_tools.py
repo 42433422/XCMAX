@@ -24,6 +24,58 @@ from tests.test_application.test_xiaox_tools import (
 )
 
 
+def test_native_startup_projects_only_wrapper_actions_and_retains_live_discovery(
+    bridge_setup, monkeypatch
+):
+    from app.application import capability_catalog
+    from app.infrastructure.xiaox.tool_names import DIRECT_ACTION_TOOLS
+
+    actual = capability_catalog.authorized_tool_specs
+    projected = []
+
+    def scoped(context, **options):
+        projected.append(set(options["specs"]))
+        return actual(context, **options)
+
+    monkeypatch.setattr(capability_catalog, "authorized_tool_specs", scoped)
+    state = bridge_setup
+    tools = state.bridge.list_tool_definitions(state.grant.mcp_token)
+    assert len(projected) == 1
+    assert projected[0] <= {*DIRECT_ACTION_TOOLS.values(), ("employee", "execute")}
+    generic = next(tool for tool in tools if tool.name == "execute_action")
+    assert "enum" not in generic.input_schema["properties"]["tool_id"]
+    # A dynamic directory cannot accidentally restrict the user's existing
+    # customer capability to the three native startup wrappers.
+    described = _invoke(
+        state.bridge,
+        state.grant.mcp_token,
+        "capability_describe",
+        {"tool_id": "customers", "action": "query"},
+    )
+    assert described["success"]
+    assert state.store.get(state.run.run_id).metadata["calls"] == {}
+
+
+def test_search_projects_candidates_before_live_authorization(bridge_setup, monkeypatch):
+    from app.application import capability_catalog
+
+    actual = capability_catalog.authorized_tool_specs
+    projected = []
+
+    def scoped(context, **options):
+        projected.extend(options["specs"].values())
+        return actual(context, **options)
+
+    monkeypatch.setattr(capability_catalog, "authorized_tool_specs", scoped)
+    state = bridge_setup
+    found = list(state.bridge.visible_actions(state.store.get(state.run.run_id), ["customers"]))
+    assert found and projected
+    assert all(
+        "customers" in f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
+        for spec in projected
+    )
+
+
 def test_employee_mcp_action_uses_live_nested_schema_only_when_visible():
     from jsonschema import Draft202012Validator
 
