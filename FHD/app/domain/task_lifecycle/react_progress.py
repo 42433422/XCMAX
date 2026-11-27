@@ -40,7 +40,7 @@ class ProgressCheckpoint(BaseModel):
     limits: ProgressLimits
 
     @model_validator(mode="after")
-    def bounded(self):
+    def bounded(self) -> ProgressCheckpoint:
         for counter, budget in (
             ("execution_turns", "execution"),
             ("repair_turns", "repair"),

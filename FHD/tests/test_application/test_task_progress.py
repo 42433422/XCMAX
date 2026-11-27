@@ -23,6 +23,13 @@ def _step(name: str, status: str) -> AgentStep:
     )
 
 
+def test_blocked_progress_does_not_claim_a_dependency_will_automatically_clear() -> None:
+    run = AgentRun(user_id="owner", message="核对原回执", status="blocked")
+    progress = task_progress_snapshot(run)
+    assert progress["stage"] == "已阻断，需核对原任务回执"
+    assert progress["status"] == "blocked" and progress["percent"] < 100
+
+
 def test_progress_is_derived_from_durable_steps_and_current_stage() -> None:
     run = AgentRun(
         user_id="owner",
