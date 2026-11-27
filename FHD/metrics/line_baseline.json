@@ -1,5 +1,5 @@
 {
-  "lines": 2801967,
+  "lines": 2802045,
   "updated": "2026-11-27",
-  "note": "PR #3721 同步最新 main（含 #3722）对齐基线"
+  "note": "PR #3724 测试增加 delenv(GITHUB_SHA) (+1 行)"
 }

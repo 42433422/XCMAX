@@ -116,6 +116,19 @@ jobs:
           BASE_URL: http://127.0.0.1:5000
         run: k6 run --out json=performance-results/k6-samples.jsonl scripts/loadtest/smoke.js
 
+      - name: Measure regular pages P95 <= 500ms budget
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python scripts/loadtest/probe.py \
+            --base http://127.0.0.1:5000 \
+            --suite regular-pages \
+            --workers 10 \
+            --total 50 \
+            --max-p95-ms 500 \
+            --max-error-rate 0.0 \
+            --json-out performance-results/regular-pages-p95.json
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
