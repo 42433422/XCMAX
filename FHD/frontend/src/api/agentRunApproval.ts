@@ -26,7 +26,7 @@ export async function approveRunWithFreshGrant(runId: string, options: ApproveOp
     if (options.isCurrent && !options.isCurrent()) return null
     const grant = String(snapshot.approval?.grant || '').trim()
     if (!grant) throw new Error(APPROVAL_GRANT_MISSING_MESSAGE)
-    return agentRunsApi.continueRun(runId, {
+    return agentRunsApi.continueRun(snapshot.approval?.run_id?.trim() || runId, {
       approval_grant: grant,
       ...(options.runtimeContext ? { runtime_context: options.runtimeContext } : {}),
     })

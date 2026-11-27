@@ -22,6 +22,16 @@ describe('approveRunWithFreshGrant (#2289)', () => {
     expect(continueRun).toHaveBeenNthCalledWith(2, 'run_1', { approval_grant: 'new' })
   })
 
+  it('approves the verified child grant while refreshing the original parent', async () => {
+    getRun.mockResolvedValueOnce({ ...waiting('old'), approval: { grant: 'old', run_id: 'child_1' } })
+      .mockResolvedValueOnce({ ...waiting('new'), approval: { grant: 'new', run_id: 'child_2' } })
+    continueRun.mockRejectedValueOnce(forbidden()).mockResolvedValueOnce({ success: true })
+    await expect(approveRunWithFreshGrant('parent')).resolves.toEqual({ success: true })
+    expect(getRun.mock.calls).toEqual([['parent'], ['parent']])
+    expect(continueRun).toHaveBeenNthCalledWith(1, 'child_1', { approval_grant: 'old' })
+    expect(continueRun).toHaveBeenNthCalledWith(2, 'child_2', { approval_grant: 'new' })
+  })
+
   it('surfaces a readable error instead of failing silently when 403 persists', async () => {
     getRun.mockResolvedValue(waiting('g'))
     continueRun.mockRejectedValue(forbidden())

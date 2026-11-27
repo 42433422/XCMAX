@@ -1212,6 +1212,18 @@
       "validation": "相关回归176 passed，1项需显式启用LibreOffice的重算资格测试skipped；其中真实注册入口43项包含逐页重验权限、撤权/过期/同长度篡改、会话和Mod隔离以及参数伪造负控。独立150组范围/游标对照一致；30万格与远坐标稀疏样本完整原生事实和JSON字节一致。Ruff、格式、结构和本地3.12补充类型检查通过；正式Python3.11及全量coverage以最终同HEAD CI为准。",
       "follow_up": "由现有review_owner基于精确base/head/blob复核本轮职责迁移和缓存边界；完整CI、人工评审、main与部署读回分别核对。本记录只请求评审，不代表人工审批通过。",
       "review_owner": "@42433422"
+    },
+    "FHD/app/fastapi_routes/domains/agent/route_support.py": {
+      "reason": "父运行无业务步骤导致审批凭证缺失，投影原子任务既有凭证并沿原事务审批；不新增审批机制。此记录是评审请求而非人工批准。",
+      "boundary": "只读原SQL回执并验证归属、父任务可投影状态及未知结果；原JWT绑定子运行/步骤/参数，原审批事务和费用权限保持有效。",
+      "validation": "自动代码审核先前精确HEAD通过；当前后端审批/工具22项和前端审批6项通过，真实原任务待新提交验收。",
+      "follow_up": "请@42433422按精确blob核对父子作用域、未知结果拒绝与原审批事务，记录不代替人工审查。",
+      "review_owner": "@42433422",
+      "base_file": "FHD/app/fastapi_routes/domains/agent/route_support.py",
+      "base_blob": "c48f9a3dea6fc0fec54015a77eb3c8f6192636c9",
+      "head_blob": "b38e36973341ca7d0a401bfd9cb61a1597fa85ec",
+      "before_lines": 658,
+      "after_lines": 681
     }
   }
 }
