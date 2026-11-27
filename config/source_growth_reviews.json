@@ -124,12 +124,12 @@
     "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py",
       "base_blob": "9f0e14502e9deee9bf3c323b38fd7f3ba70a6a46",
-      "head_blob": "178caefd05606e79eb5740617bfedfd6a535252e",
+      "head_blob": "0488005684547daa20a7d8624a92357ab0ff0534",
       "before_lines": 1168,
-      "after_lines": 1209,
-      "reason": "在现有SPECIAL_TOOL_CONTRACTS中登记原生分页读取和CSV/XLSX导出的有效合同样例，替换默认占位符导致的无效SHA和文件名。",
-      "boundary": "只扩展既有合同样例数据，不新增执行器、接口、权限或审批旁路；保持原输入输出schema约束。",
-      "validation": "test_tool_spec_v2全模块80 passed/9.82s；标准JSON Schema与host validate_tool_call对每个样例均接受，并共同拒绝63位及非十六进制SHA、.xls和.xlsx.zip。真实审批导出回读回归另1 passed/14.47s。 根分支9f0245c7b对本轮受影响模块与真实审批导出回读统一验证274 passed/1 skipped（62.42s）；跳过项明确为缺客户原件，不计客户验收。",
+      "after_lines": 1137,
+      "reason": "现役工作簿合同样例新增后触及40KB结构门禁；按同一职责迁移全部Excel读取/导出/聚合/join/diff声明式样例到同包workbook_tool_contracts。父模块从41065降至38599bytes，相对main也缩减，不提高结构预算。",
+      "boundary": "只移动声明式数据；原公共入口、样例顺序和全部字段值相同。新模块不导入父模块，不复制通用helper；没有执行器、权限、审批或模型选择变化。",
+      "validation": "f2230052df94c0e1241057f96f96e3ac0bd9794c：111个action/113个样例有序JSON前后逐字节相同，SHA256 676abecb88953e4589d4e219cf025b22a15f6702fe2b7ba8d0920cacec467546；80项tool_spec_v2通过9.48s。结构门禁errors0/warns0、py>40KB=186且baseline未变；Ruff/format/diff通过。正式最终CI继续核验。",
       "follow_up": "这是用户要求将3695集成并合入main所需的精确源码增长评审请求；正式CI与main读回分别核对。本记录不是人工评审通过；后续同责样例仍归现役合同集合。",
       "review_owner": "@42433422"
     },

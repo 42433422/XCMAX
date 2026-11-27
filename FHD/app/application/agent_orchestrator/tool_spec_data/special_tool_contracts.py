@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.application.agent_orchestrator.tool_spec_data.workbook_tool_contracts import (
+    _WORKBOOK_TOOL_CONTRACTS,
+)
+
 
 def _sample(name: str, input: dict[str, Any], output: dict[str, Any]) -> dict[str, Any]:
     return {"name": name, "input": input, "output": output}
@@ -1130,80 +1134,4 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
 }
 
 
-_SPECIAL_TOOL_CONTRACTS.update(
-    {
-        ("excel_analysis", "read"): [
-            _sample(
-                "workbook_native_cells_page_contract",
-                {
-                    "file_path": "sample.xlsx",
-                    "view": "cells",
-                    "sheet_name": "Sheet1",
-                    "offset": 1,
-                    "max_rows": 1,
-                    "expected_sha256": "a" * 64,
-                },
-                _success(
-                    data={
-                        "view": "cells",
-                        "sheet_name": "Sheet1",
-                        "source_sha256": "a" * 64,
-                        "offset": 1,
-                        "cells": [{"address": "A2", "value": 7}],
-                        "has_more": False,
-                        "next_offset": None,
-                    }
-                ),
-            )
-        ],
-        ("excel_analysis", "export"): [
-            _sample(
-                f"workbook_export_{extension}_contract",
-                {
-                    "file_path": f"result.{extension}",
-                    "rows": [{"name": "item", "quantity": 1}],
-                },
-                _success(
-                    data={
-                        "file_path": f"/workspace/result.{extension}",
-                        "row_count": 1,
-                        "columns": ["name", "quantity"],
-                    }
-                ),
-            )
-            for extension in ("xlsx", "csv")
-        ],
-        ("excel_analysis", "aggregate"): [
-            {
-                "name": "workbook_aggregate_contract",
-                "input": {
-                    "file_path": "sample.xlsx",
-                    "metrics": [{"column": "amount", "op": "sum"}],
-                },
-                "output": {"success": True},
-            }
-        ],
-        ("excel_join_compare", "join"): [
-            {
-                "name": "workbook_join_contract",
-                "input": {"file_paths": ["left.xlsx", "right.xlsx"], "join_keys": ["id"]},
-                "output": {"success": True, "action": "join", "row_count": 1},
-            }
-        ],
-        ("excel_join_compare", "diff"): [
-            {
-                "name": "workbook_diff_contract",
-                "input": {
-                    "file_path_a": "left.xlsx",
-                    "file_path_b": "right.xlsx",
-                    "key_columns": ["id"],
-                },
-                "output": {
-                    "success": True,
-                    "action": "diff",
-                    "rows_with_value_changes": {"count": 1},
-                },
-            }
-        ],
-    }
-)
+_SPECIAL_TOOL_CONTRACTS.update(_WORKBOOK_TOOL_CONTRACTS)
