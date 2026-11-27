@@ -378,6 +378,10 @@ def test_only_negotiated_resource_actions_are_registered(monkeypatch, resource_a
     assert set(actions) == {"search", *resource_actions}
     for action in resource_actions:
         assert actions[action]["risk"] == "low"
+    if "mcp_read_resource" in actions:
+        assert actions["mcp_read_resource"]["required_params"] == ["uri"]
+    if "mcp_get_prompt" in actions:
+        assert actions["mcp_get_prompt"]["required_params"] == ["name"]
 
 
 @pytest.mark.asyncio
