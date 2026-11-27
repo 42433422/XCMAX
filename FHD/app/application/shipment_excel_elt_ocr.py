@@ -189,13 +189,17 @@ class OcrInputLimitError(ValueError):
 
 
 def _load_image_arrays(
-    source: BinaryIO | Path, *, suffix: str | None = None, strict_limits: bool = False
+    source: BinaryIO | Path, *, suffix: str | None = None, strict_limits: bool = False,
+    page_indices: list[int] | None = None,
 ) -> list[Any]:
     """从已安全打开的输入流读取图像；Path 调用也经安全句柄打开。"""
     if isinstance(source, Path):
         source_suffix = suffix or source.suffix.lower()
         with elt_security.open_elt_input_file(source) as input_stream:
-            return _load_image_arrays(input_stream, suffix=source_suffix, strict_limits=strict_limits)
+            return _load_image_arrays(
+                input_stream, suffix=source_suffix, strict_limits=strict_limits,
+                page_indices=page_indices,
+            )
     if not suffix:
         raise ValueError("suffix is required when loading an OCR stream")
     max_pixels = 16_000_000
@@ -231,7 +235,8 @@ def _load_image_arrays(
                 pages = []
                 if strict_limits and len(pdf) > max_pages:
                     raise OcrInputLimitError("ocr_page_limit")
-                for i in range(min(len(pdf), max_pages)):
+                selected = page_indices if page_indices is not None else range(min(len(pdf), max_pages))
+                for i in selected:
                     page = pdf[i]
                     try:
                         pixels = page.get_width() * page.get_height() * 4
@@ -254,7 +259,7 @@ def _load_image_arrays(
         except OcrInputLimitError:
             raise
         except RECOVERABLE_ERRORS:
-            if strict_limits:
+            if strict_limits or page_indices is not None:
                 # Do not let the compatibility renderer bypass the strict budget.
                 raise
             logger.debug("pypdfium2 pdf render unavailable", exc_info=True)
@@ -271,18 +276,72 @@ def _load_image_arrays(
     raise RuntimeError(f"不支持的 OCR 源类型: {suffix}")
 
 
-def _guess_meta_lines(grid: list[list[str]]) -> list[str]:
-    """把疑似抬头行抽成单列文本，便于 buyer regex。"""
-    meta: list[str] = []
-    for row in grid[:4]:
-        joined = " ".join(str(c).strip() for c in row if str(c).strip())
-        if not joined:
-            continue
-        if re.search(
-            r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order", joined, re.I
-        ):
-            meta.append(joined)
-    return meta[:3]
+def _native_pdf_candidates(source: BinaryIO) -> tuple[int | None, dict[int, Any]]:
+    """Route native-only table pages using the existing pdfplumber component.
+
+    A page with raster content, no native table, or incomplete native parsing is
+    left to the OCR adapter. Native cell geometry is PDF points, not OCR pixels.
+    """
+    from app.application.elt.table_structure_ocr import PageStructure, TableGrid
+
+    try:
+        import pdfplumber
+    except ImportError:
+        return None, {}
+    reports = {}
+    max_pages = min(20, max(1, int(elt_getenv("FHD_EXCEL_ELT_OCR_MAX_PAGES") or 5)))
+    source.seek(0)
+    with pdfplumber.open(source) as pdf:
+        count = len(pdf.pages)
+        if count > max_pages:
+            raise OcrInputLimitError("ocr_page_limit")
+        for number, page in enumerate(pdf.pages, start=1):
+            try:
+                if page.images or not (page.extract_text() or "").strip():
+                    continue
+                candidates = []
+                for index, table in enumerate(page.find_tables()):
+                    rows = table.extract()
+                    if not rows or not any(row for row in rows):
+                        continue
+                    grid = [["" if cell is None else str(cell) for cell in row] for row in rows]
+                    if sum(len(row) for row in grid) > 250_000:
+                        raise OcrInputLimitError("ocr_native_grid_limit")
+                    candidates.append(TableGrid(
+                        grid=grid,
+                        page=number,
+                        index=index,
+                        bbox=list(table.bbox),
+                        cell_boxes=[list(box) for box in table.cells],
+                        native_missing_cells=[
+                            (row_index, col_index)
+                            for row_index, row in enumerate(rows, start=1)
+                            for col_index, cell in enumerate(row, start=1)
+                            if cell is None
+                        ],
+                    ))
+                if candidates:
+                    blocks = [{
+                        "text": word["text"],
+                        "left": word["x0"], "top": word["top"],
+                        "width": word["x1"] - word["x0"],
+                        "height": word["bottom"] - word["top"],
+                        "confidence": None,
+                        "coordinate_space": "pdf_points_top_left",
+                    } for word in page.extract_words()]
+                    reports[number] = PageStructure(
+                        number, "native_candidate", tables=candidates, blocks=blocks,
+                        coordinate_space="pdf_points_top_left",
+                        page_size=(float(page.width), float(page.height)),
+                        reason="native_merges_unverified",
+                    )
+            except OcrInputLimitError:
+                raise
+            except RECOVERABLE_ERRORS:
+                logger.warning("native PDF page %s unavailable; OCR route retained", number)
+            finally:
+                page.close()
+    return count, reports
 
 
 def ocr_source_to_workbook(
@@ -317,21 +376,43 @@ def ocr_source_to_workbook(
                 digest.update(chunk)
             source_sha256 = digest.hexdigest()
             source_file.seek(0)
-            images = _load_image_arrays(
-                source_file, suffix=path.suffix.lower(), strict_limits=True
+            native = {}
+            page_count = None
+            if path.suffix.lower() in _PDF_SUFFIXES:
+                page_count, native = _native_pdf_candidates(source_file)
+            selected = (
+                [number - 1 for number in range(1, page_count + 1) if number not in native]
+                if page_count is not None else None
             )
-        reports = recognize_table_pages(images)
+            source_file.seek(0)
+            images = [] if selected == [] else _load_image_arrays(
+                source_file, suffix=path.suffix.lower(), strict_limits=True,
+                page_indices=selected,
+            )
+        page_numbers = (
+            [index + 1 for index in selected] if selected is not None
+            else list(range(1, len(images) + 1))
+        )
+        raster_by_page = dict(zip(page_numbers, images, strict=True))
+        reports = sorted(
+            [*native.values(), *recognize_table_pages(images, page_numbers=page_numbers)],
+            key=lambda report: report.page,
+        )
         tables = []
         page_evidence = []
         failures = []
         block_count = 0
         source_name = re.sub(r'[\\/*?:\[\]]', "_", path.stem)[:28] or "OCR"
         legacy_ocr = None
-        for image, report in zip(images, reports, strict=True):
+        for report in reports:
+            image = raster_by_page.get(report.page)
             blocks = report.blocks
-            candidates = report.tables if report.status == "recognized" else []
+            candidates = report.tables if report.status in {"recognized", "native_candidate"} else []
             if not candidates:
                 if table_structure_mode() == "required":
+                    failures.append(report.page)
+                    continue
+                if image is None:
                     failures.append(report.page)
                     continue
                 blocks = blocks or ocr_array_blocks(image)
@@ -353,10 +434,10 @@ def ocr_source_to_workbook(
                 candidates = [TableGrid(grid=grid, page=report.page)]
                 status = "partial"
             else:
-                backend = "pp-structure-v3"
-                status = "candidate"
+                backend = "pdfplumber" if report.status == "native_candidate" else "pp-structure-v3"
+                status = "partial" if report.status == "native_candidate" else "candidate"
             block_count += len(blocks)
-            image_sha256 = hashlib.sha256(memoryview(image)).hexdigest()
+            image_sha256 = hashlib.sha256(memoryview(image)).hexdigest() if image is not None else None
             for table in candidates:
                 tables.append(table)
                 page_evidence.append({
@@ -365,15 +446,20 @@ def ocr_source_to_workbook(
                     "table_index": table.index,
                     "source_sha256": source_sha256,
                     "image_sha256": image_sha256,
-                    "image_width": int(image.shape[1]),
-                    "image_height": int(image.shape[0]),
+                    "image_width": int(image.shape[1]) if image is not None else None,
+                    "image_height": int(image.shape[0]) if image is not None else None,
+                    "page_size": report.page_size,
+                    "coordinate_space": report.coordinate_space,
                     "structure_status": status,
                     "structure_backend_status": report.status,
                     "structure_reason": report.reason,
                     "backend": backend,
                     "bbox": table.bbox,
                     "cell_boxes": table.cell_boxes,
-                    "cell_box_coordinate_space": "backend_reported_unknown",
+                    "cell_box_coordinate_space": (
+                        report.coordinate_space if backend == "pdfplumber" else "backend_reported_unknown"
+                    ),
+                    "native_missing_cells": table.native_missing_cells,
                     "table_ocr_blocks": table.table_ocr_blocks,
                     "source_html": table.source_html,
                     "merges": table.merges,

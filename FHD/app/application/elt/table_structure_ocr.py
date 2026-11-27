@@ -58,6 +58,7 @@ class TableGrid:
     # Engine-reported boxes may be crop-relative. Never synthesize page positions.
     cell_boxes: list[Any] = field(default_factory=list)
     table_ocr_blocks: list[dict[str, Any]] = field(default_factory=list)
+    native_missing_cells: list[tuple[int, int]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -67,6 +68,8 @@ class PageStructure:
     tables: list[TableGrid] = field(default_factory=list)
     blocks: list[dict[str, Any]] = field(default_factory=list)
     reason: str | None = None
+    coordinate_space: str = "engine_input_pixels"
+    page_size: tuple[float, float] | None = None
 
 
 def table_structure_mode() -> str:
@@ -173,13 +176,13 @@ def _build_pipeline() -> Any | None:
 def get_table_structure_pipeline() -> Any | None:
     """Lazily build one pipeline per process; never downloads implicitly."""
     global _PIPELINE, _PIPELINE_READY
-    if table_structure_mode() == "off" or not check_table_structure_available():
+    if table_structure_mode() == "off":
         return None
     with _LOCK:
         if not _PIPELINE_READY:
             _PIPELINE_READY = True
             try:
-                _PIPELINE = _build_pipeline()
+                _PIPELINE = _build_pipeline() if check_table_structure_available() else None
             except BOUNDARY_ERRORS:
                 logger.warning("PP-StructureV3 pipeline unavailable", exc_info=True)
                 _PIPELINE = None
@@ -352,7 +355,9 @@ def _table_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _page_blocks(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _page_blocks(
+    payload: dict[str, Any], *, coordinate_space: str = "engine_input_pixels"
+) -> list[dict[str, Any]]:
     result = payload.get("overall_ocr_res")
     if not isinstance(result, dict):
         return []
@@ -373,7 +378,7 @@ def _page_blocks(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "confidence": float(score) if isinstance(score, (int, float))
             and math.isfinite(score) and 0 <= score <= 1 else None,
             "polygon": polygon if polygon and all(len(p) == 2 for p in polygon) else None,
-            "coordinate_space": "engine_input_pixels",
+            "coordinate_space": coordinate_space,
         }
         if box:
             x0, y0, x1, y1 = box
@@ -404,13 +409,15 @@ def recognize_table_pages(
     images: list[Any],
     *,
     pipeline: Any | None = None,
+    page_numbers: list[int] | None = None,
 ) -> list[PageStructure]:
     """Report every input page; absence/failure is not successful structure."""
     if not images:
         return []
     engine = pipeline if pipeline is not None else get_table_structure_pipeline()
     pages: list[PageStructure] = []
-    for page, image in enumerate(images, start=1):
+    numbers = page_numbers if page_numbers is not None else list(range(1, len(images) + 1))
+    for page, image in zip(numbers, images, strict=True):
         if engine is None:
             pages.append(PageStructure(page, "unavailable", reason="structure_model_unavailable"))
             continue
@@ -448,9 +455,10 @@ def recognize_table_pages(
                             _numbers(box) or [_numbers(point) for point in _sequence(box)]
                             for box in _sequence(entry.get("cell_box_list"))
                         ],
-                        table_ocr_blocks=_page_blocks({
-                            "overall_ocr_res": entry.get("table_ocr_pred"),
-                        }),
+                        table_ocr_blocks=_page_blocks(
+                            {"overall_ocr_res": entry.get("table_ocr_pred")},
+                            coordinate_space="backend_reported_unknown",
+                        ),
                     ))
             if report.tables and report.status != "failed":
                 report.status = "recognized"

@@ -227,3 +227,48 @@ def test_elt_ocr_bridge_does_not_silently_truncate_pages(tmp_path, monkeypatch):
     assert not result["success"]
     assert result["error_code"] == "ocr_page_limit"
     assert not (tmp_path / "output.xlsx").exists()
+
+
+def test_selected_ocr_pages_preserve_original_numbers():
+    pipeline = _FakePipeline({"table_res_list": [{"pred_html": _TABLE_HTML}]})
+    reports = recognize_table_pages([object(), object()], pipeline=pipeline, page_numbers=[2, 5])
+    assert [report.page for report in reports] == [2, 5]
+    assert [report.tables[0].page for report in reports] == [2, 5]
+
+
+def test_mixed_pdf_routes_only_scan_pages_to_ocr(tmp_path, monkeypatch):
+    import numpy as np
+
+    from app.application import shipment_excel_elt_ocr as bridge
+    from app.application.elt import table_structure_ocr as structure
+
+    source = tmp_path / "mixed.pdf"
+    source.write_bytes(b"%PDF fixture; native and raster adapters stubbed")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    native_table = TableGrid(
+        grid=[["name"], ["native"]], page=1, bbox=[0, 0, 20, 20]
+    )
+    native = structure.PageStructure(
+        1, "native_candidate", [native_table],
+        coordinate_space="pdf_points_top_left", page_size=(40, 40),
+    )
+    monkeypatch.setattr(bridge, "_native_pdf_candidates", lambda handle: (2, {1: native}))
+    calls = []
+
+    def render(handle, **kwargs):
+        assert isinstance(handle.read(0), bytes)
+        calls.extend(kwargs["page_indices"])
+        return [np.zeros((4, 4, 3), dtype=np.uint8)]
+
+    monkeypatch.setattr(bridge, "_load_image_arrays", render)
+    pipeline = _FakePipeline({"table_res_list": [{"pred_html": _TABLE_HTML}]})
+    monkeypatch.setattr(structure, "get_table_structure_pipeline", lambda: pipeline)
+    result = bridge.ocr_source_to_workbook(source, output_path=tmp_path / "out.xlsx")
+    assert result["success"]
+    assert result["structure_status"] == "partial"
+    assert calls == [1]
+    assert pipeline.calls == 1
+    assert [page["page_number"] for page in result["pages"]] == [1, 2]
+    assert [page["backend"] for page in result["pages"]] == ["pdfplumber", "pp-structure-v3"]
+    assert result["pages"][0]["image_sha256"] is None
+    assert result["pages"][1]["image_sha256"] is not None
