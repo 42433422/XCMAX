@@ -147,6 +147,65 @@ def test_active_time_budget_is_shared_across_turns_but_excludes_approval_wait(
 
 
 @pytest.mark.parametrize(
+    "reason", ["tool_loop_detected", "tool_call_budget_exhausted", "model_call_budget_exhausted"]
+)
+@pytest.mark.parametrize(
+    "business_state,parent_state,execution_state",
+    [
+        ("running", "running", "running"),
+        ("queued", "running", "running"),
+        ("waiting_user", "waiting_user", "waiting_user"),
+        ("waiting_approval", "waiting_user", "waiting_user"),
+        ("waiting_input", "waiting_user", "waiting_user"),
+        ("unknown", "blocked", "unknown"),
+        ("cancelled", "cancelled", "cancelled"),
+        ("completed", "failed", "failed"),
+    ],
+)
+def test_planning_stops_preserve_business_receipts_and_control_state(
+    setup_runtime, reason, business_state, parent_state, execution_state
+):
+    invoke, _ = setup_runtime
+    store = Store()
+    transport = Transport(store)
+
+    def stop_after_admission(notification):
+        if notification["method"] != "turn/started":
+            return
+        metadata = store.run.metadata["xiaox_runtime"]
+        key = "model_call_limit" if reason.startswith("model_") else "tool_call_limit"
+        metadata[key] = {"reason": reason}
+        if business_state == "cancelled":
+            store.auth_error = "cancelled"
+        elif business_state == "waiting_input":
+            metadata["waiting_input"] = {"question": "哪个月份？"}
+        else:
+            store.rows = [
+                receipt(
+                    status=business_state,
+                    success=business_state == "completed",
+                    verified=business_state == "completed",
+                )
+            ]
+
+    result = asyncio.run(invoke(store, transport, on_event=stop_after_admission))
+    assert result["planning_stop_reason"] == reason
+    assert result["execution_state"] == execution_state
+    assert store.run.status == parent_state
+    assert result["business_receipts"] == store.rows
+    assert result["ok"] is False and result["business_completed"] is False
+    assert len(transport.inputs) == 1
+    assert store.run.final_output["xiaox_result"]["execution_state"] == execution_state
+    if business_state == "unknown":
+        assert result["reconciliation_required"] is True
+        assert store.run.metadata["non_retryable"] is True
+    elif business_state == "completed":
+        assert result["exit_status"] == reason
+        assert result["verified_operations"] is True
+        assert not result.get("reconciliation_required")
+
+
+@pytest.mark.parametrize(
     "status,verified,success",
     [
         ("completed", False, True),

@@ -168,7 +168,9 @@ def controlled_tool_context(tool_id, action):
     return dict(held[2]) if held and held[:2] == (tool_id, action) else None
 
 
-def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]:
+def _execute_catalog(
+    step: AgentStep, params: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
     from app.application.agent_orchestrator.business_action_ledger import (
         BusinessActionLedger,
         canonical_hash,
@@ -190,8 +192,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         verify_catalog_action,
     )
 
-    params = dict(step.params)
-    if _QUERY_IDENTITY_FIELDS.intersection(params) or any(
+    if _QUERY_IDENTITY_FIELDS.intersection(step.params) or any(
         k.startswith("_catalog") for k in context
     ):
         return _query_failure("catalog_identity_override")
@@ -510,6 +511,8 @@ class AgentToolExecutor:
                     "action": validation.action,
                 }
             )
+        if validation.normalized_params is not None:
+            params = validation.normalized_params
         expected_schema = context.get("tool_schema_digest")
         if expected_schema is not None:
             from app.application.capability_catalog import authorized_tool_specs
@@ -595,7 +598,7 @@ class AgentToolExecutor:
         if refusal is not None:
             return _pre_dispatch_refusal(refusal)
         if validation.tool_id == "catalog_products_v1":
-            return _execute_catalog(step, dict(runtime_context or {}))
+            return _execute_catalog(step, params, dict(runtime_context or {}))
         business_db_read = (validation.tool_id, validation.action) == (
             "business_db",
             "read",

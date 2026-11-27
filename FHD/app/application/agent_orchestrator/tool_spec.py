@@ -2,10 +2,44 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
+
+# Preserve the existing schema adapter entry points for callers.
+from app.application.agent_orchestrator.tool_schema import (
+    _deferred_input_error as _deferred_input_error,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _is_empty as _is_empty,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _nonempty_required as _nonempty_required,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _numeric_bound_error as _numeric_bound_error,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _reference_paths as _reference_paths,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _string_constraint_error as _string_constraint_error,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _supported_format as _supported_format,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _type_matches as _type_matches,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _validate_input_payload as _validate_input_payload,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    _validate_schema_payload as _validate_schema_payload,
+)
+from app.application.agent_orchestrator.tool_schema import (
+    validate_schema_object as validate_schema_object,
+)
 
 # Re-export tool data for existing callers.
 from app.application.agent_orchestrator.tool_spec_data import (  # noqa: F401
@@ -32,9 +66,6 @@ from app.application.agent_orchestrator.tool_spec_data.constants import (
 )
 from app.application.agent_orchestrator.tool_spec_data.contract_samples import _default_fixture
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-# 批量文件的数组参数超出上限时按上限截断，而不是让整轮计划失败。
-_TRUNCATABLE_BATCH_KEYS = frozenset({"file_paths", "run_ids"})
 
 RiskLevel = Literal["low", "medium", "high"]
 
@@ -81,7 +112,7 @@ class ToolActionSpecV2:
             return True
         return (
             bool(self.read_only_if_unset)
-            and _validate_schema_payload(self.input_schema, params, subject="工具参数")[0]
+            and validate_schema_object(self.input_schema, params)[0]
             and all(
                 params.get(key) is None or params.get(key) == "" for key in self.read_only_if_unset
             )
@@ -140,6 +171,7 @@ class ToolValidationResult:
     spec: ToolActionSpecV2 | None = None
     error_code: str = ""
     message: str = ""
+    normalized_params: dict[str, Any] | None = None
 
 
 def _normalize_tool_action(action: str, params: dict[str, Any] | None = None) -> str:
@@ -501,261 +533,6 @@ def get_tool_action_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
     return build_tool_specs_v2().get((normalized_tool_id, normalized_action))
 
 
-def _is_empty(value: Any) -> bool:
-    if isinstance(value, str):
-        value = value.strip()
-    return value is None or (isinstance(value, (str, list, tuple, dict)) and not value)
-
-
-def _type_matches(value: Any, expected: str) -> bool:
-    if expected == "object":
-        return isinstance(value, dict)
-    if expected == "array":
-        return isinstance(value, list)
-    if expected == "string":
-        return isinstance(value, str)
-    if expected == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if expected == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if expected == "boolean":
-        return isinstance(value, bool)
-    return True
-
-
-def _numeric_bound_error(key: str, value: Any, prop: dict[str, Any]) -> str:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return ""
-    if "minimum" in prop and value < prop["minimum"]:
-        return f"字段 {key} 低于最小值 {prop['minimum']}"
-    if "maximum" in prop and value > prop["maximum"]:
-        return f"字段 {key} 超过最大值 {prop['maximum']}"
-    if "exclusiveMinimum" in prop and value <= prop["exclusiveMinimum"]:
-        return f"字段 {key} 必须大于 {prop['exclusiveMinimum']}"
-    if "exclusiveMaximum" in prop and value >= prop["exclusiveMaximum"]:
-        return f"字段 {key} 必须小于 {prop['exclusiveMaximum']}"
-    return ""
-
-
-def _string_constraint_error(key: str, value: Any, prop: dict[str, Any]) -> str:
-    if not isinstance(value, str):
-        return ""
-    if "minLength" in prop and len(value) < int(prop["minLength"]):
-        return f"字段 {key} 短于最小长度"
-    if "maxLength" in prop and len(value) > int(prop["maxLength"]):
-        return f"字段 {key} 超过最大长度 {prop['maxLength']}"
-    pattern = prop.get("pattern")
-    if isinstance(pattern, str) and pattern and re.fullmatch(pattern, value) is None:
-        return f"字段 {key} 格式不符合要求"
-    expected = str(prop.get("format") or "")
-    if expected == "date" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
-        return f"字段 {key} 不是日期"
-    if expected == "email":
-        local, separator, domain = value.partition("@")
-        if (
-            not local
-            or not separator
-            or "@" in domain
-            or "." not in domain[1:-1]
-            or any(char.isspace() for char in value)
-        ):
-            return f"字段 {key} 不是邮箱"
-    if expected == "phone" and re.fullmatch(r"1\d{10}", value) is None:
-        return f"字段 {key} 不是手机号"
-    return ""
-
-
-def _validate_schema_payload(
-    schema: dict[str, Any],
-    payload: dict[str, Any],
-    *,
-    subject: str,
-    allow_references_from: set[str] | frozenset[str] | None = None,
-    allow_missing_fields: set[str] | frozenset[str] | None = None,
-    path_prefix: str = "",
-) -> tuple[bool, str]:
-    expected_root_type = str(schema.get("type") or "object").strip()
-    if expected_root_type == "object" and not isinstance(payload, dict):
-        return False, f"{subject} 必须是 object"
-    required = schema.get("required") if isinstance(schema.get("required"), list) else []
-    if subject == "工具输出" and payload.get("success") is False:
-        required = [key for key in (required or []) if str(key) == "success"]
-    for key in required or []:
-        name = str(key)
-        full_name = f"{path_prefix}.{name}" if path_prefix else name
-        normalized_name = re.sub(r"\[(\d+)\]", r".\1", full_name)
-        if any(
-            candidate in (allow_missing_fields or ())
-            for candidate in (name, full_name, normalized_name)
-        ):
-            continue
-        present = isinstance(payload, dict) and name in payload
-        value = payload.get(name) if present else None
-        # A present array or object is the field, including an empty list.
-        if (
-            not present
-            or value is None
-            or (_is_empty(value) and not isinstance(value, (list, dict)))
-        ):
-            return False, f"{subject} 缺少字段：{name}"
-
-    raw_properties = schema.get("properties")
-    properties = raw_properties if isinstance(raw_properties, dict) else {}
-    if schema.get("additionalProperties") is False:
-        unknown = [key for key in payload if key not in properties]
-        if unknown:
-            return False, f"{subject} 存在未定义字段：{unknown[0]}"
-    dependencies = schema.get("dependentRequired")
-    if isinstance(dependencies, dict):
-        for key, needed in dependencies.items():
-            if _is_empty(payload.get(str(key))) or not isinstance(needed, list):
-                continue
-            for item in needed:
-                if _is_empty(payload.get(str(item))):
-                    return False, f"{subject} 字段 {key} 需要同时提供 {item}"
-    for key, prop in (properties or {}).items():
-        if key not in payload or payload.get(key) is None:
-            continue
-        if not isinstance(prop, dict):
-            continue
-        value = payload.get(key)
-        if (
-            allow_references_from is not None
-            and isinstance(value, str)
-            and ("{{" in value or "}}" in value)
-        ):
-            from app.application.agent_orchestrator.param_references import (
-                validate_plan_references,
-            )
-
-            reference_error = validate_plan_references(value, allow_references_from)
-            if reference_error:
-                return False, f"{subject} 字段 {key}：{reference_error}"
-            # The concrete value is checked again after its declared predecessor
-            # has completed and the reference has been resolved.
-            continue
-        expected_type = str(prop.get("type") or "").strip()
-        if expected_type == "array" and isinstance(value, str) and value.strip():
-            # 模型常把一组 id 写成逗号/分号分隔的字符串；这里拆成数组，
-            # 否则会被类型校验拦成「字段 xxx 类型错误，应为 array」。
-            payload[key] = [
-                part.strip() for part in re.split(r"[,;，；\s]+", value) if part.strip()
-            ]
-            value = payload[key]
-        if (
-            expected_type == "string"
-            and key == "reference_id"
-            and isinstance(value, int)
-            and not isinstance(value, bool)
-        ):
-            # Order tools often resolve a numeric id. Keep the reference as text.
-            payload[key] = str(value)
-            value = payload[key]
-        if expected_type and not _type_matches(value, expected_type):
-            return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
-        enum_values = prop.get("enum")
-        if isinstance(enum_values, list) and enum_values and value not in enum_values:
-            return False, f"{subject} 字段 {key} 不在允许范围内"
-        bound = _numeric_bound_error(key, value, prop) or _string_constraint_error(key, value, prop)
-        if bound:
-            return False, f"{subject} {bound}"
-        if expected_type == "object" and isinstance(value, dict) and prop.get("properties"):
-            nested_ok, nested_message = _validate_schema_payload(
-                prop,
-                value,
-                subject=f"{subject}.{key}",
-                allow_references_from=allow_references_from,
-                allow_missing_fields=allow_missing_fields,
-                path_prefix=f"{path_prefix}.{key}" if path_prefix else str(key),
-            )
-            if not nested_ok:
-                return False, nested_message
-        if expected_type == "array" and isinstance(value, list):
-            if "minItems" in prop and len(value) < int(prop["minItems"]):
-                return False, f"{subject} 字段 {key} 数量不足"
-            if "maxItems" in prop and len(value) > int(prop["maxItems"]):
-                # 批量文件/预演编号超出上限时截断而不是整轮失败：
-                # 模型可能把所有附件一次列全，工具本身也按同一上限处理。
-                if key in _TRUNCATABLE_BATCH_KEYS:
-                    del value[int(prop["maxItems"]) :]
-                else:
-                    return False, f"{subject} 字段 {key} 数量超限"
-            raw_items = prop.get("items")
-            item_schema = raw_items if isinstance(raw_items, dict) else {}
-            item_type = str(item_schema.get("type") or "")
-            for index, item in enumerate(value):
-                if (
-                    allow_references_from is not None
-                    and isinstance(item, str)
-                    and ("{{" in item or "}}" in item)
-                ):
-                    from app.application.agent_orchestrator.param_references import (
-                        validate_plan_references,
-                    )
-
-                    reference_error = validate_plan_references(item, allow_references_from)
-                    if reference_error:
-                        return False, f"{subject} 字段 {key}[{index}]：{reference_error}"
-                    continue
-                if item_type and not _type_matches(item, item_type):
-                    return False, f"{subject} 字段 {key}[{index}] 类型错误，应为 {item_type}"
-                if item_type == "object" and isinstance(item, dict):
-                    nested_ok, nested_message = _validate_schema_payload(
-                        item_schema,
-                        item,
-                        subject=f"{subject}.{key}[{index}]",
-                        allow_references_from=allow_references_from,
-                        allow_missing_fields=allow_missing_fields,
-                        path_prefix=(
-                            f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]"
-                        ),
-                    )
-                    if not nested_ok:
-                        return False, nested_message
-    options = schema.get("anyOf")
-    if isinstance(options, list) and options:
-        last = ""
-        matched = False
-        for option in options:
-            if not isinstance(option, dict):
-                continue
-            ok, last = _validate_schema_payload(
-                option,
-                payload,
-                subject=subject,
-                allow_references_from=allow_references_from,
-                allow_missing_fields=allow_missing_fields,
-                path_prefix=path_prefix,
-            )
-            if ok:
-                matched = True
-                break
-        if not matched:
-            return False, last or f"{subject} 未满足任一必填组合"
-    exclusive_options = schema.get("oneOf")
-    if isinstance(exclusive_options, list) and exclusive_options:
-        matches = sum(
-            _validate_schema_payload(
-                option,
-                deepcopy(payload),
-                subject=subject,
-                allow_references_from=allow_references_from,
-                allow_missing_fields=allow_missing_fields,
-                path_prefix=path_prefix,
-            )[0]
-            for option in exclusive_options
-            if isinstance(option, dict)
-        )
-        if matches != 1:
-            return False, f"{subject} 必须且只能满足一个字段组合"
-    return True, ""
-
-
-def validate_schema_object(schema: dict[str, Any], payload: dict[str, Any]) -> tuple[bool, str]:
-    """Validate one object against the subset of JSON Schema used by tool calls."""
-    return _validate_schema_payload(schema or {}, payload, subject="参数")
-
-
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:
     return _validate_input_schema_with_references(
         spec, params, allow_references_from=None, allow_missing_fields=None
@@ -791,7 +568,7 @@ def _validate_input_schema_with_references(
     if missing:
         return False, "缺少有效出货参数：" + "、".join(missing)
     if (spec.tool_id, spec.action) == ("shipment_records", "create") and "purchase_unit" in params:
-        params = {**params, "unit_name": params.get("unit_name") or params["purchase_unit"]}
+        params["unit_name"] = params.get("unit_name") or params["purchase_unit"]
     if not defer_domain_checks and (spec.tool_id, spec.action) == ("inventory", "stock_in"):
         from app.domain.app_pure.inventory_inputs import validate_stock_in_request
 
@@ -810,10 +587,9 @@ def _validate_input_schema_with_references(
             validated_quote_request(params)
         except ValueError as exc:
             return False, str(exc)
-    return _validate_schema_payload(
+    return _validate_input_payload(
         spec.input_schema or {},
         params,
-        subject="参数",
         allow_references_from=allow_references_from,
         allow_missing_fields=allow_missing_fields,
     )
@@ -898,6 +674,14 @@ def validate_tool_call(
     allow_missing_fields: set[str] | frozenset[str] | None = None,
 ) -> ToolValidationResult:
     normalized_tool_id = str(tool_id or "").strip()
+    if params is not None and not isinstance(params, dict):
+        return ToolValidationResult(
+            ok=False,
+            tool_id=normalized_tool_id,
+            action=str(action or ""),
+            error_code="schema_validation_failed",
+            message="工具参数必须是 object",
+        )
     normalized_action = (
         str(action).strip()
         if normalized_tool_id.startswith("mcp__")
@@ -913,7 +697,7 @@ def validate_tool_call(
             message=f"未注册的工具动作: {normalized_tool_id}.{normalized_action}",
         )
 
-    payload = dict(params or {})
+    payload = deepcopy(params or {})
     if spec.tool_id == "business_db" and any(k in payload for k in ("sql", "raw_sql", "query_sql")):
         return ToolValidationResult(
             ok=False,
@@ -948,4 +732,5 @@ def validate_tool_call(
         tool_id=normalized_tool_id,
         action=normalized_action,
         spec=spec,
+        normalized_params=payload,
     )

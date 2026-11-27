@@ -158,6 +158,13 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
 
     def dispatch(tool, action, params):
         dispatched.append((tool, action, params["keyword"]))
+        if params["keyword"] == "unavailable":
+            return {
+                "success": False,
+                "message": "查询资源暂时不可用",
+                "retryable": True,
+                "execution": {"outcome": "not_executed", "committed": False, "effect": "none"},
+            }
         return {"success": True, "data": [{"model_number": params["keyword"]}]}
 
     monkeypatch.setattr(
@@ -174,11 +181,48 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
             "call_id": "first",
         },
     )
-    assert first["verified"] is True
+    assert first["verified"] is True, first.get("verification")
+    failed_args = {
+        "tool_id": "customers",
+        "action": "query",
+        "params": {"keyword": "unavailable"},
+        "call_id": "remaining",
+    }
+    failed = _invoke(setup.bridge, grant.mcp_token, "execute_action", failed_args)
+    assert failed["status"] == "failed" and failed["verified"] is False
+    assert failed["execution"] == {
+        "outcome": "not_executed",
+        "committed": False,
+        "effect": "none",
+    }
+    frozen = {
+        receipt["run_id"]: copy.deepcopy(setup.store.repository.get(receipt["run_id"]).to_dict())
+        for receipt in (first, failed)
+    }
     setup.store.close(run.run_id, "waiting_user")
     reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     renewed = reopened.create(run.run_id)
     bridge = XiaoxToolBridge(reopened, setup.bridge.orchestrator)
+    from app.infrastructure.xiaox.receipts import resume_error
+
+    assert resume_error(reopened, renewed.binding, reopened.receipt_snapshot(run.run_id)) == ""
+    # Replanning uses new work on the original parent; it cannot mutate any
+    # submitted action or replay a completed prefix after SQL reconnect.
+    with pytest.raises(XiaoxBindingError) as conflict:
+        _invoke(
+            bridge,
+            renewed.mcp_token,
+            "execute_action",
+            {**failed_args, "call_id": "first", "params": {"keyword": "changed"}},
+        )
+    assert conflict.value.code == "call_conflict"
+    replay = _invoke(
+        bridge,
+        renewed.mcp_token,
+        "execute_action",
+        {**failed_args, "call_id": "first", "params": {"keyword": "first"}},
+    )
+    assert replay["run_id"] == first["run_id"] and replay["verified"] is True
     second = _invoke(
         bridge,
         renewed.mcp_token,
@@ -192,8 +236,19 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
     )
     assert second["verified"] is True and second["run_id"] != first["run_id"]
     snapshot = reopened.receipt_snapshot(run.run_id)
-    assert len(snapshot) == 2 and all(row["receipt"]["verified"] for row in snapshot)
-    assert dispatched == [("customers", "query", "first"), ("customers", "query", "second")]
+    assert len(snapshot) == 3
+    assert {row["call_id"]: row["receipt"]["verified"] for row in snapshot} == {
+        "first": True,
+        "remaining": False,
+        "second": True,
+    }
+    for child_id, original in frozen.items():
+        assert reopened.repository.get(child_id).to_dict() == original
+    assert dispatched == [
+        ("customers", "query", "first"),
+        ("customers", "query", "unavailable"),
+        ("customers", "query", "second"),
+    ]
 
 
 def test_acknowledged_child_completion_uses_original_independent_readback(

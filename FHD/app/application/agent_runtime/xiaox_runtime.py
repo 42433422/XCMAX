@@ -124,15 +124,15 @@ def _input_text(
 
 
 def _budget_stop_reason(binding: Any) -> str:
-    """Return a distinguishable stop reason when a run's own budget is spent.
-
-    A run that ends on the model-call ceiling is not the same as a run whose
-    business receipts failed verification: the first is a host budget fact and
-    must stay readable as such.
-    """
-    limit = (binding.metadata or {}).get("model_call_limit") or {}
-    if limit.get("reason") == "model_call_budget_exhausted":
-        return "model_call_budget_exhausted"
+    """Keep durable planning stops distinct from business verification failures."""
+    for key in ("tool_call_limit", "model_call_limit"):
+        reason = ((binding.metadata or {}).get(key) or {}).get("reason")
+        if reason in {
+            "model_call_budget_exhausted",
+            "tool_call_budget_exhausted",
+            "tool_loop_detected",
+        }:
+            return str(reason)
     return ""
 
 
@@ -308,6 +308,8 @@ def _failure_diagnostics(run: AgentRun, result: dict[str, Any]) -> dict[str, str
         reason = str(run.metadata.get("runtime_failure_reason") or result.get("error") or "")
         if kind == "model_call_budget_exhausted":
             stage = "model"
+        elif kind in {"tool_call_budget_exhausted", "tool_loop_detected"}:
+            stage = "planning"
     return {"failure_stage": stage, "failure_kind": kind, "failure_reason": reason}
 
 
@@ -430,19 +432,31 @@ async def run_xiaox_agent(
                 _completion_mode(binding, completion_mode),
                 runtime_status,
             )
-            if budget_stop := _budget_stop_reason(binding):
-                # A spent model-call budget is a host budget fact, not a business
-                # verification failure. Keep the reason readable and keep every
-                # confirmed receipt queryable.
+            budget_stop = _budget_stop_reason(binding)
+            if budget_stop:
+                result["planning_stop_reason"] = budget_stop
+            if (
+                budget_stop
+                and not result.get("reconciliation_required")
+                and status not in {"running", "waiting_user"}
+            ):
+                # A planning stop cannot erase unknown effects or terminate a
+                # child that is still working/waiting under the parent's authority.
+                message = {
+                    "model_call_budget_exhausted": "本轮模型调用次数已达上限，任务未完成。",
+                    "tool_call_budget_exhausted": "本轮工具调用次数已达上限，任务未完成。",
+                    "tool_loop_detected": "工具调用重复且结果无进展，任务已停止。",
+                }[budget_stop]
                 status = "failed"
                 result.update(
                     ok=False,
                     business_completed=False,
                     reply_completed=False,
+                    runtime_completed=False,
                     exit_status=budget_stop,
                     execution_state="failed",
-                    error="本轮模型调用次数已达上限，任务未完成，已确认的业务回执与产物保留待核对",
-                    output="本轮模型调用次数已达上限，任务未完成。",
+                    error=message + "已确认的业务回执与产物保留待核对。",
+                    output=message,
                     error_code=budget_stop,
                 )
             if runtime_status in {"cancelled", "paused"}:
@@ -462,7 +476,9 @@ async def run_xiaox_agent(
                     )
                 result["active_seconds"] = float(metadata.get("active_seconds") or 0)
                 result["model_request_attempts"] = len(metadata.get("model_requests") or {})
-                if result.get("error_code") == "model_call_budget_exhausted":
+                if result.get("error_code") == budget_stop and not result.get(
+                    "reconciliation_required"
+                ):
                     # The host budget fact is the stop reason; an earlier attempt's
                     # business-verification wording must not mask it.
                     run.metadata.pop("runtime_failure_kind", None)
@@ -892,6 +908,7 @@ async def run_xiaox_agent(
                         binding = store.get(run_id)
                         if (
                             _model_unsettled(binding.metadata)
+                            or _budget_stop_reason(binding)
                             or binding.metadata.get("waiting_input")
                             or any(
                                 _receipt_state(row) in (_WAITING | _ACTIVE | {"unknown"})

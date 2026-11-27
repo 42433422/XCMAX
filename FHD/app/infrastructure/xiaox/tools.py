@@ -19,6 +19,7 @@ from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
     get_tool_action_spec,
+    validate_schema_object,
     validate_tool_call,
 )
 from app.application.agent_orchestrator.unified_task import create_unified_task
@@ -136,98 +137,118 @@ class XiaoxToolBridge:
     def invoke(self, token: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(arguments, dict):
             raise XiaoxBindingError("invalid_arguments", "工具参数必须是对象")
+        try:
+            size = len(json.dumps(arguments, ensure_ascii=False, allow_nan=False).encode())
+        except (TypeError, ValueError, RecursionError) as exc:
+            raise XiaoxBindingError("invalid_arguments", "工具参数必须是有效的 JSON 对象") from exc
+        if size > 256_000:
+            raise XiaoxBindingError("invalid_arguments", "业务参数过大，请使用已归档文件引用")
         with self.store.scope(token, "mcp") as binding:
             if self.run_id is not None and binding.run_id != self.run_id:
                 raise XiaoxBindingError("scope_conflict", "运行凭据不属于此工具入口")
-            if name == "capability_search":
-                from app.application.capability_catalog import authorized_tool_specs
+            if name not in XIAOX_TOOL_NAMES:
+                raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
+            binding = self.store.admit_tool_invocation(
+                binding.run_id, name, arguments, generation=binding.metadata["generation"]
+            )
+            result = self._invoke_bound(binding, name, arguments)
+            self.store.observe_tool_result(
+                binding.run_id, name, arguments, result, generation=binding.metadata["generation"]
+            )
+            return result
 
-                query = str(arguments.get("query") or "").strip().casefold()[:200]
-                limit = arguments.get("limit", 12)
-                offset = arguments.get("offset", 0)
-                if type(limit) is not int or not 1 <= limit <= 30:
-                    raise XiaoxBindingError("invalid_arguments", "能力检索数量必须为 1 至 30")
-                if type(offset) is not int or offset < 0:
-                    raise XiaoxBindingError("invalid_arguments", "能力检索起点必须为非负整数")
-                matches = []
-                for _, spec in sorted(
-                    authorized_tool_specs(binding.context, include_aiopen=True).items()
-                ):
-                    text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
-                    if all(word in text for word in query.split()) and self._allowed(spec, binding):
-                        matches.append(
-                            {
-                                "tool_id": spec.tool_id,
-                                "action": spec.action,
-                                "description": spec.description,
-                                "read_only": spec.read_only,
-                            }
-                        )
-                end = offset + limit
-                return {
-                    "success": True,
-                    "capabilities": matches[offset:end],
-                    "total": len(matches),
-                    "next_offset": end if end < len(matches) else None,
-                }
-            if name == "capability_describe":
-                spec = self._spec(binding, arguments)
-                return {
-                    "success": True,
-                    "capability": {
-                        "tool_id": spec.tool_id,
-                        "action": spec.action,
-                        "description": spec.description,
-                        "input_schema": spec.input_schema,
-                        "output_schema": spec.output_schema,
-                        "schema_digest": spec.schema_digest,
-                        "read_only": spec.read_only,
-                        "read_only_if_unset": spec.read_only_if_unset,
-                        "risk": spec.risk,
-                        "idempotent": spec.idempotent,
-                        "required_params": spec.required_params,
-                        "timeout_seconds": spec.timeout_seconds,
-                        "approval_required": not (spec.read_only and spec.risk == "low"),
-                    },
-                }
-            if name == "request_input":
-                question = arguments.get("question")
-                if not isinstance(question, str) or not question.strip() or len(question) > 4000:
-                    raise XiaoxBindingError("invalid_arguments", "请提供明确的待补充问题")
-                self.store.update(
-                    binding.run_id,
-                    lambda run, metadata: metadata.update(
-                        waiting_input={"question": question.strip(), "created_at": utc_now_iso()}
-                    ),
-                    generation=binding.metadata["generation"],
-                )
-                return {
-                    "success": False,
-                    "needs_user_input": True,
-                    "status": "waiting_user",
-                    "question": question.strip(),
-                    "verified": False,
-                }
-            if name == "task_evidence":
-                return self._evidence(binding, str(arguments.get("call_id") or ""))
-            if name == "execute_action":
-                from app.application.tool_execution_deadline import invocation_deadline
+    def _invoke_bound(
+        self, binding: XiaoxBinding, name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        if name == "capability_search":
+            from app.application.capability_catalog import authorized_tool_specs
 
-                # The MCP server thread predates begin_active. Restore its
-                # current SQL budget instead of inheriting stale thread state
-                # or accepting a model-supplied deadline field.
-                active = binding.metadata.get("active_started_at") is not None
-                budget = (
-                    invocation_deadline(
-                        time.monotonic()
-                        + max(0.0, float(binding.metadata["deadline_at"]) - time.time())
+            query = str(arguments.get("query") or "").strip().casefold()[:200]
+            limit = arguments.get("limit", 12)
+            offset = arguments.get("offset", 0)
+            if type(limit) is not int or not 1 <= limit <= 30:
+                raise XiaoxBindingError("invalid_arguments", "能力检索数量必须为 1 至 30")
+            if type(offset) is not int or offset < 0:
+                raise XiaoxBindingError("invalid_arguments", "能力检索起点必须为非负整数")
+            matches = []
+            for _, spec in sorted(
+                authorized_tool_specs(binding.context, include_aiopen=True).items()
+            ):
+                text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
+                if all(word in text for word in query.split()) and self._allowed(spec, binding):
+                    matches.append(
+                        {
+                            "tool_id": spec.tool_id,
+                            "action": spec.action,
+                            "description": spec.description,
+                            "read_only": spec.read_only,
+                        }
                     )
-                    if active
-                    else nullcontext()
+            end = offset + limit
+            return {
+                "success": True,
+                "capabilities": matches[offset:end],
+                "total": len(matches),
+                "next_offset": end if end < len(matches) else None,
+            }
+        if name == "capability_describe":
+            spec = self._spec(binding, arguments)
+            return {
+                "success": True,
+                "capability": {
+                    "tool_id": spec.tool_id,
+                    "action": spec.action,
+                    "description": spec.description,
+                    "input_schema": spec.input_schema,
+                    "output_schema": spec.output_schema,
+                    "schema_digest": spec.schema_digest,
+                    "read_only": spec.read_only,
+                    "read_only_if_unset": spec.read_only_if_unset,
+                    "risk": spec.risk,
+                    "idempotent": spec.idempotent,
+                    "required_params": spec.required_params,
+                    "timeout_seconds": spec.timeout_seconds,
+                    "approval_required": not (spec.read_only and spec.risk == "low"),
+                },
+            }
+        if name == "request_input":
+            question = arguments.get("question")
+            if not isinstance(question, str) or not question.strip() or len(question) > 4000:
+                raise XiaoxBindingError("invalid_arguments", "请提供明确的待补充问题")
+            self.store.update(
+                binding.run_id,
+                lambda run, metadata: metadata.update(
+                    waiting_input={"question": question.strip(), "created_at": utc_now_iso()}
+                ),
+                generation=binding.metadata["generation"],
+            )
+            return {
+                "success": False,
+                "needs_user_input": True,
+                "status": "waiting_user",
+                "question": question.strip(),
+                "verified": False,
+            }
+        if name == "task_evidence":
+            return self._evidence(binding, str(arguments.get("call_id") or ""))
+        if name == "execute_action":
+            from app.application.tool_execution_deadline import invocation_deadline
+
+            # The MCP server thread predates begin_active. Restore its
+            # current SQL budget instead of inheriting stale thread state
+            # or accepting a model-supplied deadline field.
+            active = binding.metadata.get("active_started_at") is not None
+            budget = (
+                invocation_deadline(
+                    time.monotonic()
+                    + max(0.0, float(binding.metadata["deadline_at"]) - time.time())
                 )
-                with budget:
-                    return self._execute(binding, arguments)
-            raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
+                if active
+                else nullcontext()
+            )
+            with budget:
+                return self._execute(binding, arguments)
+        raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
 
     def _spec(self, binding: XiaoxBinding, args: dict[str, Any]) -> ToolActionSpecV2:
         from app.application.capability_catalog import authorized_tool_specs
@@ -261,8 +282,6 @@ class XiaoxToolBridge:
         params = args.get("params")
         if not isinstance(params, dict):
             raise XiaoxBindingError("invalid_arguments", "业务参数必须是对象")
-        if len(json.dumps(params, ensure_ascii=False, allow_nan=False).encode()) > 256_000:
-            raise XiaoxBindingError("invalid_arguments", "业务参数过大，请使用已归档文件引用")
         business_run_target = (
             str(args.get("tool_id") or ""),
             str(args.get("action") or ""),
@@ -296,23 +315,14 @@ class XiaoxToolBridge:
             }
         self._check_schema(spec, args)
         validation = validate_tool_call(spec.tool_id, spec.action, params)
-        from jsonschema import Draft202012Validator, SchemaError
-        from referencing import Registry
-        from referencing.exceptions import Unresolvable
-
-        try:
-            schema_valid = Draft202012Validator(spec.input_schema, registry=Registry()).is_valid(
-                params
-            )
-        except (SchemaError, Unresolvable):
-            schema_valid = False
+        schema_valid, schema_message = validate_schema_object(spec.input_schema, params)
         if not validation.ok or not schema_valid:
             return {
                 "success": False,
                 "verified": False,
                 "status": "not_started",
                 "error_code": validation.error_code or "schema_validation_failed",
-                "message": validation.message or "参数不符合当前精确契约，请读取 schema 后补充。",
+                "message": validation.message or schema_message,
             }
         if spec.tool_id == "aiopen" and not spec.is_read_only_call(params):
             from app.application.aiopen.agent_bridge import inline_verification

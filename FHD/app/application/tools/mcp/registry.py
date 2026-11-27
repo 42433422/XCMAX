@@ -56,6 +56,8 @@ _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
     "mcp_list_resources": {
         "risk": "low",
         "idempotent": True,
+        "read_only": True,
+        "input_schema": {"type": "object", "additionalProperties": False},
         "required_params": [],
         "availability": "shared",
         "description": "列出该 MCP 服务器提供的资源",
@@ -63,6 +65,13 @@ _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
     "mcp_read_resource": {
         "risk": "low",
         "idempotent": True,
+        "read_only": True,
+        "input_schema": {
+            "type": "object",
+            "required": ["uri"],
+            "properties": {"uri": {"type": "string", "minLength": 1}},
+            "additionalProperties": False,
+        },
         "required_params": ["uri"],
         "availability": "shared",
         "description": "读取该 MCP 服务器指定 uri 的资源",
@@ -70,6 +79,8 @@ _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
     "mcp_list_prompts": {
         "risk": "low",
         "idempotent": True,
+        "read_only": True,
+        "input_schema": {"type": "object", "additionalProperties": False},
         "required_params": [],
         "availability": "shared",
         "description": "列出该 MCP 服务器提供的提示词模板",
@@ -77,6 +88,16 @@ _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
     "mcp_get_prompt": {
         "risk": "low",
         "idempotent": True,
+        "read_only": True,
+        "input_schema": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "arguments": {"type": "object", "additionalProperties": {"type": "string"}},
+            },
+            "additionalProperties": False,
+        },
         "required_params": ["name"],
         "availability": "shared",
         "description": "获取该 MCP 服务器指定提示词模板",
@@ -158,7 +179,8 @@ def _discover(
         except BOUNDARY_ERRORS as exc:  # 单个服务器异常不影响其他服务器
             logger.warning("MCP 服务器 %s 不可用：%s", config.name, exc)
             continue
-        if not infos:
+        resource_actions = getattr(infos, "resource_actions", ())
+        if not infos and not resource_actions:
             continue
         tool_id = tool_id_for(config.name)
         if tool_id in servers:
@@ -168,7 +190,7 @@ def _discover(
             if info.name in actions or info.name in RESOURCE_ACTIONS:
                 raise ValueError(f"Duplicate MCP capability: {tool_id}.{info.name}")
             actions[info.name] = _action_spec(info, config)
-        for name in RESOURCE_ACTIONS:
+        for name in resource_actions:
             actions.setdefault(name, dict(_RESOURCE_ACTION_SPECS[name]))
         tools[tool_id] = {
             "description": (

@@ -64,7 +64,7 @@ mem0ai==2.2.1
 bm25s==0.3.16
 # 计划修复：容忍模型 JSON 的尾逗号/截断（MIT，纯 Python）
 json-repair==0.64.9
-jsonschema==4.26.0
+jsonschema[format-nongpl]==4.26.0
 
 pandas>=2.0.0
 numpy>=1.24.0

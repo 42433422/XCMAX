@@ -60,6 +60,37 @@ logger = logging.getLogger(__name__)
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
+def _execution_registry(context: dict[str, Any], plan: PlanGraph | None = None) -> dict[str, Any]:
+    from app.application.capability_catalog import authorized_tool_specs
+    from app.application.workflow.planning_graph_policy import filter_registry_for_profile
+    from app.application.workflow.tool_profile import resolve_tool_execution_profile
+    from app.application.workflow_registry_app import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry(include_aiopen=True)
+    if "_actor_authorization" in context:
+        requested = {(node.tool_id, node.action) for node in plan.nodes} if plan else None
+        specs = {
+            (tool, action): spec
+            for tool, entry in registry.items()
+            for action in entry["actions"]
+            if (requested is None or (tool, action) in requested)
+            and (spec := get_tool_action_spec(tool, action)) is not None
+        }
+        authorized = authorized_tool_specs(context, include_aiopen=True, specs=specs)
+        registry = {
+            tool: {**entry, "actions": actions}
+            for tool, entry in registry.items()
+            if (
+                actions := {
+                    action: authorized[(tool, action)].to_dict()
+                    for action in entry["actions"]
+                    if (tool, action) in authorized
+                }
+            )
+        }
+    return filter_registry_for_profile(registry, resolve_tool_execution_profile(context))
+
+
 def _authorized_step_matches_plan(run: AgentRun, step: AgentStep) -> bool:
     """The frozen plan is the authorization. A later param or dependency edit cannot reuse it."""
     stored = run.metadata.get("plan")
@@ -597,7 +628,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
-        from app.application.workflow_registry_app import get_workflow_tool_registry
 
         if error := continuation_conversation_error(run, context):
             return error
@@ -620,7 +650,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for node in plan.nodes
         ):
             return "持久化计划参数或依赖已变化，拒绝续跑"
-        registry = get_workflow_tool_registry(include_aiopen=True)
+        registry = _execution_registry(context, plan)
         if validate_required_params(plan, registry):
             return "计划不再符合当前工具注册表或参数契约，拒绝续跑"
         approval_ids = plan.metadata.get("approval_required_node_ids") or []
@@ -1034,9 +1064,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
-        from app.application.workflow_registry_app import get_workflow_tool_registry
 
-        registry = get_workflow_tool_registry(include_aiopen=True)
+        registry = _execution_registry(runtime_context, plan)
         plan_error = validate_plan_graph(plan) or validate_required_params(plan, registry)
         if plan_error:
             run.status, run.error = "blocked", f"执行前计划审核未通过：{plan_error}"

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 
 def _sample_value_for_property(key: str, prop: dict[str, Any]) -> Any:
+    if "default" in prop:
+        return deepcopy(prop["default"])
+    choices = prop.get("anyOf")
+    if isinstance(choices, list) and choices:
+        return _sample_value_for_property(key, choices[0])
     enum_values = prop.get("enum")
     if isinstance(enum_values, list) and enum_values:
         return enum_values[0]
@@ -26,6 +32,8 @@ def _sample_value_for_property(key: str, prop: dict[str, Any]) -> Any:
     if expected_type == "object":
         if prop.get("properties"):
             return _sample_payload_from_schema(prop)
+        if isinstance(prop.get("additionalProperties"), dict):
+            return {"sample": _sample_value_for_property("sample", prop["additionalProperties"])}
         return {"sample": True}
     if expected_type == "array":
         raw_items = prop.get("items")

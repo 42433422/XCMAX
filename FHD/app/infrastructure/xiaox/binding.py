@@ -24,6 +24,13 @@ from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest as
 
 _KEY = "xiaox_runtime"
 _AUDIENCES = frozenset({"mcp", "model"})
+_MAX_TOOL_INVOCATIONS = 1024
+_TOOL_LOOP_REPETITIONS = 8
+_TOOL_LOOP_MAX_PERIOD = 4
+_TOOL_STOP_MESSAGES = {
+    "tool_call_budget_exhausted": "原任务工具调用次数已达上限，已确认回执保留",
+    "tool_loop_detected": "检测到重复工具调用且结果无进展，已确认回执保留",
+}
 _IDENTITY_FIELDS = (
     "user_id",
     "actor_id",
@@ -69,6 +76,23 @@ class XiaoxBindingError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def _tool_observation(name: str, result: dict[str, Any]) -> dict[str, Any]:
+    if name != "execute_action":
+        return result
+    # Compare business facts, not fresh child/call IDs or accounting timestamps.
+    # Preserve the entire tool output: changing business data is real progress.
+    return {
+        **{
+            key: result.get(key)
+            for key in ("success", "verified", "status", "execution", "error_code", "artifacts")
+        },
+        "tool_calls": [
+            {key: row.get(key) for key in ("tool_id", "action", "params", "output", "status")}
+            for row in result.get("tool_calls") or []
+        ],
+    }
 
 
 def _identity(run: AgentRun) -> str:
@@ -357,7 +381,119 @@ class XiaoxBindingStore:
         actual = hashlib.sha256(token.encode()).hexdigest()
         if not expected or not hmac.compare_digest(expected, actual):
             raise XiaoxBindingError("token_invalid", "运行凭据不属于此调用通道")
-        return self.check_current(run_id, generation=binding.metadata.get("generation"))
+        binding = self.check_current(run_id, generation=binding.metadata.get("generation"))
+        reason = (binding.metadata.get("tool_call_limit") or {}).get("reason")
+        if audience == "model" and reason in _TOOL_STOP_MESSAGES:
+            raise XiaoxBindingError(reason, _TOOL_STOP_MESSAGES[reason])
+        return binding
+
+    def admit_tool_invocation(
+        self, run_id: str, name: str, arguments: dict[str, Any], *, generation: int
+    ) -> XiaoxBinding:
+        """Charge every MCP operation to the original SQL task, including discovery."""
+        from app.infrastructure.xiaox.tool_names import XIAOX_TOOL_NAMES
+
+        if name not in XIAOX_TOOL_NAMES or not isinstance(arguments, dict):
+            raise XiaoxBindingError("invalid_arguments", "运行工具或参数无效")
+        denied = ""
+
+        def admit(run: AgentRun, metadata: dict[str, Any]) -> None:
+            nonlocal denied
+            denied = ""
+            count = metadata.get("tool_invocation_count", len(metadata.get("calls") or {}))
+            if type(count) is not int or count < 0:
+                raise XiaoxBindingError("invalid_budget", "原任务工具调用计数无效")
+            reason = (metadata.get("tool_call_limit") or {}).get("reason")
+            if count >= _MAX_TOOL_INVOCATIONS:
+                denied = "tool_call_budget_exhausted"
+            elif reason in _TOOL_STOP_MESSAGES and name not in {"task_evidence", "request_input"}:
+                denied = reason
+            if denied:
+                if reason != denied:
+                    metadata["tool_call_limit"] = {"reason": denied, "used_tool_calls": count}
+                    run.add_event(
+                        "runtime.tool.stopped", _TOOL_STOP_MESSAGES[denied], {"reason": denied}
+                    )
+                return
+            metadata["tool_invocation_count"] = count + 1
+
+        binding = self.update(run_id, admit, generation=generation)
+        if denied:
+            raise XiaoxBindingError(denied, _TOOL_STOP_MESSAGES[denied])
+        return binding
+
+    def observe_tool_result(
+        self,
+        run_id: str,
+        name: str,
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+        *,
+        generation: int,
+    ) -> None:
+        """Bound repeated observations without treating receipt polling as a loop."""
+        if (
+            name == "request_input"
+            or result.get("reconciliation_required")
+            or result.get("status") == "unknown"
+        ):
+            return
+        polling = name == "task_evidence" or (
+            result.get("in_progress")
+            or result.get("pending_approval")
+            or result.get("needs_user_input")
+            or result.get("status") in {"claimed", "running", "waiting_user", "waiting_approval"}
+        )
+        signature = canonical_digest(
+            [
+                name,
+                {k: v for k, v in arguments.items() if k != "call_id"},
+                _tool_observation(name, result),
+            ]
+        )
+
+        def observe(run: AgentRun, metadata: dict[str, Any]) -> None:
+            from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
+
+            answers = canonical_digest(goal_answers(run))
+            history = list(metadata.get("tool_observation_history") or [])
+            if metadata.get("tool_observation_answers", answers) != answers:
+                history = []
+            if polling:
+                # New asynchronous work or a changed original receipt is progress;
+                # repeated polling of the same receipt neither clears nor grows a loop.
+                call = (metadata.get("calls") or {}).get(arguments.get("call_id")) or {}
+                key = str(call.get("child_task_id") or result.get("task_id") or "")
+                observations = metadata.setdefault("tool_receipt_observations", {})
+                receipt_digest = canonical_digest(_tool_observation("execute_action", result))
+                if key and observations.get(key) != receipt_digest:
+                    observations[key] = receipt_digest
+                    history = []
+                metadata.update(tool_observation_history=history, tool_observation_answers=answers)
+                return
+            history = (history + [signature])[-(_TOOL_LOOP_MAX_PERIOD * _TOOL_LOOP_REPETITIONS) :]
+            metadata.update(tool_observation_history=history, tool_observation_answers=answers)
+            for period in range(1, _TOOL_LOOP_MAX_PERIOD + 1):
+                size = period * _TOOL_LOOP_REPETITIONS
+                if (
+                    len(history) >= size
+                    and history[-size:] == history[-period:] * _TOOL_LOOP_REPETITIONS
+                ):
+                    if not metadata.get("tool_call_limit"):
+                        metadata["tool_call_limit"] = {
+                            "reason": "tool_loop_detected",
+                            "period": period,
+                            "repetitions": _TOOL_LOOP_REPETITIONS,
+                            "used_tool_calls": metadata.get("tool_invocation_count", 0),
+                        }
+                        run.add_event(
+                            "runtime.tool.stopped",
+                            _TOOL_STOP_MESSAGES["tool_loop_detected"],
+                            {"reason": "tool_loop_detected", "period": period},
+                        )
+                    break
+
+        self.update(run_id, observe, generation=generation)
 
     @contextmanager
     def scope(self, token: str, audience: str = "mcp") -> Iterator[XiaoxBinding]:
