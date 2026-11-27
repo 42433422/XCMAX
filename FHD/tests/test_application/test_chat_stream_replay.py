@@ -7,6 +7,7 @@ import uuid
 from datetime import timedelta
 from unittest.mock import AsyncMock
 
+import fakeredis
 import pytest
 from fastapi import HTTPException
 from redis.exceptions import LockError
@@ -294,9 +295,7 @@ def test_replay_from_start_rejects_a_trimmed_prefix(monkeypatch, backend):
     monkeypatch.setattr(replay, "REPLAY_MAX_EVENTS", 2)
     if backend != "local":
         _use_redis(
-            _FakeRedis()
-            if backend == "redis"
-            else pytest.importorskip("fakeredis").FakeRedis(decode_responses=True)
+            _FakeRedis() if backend == "redis" else fakeredis.FakeRedis(decode_responses=True)
         )
     scope = {"owner": "7", "tenant": "2"}
     assert replay.claim_runner("trimmed-prefix", **scope)
@@ -375,11 +374,7 @@ async def test_resume_endpoint_hides_another_owners_turn(monkeypatch):
 @pytest.mark.parametrize("backend", ["fake", "lua"])
 @pytest.mark.parametrize("operation", ["append", "clear", "finish"])
 def test_expired_producer_cannot_mutate_replacement_replay(operation, backend):
-    fake = (
-        _FakeRedis()
-        if backend == "fake"
-        else pytest.importorskip("fakeredis").FakeRedis(decode_responses=True)
-    )
+    fake = _FakeRedis() if backend == "fake" else fakeredis.FakeRedis(decode_responses=True)
     _use_redis(fake)
     turn, owner, tenant = "turn-fenced", "7", "2"
     assert replay.claim_runner(turn, owner=owner, tenant=tenant)
@@ -459,7 +454,7 @@ async def test_producer_cancels_and_joins_heartbeat_after_losing_lease(monkeypat
 
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_producer_completion_joins_heartbeat_and_releases_lease(monkeypatch, cancel):
-    fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=True)
+    fake = fakeredis.FakeRedis(decode_responses=True)
     _use_redis(fake)
     assert replay.claim_runner("exit", owner="7", tenant="2")
     runner = replay.runner_for("exit", owner="7", tenant="2")
@@ -507,7 +502,7 @@ async def test_producer_completion_joins_heartbeat_and_releases_lease(monkeypatc
 @pytest.mark.parametrize("backend", ["local", "lua"])
 def test_claim_clears_old_replay_before_publishing_lease(backend):
     if backend == "lua":
-        _use_redis(pytest.importorskip("fakeredis").FakeRedis(decode_responses=True))
+        _use_redis(fakeredis.FakeRedis(decode_responses=True))
     turn, owner, tenant = "atomic-retry", "7", "2"
     assert replay.claim_runner(turn, owner=owner, tenant=tenant)
     replay.append(turn, {"text": "old"}, owner=owner, tenant=tenant)
@@ -528,7 +523,7 @@ def test_claim_clears_old_replay_before_publishing_lease(backend):
 
 @pytest.mark.parametrize("decode_responses", [False, True])
 def test_atomic_claim_uses_real_redis_lock_token_protocol(decode_responses):
-    fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=decode_responses)
+    fake = fakeredis.FakeRedis(decode_responses=decode_responses)
     _use_redis(fake)
     assert replay.claim_runner("protocol", owner="7")
     runner = replay.runner_for("protocol", owner="7")
@@ -600,7 +595,7 @@ async def test_replay_idle_timeout_measures_time_since_last_event(monkeypatch, m
 
 @pytest.mark.parametrize("decode_responses", [False, True])
 async def test_redis_response_modes_preserve_replay_payload_cursor_and_done(decode_responses):
-    fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=decode_responses)
+    fake = fakeredis.FakeRedis(decode_responses=decode_responses)
     _use_redis(fake)
     turn, owner, tenant = "response-mode", "7", "2"
     assert replay.claim_runner(turn, owner=owner, tenant=tenant)

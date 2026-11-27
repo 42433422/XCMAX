@@ -4,6 +4,7 @@ pytest-cov>=4.1
 coverage==7.15.1  # Match the canonical uv.lock report toolchain
 pytest-mock>=3.12
 pytest-asyncio>=0.23
+fakeredis[lua]==2.41.0
 jsonschema>=4.23
 ruff>=0.8,<0.16
 import-linter>=2.15,<3
