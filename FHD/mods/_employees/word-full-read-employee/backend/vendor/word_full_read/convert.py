@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from xml.etree import ElementTree as ET
 
-from app.infrastructure.document_parsing.native import read_native_document
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
+from app.mod_sdk.host_services import read_native_document
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"

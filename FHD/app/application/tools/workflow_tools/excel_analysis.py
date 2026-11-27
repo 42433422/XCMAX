@@ -356,9 +356,13 @@ def physical_range_sum(
     ):
         return invalid
 
-    bounds = {"min_row": start, "max_row": stop, "min_col": left, "max_col": left}
     numbers: list[float] = []
     ignored: list[int] = []
+    read_errors: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (
+        InvalidFileException,
+        KeyError,
+        zipfile.BadZipFile,
+    )
     try:
         with (
             closing(
@@ -367,7 +371,9 @@ def physical_range_sum(
             closing(load_workbook(path, read_only=True, keep_links=False)) as formulas,
         ):
             cells = zip(
-                values[sheet].iter_rows(**bounds), formulas[sheet].iter_rows(**bounds), strict=True
+                values[sheet].iter_rows(min_row=start, max_row=stop, min_col=left, max_col=left),
+                formulas[sheet].iter_rows(min_row=start, max_row=stop, min_col=left, max_col=left),
+                strict=True,
             )
             for row, ((value,), (formula,)) in enumerate(cells, start):
                 if value.data_type == "e" or (formula.data_type == "f" and value.value is None):
@@ -383,11 +389,11 @@ def physical_range_sum(
                         "error": "sum_range_date_cell",
                         "cell": f"{column}{row}",
                     }
-                if type(value.value) in (int, float):
+                if type(value.value) is int or type(value.value) is float:
                     numbers.append(value.value)
                 elif value.value is not None:
                     ignored.append(row - 1)
-    except (*RECOVERABLE_ERRORS, InvalidFileException, KeyError, zipfile.BadZipFile):
+    except read_errors:
         return {"success": False, "error": "read_excel_failed"}
     evidence = {
         "cell_range": f"{column}{start}:{column}{stop}",

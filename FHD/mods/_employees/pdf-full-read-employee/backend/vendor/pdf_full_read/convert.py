@@ -157,7 +157,7 @@ async def convert_file(
     if suffix != ".pdf":
         raise ValueError(f"不支持的文件类型：{suffix or '(无后缀)'}，仅支持 .pdf")
 
-    from app.infrastructure.document_parsing.native import read_native_document
+    from app.mod_sdk.host_services import read_native_document
 
     document_facts = read_native_document(src_path)
     output_dir = output_path.parent

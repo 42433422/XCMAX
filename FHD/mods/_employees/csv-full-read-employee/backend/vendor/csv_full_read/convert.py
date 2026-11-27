@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from app.infrastructure.document_parsing.delimited import column_keys
-from app.infrastructure.document_parsing.native import read_native_document
+from app.mod_sdk.host_services import read_native_document
+from app.mod_sdk.host_services import tabular_column_keys as column_keys
 
 
 def convert_file(

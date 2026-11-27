@@ -43,7 +43,7 @@ def _extract_pptx(src_path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-    from app.infrastructure.document_parsing.native import read_native_document
+    from app.mod_sdk.host_services import read_native_document
 
     document_facts = read_native_document(src_path)
     prs = Presentation(str(src_path))

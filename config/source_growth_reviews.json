@@ -328,12 +328,12 @@
     "FHD/app/application/elt/table_segmentation.py": {
       "base_file": "FHD/app/application/elt/table_segmentation.py",
       "base_blob": "33c6bcf4d09a5c5994fe672c73742b1559892c7b",
-      "head_blob": "9d68577ef260bdac239e3c3280f7645c6c749478",
+      "head_blob": "700628e66d5c238f5bbfee0568b7b6a1470742fb",
       "before_lines": 938,
-      "after_lines": 1093,
-      "reason": "在原Segmenter职责内接入原生Table/名称范围、未归属区域稀疏候选及非法候选拒绝，保留原件坐标和未知内容。",
+      "after_lines": 977,
+      "reason": "在原Segmenter职责内接入原生Table/名称范围、未归属区域稀疏候选及非法候选拒绝，保留原件坐标和未知内容。 正式CI发现40KB结构门禁后，将原生候选纯逻辑提取至同包table_structure_candidates，原公开导入保持，主文件降至37988bytes。",
       "boundary": "格式结构候选和业务模型解释分开；边界校验不推断客户业务语义，不引入关键词业务旁路。",
-      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。 末轮三个分割/索引/Excel模块70项通过，迁移三函数AST与签名保持；Structure gates errors0/warns0，py>40KB恢复186且未抬预算。",
       "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     },
@@ -1144,12 +1144,12 @@
     "FHD/app/application/tools/workflow_tools/excel_analysis.py": {
       "base_file": "FHD/app/application/tools/workflow_tools/excel_analysis.py",
       "base_blob": "f2655bec21380b866fff70f5c1483d907864e966",
-      "head_blob": "fa3d2f475dfaa08caf7e348490232d8b055ee0b2",
+      "head_blob": "88817205ea74f791783ea8694d739c757655c65b",
       "before_lines": 600,
-      "after_lines": 821,
+      "after_lines": 827,
       "reason": "扩展现有只读工具实现原生分页/范围回读，并适配3682的无表头读取、物理求和、表头需确认和导出格式合同。",
       "boundary": "每页沿用原workflow_file_snapshot身份与当前权限核验；不吸收3682桌面/父任务/写表范围，不扩通用host校验器。",
-      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。 默认读取同样在表头/pandas/openpyxl前完成归档审计；末轮106项通过（15.64s），五个注册动作恶意ZIP负控和合法CSV/XLS路由均覆盖。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。 默认读取同样在表头/pandas/openpyxl前完成归档审计；末轮106项通过（15.64s），五个注册动作恶意ZIP负控和合法CSV/XLS路由均覆盖。 正式CI三处类型错误已按原调用合同修复；Excel单目标mypy在共享Python3.12下通过，原物理求和注册入口4项回归通过，完整Python3.11类型门禁以新HEAD CI为准。",
       "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     }

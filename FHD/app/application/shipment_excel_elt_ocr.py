@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import tempfile
+from io import BufferedReader, BytesIO
 from pathlib import Path
 from typing import Any, BinaryIO
 
@@ -288,7 +289,7 @@ def _load_image_arrays(
     raise RuntimeError(f"不支持的 OCR 源类型: {suffix}")
 
 
-def _native_pdf_candidates(source: BinaryIO) -> tuple[int | None, dict[int, Any]]:
+def _native_pdf_candidates(source: BufferedReader | BytesIO) -> tuple[int | None, dict[int, Any]]:
     """Route native-only table pages using the existing pdfplumber component.
 
     A page with raster content, no native table, or incomplete native parsing is
@@ -400,6 +401,8 @@ def ocr_source_to_workbook(
             native: dict[int, Any] = {}
             page_count = None
             if path.suffix.lower() in _PDF_SUFFIXES:
+                if not isinstance(source_file, (BufferedReader, BytesIO)):
+                    raise TypeError("Native PDF parsing requires a buffered binary stream")
                 page_count, native = _native_pdf_candidates(source_file)
             selected = (
                 [number - 1 for number in range(1, page_count + 1) if number not in native]
