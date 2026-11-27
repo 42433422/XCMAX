@@ -576,10 +576,13 @@ class XiaoxBindingStore:
             previous_receipt = call.get("receipt") or {}
             if (
                 receipt is not None
-                and receipt.get("status") != "unknown"
+                and receipt.get("child_updated_at")
                 and (previous_receipt.get("child_updated_at") or "")
                 > (receipt.get("child_updated_at") or "")
             ):
+                # A delayed observation cannot replace newer durable evidence,
+                # including an older unknown observed before independent QC.
+                # Unknown receipts without a source revision still fail closed.
                 return
             if child_run_id:
                 if call["child_run_id"] not in ("", child_run_id):

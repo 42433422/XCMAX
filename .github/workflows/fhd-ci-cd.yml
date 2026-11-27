@@ -165,6 +165,7 @@ jobs:
           uv run --no-sync pytest \
             tests/test_application/test_agent_task_admission.py \
             tests/test_application/test_task_execution_repository.py \
+            tests/test_application/test_task_event_durability.py \
             tests/test_application/test_task_dispatcher.py \
             tests/test_application/test_agent_loop.py \
             tests/application/test_employee_runtime_write_approval.py \

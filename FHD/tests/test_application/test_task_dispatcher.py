@@ -330,7 +330,9 @@ def test_worker_assertion_persists_matching_run_task_and_queue(monkeypatch, acto
 
     def fail_before_tool(*_args, **_kwargs):
         if open_effect:
-            assert queue.mark_open_effect(run.run_id, "external", owner_id="worker")
+            assert queue.mark_open_effect(
+                run.run_id, "external", owner_id="worker", execution_count=claim.execution_count
+            )
         raise AssertionError("workflow initialization failed")
 
     monkeypatch.setattr(AgentOrchestrator, "_execute_ready_steps", fail_before_tool)

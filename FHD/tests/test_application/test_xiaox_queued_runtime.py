@@ -154,7 +154,9 @@ def test_claimed_queue_worker_settles_chat_without_a_view(runtime_entry, monkeyp
             ]
             == "queued"
         )
-        state.queue.finish(run_id, "legacy-worker", "failed")
+        state.queue.finish(
+            run_id, "legacy-worker", "failed", execution_count=execution.execution_count
+        )
         assert not reconcile_queued_chat_reply(
             {**context, "tenant_id": 999}, context["turn_id"], run_id
         )

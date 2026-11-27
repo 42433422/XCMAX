@@ -322,7 +322,13 @@ def _drain_background_run(run_id: str) -> AgentRun:
     )
 
     state, error_code = dispatched_run_state(run)
-    queue.finish(run_id, "route-test-worker", state, error_code=error_code)
+    queue.finish(
+        run_id,
+        "route-test-worker",
+        state,
+        error_code=error_code,
+        execution_count=claimed.execution_count,
+    )
     return run
 
 
@@ -1584,12 +1590,23 @@ def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
     now = datetime.fromisoformat(queued.available_at)
     lease_seconds = 30 if error_code == "worker_incomplete_state" else 1
     assert (
-        queue.claim("expired-worker", lease_seconds=lease_seconds, now=now.isoformat()) is not None
-    )
+        claim := queue.claim("expired-worker", lease_seconds=lease_seconds, now=now.isoformat())
+    ) is not None
     if error_code == "worker_incomplete_state":
-        assert queue.finish(run.run_id, "expired-worker", "unknown", error_code=error_code)
+        assert queue.finish(
+            run.run_id,
+            "expired-worker",
+            "unknown",
+            error_code=error_code,
+            execution_count=claim.execution_count,
+        )
     elif error_code == "needs_verification":
-        queue.mark_open_effect(run.run_id, "unconfirmed-next-write")
+        queue.mark_open_effect(
+            run.run_id,
+            "unconfirmed-next-write",
+            execution_count=claim.execution_count,
+            owner_id="expired-worker",
+        )
     else:
         for attempt in range(1, DEFAULT_MAX_ATTEMPTS):
             assert (
@@ -1849,7 +1866,9 @@ def test_generated_shipment_download_contains_real_business_cells(
 
     init_template_tables(str(tmp_path / "shipment.db"))
     if registered_template:
-        template = tmp_path / "registered-shipment.xlsx"
+        # Registered files must remain within the configured application data root.
+        template = tmp_path / "data" / "registered-shipment.xlsx"
+        template.parent.mkdir(parents=True, exist_ok=True)
         book = Workbook()
         book.active.title = "发货单"
         book.active["K1"] = "synthetic registered template identity"

@@ -38,7 +38,7 @@ def test_nonapproval_wait_keeps_identity_and_never_expires_as_rejection(lifecycl
     repo.enqueue(run)
     claimed = repo.claim("worker", lease_seconds=30)
     assert claimed is not None
-    waiting = repo.finish(run.run_id, "worker", state)
+    waiting = repo.finish(run.run_id, "worker", state, execution_count=claimed.execution_count)
     assert waiting is not None and waiting.state == state
     assert not waiting.finished_at
     assert repo.resolve_approval(run.run_id, "approve", "owner") is None
@@ -55,11 +55,19 @@ def test_lost_completion_is_unknown_and_cannot_be_approved_or_requeued(lifecycle
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="write once", status="queued")
     repo.enqueue(run)
-    assert repo.claim("worker", lease_seconds=30) is not None
-    repo.mark_open_effect(run.run_id, "original-write")
+    assert (claim := repo.claim("worker", lease_seconds=30)) is not None
+    repo.mark_open_effect(
+        run.run_id, "original-write", execution_count=claim.execution_count, owner_id="worker"
+    )
     run.status = run_state
     state, code = dispatched_run_state(run)
-    uncertain = repo.finish(run.run_id, "worker", state, error_code=code or "timeout")
+    uncertain = repo.finish(
+        run.run_id,
+        "worker",
+        state,
+        error_code=code or "timeout",
+        execution_count=claim.execution_count,
+    )
     assert uncertain is not None and uncertain.state == "unknown"
     assert uncertain.last_error_code == "needs_verification"
     assert not uncertain.finished_at
@@ -78,11 +86,20 @@ def test_unconfirmed_effect_stays_unknown_on_interruption(lifecycle_queue, inter
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="external write with missing receipt", status="queued")
     repo.enqueue(run)
-    assert repo.claim("original-worker", lease_seconds=30) is not None
-    assert repo.mark_open_effect(run.run_id, "external-write", owner_id="original-worker")
+    assert (claim := repo.claim("original-worker", lease_seconds=30)) is not None
+    assert repo.mark_open_effect(
+        run.run_id,
+        "external-write",
+        owner_id="original-worker",
+        execution_count=claim.execution_count,
+    )
 
     interrupted = repo.finish(
-        run.run_id, "original-worker", interrupted_state, error_code="timeout"
+        run.run_id,
+        "original-worker",
+        interrupted_state,
+        error_code="timeout",
+        execution_count=claim.execution_count,
     )
     assert interrupted is not None
     assert (interrupted.state, interrupted.last_error_code) == ("unknown", "needs_verification")
@@ -90,7 +107,12 @@ def test_unconfirmed_effect_stays_unknown_on_interruption(lifecycle_queue, inter
     assert repo.lifecycle(run.run_id)["effects"] == ["external-write"]
     assert repo.enqueue(run).state == "unknown"
     assert repo.claim("replacement-worker", lease_seconds=30) is None
-    assert repo.finish(run.run_id, "original-worker", "completed") is None
+    assert (
+        repo.finish(
+            run.run_id, "original-worker", "completed", execution_count=claim.execution_count
+        )
+        is None
+    )
     assert repo.transition(run.run_id, "completed") is None
 
 
@@ -101,9 +123,16 @@ def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path)
     run = AgentRun(user_id="owner", message="external write", status="queued")
     run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
     original.enqueue(run, idempotency_key="request-1", fingerprint="same-body")
-    assert original.claim("first-worker", lease_seconds=30) is not None
-    assert original.mark_open_effect(run.run_id, "business-write", owner_id="first-worker")
-    assert original.finish(run.run_id, "first-worker", "timed_out").state == "unknown"
+    assert (claim := original.claim("first-worker", lease_seconds=30)) is not None
+    assert original.mark_open_effect(
+        run.run_id, "business-write", owner_id="first-worker", execution_count=claim.execution_count
+    )
+    assert (
+        original.finish(
+            run.run_id, "first-worker", "timed_out", execution_count=claim.execution_count
+        ).state
+        == "unknown"
+    )
     engine.dispose()
 
     recovered_engine = create_engine(f"sqlite:///{db_path}")
@@ -116,7 +145,12 @@ def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path)
     assert (result.run_id, result.state) == (run.run_id, "unknown")
     assert recovered.lifecycle(run.run_id)["effects"] == ["business-write"]
     assert recovered.claim("second-worker", lease_seconds=30) is None
-    assert recovered.finish(run.run_id, "first-worker", "completed") is None
+    assert (
+        recovered.finish(
+            run.run_id, "first-worker", "completed", execution_count=claim.execution_count
+        )
+        is None
+    )
     recovered_engine.dispose()
 
 
@@ -169,10 +203,18 @@ def test_stale_worker_cannot_clear_effects_or_append_lifecycle_history(lifecycle
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="late receipt", status="queued")
     repo.enqueue(run)
-    assert repo.claim("current-worker", lease_seconds=30) is not None
-    repo.mark_open_effect(run.run_id, "original-write")
+    assert (claim := repo.claim("current-worker", lease_seconds=30)) is not None
+    repo.mark_open_effect(
+        run.run_id,
+        "original-write",
+        execution_count=claim.execution_count,
+        owner_id="current-worker",
+    )
     before = repo.lifecycle(run.run_id)
-    assert repo.finish(run.run_id, "stale-worker", "completed") is None
+    assert (
+        repo.finish(run.run_id, "stale-worker", "completed", execution_count=claim.execution_count)
+        is None
+    )
     assert repo.lifecycle(run.run_id) == before
     assert repo.get(run.run_id).lease_owner == "current-worker"
 
@@ -184,17 +226,108 @@ def test_stale_worker_cannot_open_effect_or_poison_current_claim(lifecycle_queue
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="late dispatch", status="queued")
     repo.enqueue(run)
-    assert repo.claim("current-worker", lease_seconds=30) is not None
+    assert (claim := repo.claim("current-worker", lease_seconds=30)) is not None
     before = repo.lifecycle(run.run_id)
-    token = task_dispatcher._open_effect.set((repo, run.run_id, "stale-worker"))
+    token = task_dispatcher._open_effect.set(
+        (repo, run.run_id, "stale-worker", claim.execution_count)
+    )
     try:
         with pytest.raises(WorkerLeaseLost):
             task_dispatcher.note_open_effect(run.run_id, "must-not-write")
     finally:
         task_dispatcher._open_effect.reset(token)
     assert repo.lifecycle(run.run_id) == before
-    assert repo.mark_open_effect(run.run_id, "owned-write", owner_id="current-worker") is True
+    assert (
+        repo.mark_open_effect(
+            run.run_id,
+            "owned-write",
+            owner_id="current-worker",
+            execution_count=claim.execution_count,
+        )
+        is True
+    )
     assert repo.lifecycle(run.run_id)["effects"] == ["owned-write"]
+
+
+def test_reused_owner_cannot_publish_from_an_older_claim(lifecycle_queue, monkeypatch):
+    from app.application.agent_orchestrator import task_dispatcher
+    from app.application.agent_orchestrator import task_execution_repository as memory
+    from app.application.agent_orchestrator import task_execution_sql_repository as sql
+    from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+    queue = lifecycle_queue
+    run = AgentRun(user_id="owner", message="same worker name after restart")
+    queued = queue.enqueue(run)
+    first = queue.claim("same-owner", lease_seconds=5, now=queued.available_at)
+    assert first is not None
+    now = (datetime.fromisoformat(first.lease_expires_at) + timedelta(seconds=1)).isoformat()
+    monkeypatch.setattr(memory, "utc_now_iso", lambda: now)
+    monkeypatch.setattr(sql, "utc_now_iso", lambda: now)
+    second = queue.claim("same-owner", lease_seconds=60)
+    assert second is not None and second.execution_count == first.execution_count + 1
+    before, history = queue.get(run.run_id).to_dict(), queue.lifecycle(run.run_id)
+    assert [event["code"] for event in history["history"]] == [
+        "task_enqueued",
+        "worker_claimed",
+        "worker_reclaimed",
+    ]
+    assert [event["execution_count"] for event in history["history"][1:]] == [1, 2]
+
+    assert not queue.heartbeat(
+        run.run_id, first.lease_owner, execution_count=first.execution_count, lease_seconds=600
+    )
+    assert not queue.mark_open_effect(
+        run.run_id, "old-effect", owner_id=first.lease_owner, execution_count=first.execution_count
+    )
+    assert (
+        queue.finish(
+            run.run_id, first.lease_owner, "succeeded", execution_count=first.execution_count
+        )
+        is None
+    )
+    token = task_dispatcher._open_effect.set(
+        (queue, run.run_id, first.lease_owner, first.execution_count)
+    )
+    try:
+        with pytest.raises(WorkerLeaseLost):
+            task_dispatcher.note_open_effect(run.run_id, "old-tool-dispatch")
+    finally:
+        task_dispatcher._open_effect.reset(token)
+    assert queue.get(run.run_id).to_dict() == before
+    assert queue.lifecycle(run.run_id) == history
+    assert queue.heartbeat(
+        run.run_id, second.lease_owner, execution_count=second.execution_count, lease_seconds=600
+    )
+    assert (
+        queue.finish(
+            run.run_id, second.lease_owner, "succeeded", execution_count=second.execution_count
+        ).state
+        == "succeeded"
+    )
+
+
+@pytest.mark.parametrize("generation", [None, 0, -1, True, "1"])
+def test_invalid_claim_generation_cannot_mutate_queue(lifecycle_queue, generation):
+    queue = lifecycle_queue
+    run = AgentRun(user_id="owner", message="authority is mandatory")
+    queue.enqueue(run)
+    claim = queue.claim("worker", lease_seconds=60)
+    assert claim is not None
+    before, history = queue.get(run.run_id).to_dict(), queue.lifecycle(run.run_id)
+    assert not queue.heartbeat(run.run_id, "worker", execution_count=generation, lease_seconds=60)
+    assert not queue.mark_open_effect(run.run_id, owner_id="worker", execution_count=generation)
+    assert queue.finish(run.run_id, "worker", "succeeded", execution_count=generation) is None
+    assert not queue.mark_open_effect(
+        run.run_id, owner_id="", execution_count=claim.execution_count
+    )
+    with pytest.raises(TypeError):
+        queue.mark_open_effect(run.run_id)
+    with pytest.raises(TypeError):
+        queue.heartbeat(run.run_id, "worker", lease_seconds=60)
+    with pytest.raises(TypeError):
+        queue.finish(run.run_id, "worker", "succeeded")
+    assert queue.get(run.run_id).to_dict() == before
+    assert queue.lifecycle(run.run_id) == history
 
 
 def test_sql_queue_claim_is_atomic_renewable_and_recoverable(tmp_path) -> None:
@@ -216,9 +349,24 @@ def test_sql_queue_claim_is_atomic_renewable_and_recoverable(tmp_path) -> None:
     assert claimed.lease_owner == "worker-1"
     assert claimed.execution_count == 1
     assert second.claim("worker-2", lease_seconds=10, now=claim_time.isoformat()) is None
-    assert second.heartbeat(run.run_id, "wrong-worker", lease_seconds=10) is False
-    assert first.heartbeat(run.run_id, "worker-1", lease_seconds=10) is True
-    assert second.finish(run.run_id, "wrong-worker", "completed") is None
+    assert (
+        second.heartbeat(
+            run.run_id, "wrong-worker", lease_seconds=10, execution_count=claimed.execution_count
+        )
+        is False
+    )
+    assert (
+        first.heartbeat(
+            run.run_id, "worker-1", lease_seconds=10, execution_count=claimed.execution_count
+        )
+        is True
+    )
+    assert (
+        second.finish(
+            run.run_id, "wrong-worker", "completed", execution_count=claimed.execution_count
+        )
+        is None
+    )
 
     recovered = second.claim(
         "worker-2",
@@ -230,7 +378,9 @@ def test_sql_queue_claim_is_atomic_renewable_and_recoverable(tmp_path) -> None:
     assert recovered.execution_count == 2
     assert recovered.recovery_count == 1
 
-    completed = first.finish(run.run_id, "worker-2", "completed")
+    completed = first.finish(
+        run.run_id, "worker-2", "completed", execution_count=recovered.execution_count
+    )
     assert completed is not None
     assert completed.state == "succeeded"
     assert completed.tenant_id == "tenant-a"
@@ -358,10 +508,16 @@ def test_processes_share_idempotent_admission_or_report_conflicting_body(
         claim = reopened.claim("one-worker", lease_seconds=60)
         assert claim is not None and claim.run_id == queued[0]
         assert reopened.claim("duplicate-worker", lease_seconds=60) is None
-        assert reopened.mark_open_effect(queued[0], "write", owner_id="one-worker")
-        assert reopened.finish(queued[0], "one-worker", "failed", error_code="timeout").state == (
-            "unknown"
+        assert reopened.mark_open_effect(
+            queued[0], "write", owner_id="one-worker", execution_count=claim.execution_count
         )
+        assert reopened.finish(
+            queued[0],
+            "one-worker",
+            "failed",
+            error_code="timeout",
+            execution_count=claim.execution_count,
+        ).state == ("unknown")
         retry = AgentRun(user_id="owner", message="same task", status="queued")
         retry.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
         original_body = "same-body" if queued[0] == "first" else fingerprint
@@ -405,14 +561,27 @@ def test_expired_owner_cannot_renew_or_finish_before_replacement(tmp_path, monke
     assert claimed is not None
     expired = (now + timedelta(seconds=10)).isoformat()
     monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: expired)
-    assert not repository.heartbeat(run.run_id, "old", lease_seconds=60)
-    assert repository.finish(run.run_id, "old", "completed") is None
+    assert not repository.heartbeat(
+        run.run_id, "old", lease_seconds=60, execution_count=claimed.execution_count
+    )
+    assert (
+        repository.finish(run.run_id, "old", "completed", execution_count=claimed.execution_count)
+        is None
+    )
     assert repository.get(run.run_id).state == "running"
     replacement = repository.claim("new", lease_seconds=60)
     assert replacement and replacement.lease_owner == "new"
-    assert repository.finish(run.run_id, "old", "failed") is None
+    assert (
+        repository.finish(run.run_id, "old", "failed", execution_count=claimed.execution_count)
+        is None
+    )
     assert repository.get(run.run_id).lease_owner == "new"
-    assert repository.finish(run.run_id, "new", "completed").state == "succeeded"
+    assert (
+        repository.finish(
+            run.run_id, "new", "completed", execution_count=replacement.execution_count
+        ).state
+        == "succeeded"
+    )
     engine.dispose()
 
 
@@ -427,19 +596,30 @@ def test_rejected_worker_finish_preserves_recovery_evidence(tmp_path, monkeypatc
     SQLAlchemyAgentRunRepository(session_factory=factory).save(run)
     queued = repository.enqueue(run)
     now = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
-    assert repository.claim("old", lease_seconds=10, now=now.isoformat()) is not None
+    assert (claim := repository.claim("old", lease_seconds=10, now=now.isoformat())) is not None
     expired = (now + timedelta(seconds=10)).isoformat()
     monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: expired)
 
     # An expired callback must not publish a transition even before replacement.
     before = repository.lifecycle(run.run_id)
-    assert repository.finish(run.run_id, "old", "completed") is None
+    assert (
+        repository.finish(run.run_id, "old", "completed", execution_count=claim.execution_count)
+        is None
+    )
     assert repository.lifecycle(run.run_id) == before
 
-    assert repository.claim("replacement", lease_seconds=60) is not None
-    repository.mark_open_effect(run.run_id, "unconfirmed-business-write")
+    assert (replacement_claim := repository.claim("replacement", lease_seconds=60)) is not None
+    repository.mark_open_effect(
+        run.run_id,
+        "unconfirmed-business-write",
+        execution_count=replacement_claim.execution_count,
+        owner_id="replacement",
+    )
     before = repository.lifecycle(run.run_id)
-    assert repository.finish(run.run_id, "old", "completed") is None
+    assert (
+        repository.finish(run.run_id, "old", "completed", execution_count=claim.execution_count)
+        is None
+    )
     assert repository.lifecycle(run.run_id) == before
     assert repository.get(run.run_id).lease_owner == "replacement"
     # Losing the new worker must still require reconciliation, never a new call.

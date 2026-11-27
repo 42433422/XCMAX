@@ -260,7 +260,9 @@ def test_crashed_active_snapshot_requires_authoritative_expired_queue(tmp_path, 
     repo.save(run)
     queue.enqueue(run)
     claimed = queue.claim("original-worker", lease_seconds=1)
-    queue.mark_open_effect(run.run_id)
+    queue.mark_open_effect(
+        run.run_id, execution_count=claimed.execution_count, owner_id="original-worker"
+    )
     with pytest.raises(VerificationRecoveryError, match="租约"):
         reverify_run(repo, run.run_id)
     assert not readback
@@ -305,9 +307,15 @@ def test_queue_changed_during_crash_reverification_fails_same_transaction_cas(
     run.metadata["execution"] = {"state": "active"}
     repo.save(run)
     queue.enqueue(run)
-    queue.claim("old-worker", lease_seconds=60)
-    queue.mark_open_effect(run.run_id)
-    queue.finish(run.run_id, "old-worker", "failed", error_code="needs_verification")
+    claim = queue.claim("old-worker", lease_seconds=60)
+    queue.mark_open_effect(run.run_id, execution_count=claim.execution_count, owner_id="old-worker")
+    queue.finish(
+        run.run_id,
+        "old-worker",
+        "failed",
+        error_code="needs_verification",
+        execution_count=claim.execution_count,
+    )
 
     def queue_changed(**kwargs):
         with factory.begin() as db:
@@ -366,9 +374,15 @@ def test_in_memory_crash_proof_must_use_the_paired_run_and_queue(monkeypatch, re
     run.metadata["execution"] = {"state": "active"}
     repo.save(run)
     queue.enqueue(run)
-    queue.claim("old-worker", lease_seconds=60)
-    queue.mark_open_effect(run.run_id)
-    queue.finish(run.run_id, "old-worker", "failed", error_code="needs_verification")
+    claim = queue.claim("old-worker", lease_seconds=60)
+    queue.mark_open_effect(run.run_id, execution_count=claim.execution_count, owner_id="old-worker")
+    queue.finish(
+        run.run_id,
+        "old-worker",
+        "failed",
+        error_code="needs_verification",
+        execution_count=claim.execution_count,
+    )
     monkeypatch.setattr(
         run_repository, "get_agent_run_repository", lambda: InMemoryAgentRunRepository()
     )
@@ -757,10 +771,18 @@ def test_unknown_queue_settles_only_exact_verified_pending_effects(
         run.metadata.update(non_retryable=True, recovery={"state": "result_pending"})
     repository.save(run)
     queue.enqueue(run)
-    queue.claim("old-worker", lease_seconds=60)
+    claim = queue.claim("old-worker", lease_seconds=60)
     key = run.steps[0].step_id if effect == "original_step" else "unbound-dispatch"
-    queue.mark_open_effect(run.run_id, key)
-    queue.finish(run.run_id, "old-worker", "failed", error_code="needs_verification")
+    queue.mark_open_effect(
+        run.run_id, key, execution_count=claim.execution_count, owner_id="old-worker"
+    )
+    queue.finish(
+        run.run_id,
+        "old-worker",
+        "failed",
+        error_code="needs_verification",
+        execution_count=claim.execution_count,
+    )
     before = queue.get(run.run_id)
     assert before.state == "unknown"
     original = repository.get(run.run_id)
@@ -811,9 +833,14 @@ def test_completed_receipt_readback_keeps_unsettled_costs_and_effects(
         run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
     repository.save(run)
     queue.enqueue(run)
-    queue.claim("old-worker", lease_seconds=60)
-    queue.mark_open_effect(run.run_id, run.steps[0].step_id)
-    queue.finish(run.run_id, "old-worker", "blocked")
+    claim = queue.claim("old-worker", lease_seconds=60)
+    queue.mark_open_effect(
+        run.run_id,
+        run.steps[0].step_id,
+        execution_count=claim.execution_count,
+        owner_id="old-worker",
+    )
+    queue.finish(run.run_id, "old-worker", "blocked", execution_count=claim.execution_count)
     original_queue = queue.get(run.run_id).to_dict()
     original_effects = queue.lifecycle(run.run_id)
     original = repository.get(run.run_id)

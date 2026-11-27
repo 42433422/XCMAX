@@ -280,7 +280,9 @@ def preserve_run_evidence(
         **({} if settled_pending or settled_xiaox else copy.deepcopy(old.get("recovery") or {})),
         **(run.metadata.get("recovery") or {}),
     }
-    if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required" and not settled_xiaox:
+    if (old.get("recovery") or {}).get(
+        "state"
+    ) == "manual_reconciliation_required" and not settled_xiaox:
         recovery["state"] = "manual_reconciliation_required"
     if recovery:
         run.metadata["recovery"] = recovery
@@ -630,8 +632,12 @@ class SQLAlchemyAgentRunRepository:
         )
 
     def save_if_unchanged_in_session(
-        self, db: Session, run: AgentRun, previous: AgentRun,
-        *, allow_verified_xiaox_recovery: bool = False,
+        self,
+        db: Session,
+        run: AgentRun,
+        previous: AgentRun,
+        *,
+        allow_verified_xiaox_recovery: bool = False,
     ) -> bool:
         from app.db.models.agent import AgentRunRecord
 
@@ -652,7 +658,9 @@ class SQLAlchemyAgentRunRepository:
         if matched != 1:
             return False
         self.save_in_session(
-            db, run, allow_planning_replacement=True,
+            db,
+            run,
+            allow_planning_replacement=True,
             allow_verified_xiaox_recovery=allow_verified_xiaox_recovery,
         )
         return True
@@ -1043,16 +1051,25 @@ class SQLAlchemyAgentRunRepository:
         self, run_id: str, action: str, *, requested_by: str = ""
     ) -> TaskControlCommand:
         self._ensure_schema()
-        run = self.get(run_id)
-        command = TaskControlCommand(
-            task_id=self._run_task_id(run),
-            run_id=str(run_id or ""),
-            action=cast(TaskControlAction, str(action)),
-            requested_by=str(requested_by or ""),
-        )
         with self._session_scope() as db:
-            from app.db.models.agent import AgentTaskCommandRecord
+            from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord
 
+            # Share the run fence used by recovery and control-state CAS. A
+            # command cannot appear after recovery has inspected this run but
+            # before that transaction commits. SQLite needs a real write here.
+            db.query(AgentRunRecord).filter_by(run_id=str(run_id or "")).update(
+                {AgentRunRecord.status: AgentRunRecord.status}, synchronize_session=False
+            )
+            record = db.get(AgentRunRecord, str(run_id or ""), populate_existing=True)
+            run = self._record_to_run(record) if record is not None else None
+            # Timestamp and supersession follow lock acquisition, so a waiter
+            # cannot publish an older intent after a newer command has committed.
+            command = TaskControlCommand(
+                task_id=self._run_task_id(run),
+                run_id=str(run_id or ""),
+                action=cast(TaskControlAction, str(action)),
+                requested_by=str(requested_by or ""),
+            )
             superseded_at = utc_now_iso()
             requested = (
                 db.query(AgentTaskCommandRecord)

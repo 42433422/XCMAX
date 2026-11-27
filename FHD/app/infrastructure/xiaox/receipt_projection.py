@@ -47,6 +47,7 @@ def projection_allowed(run: AgentRun) -> bool:
         and metadata.get("calls")
         and not metadata.get("coordinator_active")
         and metadata.get("revoked") is True
+        and metadata.get("close_reason") not in {"cancelled", "paused"}
         and not model_unsettled(metadata)
         and queued.get("state") != "queued"
     )
@@ -92,8 +93,10 @@ def project_receipt_state(
     """Build a projection; the SQL queue boundary independently verifies its inputs."""
     if not projection_allowed(run):
         return None
-    if requires_retry_reconciliation(run) and not verified_child_recovery and not any(
-        receipt_state(row) == "unknown" for row in rows
+    if (
+        requires_retry_reconciliation(run)
+        and not verified_child_recovery
+        and not any(receipt_state(row) == "unknown" for row in rows)
     ):
         return None  # Later receipts cannot silently clear an earlier unknown outcome.
     metadata = run.metadata["xiaox_runtime"]

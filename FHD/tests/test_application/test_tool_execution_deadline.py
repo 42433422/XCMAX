@@ -170,10 +170,12 @@ def test_stale_dispatch_owner_remains_fenced_with_inherited_unknown_io(monkeypat
     step = AgentStep(node_id="write", tool_id="business_db", action="write", idempotent=False)
     queue = InMemoryTaskExecutionRepository()
     queue.enqueue(run)
-    assert queue.claim("current-worker", lease_seconds=30) is not None
+    assert (claim := queue.claim("current-worker", lease_seconds=30)) is not None
     before = queue.lifecycle(run.run_id)
     calls = []
-    token = task_dispatcher._open_effect.set((queue, run.run_id, "stale-worker"))
+    token = task_dispatcher._open_effect.set(
+        (queue, run.run_id, "stale-worker", claim.execution_count)
+    )
     try:
         with invocation_deadline(time.monotonic() + 10) as budget:
             budget.uncertain.append({"kind": "http_timeout", "method": "POST"})

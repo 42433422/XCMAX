@@ -25,7 +25,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
+_open_effect: contextvars.ContextVar[tuple[object, str, str, int] | None] = contextvars.ContextVar(
     "task_open_effect", default=None
 )
 
@@ -35,11 +35,14 @@ def note_open_effect(run_id: str, effect_id: str) -> None:
     claim = _open_effect.get()
     if claim is None:
         return
-    repo, claimed_run_id, owner_id = claim
+    repo, claimed_run_id, owner_id, execution_count = claim
     marker = getattr(repo, "mark_open_effect", None)
     if marker is not None:
         effect = effect_id if run_id == claimed_run_id else f"child:{run_id}:{effect_id}"
-        if marker(claimed_run_id, effect, owner_id=owner_id) is False:
+        if (
+            marker(claimed_run_id, effect, owner_id=owner_id, execution_count=execution_count)
+            is False
+        ):
             from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
             raise WorkerLeaseLost("worker lease expired before opening a side effect")
@@ -241,19 +244,21 @@ class AgentTaskDispatcher:
         for run_id, item in active:
             if not item.thread.is_alive():
                 with self._active_lock:
-                    self._active.pop(run_id, None)
+                    if self._active.get(run_id) is item:
+                        self._active.pop(run_id, None)
                 continue
             if now - item.last_heartbeat < self._heartbeat_seconds:
                 continue
             renewed = self._execution_repo.heartbeat(
                 run_id,
                 item.owner_id,
+                execution_count=item.execution.execution_count,
                 lease_seconds=self._lease_seconds,
             )
             if renewed:
                 with self._active_lock:
                     current = self._active.get(run_id)
-                    if current is not None:
+                    if current is item:
                         current.last_heartbeat = now
 
     def _execute_claim(self, execution: AgentTaskExecution, owner_id: str) -> None:
@@ -283,7 +288,9 @@ class AgentTaskDispatcher:
         state = "failed"
         abandon = False
         xiaox_run = False
-        effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
+        effect_token = _open_effect.set(
+            (self._execution_repo, execution.run_id, owner_id, execution.execution_count)
+        )
         try:
             from app.infrastructure.xiaox.binding import has_legacy_runtime_binding
 
@@ -323,6 +330,7 @@ class AgentTaskDispatcher:
                     orchestrator,
                     preview,
                     owner=owner_id,
+                    execution=execution,
                     queue=self._execution_repo,
                     request_id=str(preview.metadata.get("approval_request_id") or ""),
                     finish=False,
@@ -347,7 +355,12 @@ class AgentTaskDispatcher:
         except EltCheckpointWorkerExited:
             abandon = True
             try:
-                self._execution_repo.heartbeat(execution.run_id, owner_id, lease_seconds=1.0)
+                self._execution_repo.heartbeat(
+                    execution.run_id,
+                    owner_id,
+                    execution_count=execution.execution_count,
+                    lease_seconds=1.0,
+                )
             except RECOVERABLE_ERRORS:
                 logger.info("ELT worker claim will expire normally for %s", execution.run_id)
             logger.warning(
@@ -388,6 +401,7 @@ class AgentTaskDispatcher:
                     execution.run_id,
                     owner_id,
                     state,
+                    execution_count=execution.execution_count,
                     error_code=error_code,
                 )
                 if finished is not None and finished.state == "succeeded":
@@ -397,7 +411,12 @@ class AgentTaskDispatcher:
 
                     recover_terminal_outcome(execution.run_id, repository=self._run_repo)
             with self._active_lock:
-                self._active.pop(execution.run_id, None)
+                current = self._active.get(execution.run_id)
+                if current is not None and (
+                    current.owner_id,
+                    current.execution.execution_count,
+                ) == (owner_id, execution.execution_count):
+                    self._active.pop(execution.run_id, None)
             self._wake.set()
 
 

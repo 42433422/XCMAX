@@ -156,6 +156,7 @@ class TaskExecutionRepository(Protocol):
         run_id: str,
         owner_id: str,
         *,
+        execution_count: int,
         lease_seconds: float,
         now: str | None = None,
     ) -> bool: ...
@@ -166,8 +167,18 @@ class TaskExecutionRepository(Protocol):
         owner_id: str,
         state: str,
         *,
+        execution_count: int,
         error_code: str = "",
     ) -> AgentTaskExecution | None: ...
+
+    def mark_open_effect(
+        self,
+        run_id: str,
+        effect_id: str = "dispatch",
+        *,
+        owner_id: str,
+        execution_count: int,
+    ) -> bool: ...
 
     def transition(
         self,

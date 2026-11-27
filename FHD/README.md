@@ -34,6 +34,10 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+Agent 持久化与生命连续性继续复用 Xiaox Runtime、固定 Codex SDK、[LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT；checkpoint 4.3.0、SQLite 3.1.2、仓内 PostgreSQL 3.1.1+xcagi.1）和 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT）。原 SQL 任务、执行队列与事件账本保存状态和父子关系，LangGraph 同步保存检查点；已完成步骤按原业务回执恢复，未知副作用先对账。新增适配仅约束产品的租约代际、控制状态与回执身份，不新增调度器或检查点存储。
+
+Worker 的心跳、副作用登记与完成回执必须携带首次认领的 owner 和 execution_count；过期或被接管的执行者不得更新新租约或提交业务。入队、认领、接管与重启中断事件同原 SQL 事务提交。重启保留合法父子等待，只恢复原任务可证明安全的余步；取消、暂停及旧回执不能自动重新唤醒任务。回归入口为 `test_task_event_durability.py`、`test_stale_run_reconciler.py`、`test_task_execution_repository.py`、`test_worker_repository.py`、`test_native_task_recovery*.py` 与 `test_xiaox_receipt_projection.py`；原 PostgreSQL 事务 CI 同时执行新增账本用例。本地文件库、真实 PostgreSQL 和进程中断回归只证明相应恢复边界，真实模型及长时生产验收另行取证。
+
 业务导入边界复用现有 [Import Linter 2.15](https://github.com/seddonym/import-linter/) 与 [Grimp 3.17](https://github.com/python-grimp/grimp/)（均为 BSD-2-Clause），CI 从 `uv.lock` 安装精确版本。12 条合同统一在 `pyproject.toml`，覆盖领域纯度、工作流端口、LangGraph 接入和回执读取边界；已清退旧 AST 扫描器及其 YAML 规则副本。LangGraph 由原 `ServiceContainer` 组装，缓存失效、聊天显示与流式取消分别复用原工具注册表、显示规则和 `StreamWorker`；回执分类与投影由原领域结果模块和基础设施回执模块共同承接。边界检查及其负例沿用现有 arch-fitness 门禁，运行时改动由原变更分类器触发业务合同测试。
 
 软件购买继续复用 lockfile 固定的 [Vue 3.5.45](https://github.com/vuejs/core)、[Vue Router 5.5.1](https://github.com/vuejs/router) 与 [Element Plus 2.14.8](https://github.com/element-plus/element-plus)（均为 MIT），沿原组件、登录回跳、订单与支付结果页面展示一个软件买断选项。支付履约复用 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT）的事务和已有订单幂等机制；独立支付服务沿用 [Spring Boot 4.0.8](https://github.com/spring-projects/spring-boot) 与 [WeChat Pay Java 0.2.17](https://github.com/wechatpay-apiv3/wechatpay-java)（Apache-2.0，版本见 `java_payment_service/pom.xml`）。新增适配只处理标准 SKU、历史授权兼容、固定试用到期和商业条款镜像；定制仍走确认报价后的原订单，AI 仍走原钱包，不新增计费框架。当前价格与交付边界见[账号 SSOT](docs/account_system_ssot.md#221-企业购买形态)；受控测试支付不代表生产验收。
