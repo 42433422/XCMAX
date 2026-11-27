@@ -13,7 +13,9 @@ FHD = Path(__file__).resolve().parents[2]
 
 
 def _load_probe():
-    spec = importlib.util.spec_from_file_location("loadtest_probe", FHD / "scripts/loadtest/probe.py")
+    spec = importlib.util.spec_from_file_location(
+        "loadtest_probe", FHD / "scripts/loadtest/probe.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
