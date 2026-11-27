@@ -33,9 +33,10 @@ async def chat_completion_openai_format(
     if provider is None:
         logger.error("No configured LLM provider (profile=%s)", profile)
         return None
+    from app.infrastructure.llm.instrumented_provider import wrap_provider
     from app.infrastructure.llm.model_admission import rate_limit_provider
 
-    provider = rate_limit_provider(provider)
+    provider = wrap_provider(rate_limit_provider(provider), profile=profile)
     # MiMo V2.5 is a reasoning model.  For short structured-output flows its
     # reasoning can consume the entire completion budget before any JSON body
     # is emitted.  Keep this provider-specific compatibility parameter at the

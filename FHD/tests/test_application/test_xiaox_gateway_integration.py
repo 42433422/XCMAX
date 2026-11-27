@@ -281,9 +281,60 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
             **options,
         )
 
-    assert second["ok"] is True and second["exit_status"] == "reply_completed", second
-    assert second["business_completed"] is False and second["output"] == "已收到月份回答"
     saved = repository.get(first["run_id"])
+    metadata = saved.metadata if saved is not None else {}
+    runtime = metadata.get("xiaox_runtime") or {}
+    verification = metadata.get("runtime_goal_verification") or {}
+    # A JSON string survives short traceback/JUnit formatting; a dict message
+    # abbreviates the error fields. Never dump credentials or the full context.
+    resume_diagnostic = json.dumps(
+        {
+            "second": {
+                key: second.get(key)
+                for key in ("ok", "error", "error_code", "exit_status", "failure_stage")
+            },
+            "sql_run": {
+                key: getattr(saved, key, None)
+                for key in ("run_id", "status", "created_at", "updated_at")
+            },
+            "runtime": {
+                key: runtime.get(key)
+                for key in (
+                    "generation",
+                    "runtime_status",
+                    "active_seconds",
+                    "active_started_at",
+                    "deadline_at",
+                    "model_reconciliation_required",
+                )
+            },
+            "model_requests": {
+                request_id: {
+                    **{
+                        key: call.get(key)
+                        for key in ("state", "attempt", "started_at", "finished_at", "duration_ms")
+                    },
+                    "diagnostic": {
+                        key: (call.get("diagnostic") or {}).get(key)
+                        for key in ("failure_kind", "stage", "request_phase", "outcome")
+                    },
+                }
+                for request_id, call in (runtime.get("model_requests") or {}).items()
+            },
+            "verification": {
+                key: verification.get(key) for key in ("status", "error_code", "accepted")
+            },
+            "timeline": [[event.event_type, event.created_at] for event in saved.events]
+            if saved is not None
+            else [],
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+    if second.get("ok") is not True or second.get("exit_status") != "reply_completed":
+        print("XIAOX_RESUME_DIAGNOSTIC " + resume_diagnostic)
+    assert second["ok"] is True and second["exit_status"] == "reply_completed", resume_diagnostic
+    assert second["business_completed"] is False and second["output"] == "已收到月份回答"
     assert saved.metadata["xiaox_runtime"]["thread_id"] == thread_id
     assert "waiting_input" not in saved.metadata["xiaox_runtime"]
     assert saved.metadata["xiaox_runtime"]["revoked"] is True

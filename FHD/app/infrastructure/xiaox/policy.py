@@ -303,6 +303,52 @@ class RuntimeSettings:
     codex_bin: str | None = None
     turn_timeout_seconds: int = 300
     qualification_file: Path | None = None
+    authorized_fallbacks: tuple[RuntimeSettings, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.authorized_fallbacks, tuple) or len(self.authorized_fallbacks) > 2:
+            raise RuntimePolicyError("At most two explicit authorized fallback routes are allowed")
+        if not self.authorized_fallbacks:
+            return
+        if self.route is None or self.runtime_root is None:
+            raise RuntimePolicyError("Authorized fallback routes require the original runtime")
+        identities = {self.route.identity}
+        for candidate in self.authorized_fallbacks:
+            if (
+                not isinstance(candidate, RuntimeSettings)
+                or candidate.authorized_fallbacks
+                or candidate.route is None
+                or candidate.runtime_root != self.runtime_root
+                or candidate.engine != self.engine
+                or candidate.codex_bin != self.codex_bin
+            ):
+                raise RuntimePolicyError("Fallback routes must share one runtime without nesting")
+            if "market" in (self.route.gateway_kind, candidate.route.gateway_kind):
+                raise RuntimePolicyError("Account routes do not yet authorize model fallback")
+            if candidate.route.identity in identities:
+                raise RuntimePolicyError("Authorized fallback routes must be distinct")
+            identities.add(candidate.route.identity)
+            if any(
+                getattr(candidate.route, name) < getattr(self.route, name)
+                for name in ("context_window", "max_output_tokens", "max_request_bytes")
+            ):
+                raise RuntimePolicyError("Fallback capacity cannot shrink the original task")
+
+    def authorized_route_identities(self) -> list[str]:
+        identities = []
+        for settings in (self, *self.authorized_fallbacks):
+            if settings.route is None:
+                raise RuntimePolicyError("Xiaox model route is required")
+            identities.append(settings.route.identity)
+        return identities
+
+    def qualified_routes(self) -> tuple[ModelRoute, ...]:
+        routes = []
+        for settings in (self, *self.authorized_fallbacks):
+            route = settings.require_qualified()
+            route.token()
+            routes.append(route)
+        return tuple(routes)
 
     def require_qualified(self) -> ModelRoute:
         if self.route is None or self.qualification_file is None:
@@ -339,6 +385,20 @@ class RuntimeSettings:
         return self.route
 
 
+def _qualification_path(value: Any, root: Path) -> Path | None:
+    qualification = Path(value).expanduser() if value else None
+    if qualification is not None and (
+        not qualification.is_absolute()
+        or not qualification.is_relative_to(root)
+        or not qualification.relative_to(root).parts
+        or ".." in qualification.relative_to(root).parts
+        or root.is_symlink()
+        or not qualification.resolve().is_relative_to(root.resolve())
+    ):
+        raise RuntimePolicyError("Xiaox qualification_file must be inside the private runtime_root")
+    return qualification
+
+
 def runtime_settings() -> RuntimeSettings:
     location = os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip()
     if not location:
@@ -361,21 +421,27 @@ def runtime_settings() -> RuntimeSettings:
         root = Path(data["runtime_root"]).expanduser() if data.get("runtime_root") else None
         if root is None or not root.is_absolute():
             raise RuntimePolicyError("Xiaox requires an absolute private runtime_root")
-        qualification = (
-            Path(data["qualification_file"]).expanduser()
-            if data.get("qualification_file")
-            else None
-        )
-        if qualification is not None and (
-            not qualification.is_absolute()
-            or not qualification.is_relative_to(root)
-            or not qualification.relative_to(root).parts
-            or ".." in qualification.relative_to(root).parts
-            or root.is_symlink()
-            or not qualification.resolve().is_relative_to(root.resolve())
-        ):
-            raise RuntimePolicyError(
-                "Xiaox qualification_file must be inside the private runtime_root"
+        qualification = _qualification_path(data.get("qualification_file"), root)
+        candidates = data.get("authorized_fallbacks", [])
+        if not isinstance(candidates, list) or len(candidates) > 2:
+            raise RuntimePolicyError("At most two explicit authorized fallback routes are allowed")
+        fallbacks = []
+        for candidate in candidates:
+            if (
+                not isinstance(candidate, dict)
+                or set(candidate) != {"route", "qualification_file"}
+                or not candidate["qualification_file"]
+            ):
+                raise RuntimePolicyError(
+                    "Fallback configuration needs only route and qualification_file"
+                )
+            fallbacks.append(
+                RuntimeSettings(
+                    route=ModelRoute(**candidate["route"]),
+                    runtime_root=root,
+                    codex_bin=data.get("codex_bin"),
+                    qualification_file=_qualification_path(candidate["qualification_file"], root),
+                )
             )
         return RuntimeSettings(
             engine=engine,
@@ -385,6 +451,7 @@ def runtime_settings() -> RuntimeSettings:
             codex_bin=data.get("codex_bin"),
             turn_timeout_seconds=_positive(data.get("turn_timeout_seconds", 180), "timeout", 3570),
             qualification_file=qualification,
+            authorized_fallbacks=tuple(fallbacks),
         )
     except (OSError, KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, RuntimePolicyError):

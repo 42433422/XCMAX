@@ -13,10 +13,6 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.llm_failure_classifier import (
-    is_quota_or_billing_failure,
-    is_transient_failure,
-)
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, resolve_api_key
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -54,19 +50,12 @@ def is_wallet_dependency_failure(error_text: str) -> bool:
 
 
 def is_chat_failoverable_failure(error_text: str, status_code: Optional[int] = None) -> bool:
-    """上游配额/额度或瞬时限流——换厂商/模型可能恢复。"""
-    if is_wallet_dependency_failure(error_text):
-        return False
-    if is_wallet_balance_failure(error_text, status_code):
-        return True
-    if status_code == 500 or "error 500" in (error_text or "").lower():
-        # 网关/上游 500 在聊天链路按瞬态处理；事故分类仍保持 500=code 的既有语义。
-        return True
-    if is_quota_or_billing_failure(error_text, status_code):
-        return True
-    if is_transient_failure(error_text, status_code):
-        return True
-    return False
+    """Only a definite refusal allows another authorized route.
+
+    Timeouts and 5xx can conceal accepted inference. Error text must never
+    authorize replay or override an account/authentication refusal.
+    """
+    return status_code in {402, 404, 429} and not is_wallet_dependency_failure(error_text)
 
 
 async def list_chat_failover_candidates(

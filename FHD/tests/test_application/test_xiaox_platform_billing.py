@@ -8,6 +8,8 @@ from app.infrastructure.billing import model_usage as ledger
 from app.infrastructure.billing.model_reservation import (
     ModelReservationError,
     record_platform_model_usage,
+    reserve_model_usage,
+    settle_model_usage,
 )
 from app.infrastructure.xiaox.policy import ModelRoute
 
@@ -120,3 +122,75 @@ def test_existing_request_cannot_be_rebound_to_different_account(account_usage):
     with pytest.raises(ModelReservationError, match="cannot be rebound"):
         record_platform_model_usage(**account_usage)
     assert ledger.list_model_usage_entries(run_id="run-1")[0]["user_id"] == "71"
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"run_id": "other-run"},
+        {"user_id": "72"},
+        {"provider_id": "other"},
+        {"model": "other"},
+        {"token_ceiling": 9000},
+    ],
+)
+def test_reservation_replay_cannot_rebind_its_original_owner_route_or_budget(
+    tmp_path, monkeypatch, changed
+):
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
+    ledger.set_model_wallet_balance("71", 100)
+    ledger.set_model_wallet_balance("72", 100)
+    arguments = {
+        "usage_key": "reserved-request",
+        "run_id": "run-1",
+        "user_id": "71",
+        "provider_id": "litellm",
+        "model": "chosen",
+        "token_ceiling": 8000,
+    }
+    original = reserve_model_usage(**arguments)
+    assert reserve_model_usage(**arguments) == original
+    with pytest.raises(ModelReservationError, match="cannot be rebound"):
+        reserve_model_usage(**(arguments | changed))
+    assert ledger.list_model_usage_entries(run_id="run-1") == [original]
+    assert ledger.get_model_wallet("71")["balance_units"] == 92
+    assert ledger.get_model_wallet("72")["balance_units"] == 100
+    usage = {"prompt_tokens": 1000, "completion_tokens": 1000, "total_tokens": 2000}
+    settled = settle_model_usage(arguments["usage_key"], usage)
+    assert reserve_model_usage(**arguments) == settled
+    assert ledger.get_model_wallet("71")["balance_units"] == 98
+
+
+@pytest.mark.parametrize("consumer", ["reservation", "platform_audit"])
+def test_conflicting_pending_usage_is_rejected_before_any_wallet_recovery(
+    account_usage, monkeypatch, consumer
+):
+    calls = []
+
+    def debit(**request):
+        calls.append(request)
+        if len(calls) == 1:
+            return "market_debit_pending", {"outcome_unknown": True}
+        return "debited", {"status": "debited", "hold_no": "H", "amount_yuan": "0.08"}
+
+    monkeypatch.setattr(ledger, "_apply_market_wallet_debit", debit)
+    original = {
+        "usage_key": account_usage["usage_key"],
+        "run_id": "original-run",
+        "user_id": "71",
+        "provider_id": "litellm",
+        "model": "chosen",
+        "token_ceiling": 8000,
+    }
+    with pytest.raises(ModelReservationError, match="reservation was not confirmed"):
+        reserve_model_usage(**original)
+    pending = ledger.list_model_usage_entries()[0]
+    with pytest.raises(ModelReservationError, match="cannot be rebound"):
+        if consumer == "reservation":
+            reserve_model_usage(**(original | {"user_id": "72"}))
+        else:
+            record_platform_model_usage(**account_usage)
+    assert len(calls) == 1 and ledger.list_model_usage_entries() == [pending]
+    assert reserve_model_usage(**original)["billing_status"] == "debited"
+    assert len(calls) == 2 and calls[0] == calls[1]

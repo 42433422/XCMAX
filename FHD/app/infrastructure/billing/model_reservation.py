@@ -23,6 +23,25 @@ def reserve_model_usage(
     *, usage_key: str, run_id: str, user_id: str, provider_id: str, model: str, token_ceiling: int
 ) -> dict[str, Any]:
     reserved = ledger.estimate_llm_cost_units(total_tokens=token_ceiling)
+
+    def validate_existing(entry: dict[str, Any]) -> None:
+        if (
+            any(
+                entry.get(key) != value
+                for key, value in {
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "provider_id": provider_id,
+                    "provider": provider_id,
+                    "model": model,
+                    "entry_type": "model_call",
+                    "source": "xiaox.model_gateway",
+                }.items()
+            )
+            or (entry.get("metadata") or {}).get("reservation_units") != reserved
+        ):
+            raise ModelReservationError("Existing model reservation cannot be rebound")
+
     entry = ledger.record_model_usage(
         usage_key=usage_key,
         run_id=run_id,
@@ -33,7 +52,9 @@ def reserve_model_usage(
         cost_units=reserved,
         source="xiaox.model_gateway",
         metadata={"reservation_units": reserved, "usage_status": "reserved"},
+        validate_existing=validate_existing,
     )
+    validate_existing(entry)
     if entry.get("billing_status") not in {"debited", "metered", "unmetered"}:
         raise ModelReservationError(
             "Model cost reservation was not confirmed",
@@ -215,21 +236,30 @@ def record_platform_model_usage(
         "wallet_backend": "audit",
         "created_at": ledger._utc_iso(),
     }
-    recorded = ledger._record_usage_entry(entry)
-    if any(
-        recorded.get(k) != entry[k]
-        for k in (
-            "run_id",
-            "user_id",
-            "provider_id",
-            "model",
-            "prompt_tokens",
-            "completion_tokens",
-            "total_tokens",
-            "cost_units",
-            "metadata",
-            "wallet_backend",
-        )
-    ):
-        raise ModelReservationError("Existing platform settlement cannot be rebound")
+
+    def validate_existing(recorded: dict[str, Any]) -> None:
+        if any(
+            recorded.get(k) != entry[k]
+            for k in (
+                "run_id",
+                "user_id",
+                "provider_id",
+                "provider",
+                "model",
+                "entry_type",
+                "source",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "cost_units",
+                "metadata",
+                "wallet_backend",
+                "billing_source",
+                "billing_status",
+            )
+        ):
+            raise ModelReservationError("Existing platform settlement cannot be rebound")
+
+    recorded = ledger._record_usage_entry(entry, validate_existing=validate_existing)
+    validate_existing(recorded)
     return recorded

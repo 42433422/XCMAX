@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any, cast
 
@@ -11,8 +10,6 @@ import httpx
 from app.infrastructure.llm.providers.credentials import resolve_deepseek_credentials
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
 
 
 class DeepSeekLegacyProvider:
@@ -65,7 +62,9 @@ class DeepSeekLegacyProvider:
                 time.perf_counter() - t0,
             )
             return cast("dict[str, Any] | None", result)
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
-            logger.error("DeepSeekLegacyProvider failed: %s", exc)
-            return None
+            # Preserve transport uncertainty for the shared retry/circuit owner.
+            # An empty response would be mistaken for a successful call or a
+            # repairable output and could dispatch another paid request.
+            raise

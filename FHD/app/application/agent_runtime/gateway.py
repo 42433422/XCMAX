@@ -181,13 +181,12 @@ def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "start_paused",
         "start_queued",
         "runtime_config",
+        "runtime_authorized_model_routes",
+        "runtime_effective_model_route",
+        "authorized_model_routes",
         "runtime_type",
     ):
         context.pop(key, None)
-    if "desktop_navigation" in context:
-        from app.infrastructure.xiaox.tools import desktop_navigation_items
-
-        context["desktop_navigation"] = desktop_navigation_items(context["desktop_navigation"])
     return context, owner
 
 
@@ -267,6 +266,25 @@ def _same_owner(
         raise XiaoxBindingError("conversation_changed", error)
 
 
+def _validate_model_routes(run: AgentRun, identities: list[str]) -> None:
+    primary = identities[0]
+    configured = (run.metadata.get("xiaox_runtime") or {}).get("runtime_config")
+    if (
+        run.metadata.get("runtime_route_identity") != primary
+        or run.metadata.get("runtime_authorized_model_routes", [primary]) != identities
+        or run.metadata.get("runtime_effective_model_route", primary) not in identities
+        or (
+            configured is not None
+            and (
+                not isinstance(configured, dict)
+                or configured.get("route_identity") != primary
+                or configured.get("authorized_model_routes", [primary]) != identities
+            )
+        )
+    ):
+        raise XiaoxBindingError("runtime_changed", "原任务的模型路由及备用授权不能改变")
+
+
 def _insert_parent(
     repository: SQLAlchemyAgentRunRepository, run: AgentRun, *, queue: Any = None
 ) -> tuple[AgentRun, bool]:
@@ -299,15 +317,7 @@ def _insert_parent(
     return repository.get(run.run_id) or run, True
 
 
-def _duplicate_result(
-    run: AgentRun, request: dict[str, Any], repository: SQLAlchemyAgentRunRepository
-) -> dict[str, Any]:
-    if request.get("state") == "queued":
-        from app.infrastructure.xiaox.queued_runtime import recover_interrupted_queue_request
-
-        key = canonical_digest({"turn_id": request.get("turn_id"), "owner": run.user_id})
-        if result := recover_interrupted_queue_request(repository, run, key):
-            return {**public_runtime_result(result), "deduplicated": True}
+def _duplicate_result(run: AgentRun, request: dict[str, Any]) -> dict[str, Any]:
     if isinstance(request.get("result"), dict):
         return {**public_runtime_result(request["result"]), "deduplicated": True}
     result = _failure(
@@ -425,7 +435,6 @@ async def run_runtime_task_async(
             CONTEXT_KEY,
             METADATA_KEY,
             normalize_mode,
-            requests_plan_document,
         )
 
         mode = normalize_mode(context.get(CONTEXT_KEY))
@@ -564,7 +573,7 @@ async def run_runtime_task_async(
             if request is not None:
                 if request.get("digest") != digest:
                     raise XiaoxBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
-                return _duplicate_result(parent, request, repository)
+                return _duplicate_result(parent, request)
             if not is_resume:
                 raise XiaoxBindingError("request_conflict", "原运行任务缺少已绑定的请求标识")
             if parent.status != "blocked":
@@ -597,14 +606,13 @@ async def run_runtime_task_async(
         surface = "employee" if context.get("employee_id") else "chat"
         if surface not in settings.surfaces:
             raise RuntimePolicyError("当前入口未启用固定 Xiaox 执行器")
-        route = settings.route if deferred else settings.require_qualified()
+        routes = () if deferred else settings.qualified_routes()
+        route = settings.route if deferred else routes[0]
         if route is None or settings.runtime_root is None:
             raise RuntimePolicyError("Xiaox model route and private runtime_root are required")
-        if not deferred:
-            route.token()  # Credentials and real qualification precede business execution.
+        authorized_routes = settings.authorized_route_identities()
         if is_resume and parent is not None:
-            if parent.metadata.get("runtime_route_identity") != route.identity:
-                raise XiaoxBindingError("runtime_changed", "原任务的模型路由不能改变")
+            _validate_model_routes(parent, authorized_routes)
         queue = None
         if start_queued:
             from app.infrastructure.xiaox.queued_runtime import (
@@ -622,15 +630,11 @@ async def run_runtime_task_async(
                 runtime_task_id=_task_id,
                 runtime_context=context,
                 runtime_route_identity=route.identity,
+                runtime_authorized_model_routes=authorized_routes,
                 runtime_route=route.runtime_identity(),
                 runtime_gate_required=gate is not None,
                 runtime_instruction_digest=instruction_digest,
                 runtime_completion_mode=completion_mode,
-                **(
-                    {"runtime_requested_deliverable": "action_plan", "plan_delivery_version": 1}
-                    if mode == "plan" and requests_plan_document(task)
-                    else {}
-                ),
                 **{METADATA_KEY: mode},
                 runtime_allowed_actions=actions,
                 _xiaox_system_prompt=system_prompt,
@@ -688,7 +692,7 @@ async def run_runtime_task_async(
         if request is not None and request.get("digest") != digest:
             raise XiaoxBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
         if request is not None and not admitted:
-            return _duplicate_result(parent, request, repository)
+            return _duplicate_result(parent, request)
         if start_paused:
             return dict(public_runtime_result(parent.final_output["xiaox_result"]))
         if start_queued and not is_resume:
@@ -715,6 +719,7 @@ async def run_runtime_task_async(
             def claim(run: AgentRun, _metadata: dict[str, Any]) -> None:
                 nonlocal admitted
                 admitted = False
+                _validate_model_routes(run, authorized_routes)
                 requests = run.metadata.setdefault("runtime_requests", {})
                 if request_key in requests:
                     if requests[request_key].get("digest") != digest:
@@ -724,6 +729,13 @@ async def run_runtime_task_async(
                     return
                 if len(requests) >= 256:
                     raise XiaoxBindingError("request_limit", "运行任务已达到续跑请求上限")
+                # Old bindings authorize only their original model. Normalize
+                # that exact authorization under the existing SQL claim lock.
+                run.metadata.setdefault("runtime_authorized_model_routes", authorized_routes)
+                if isinstance(_metadata.get("runtime_config"), dict):
+                    _metadata["runtime_config"].setdefault(
+                        "authorized_model_routes", authorized_routes
+                    )
                 requests[request_key] = {
                     "digest": digest,
                     "state": "admitted",
@@ -748,7 +760,7 @@ async def run_runtime_task_async(
             claimed = store.update(resolved_id, claim)
             if not admitted:
                 return _duplicate_result(
-                    claimed.run, claimed.run.metadata["runtime_requests"][request_key], repository
+                    claimed.run, claimed.run.metadata["runtime_requests"][request_key]
                 )
         from fastapi import FastAPI
 
@@ -766,6 +778,7 @@ async def run_runtime_task_async(
         bridge = XiaoxToolBridge(store, gate=gate, run_id=resolved_id)
         app.state.xiaox_tool_bridge = bridge
         app.state.xiaox_model_route = route
+        app.state.xiaox_model_routes = routes
         app.include_router(model_router)
         app.include_router(mcp_router)
         with LocalRuntimeServer(app) as server:
@@ -792,7 +805,11 @@ async def run_runtime_task_async(
                 input_data=input_data,
                 completion_mode=completion_mode,
                 allowed_actions=actions,
-                runtime_config={**route.runtime_identity(), "gate_required": gate is not None},
+                runtime_config={
+                    **route.runtime_identity(),
+                    "gate_required": gate is not None,
+                    "authorized_model_routes": authorized_routes,
+                },
                 answer_to_waiting_input=answer_to_waiting_input,
                 tool_bridge=bridge,
                 on_event=(lambda event: on_event(public_runtime_result(event)))

@@ -10,8 +10,11 @@ import pytest
 from fastapi import HTTPException
 
 from modstore_server import llm_billed_chat, llm_billed_once
+from modstore_server import llm_client_requests as ledger
 from modstore_server.llm_billing_values import WalletHold
 from modstore_server.llm_key_resolver import ChatRouteSnapshot, chat_route_snapshot
+from tests.llm_request_support import KEY
+from tests.llm_request_support import db as db
 
 
 def _route(provider="xiaomi", model="mimo-v2.6-flash", source="platform", revision="before"):
@@ -301,9 +304,10 @@ async def test_billed_chat_never_publishes_reasoning_as_final_content(
     else:
         with pytest.raises(HTTPException) as error:
             await llm_billed_chat.run_billed_llm_chat(**args)
-        assert error.value.status_code == 502
+        assert error.value.status_code == 409
         assert error.value.detail["route_state"] == "failed"
-        assert "未输出正文" in error.value.detail["message"]
+        assert "未输出正文" in error.value.detail["error"]
+        assert error.value.detail["request_id"]
         wallet.settle.assert_not_awaited()
         saved.assert_not_called()
 
@@ -404,9 +408,17 @@ def test_failed_receipt_preserves_reconciliation_fields_and_excludes_credentials
 
 
 @pytest.mark.asyncio
-async def test_stream_does_not_failover_after_emitting_tool_call(monkeypatch, failed_billed_case):
+@pytest.mark.parametrize("status", [402, 429, 503])
+@pytest.mark.parametrize("keyed", [False, True])
+@pytest.mark.parametrize("output", ["delta", "toolcall"])
+async def test_stream_does_not_failover_after_emitting_output(
+    monkeypatch, failed_billed_case, db, status, keyed, output
+):
     route, args, wallet = failed_billed_case
     args.pop("route_snapshot")
+    args["db"] = db
+    if keyed:
+        args["client_request_id"] = KEY
     monkeypatch.setattr(
         llm_billed_chat,
         "resolve_chat_route_snapshot",
@@ -420,33 +432,131 @@ async def test_stream_does_not_failover_after_emitting_tool_call(monkeypatch, fa
 
     async def dispatch(provider, **kwargs):
         dispatched.append(provider)
-        yield {
-            "type": "toolcall",
-            "choices": [
-                {
-                    "delta": {
-                        "tool_calls": [
-                            {"id": "call-1", "function": {"name": "read", "arguments": "{}"}}
-                        ]
+        if output == "delta":
+            yield {"type": "delta", "delta": "partial answer"}
+        else:
+            yield {
+                "type": "toolcall",
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {"id": "call-1", "function": {"name": "read", "arguments": "{}"}}
+                            ]
+                        }
                     }
-                }
-            ],
-        }
-        yield {"type": "error", "status": 503, "error": "temporarily unavailable"}
+                ],
+            }
+        yield {"type": "error", "status": status, "error": "temporarily unavailable"}
 
     monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch)
     response = await llm_billed_chat.stream_billed_llm_chat(**args)
     events = [_frame(frame) async for frame in response.body_iterator]
     assert dispatched == [route.provider]
-    assert [event for event, _ in events] == ["meta", "toolcall", "error"]
+    assert [event for event, _ in events] == (["status"] if keyed else []) + [
+        "meta",
+        output,
+        "error",
+    ]
     assert candidates.await_args.kwargs["include_platform_fallbacks"] is True
+    wallet.settle.assert_not_awaited()
+    wallet.release.assert_not_awaited()
+    assert events[-1][1]["status"] == 409
+    if keyed:
+        assert ledger.lookup(db, 7, KEY, 90) == "settling"
+        with pytest.raises(HTTPException) as replay:
+            await llm_billed_chat.stream_billed_llm_chat(**args)
+        assert replay.value.status_code == 409
+        assert dispatched == [route.provider]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("keyed", [False, True])
+@pytest.mark.parametrize("source", ["platform", "user_override"])
+async def test_payment_rejection_releases_original_hold_within_existing_fallback_authority(
+    monkeypatch, failed_billed_case, db, stream, keyed, source
+):
+    _, args, wallet = failed_billed_case
+    route = _route(source=source)
+    args.pop("route_snapshot")
+    args["db"] = db
+    if keyed:
+        args["client_request_id"] = KEY
+    monkeypatch.setattr(
+        llm_billed_chat,
+        "resolve_chat_route_snapshot",
+        lambda db, uid, provider, model, **kw: _route(provider, model, source=source),
+    )
+    monkeypatch.setattr(
+        llm_billed_chat,
+        "list_chat_failover_candidates",
+        AsyncMock(return_value=[(route.provider, route.model), ("deepseek", "deepseek-chat")]),
+    )
+    dispatched = []
+
+    async def dispatch(provider, **kwargs):
+        dispatched.append(provider)
+        if provider == route.provider:
+            return {"ok": False, "status": 402, "error": "provider payment required"}
+        return {
+            "ok": True,
+            "content": "authorized backup answer",
+            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+        }
+
+    async def dispatch_stream(provider, **kwargs):
+        result = await dispatch(provider, **kwargs)
+        if not result["ok"]:
+            yield {"type": "error", **result}
+        else:
+            yield {"type": "delta", "delta": result["content"]}
+            yield {"type": "usage", "usage": result["usage"]}
+            yield {"type": "finish", "finish_reason": "stop"}
+
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
+    monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch_stream)
+
+    async def call():
+        if stream:
+            response = await llm_billed_chat.stream_billed_llm_chat(**args)
+            return dict([_frame(frame) async for frame in response.body_iterator])
+        return await llm_billed_chat.run_billed_llm_chat(**args)
+
+    if source == "platform":
+        if stream:
+            events = await call()
+            assert "done" not in events and events["error"]["status"] == 402
+        else:
+            with pytest.raises(HTTPException) as rejected:
+                await call()
+            assert rejected.value.status_code == 402
+        assert dispatched == [route.provider]
+        wallet.preauthorize.assert_awaited_once()
+        assert wallet.release.await_args.args[1].hold_no == "synthetic-hold"
+        if keyed:
+            assert ledger.lookup(db, 7, KEY, 90) == "failed"
+    else:
+        result = await call()
+        receipt = result["done"] if stream else result
+        assert receipt["content"] == "authorized backup answer"
+        assert receipt["provider"] == "deepseek" and receipt["billed"] is False
+        assert dispatched == [route.provider, "deepseek"]
+        wallet.preauthorize.assert_not_awaited()
+        assert wallet.release.await_args.args[1].hold_no.startswith("byok-")
+        if keyed:
+            assert ledger.lookup(db, 7, KEY, 90) == "completed"
+            await call()
+            assert dispatched == [route.provider, "deepseek"]
+    wallet.release.assert_awaited_once()
     wallet.settle.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("first_status", [429, 503])
 async def test_fallback_preauthorizes_and_settles_actual_route(
-    monkeypatch, failed_billed_case, stream
+    monkeypatch, failed_billed_case, stream, first_status
 ):
     route, args, wallet = failed_billed_case
     args.pop("route_snapshot")
@@ -470,17 +580,32 @@ async def test_fallback_preauthorizes_and_settles_actual_route(
 
     async def dispatch(provider, **kw):
         if provider == route.provider:
-            return {"ok": False, "status": 503, "error": "temporarily unavailable"}
+            return {"ok": False, "status": first_status, "error": "temporarily unavailable"}
         return {"ok": True, "content": "backup answer", "usage": {}}
 
     async def dispatch_stream(provider, **kw):
         if provider == route.provider:
-            yield {"type": "error", "status": 503, "error": "temporarily unavailable"}
+            yield {"type": "error", "status": first_status, "error": "temporarily unavailable"}
         else:
             yield {"type": "delta", "delta": "backup answer"}
 
     monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
     monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch_stream)
+    if first_status == 503:
+        if stream:
+            response = await llm_billed_chat.stream_billed_llm_chat(**args)
+            events = dict([_frame(frame) async for frame in response.body_iterator])
+            assert "done" not in events and events["error"]["status"] == 409
+        else:
+            with pytest.raises(HTTPException) as pending:
+                await llm_billed_chat.run_billed_llm_chat(**args)
+            assert pending.value.status_code == 409
+        wallet.preauthorize.assert_awaited_once()
+        wallet.release.assert_not_awaited()
+        wallet.settle.assert_not_awaited()
+        charge.assert_not_called()
+        saved.assert_not_called()
+        return
     if stream:
         response = await llm_billed_chat.stream_billed_llm_chat(**args)
         events = dict([_frame(frame) async for frame in response.body_iterator])

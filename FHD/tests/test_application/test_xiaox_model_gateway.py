@@ -1,17 +1,15 @@
 """Admission/settlement failures must stop provider I/O and future tool work."""
 
 import json
-import sqlite3
 import time
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import replace
 from types import SimpleNamespace
 
 import httpx
 import pytest
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.infrastructure.billing import model_usage as ledger
@@ -20,7 +18,6 @@ from app.infrastructure.xiaox.model_gateway import (
     MODEL_PATH,
     ModelRequestTimeout,
     _finish,
-    _wait_for_model_retry,
     model_request_deadline,
     model_request_timeout_seconds,
     request_remaining,
@@ -73,6 +70,13 @@ class Store:
 
 @pytest.fixture
 def gateway(tmp_path, monkeypatch):
+    from app.infrastructure.llm import model_admission
+
+    # Every fixture is a fresh host/account. Faults in one independent request
+    # scenario must not leave the next scenario's process-local circuit open.
+    monkeypatch.setattr(model_admission, "_MODEL_BREAKERS", {})
+    monkeypatch.setattr(model_admission, "_MODEL_INFLIGHT", 0)
+    monkeypatch.setattr(model_admission, "_MODEL_ROUTE_INFLIGHT", {})
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
     monkeypatch.setenv("MODEL_USAGE_WALLET_REQUIRED", "1")
@@ -241,113 +245,9 @@ def test_model_call_budget_refusal_is_committed_as_a_readable_stop_reason(gatewa
     assert limit["max_model_calls"] == store.route_max_model_calls
 
 
-@pytest.mark.parametrize(
-    ("header", "connected", "delays", "status"),
-    [
-        ("12", True, [12.0], 200),
-        ("120", True, [], 429),
-        ("12", False, [12.0], 499),
-        (None, True, [0.375, 0.75], 200),
-    ],
-)
-def test_rate_limited_model_retries_respect_budget_disconnect_and_billing(
-    gateway, monkeypatch, header, connected, delays, status
-):
-    client, store, calls, response, app = gateway
-    sleeps = []
-
-    async def wait_for_retry(request, delay):
-        sleeps.append(delay)
-        return connected
-
-    monkeypatch.setattr("app.infrastructure.xiaox.model_gateway._wait_for_model_retry", wait_for_retry)
-    monkeypatch.setattr("app.infrastructure.xiaox.model_gateway.uniform", lambda low, high: low)
-
-    def handler(request):
-        calls.append(request)
-        if len(calls) <= (1 if header else 2):
-            return httpx.Response(429, headers={"Retry-After": header} if header else None)
-        return httpx.Response(200, json=response)
-
-    app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
-        transport=httpx.MockTransport(handler), **kwargs
-    )
-    result = post(client)
-    assert result.status_code == status and sleeps == delays
-    assert len(calls) == len(delays) + int(connected)
-    assert ledger.get_model_wallet("71")["balance_units"] == (98 if status == 200 else 100)
-    rows = list(store.binding.metadata["model_requests"].values())
-    assert rows[0]["state"] == "failed" and rows[0]["cost_units"] == 0
-    assert not store.binding.metadata.get("model_reconciliation_required")
-    if status == 429:
-        assert result.headers["Retry-After"] == header
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_wait_stops_when_asgi_client_disconnects():
-    async def receive():
-        return {"type": "http.disconnect"}
-
-    assert not await _wait_for_model_retry(Request({"type": "http"}, receive=receive), 12)
-
-
 def test_unknown_usage_is_not_zero():
     assert response_usage({}) is None
     assert response_usage({"usage": {"input_tokens": -1, "output_tokens": 10}}) is None
-
-
-@pytest.mark.parametrize("problem", ["full", "busy"])
-def test_settlement_storage_failure_reports_native_status_without_redispatch(
-    gateway, tmp_path, monkeypatch, problem
-):
-    client, store, calls, _, _ = gateway
-    if problem == "full":
-        with closing(sqlite3.connect(":memory:")) as db:
-            db.execute("CREATE TABLE entries (payload BLOB)")
-            db.execute("PRAGMA max_page_count=2")
-            with pytest.raises(sqlite3.OperationalError) as caught:
-                db.execute("INSERT INTO entries VALUES (zeroblob(65536))")
-        storage_stage, result_name = "usage_ledger", "SQLITE_FULL"
-
-        def fail(*args):
-            raise caught.value
-
-        monkeypatch.setattr("app.infrastructure.billing.model_reservation.settle_model_usage", fail)
-    else:
-        path = tmp_path / "storage.sqlite3"
-        with closing(sqlite3.connect(path)) as owner:
-            owner.execute("BEGIN IMMEDIATE")
-            with closing(sqlite3.connect(path, timeout=0)) as contender:
-                with pytest.raises(sqlite3.OperationalError) as caught:
-                    contender.execute("BEGIN IMMEDIATE")
-        storage_stage, result_name = "run_projection", "SQLITE_BUSY"
-        original_update = store.update
-        failed = False
-
-        def fail(run_id, mutation, **kwargs):
-            nonlocal failed
-            if mutation.__name__ == "finish" and not failed:
-                failed = True
-                raise SQLAlchemyOperationalError(
-                    "UPDATE sensitive_rows", {"private": "sensitive-parameter"}, caught.value
-                )
-            return original_update(run_id, mutation, **kwargs)
-
-        monkeypatch.setattr(store, "update", fail)
-
-    result = post(client, stream=True)
-    assert result.status_code == 200
-    assert "model_settlement_storage_failed" in result.text
-    assert "sensitive_rows" not in result.text and "sensitive-parameter" not in result.text
-    (request,) = store.binding.metadata["model_requests"].values()
-    assert request["state"] == "unknown" and store.binding.metadata["model_reconciliation_required"]
-    diagnostic = request["diagnostic"]
-    assert diagnostic["storage_stage"] == storage_stage
-    assert diagnostic["sqlite_error_name"] == result_name
-    assert diagnostic["sqlite_error_code"] == getattr(sqlite3, result_name)
-    assert diagnostic["outcome"] == "unknown" and diagnostic["retryable"] is False
-    assert diagnostic["stream_phase"] == "settlement"
-    assert len(calls) == 1
 
 
 def test_another_task_token_cannot_use_this_private_gateway(gateway):
@@ -820,11 +720,10 @@ def test_unsuccessful_terminal_settles_known_usage_and_never_releases_tools(
         {
             "type": "function_call",
             "name": "mcp__xcmax__request_input",
-            "namespace": "private_server",
+            "namespace": "another_server",
         },
         {"type": "local_shell_call", "action": {"command": ["echo", "blocked"]}},
         {"type": "function_call_output", "call_id": "fake", "output": "business completed"},
-        {"type": "private_item"},
     ],
 )
 def test_unadvertised_native_or_forged_tool_proposals_never_reach_runtime(gateway, stream, item):
@@ -838,17 +737,6 @@ def test_unadvertised_native_or_forged_tool_proposals_never_reach_runtime(gatewa
         else "invalid response" in received.text
     )
     assert '"output"' not in received.text
-    row = next(iter(store.binding.metadata["model_requests"].values()))
-    detail = row["diagnostic"]["response_item"]
-    kind = item["type"]
-    assert detail["item_type"] == ("unrecognized" if kind == "private_item" else kind)
-    if kind == "function_call":
-        assert detail["reason"] == "function_identity_not_allowed"
-        assert detail["name"] == item["name"]
-        assert detail["namespace"] == ("unrecognized" if "namespace" in item else None)
-    else:
-        assert detail["reason"] == "item_type_not_allowed"
-    assert "response_item" not in received.text
     assert store.binding.metadata["model_reconciliation_required"]
     assert post(client).status_code == 409
 
@@ -887,8 +775,6 @@ def test_stream_failure_after_first_frame_records_internal_boundary(gateway, bad
     assert row["diagnostic"]["output_started"] is True
     assert row["diagnostic"]["stream_phase"] == phase
     assert row["diagnostic"]["stream_frame"] == 2
-    if phase == "delta_item":
-        assert row["diagnostic"]["response_item"] == {"reason": "item_not_object"}
     assert not store.run.llm_calls
     assert post(client, stream=True).status_code == 409
     assert len(calls) == 1

@@ -17,8 +17,6 @@ import time
 import uuid
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import AsyncExitStack, ExitStack, aclosing, contextmanager
-from email.utils import parsedate_to_datetime
-from random import uniform
 from types import SimpleNamespace
 from typing import Any, get_args
 
@@ -29,6 +27,7 @@ from httpx_sse import EventSource
 from sqlalchemy.exc import DBAPIError
 from starlette.types import Receive, Scope, Send
 
+from app.infrastructure.llm.retry_policy import retry_after_seconds, retry_delay
 from app.infrastructure.xiaox.policy import ModelRoute
 
 router = APIRouter()
@@ -44,7 +43,22 @@ def model_request_timeout_seconds() -> float:
         value = float(raw)
     except ValueError:
         value = 180.0
+    if not math.isfinite(value):
+        value = 180.0
     return max(30.0, min(value, 600.0))
+
+
+def model_phase_timeout_seconds(phase: str) -> float:
+    """Separate transport/header/inference guards under the same request clock."""
+    default = {"connect": 15.0, "pool": 15.0, "write": 15.0, "cleanup": 2.0}.get(
+        phase, model_request_timeout_seconds()
+    )
+    raw = os.environ.get(f"XCAGI_MODEL_{phase.upper()}_TIMEOUT_SEC", str(default))
+    try:
+        value = float(raw)
+    except ValueError:
+        value = default
+    return max(0.1, min(value, 600.0)) if math.isfinite(value) and value > 0 else default
 
 
 class ModelRequestTimeout(TimeoutError):
@@ -69,17 +83,7 @@ def request_remaining(deadline: float) -> float:
 
 
 def _retry_after_seconds(headers: httpx.Headers) -> float | None:
-    raw = headers.get("retry-after")
-    if not raw:
-        return None
-    try:
-        delay = float(raw)
-    except ValueError:
-        try:
-            delay = parsedate_to_datetime(raw).timestamp() - time.time()
-        except (ValueError, OverflowError, OSError):
-            return None
-    return delay if math.isfinite(delay) and delay >= 0 else None
+    return retry_after_seconds(headers.get("retry-after"))
 
 
 async def _wait_for_model_retry(request: Request, delay: float) -> bool:
@@ -278,6 +282,68 @@ def _prepare_body(body: Any, route: ModelRoute) -> dict[str, Any]:
     }
 
 
+def _portable_fallback_body(body: dict[str, Any]) -> bool:
+    """Only self-contained Responses history may cross a qualified model route.
+
+    Provider-side IDs and encrypted reasoning cannot be translated or dropped.
+    Tool result strings stay unchanged; their business data is not a route grant.
+    """
+    if any(body.get(key) for key in ("prompt", "conversation", "previous_response_id")):
+        return False
+    history = body.get("input", [])
+    if isinstance(history, list):
+        calls = {
+            item.get("call_id")
+            for item in history
+            if isinstance(item, dict)
+            and item.get("type") == "function_call"
+            and isinstance(item.get("call_id"), str)
+        }
+        if any(
+            isinstance(item, dict)
+            and item.get("type") == "function_call_output"
+            and (not isinstance(item.get("call_id"), str) or item["call_id"] not in calls)
+            for item in history
+        ):
+            return False
+
+    def portable(value: Any) -> bool:
+        if isinstance(value, list):
+            return all(portable(item) for item in value)
+        if not isinstance(value, dict):
+            return isinstance(value, (str, int, float, bool)) or value is None
+        if any(
+            value.get(key)
+            for key in (
+                "encrypted_content",
+                "encrypted_function_args",
+                "file_id",
+                "container_id",
+                "approval_request_id",
+            )
+        ):
+            return False
+        kind = value.get("type")
+        if kind not in {
+            None,
+            "message",
+            "input_text",
+            "output_text",
+            "function_call",
+            "function_call_output",
+            "refusal",
+        }:
+            return False
+        if kind is None and (
+            value.get("role") not in {"system", "developer", "user", "assistant"}
+            or "content" not in value
+        ):
+            return False  # Includes the SDK's type-optional remote item reference.
+        return all(portable(child) for child in value.values())
+
+    return portable(history)
+
+
 class _ModelCallLimitReached(Exception):
     """Raised inside a binding mutation so the refusal can be committed first."""
 
@@ -305,8 +371,10 @@ def _claim(
     *,
     request_group: str = "",
     attempt: int = 1,
+    expected_route_identity: str | None = None,
 ) -> tuple[Any, int]:
     from app.application.agent_orchestrator.budget import budget_exceeded_payload
+    from app.application.agent_orchestrator.task_context import ensure_run_trace
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
     from app.infrastructure.llm.model_admission import admit_model_call
 
@@ -314,18 +382,35 @@ def _claim(
     with store.scope(token, audience="model") as binding:
         _remaining(binding)
         config = binding.metadata.get("runtime_config") or {}
-        if config.get("route_identity") != route.identity or config.get("model") != route.model:
+        authorized = config.get("authorized_model_routes", [config.get("route_identity")])
+        if (
+            not isinstance(authorized, list)
+            or route.identity not in authorized
+            or (
+                route.identity == config.get("route_identity")
+                and config.get("model") != route.model
+            )
+        ):
             raise HTTPException(409, "The configured gateway no longer matches this task")
         admit_model_call(None, profile="xiaox", kwargs={"model": route.model})
 
         def claim(run: Any, metadata: dict[str, Any]) -> None:
+            if (
+                expected_route_identity is not None
+                and run.metadata.get("runtime_effective_model_route", config.get("route_identity"))
+                != expected_route_identity
+            ):
+                raise HTTPException(409, "The task's effective model changed during this request")
             if metadata.get("model_reconciliation_required"):
                 raise HTTPException(409, "Previous model usage requires reconciliation")
             calls = metadata.setdefault("model_requests", {})
             if any(item.get("state") in {"reserved", "unknown"} for item in calls.values()):
                 raise HTTPException(409, "A model request is still in progress or unconfirmed")
-            if len(calls) >= route.max_model_calls:
-                raise _ModelCallLimitReached(route.max_model_calls, len(calls))
+            maximum_calls = config.get("max_model_calls", route.max_model_calls)
+            if type(maximum_calls) is not int or not 0 < maximum_calls <= 1000:
+                raise HTTPException(409, "Task model-call limit is invalid")
+            if len(calls) >= maximum_calls:
+                raise _ModelCallLimitReached(maximum_calls, len(calls))
             held = int(run.metadata.get("reserved_cost_units") or 0)
             if budget_exceeded_payload(
                 run, additional_cost_units=held + reserve, scope="xiaox_model"
@@ -342,7 +427,13 @@ def _claim(
                 "request_group": request_group or request_id,
                 "attempt": attempt,
                 "started_at": time.time(),
+                "trace_id": ensure_run_trace(run, live=False)["trace_id"],
+                "route_identity": route.identity,
             }
+            # The SDK thread keeps its original logical model. Persist the
+            # actual route so its later opaque history never goes back to the
+            # previous provider after a successful switch or a host restart.
+            run.metadata["runtime_effective_model_route"] = route.identity
 
         try:
             store.update(binding.run_id, claim, generation=binding.metadata.get("generation"))
@@ -403,7 +494,11 @@ def _finish(
         call = metadata["model_requests"][request_id]
         terminal = call.get("state") in {"completed", "failed"}
         if not terminal:
-            call.update(state=state if settled else "unknown", usage_key=usage_key)
+            call.update(
+                state=state if settled else "unknown",
+                usage_key=usage_key,
+                finished_at=time.time(),
+            )
         if settled is None or usage is None:
             if not terminal:
                 metadata["model_reconciliation_required"] = True
@@ -470,8 +565,11 @@ class _ModelSettlementStorageError(RuntimeError):
             if type(code) is int and 0 < code <= 0x7FFFFFFF:
                 self.diagnostic["sqlite_error_code"] = code
             if (
-                isinstance(name, str) and len(name) <= 64 and name.startswith("SQLITE_")
-                and name.isascii() and name.isidentifier()
+                isinstance(name, str)
+                and len(name) <= 64
+                and name.startswith("SQLITE_")
+                and name.isascii()
+                and name.isidentifier()
             ):
                 self.diagnostic["sqlite_error_name"] = name
 
@@ -503,7 +601,8 @@ async def forward_responses(request: Request):
     from app.utils.operational_errors import BOUNDARY_ERRORS
 
     store = request.app.state.xiaox_binding_store
-    route: ModelRoute = request.app.state.xiaox_model_route
+    primary: ModelRoute = request.app.state.xiaox_model_route
+    route = primary
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(401, "A run-bound model token is required")
@@ -516,13 +615,32 @@ async def forward_responses(request: Request):
         raise HTTPException(403, "Runtime model authorization is invalid") from exc
     if binding.run_id != getattr(request.app.state, "xiaox_run_id", None):
         raise HTTPException(403, "Runtime model authorization belongs to another task")
+    routes = tuple(getattr(request.app.state, "xiaox_model_routes", (primary,)))
+    authorized = (binding.metadata.get("runtime_config") or {}).get(
+        "authorized_model_routes", [primary.identity]
+    )
+    if (
+        not 1 <= len(routes) <= 3
+        or routes[0] != primary
+        or [item.identity for item in routes] != authorized
+    ):
+        raise HTTPException(409, "Authorized model routes no longer match this task")
+    active = binding.run.metadata.get("runtime_effective_model_route", primary.identity)
+    if active not in authorized:
+        raise HTTPException(409, "The task's effective model route is no longer authorized")
+    route_index = authorized.index(active)
+    expected_active_route = active
+    route = routes[route_index]
     raw = bytearray()
     async for chunk in request.stream():
         raw.extend(chunk)
-        if len(raw) > route.max_request_bytes:
+        if len(raw) > primary.max_request_bytes:
             raise HTTPException(413, "Model request is too large")
     try:
-        body = _prepare_body(json.loads(raw), route)
+        requested_body = json.loads(raw)
+        logical_body = _prepare_body(requested_body, primary)  # Keep the SDK's original contract.
+        requested_body["max_output_tokens"] = logical_body["max_output_tokens"]
+        body = _prepare_body({**requested_body, "model": route.model}, route)
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
     route.token()  # Validate the account credential without persisting it.
@@ -543,6 +661,8 @@ async def forward_responses(request: Request):
     cleanup_started = False
     slot_failure: BaseException | None = None
     platform_receipt: Any = None
+    request_phase = "admission"
+    inference_deadline = deadline
 
     def finish_usage(*args: Any, **kwargs: Any) -> None:
         _finish(
@@ -563,6 +683,16 @@ async def forward_responses(request: Request):
         if claimed:
             finish_usage(store, binding.run_id, request_id, usage=None, usage_key=usage_key)
 
+    async def close_transport(resource: Any, cleanup_deadline: float | None = None) -> None:
+        if cleanup_deadline is None:
+            cleanup_deadline = time.monotonic() + model_phase_timeout_seconds("cleanup")
+        # Also used between attempts: closing a failed transport is part of
+        # bounded recovery and may never prevent the next deadline check.
+        with anyio.move_on_after(max(0.0, cleanup_deadline - time.monotonic())) as closing:
+            await resource.aclose()
+        if closing.cancel_called:
+            logger.warning("Xiaox model transport cleanup deadline exceeded")
+
     async def close_resources(
         error: BaseException | None, settle: Callable[[], None] | None = None
     ) -> None:
@@ -571,28 +701,37 @@ async def forward_responses(request: Request):
             return
         cleanup_started = True
         interrupted = sys.exception()
+        cleanup_deadline = time.monotonic() + model_phase_timeout_seconds("cleanup")
+
         try:
             with anyio.CancelScope(shield=True):
                 async with AsyncExitStack() as cleanup:
-                    cleanup.callback(close_slot, error)
+                    cleanup.callback(close_slot, error or interrupted)
                     if client is not None:
-                        cleanup.push_async_callback(client.aclose)
+                        cleanup.push_async_callback(close_transport, client, cleanup_deadline)
                     if upstream is not None:
-                        cleanup.push_async_callback(upstream.aclose)
+                        cleanup.push_async_callback(close_transport, upstream, cleanup_deadline)
                     if settle is not None:
                         await anyio.to_thread.run_sync(settle)
-        except BOUNDARY_ERRORS:
+        except BOUNDARY_ERRORS as cleanup_error:
             # Request cancellation remains authoritative even if receipt storage
             # or a transport close fails; every registered cleanup still runs.
             if isinstance(interrupted, anyio.get_cancelled_exc_class()):
                 raise interrupted
+            if isinstance(cleanup_error, _ModelSettlementStorageError) and interrupted is not None:
+                logger.warning("Xiaox model settlement cleanup remains unconfirmed")
+                return  # Keep the original HTTP refusal and its diagnostic.
             raise
 
+    def choose_next_route() -> None:
+        nonlocal route_index, route, body
+        if route_index + 1 < len(routes) and _portable_fallback_body(requested_body):
+            route_index += 1
+            route = routes[route_index]
+            body = _prepare_body({**requested_body, "model": route.model}, route)
+            route.token()
+
     try:
-        with model_rate_limit_scope(binding.context):
-            stack.enter_context(
-                model_call_slot(SimpleNamespace(provider_id=route.provider_id), profile="xiaox")
-            )
         from app.infrastructure.llm.retry_policy import (
             is_safe_transport_retry,
             model_failure_details,
@@ -615,6 +754,20 @@ async def forward_responses(request: Request):
                 stream_phase=stream_phase,
                 stream_frame=stream_frame,
             )
+            timeout_phase = next(
+                (
+                    name
+                    for name, cls in (
+                        ("connect", httpx.ConnectTimeout),
+                        ("pool", httpx.PoolTimeout),
+                        ("write", httpx.WriteTimeout),
+                        ("read", httpx.ReadTimeout),
+                    )
+                    if isinstance(error, cls)
+                ),
+                request_phase,
+            )
+            details["request_phase"] = timeout_phase
             # 保留截断后的上游原因，供只读核对；响应体不是权限依据。
             if upstream_error:
                 details["upstream_error"] = upstream_error[:500]
@@ -641,6 +794,7 @@ async def forward_responses(request: Request):
                 call = metadata.get("model_requests", {}).get(request_id)
                 if call is not None:
                     call["diagnostic"] = details
+                    call["duration_ms"] = details["elapsed_ms"]
                 run.metadata["runtime_failure_kind"] = details["failure_kind"]
                 run.metadata["runtime_failure_reason"] = details["failure_reason"]
                 run.metadata["runtime_failure_stage"] = "model"
@@ -667,6 +821,14 @@ async def forward_responses(request: Request):
             def record(run: Any, metadata: dict[str, Any]) -> None:
                 call = metadata["model_requests"][request_id]
                 call.update(observed_model=observed, model_identity_verified=matches)
+                response_id = response.get("id")
+                if (
+                    isinstance(response_id, str)
+                    and len(response_id) <= 256
+                    and response_id.isprintable()
+                ):
+                    call["provider_response_id"] = response_id
+                call["duration_ms"] = round((time.monotonic() - attempt_started) * 1000, 1)
 
             await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
             if response.get("fallback_used") or response.get("_fallback_used"):
@@ -700,16 +862,35 @@ async def forward_responses(request: Request):
             usage_key = f"xiaox:{binding.run_id}:{request_id}"
             claimed = reserved = network_started = finished = False
             platform_receipt = None
+            slot_failure = None
             binding = await anyio.to_thread.run_sync(
                 lambda: store.authenticate(token, audience="model")
             )
             _remaining(binding)
+            with model_rate_limit_scope(binding.context):
+                stack.enter_context(
+                    model_call_slot(
+                        SimpleNamespace(
+                            provider_id=route.provider_id,
+                            model=route.model,
+                            route_identity=route.identity,
+                        ),
+                        profile="xiaox",
+                    )
+                )
             await anyio.to_thread.run_sync(
                 lambda: _claim(
-                    store, token, route, request_id, request_group=request_group, attempt=attempt
+                    store,
+                    token,
+                    route,
+                    request_id,
+                    request_group=request_group,
+                    attempt=attempt,
+                    expected_route_identity=expected_active_route,
                 )
             )
             claimed = True
+            expected_active_route = route.identity
             if route.gateway_kind != "market":
                 await anyio.to_thread.run_sync(
                     lambda: reserve_model_usage(
@@ -731,8 +912,10 @@ async def forward_responses(request: Request):
                 # HTTPX phase timeout stays bounded by the one absolute clock;
                 # it is a transport guard, not a second budget.
                 "timeout": httpx.Timeout(
-                    min(model_request_timeout_seconds(), attempt_budget),
-                    connect=min(15.0, attempt_budget),
+                    **{
+                        phase: min(model_phase_timeout_seconds(phase), attempt_budget)
+                        for phase in ("connect", "read", "write", "pool")
+                    }
                 ),
                 "trust_env": False,
                 "follow_redirects": False,
@@ -752,10 +935,14 @@ async def forward_responses(request: Request):
                 json=body,
             )
             network_started = True
+            request_phase = "response"
             try:
-                with anyio.fail_after(request_remaining(deadline)):
+                with anyio.fail_after(
+                    min(model_phase_timeout_seconds("response"), request_remaining(deadline))
+                ):
                     upstream = await client.send(outbound, stream=True)
             except httpx.HTTPError as exc:
+                slot_failure = exc
                 await record_failure(exc)
                 if not is_safe_transport_retry(exc):
                     raise
@@ -772,15 +959,32 @@ async def forward_responses(request: Request):
                 finished = True
                 if attempt == 3:
                     raise
-                await client.aclose()
+                await close_transport(client)
                 client = None
-                delay = 0.25 * 2 ** (attempt - 1)
+                close_slot(slot_failure)
+                delay = retry_delay(attempt)
                 if request_remaining(deadline) <= delay:
                     raise HTTPException(
                         408, "Task deadline cannot admit another model attempt"
                     ) from exc
-                await anyio.sleep(delay)
+                request_phase = "backoff"
+                if not await _wait_for_model_retry(request, delay):
+                    return Response(status_code=499)
+                choose_next_route()
                 continue
+            request_phase = "inference"
+            inference_deadline = min(
+                deadline, time.monotonic() + model_phase_timeout_seconds("inference")
+            )
+            headers_ms = round((time.monotonic() - attempt_started) * 1000, 1)
+            await anyio.to_thread.run_sync(
+                lambda: store.update(
+                    binding.run_id,
+                    lambda _run, metadata: metadata["model_requests"][request_id].update(
+                        response_headers_ms=headers_ms
+                    ),
+                )
+            )
             if route.gateway_kind in {"litellm", "market"} and upstream.status_code < 300:
                 expected_headers = (
                     {"x-xcmax-upstream-attempts": "1", "x-xcmax-upstream-fallbacks": "0"}
@@ -811,8 +1015,15 @@ async def forward_responses(request: Request):
             )
             upstream_error = ""
             try:
-                await upstream.aread()
+                # Non-2xx bodies can drip bytes forever, just like a successful
+                # response. They consume the original header/retry/body clock.
+                with anyio.fail_after(request_remaining(inference_deadline)):
+                    await upstream.aread()
                 upstream_error = upstream.text
+            except TimeoutError:
+                # AnyIO's absolute timeout is also an OSError; do not erase it
+                # while treating an unreadable provider diagnostic as optional.
+                raise
             except (httpx.HTTPError, UnicodeDecodeError, OSError):
                 upstream_error = ""
             await record_failure(slot_failure, upstream_error=upstream_error)
@@ -838,18 +1049,17 @@ async def forward_responses(request: Request):
                 _retry_after_seconds(upstream.headers) if upstream.status_code == 429 else None
             )
             if upstream.status_code == 429 and attempt < 3:
-                # Missing retry hints use the SDK's bounded exponential jitter.
-                delay = (
-                    max(0.25, retry_after) if retry_after is not None
-                    else 0.5 * 2 ** (attempt - 1) * uniform(0.75, 1)
-                )
+                delay = retry_delay(attempt, upstream.headers.get("retry-after"))
                 if request_remaining(deadline) > delay:
-                    await upstream.aclose()
-                    await client.aclose()
+                    cleanup_deadline = time.monotonic() + model_phase_timeout_seconds("cleanup")
+                    await close_transport(upstream, cleanup_deadline)
+                    await close_transport(client, cleanup_deadline)
                     upstream = client = None
-                    slot_failure = None
+                    close_slot(slot_failure)
+                    request_phase = "backoff"
                     if not await _wait_for_model_retry(request, delay):
                         return Response(status_code=499)
+                    choose_next_route()
                     continue
             return JSONResponse(
                 {
@@ -859,12 +1069,14 @@ async def forward_responses(request: Request):
                     }
                 },
                 status_code=upstream.status_code if definite else 502,
-                headers={"Retry-After": str(math.ceil(retry_after))} if retry_after is not None else None,
+                headers={"Retry-After": str(math.ceil(retry_after))}
+                if retry_after is not None
+                else None,
             )
         assert upstream is not None and client is not None
         slot_failure = None
         if not body.get("stream"):
-            with anyio.fail_after(request_remaining(deadline)):
+            with anyio.fail_after(request_remaining(inference_deadline)):
                 response = json.loads(await upstream.aread())
             await observe_identity(response)
             _validate_model_output(response)
@@ -915,7 +1127,7 @@ async def forward_responses(request: Request):
                 # The stream closes on the same absolute clock that bounded
                 # the header wait; downstream slowness cannot extend it, and
                 # a reconnect never re-issues this request.
-                with anyio.fail_after(request_remaining(deadline)):
+                with anyio.fail_after(request_remaining(inference_deadline)):
                     async for event in EventSource(upstream).aiter_sse():
                         if event.data == "[DONE]":
                             continue
