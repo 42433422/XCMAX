@@ -1,5 +1,5 @@
 {
-  "lines": 2801449,
+  "lines": 2801656,
   "updated": "2026-11-27",
-  "note": "用户批准商业成熟度 M2 第08项（新用户 10 分钟核心任务引导）：新增 onboardingTutorial 10 分钟核心任务清单与 SLA 判定（合入最新 main fe7580bd 对齐基线）"
+  "note": "PR #3721 同步最新 main（含 #3725）并更新 finance eval 契约"
 }
