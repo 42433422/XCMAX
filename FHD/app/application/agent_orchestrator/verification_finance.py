@@ -138,7 +138,11 @@ def verify_finance_update(
         ):
             return _report("failed", "result_finance_effect_mismatch", source)
         return _report(
-            "verified", "result_verified", source, transaction_id=row.id, action="update_transaction"
+            "verified",
+            "result_verified",
+            source,
+            transaction_id=row.id,
+            action="update_transaction",
         )
 
 

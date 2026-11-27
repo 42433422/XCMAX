@@ -148,12 +148,14 @@ def test_finance_update_and_delete_verify_committed_tenant_state(trusted_actor):
         )
     assert updated["success"] is True
     assert verify(update_case, updated)["status"] == "verified"
-    assert verify(invocation(actor, "finance", "update_transaction", update_params), updated)[
-        "code"
-    ] == "result_finance_effect_mismatch"
-    assert verify(invocation(other, "finance", "update_transaction", update_params), updated)[
-        "code"
-    ] == "result_finance_record_unavailable"
+    assert (
+        verify(invocation(actor, "finance", "update_transaction", update_params), updated)["code"]
+        == "result_finance_effect_mismatch"
+    )
+    assert (
+        verify(invocation(other, "finance", "update_transaction", update_params), updated)["code"]
+        == "result_finance_record_unavailable"
+    )
     with owned_tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         db.get(FinancialTransaction, txn_id).counterparty_name = "Tampered"
     assert verify(update_case, updated)["status"] == "failed"
