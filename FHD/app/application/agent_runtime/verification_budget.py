@@ -11,7 +11,7 @@ from typing import Any
 
 JOB_KEY = "runtime_goal_verification_task"
 JOB_HEADER = "x-xcagi-verification-job"
-VERIFIER_VERSION = 1
+VERIFIER_VERSION = 2
 
 
 def initialize_verification_budget(

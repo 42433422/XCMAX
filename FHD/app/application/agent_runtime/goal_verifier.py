@@ -18,13 +18,22 @@ from typing import TYPE_CHECKING, Any, cast
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
+from app.application.agent_runtime.goal_verification_task import (
+    current_review_inputs as _current_review_inputs,
+)
+from app.application.agent_runtime.goal_verification_task import (
+    restore_review_repair,
+    review_repair_checkpoint,
+)
 from app.application.agent_runtime.instructions import GOAL_REVIEW_RULES as _RULES
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
+    REPAIRABLE_GOAL_REVIEW_ERRORS,
     canonical_digest,
     goal_answers,
     goal_evidence_snapshot,
     goal_report_coverage,
+    goal_source_catalogue,
     plan_navigation_entries,
     planned_tool_calls,
     review_schema,
@@ -34,6 +43,15 @@ from app.domain.task_lifecycle.agent_runtime_contract import (
     validate_runtime_goal,
 )
 from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
+from app.domain.task_lifecycle.goal_review_models import (
+    normalize_review_provenance as _normalize_review_provenance,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    preserves_source_bindings as _preserves_source_bindings,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    review_judgments as _review_judgments,
+)
 
 if TYPE_CHECKING:
     from app.application.agent_runtime.plan_delivery import PlanVerdict
@@ -162,36 +180,12 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _review_json_text(value: str) -> str:
-    """Unwrap one Markdown code fence around the required review JSON.
-
-    Some models emit the schema-conformant object inside ```json. The content is
-    still parsed and validated against the host contract, so this only removes
-    presentation syntax and never relaxes the review checks.
-    """
+    """Unwrap one presentation fence; all JSON and host checks still apply."""
     text = value.strip()
     lines = text.splitlines()
     if len(lines) >= 3 and lines[0].lower() in {"```", "```json"} and lines[-1] == "```":
         return "\n".join(lines[1:-1]).strip()
     return text
-
-
-def _normalize_review_provenance(raw: Any, contract: dict[str, Any]) -> Any:
-    """Normalize request aliases only for text present verbatim in the frozen request.
-
-    Conversation history and file text cannot authorize new business goals.
-    """
-    if not isinstance(raw, dict) or not isinstance(raw.get("goals"), list):
-        return raw
-    request = contract["request"]["text"]
-    for goal in raw["goals"]:
-        if (
-            isinstance(goal, dict)
-            and goal.get("source_id") in {"original_request", "input", "user_request"}
-            and isinstance(goal.get("source"), str)
-            and goal["source"] in request
-        ):
-            goal["source_id"] = "request"
-    return raw
 
 
 def _verbatim_blocks(text: str) -> list[str]:
@@ -380,6 +374,20 @@ def verify_runtime_goal(
             feedback="原核验响应与当前目标或结果版本不一致，不能复用旧证据。",
         )
         return _finish_report(report)
+    try:
+        repair_context = restore_review_repair(binding.run, replay_response, input_identity)
+    except ValueError:
+        report.update(
+            error_code="goal_verification_evidence_changed",
+            feedback="原核验报告修复前提已变化，不能复用修正结果。",
+        )
+        return _finish_report(report)
+    if repair_context:
+        report.update(
+            review=repair_context["review"],
+            error_code="goal_verification_invalid_gap",
+            feedback="\n".join(repair_context["wire"]["errors"]),
+        )
     states = {receipt_state(row) for row in rows}
     if model_unsettled(binding.metadata) or states & {
         "unknown",
@@ -403,6 +411,8 @@ def verify_runtime_goal(
         report.update(
             error_code="goal_evidence_conflict", feedback="原任务的执行回执身份冲突，不能核验完成。"
         )
+        return _finish_report(report)
+    if repair_context and replay_response is None:
         return _finish_report(report)
     if contract["scope"].get("plan_delivery_version") == 1:
         if not plan_delivery or not plan_delivery.proof:
@@ -537,17 +547,27 @@ def verify_runtime_goal(
     )
     schema = review_schema(
         contract,
+        answers=answers,
         action_catalog=action_catalog,
         file_evidence=file_evidence,
         receipt_ids=tuple(row["evidence_id"] for row in snapshot["evidence"]),
         source_block_ids=tuple(source_blocks),
         response_block_ids=tuple(response_blocks),
     )
-    wire_validator = Draft202012Validator(schema) if file_evidence is not None else None
+    # Source policy belongs to deterministic host validation, not format retry.
+    # Keep the full policy in the advertised schema; validate wire citations here.
+    wire_schema = copy.deepcopy(schema)
+    assessment = wire_schema["$defs"]["GoalAssessment"]
+    assessment["properties"]["source_id"].pop("enum")
+    assessment["allOf"] = [
+        rule for rule in assessment["allOf"] if "source_id" not in rule["if"]["properties"]
+    ]
+    wire_validator = Draft202012Validator(wire_schema) if file_evidence is not None else None
     payload = {
         "task": "verify_runtime_goal",
         "rules": list(_RULES),
         "original_request": request_view,
+        "source_catalogue": goal_source_catalogue(contract, answers),
         "host_constraints": contract["scope"].get("constraints") or {},
         **(
             {"requested_deliverable": contract["scope"]["requested_deliverable"]}
@@ -559,6 +579,8 @@ def verify_runtime_goal(
         "response": output,
         "output_schema": schema,
     }
+    if repair_context:
+        payload["review_repair"] = repair_context["wire"]
     if file_evidence is not None:
         payload["file_evidence"] = documents
     if response_blocks:
@@ -574,9 +596,7 @@ def verify_runtime_goal(
             "按已由宿主绑定并渲染的方案覆盖原始要求来判定。方案步骤无需已执行，"
             "实际执行回执不属于本次交付条件。"
         )
-    # This is an output reservation, not an attempt to parse the user's goals.
-    # Long requests/evidence get room on the first call; the route still owns
-    # the qualified hard limit and charges every attempt through one gateway.
+    # Reserve output within the qualified route limit; bill every attempt.
     payload_size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
     output_estimate = max(
         # MiMo bills internal reasoning against the same output allowance.
@@ -592,9 +612,10 @@ def verify_runtime_goal(
         return _finish_report(report)
     error = ""
     format_failure = False
+    repair_review = repair_context["review"] if repair_context else None
     with ExitStack() as clients:
         client = None
-        for attempt in range(2):
+        for attempt in range(1 if repair_context else 2):
             remaining = remaining_invocation_seconds(deadline - time.monotonic())
             if not math.isfinite(remaining) or remaining <= 0:
                 format_failure = False
@@ -605,6 +626,12 @@ def verify_runtime_goal(
                 break
             if attempt and (consume_format_retry is None or not consume_format_retry()):
                 break
+            if attempt and not _current_review_inputs(binding, contract, snapshot, rows, output):
+                report.update(
+                    error_code="goal_verification_evidence_changed",
+                    feedback="报告修复前原目标或证据已变化，不能再次使用旧输入。",
+                )
+                return _finish_report(report)
             messages = [
                 {"role": "system", "content": "独立核对原始目标及宿主证据；只读，不执行、不授权。"},
                 {
@@ -638,6 +665,7 @@ def verify_runtime_goal(
                                 "input": input_identity,
                                 "verifier_version": VERIFIER_VERSION,
                                 "attempt": attempt + 1,
+                                "review_repair": repair_context,
                             }
                         )
                     if client is None:
@@ -683,9 +711,17 @@ def verify_runtime_goal(
                         "attempt": attempt + 1,
                         "response": raw,
                         "response_digest": canonical_digest(raw),
+                        "review_repair": repair_context,
                     }
                 )
             diagnostic.update(response_id=raw.get("id"), response_status=raw.get("status"))
+            if not _current_review_inputs(binding, contract, snapshot, rows, output):
+                diagnostic["state"] = "evidence_changed"
+                report.update(
+                    error_code="goal_verification_evidence_changed",
+                    feedback="核验期间原目标或证据已变化，不能复用旧报告。",
+                )
+                return _finish_report(report)
             if remaining_invocation_seconds(deadline - time.monotonic()) <= 0:
                 diagnostic["state"] = "expired"
                 format_failure = False
@@ -752,6 +788,7 @@ def verify_runtime_goal(
                         )
                         return _finish_report(report)
                 decoded = _normalize_review_provenance(decoded, contract)
+                wire_review = copy.deepcopy(decoded)
                 if wire_validator is not None:
                     if not wire_validator.is_valid(decoded):
                         raise ValueError("Invalid goal review references")
@@ -765,6 +802,48 @@ def verify_runtime_goal(
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"
+            if repair_review is not None and (
+                _review_judgments(review) != _review_judgments(repair_review)
+                or not _preserves_source_bindings(
+                    repair_review, review, payload["source_catalogue"]
+                )
+            ):
+                diagnostic["state"] = "repair_changed_judgment"
+                report.update(feedback="核验来源修复改变了原判断或遗漏目标，原任务保持未完成。")
+                return _finish_report(report)
+            if errors:
+                _, defects = validate_goal_review(
+                    review,
+                    contract,
+                    snapshot,
+                    output,
+                    file_evidence=file_evidence,
+                    require_completion=False,
+                )
+                if defects and all(
+                    item.startswith(REPAIRABLE_GOAL_REVIEW_ERRORS) for item in defects
+                ):
+                    diagnostic.update(state="invalid_provenance", validation_errors=defects)
+                    report.update(
+                        status="unavailable",
+                        review=review,
+                        error_code="goal_verification_invalid_gap",
+                        feedback="\n".join(defects),
+                    )
+                    repair_review = review
+                    payload["review_repair"] = {
+                        "review": wire_review,
+                        "errors": defects,
+                        "allowed_fields": ["goal_id", "source_id", "source"],
+                    }
+                    repair_context = review_repair_checkpoint(
+                        input_identity, review, payload["review_repair"]
+                    )
+                    error = (
+                        "来源或目标标识无效；仅修正review_repair指定字段，所有判断和缺口保持不变"
+                    )
+                    format_failure = False
+                    continue
             if (
                 plan_delivery
                 and plan_delivery.proof

@@ -1,7 +1,8 @@
-"""Strict data schemas for non-executing goal assessments and plan proposals."""
+"""Strict goal review schemas and frozen source identities; no execution authority."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -89,3 +90,96 @@ class GoalReview(BaseModel):
             "包括尚未核实的具体声明。narrative 仅用于与产品能力无关的文字方案。"
         ),
     )
+
+
+def goal_source_catalogue(
+    contract: dict[str, Any], answers: Sequence[dict[str, Any]] = ()
+) -> dict[str, dict[str, Any]]:
+    """Derive locatable obligations from frozen user input, never assistant/tool claims."""
+    kinds = ["reply", "constraint"] + (
+        ["planned_action"]
+        if contract["scope"].get("requested_deliverable") == "action_plan"
+        else ["read", "write"]
+    )
+    sources = {
+        "request": {"text": contract["request"]["text"], "role": "user", "allowed_kinds": kinds}
+    }
+    for row in answers:
+        identity, text = row.get("source_id"), row.get("answer")
+        if (
+            isinstance(identity, str)
+            and identity.startswith("answer:")
+            and identity != "answer:"
+            and identity not in sources
+            and isinstance(text, str)
+            and text.strip()
+        ):
+            sources[identity] = {"text": text, "role": "user", "allowed_kinds": kinds}
+    objective = (contract["scope"].get("constraints") or {}).get("objective")
+    if isinstance(objective, str) and objective.strip():
+        sources["objective"] = {
+            "text": objective,
+            "role": "host",
+            "allowed_kinds": ["read", "write"],
+        }
+    for index, row in enumerate(contract["request"].get("history") or []):
+        if (
+            isinstance(row, dict)
+            and row.get("role") == "user"
+            and isinstance(row.get("content"), str)
+            and row["content"].strip()
+        ):
+            sources[f"history:{index}:user"] = {
+                "text": row["content"],
+                "role": "user",
+                "allowed_kinds": ["reply", "constraint"],
+            }
+    return sources
+
+
+def normalize_review_provenance(raw: Any, contract: dict[str, Any]) -> Any:
+    """Normalize current-request aliases only for verbatim frozen request text."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("goals"), list):
+        return raw
+    request = contract["request"]["text"]
+    for goal in raw["goals"]:
+        if (
+            isinstance(goal, dict)
+            and goal.get("source_id") in {"original_request", "input", "user_request"}
+            and isinstance(goal.get("source"), str)
+            and goal["source"] in request
+        ):
+            goal["source_id"] = "request"
+    return raw
+
+
+def review_judgments(review: dict[str, Any]) -> dict[str, Any]:
+    """Only identifiers and verbatim source bindings may change during repair."""
+    return {
+        **review,
+        "goals": [
+            {
+                key: value
+                for key, value in goal.items()
+                if key not in {"goal_id", "source_id", "source"}
+            }
+            for goal in review["goals"]
+        ],
+    }
+
+
+def preserves_source_bindings(
+    previous: dict[str, Any],
+    review: dict[str, Any],
+    sources: dict[str, dict[str, Any]],
+) -> bool:
+    for before, after in zip(previous["goals"], review["goals"], strict=True):
+        quote = before["source"]
+        if quote in sources.get(before["source_id"], {}).get("text", ""):
+            if (before["source_id"], quote) != (after["source_id"], after["source"]):
+                return False
+        elif (
+            any(quote in source["text"] for source in sources.values()) and quote != after["source"]
+        ):
+            return False
+    return True

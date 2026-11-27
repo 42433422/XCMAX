@@ -371,9 +371,10 @@ def test_revision_review_reads_previous_public_email_and_language_rule(verifier)
 def test_host_source_provenance_is_required_even_for_verified_children(verifier):
     verifier.replies = [
         response(review(goal("完全不同的目标"), goal("再查询second", goal_id="second")))
-    ]
+    ] * 2
     report = verifier.verify()
-    assert not report["accepted"] and "原始请求证据" in report["feedback"]
+    assert not report["accepted"] and "goal_source_mismatch:" in report["feedback"]
+    assert len(verifier.requests) == 2
 
 
 def test_revision_must_keep_previous_public_deliverable_language(verifier):
@@ -460,7 +461,7 @@ def test_review_source_alias_cannot_introduce_untrusted_goal(verifier, alias, so
     verifier.output = "库存是企业当前拥有的货物数量。"
     verifier.replies = [
         response(review(goal(source, kind="reply", evidence_ids=["response"], source_id=alias)))
-    ]
+    ] * 2
     report = verifier.verify()
     assert not report["accepted"]
     assert report["status"] == "unavailable"
@@ -493,10 +494,18 @@ def test_history_only_grounds_retained_terms_in_current_reply(
         prior, goal_id="retained", kind=kind, evidence_ids=["response"], source_id="history"
     )
     current = goal(verifier.run.message, kind="reply", evidence_ids=["response"])
-    verifier.replies = [response(review(*([current] if include_current else []), retained))]
+    verifier.replies = [response(review(*([current] if include_current else []), retained))] * (
+        2 if role in {"assistant", "tool"} else 1
+    )
     report = verifier.verify()
     assert report["accepted"] is accepted
-    assert ("目标 retained 缺少唯一标识或原始请求证据" in report["feedback"]) is not accepted
+    if not accepted:
+        expected = (
+            "goal_source_unknown:"
+            if role in {"assistant", "tool"}
+            else "goal_history_scope_invalid:"
+        )
+        assert expected in report["feedback"]
 
 
 def test_verified_attachment_group_has_distinct_citations_and_is_all_or_nothing(

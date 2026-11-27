@@ -17,6 +17,8 @@ from app.application.agent_runtime.verification_budget import (
 )
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
+    REPAIRABLE_GOAL_REVIEW_ERRORS,
+    AgentRuntimeContractError,
     canonical_digest,
     goal_answers,
     goal_evidence_snapshot,
@@ -31,6 +33,7 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     receipt_verified,
     verified_receipt_artifacts,
 )
+from app.domain.task_lifecycle.goal_review_models import GoalReview
 from app.infrastructure.xiaox.binding import XiaoxBindingError
 
 _RECOVERABLE = frozenset(
@@ -40,6 +43,81 @@ _RECOVERABLE = frozenset(
         "goal_verification_interrupted",
     }
 )
+
+
+def current_review_inputs(
+    binding: Any,
+    contract: dict[str, Any],
+    snapshot: dict[str, Any],
+    rows: list[dict[str, Any]],
+    output: str,
+) -> bool:
+    try:
+        return validate_runtime_goal(binding.run) == contract["digest"] and snapshot == (
+            goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
+        )
+    except AgentRuntimeContractError:
+        return False
+
+
+def review_repair_checkpoint(
+    input_identity: dict[str, Any], review: dict[str, Any], wire: dict[str, Any]
+) -> dict[str, Any]:
+    """Bind the original judgment and correction prompt before the second request."""
+    context = copy.deepcopy(
+        {
+            "input": input_identity,
+            "verifier_version": VERIFIER_VERSION,
+            "review": review,
+            "wire": wire,
+        }
+    )
+    return {**context, "digest": canonical_digest(context)}
+
+
+def restore_review_repair(
+    run: Any, replay_response: dict[str, Any] | None, input_identity: dict[str, Any]
+) -> dict[str, Any] | None:
+    """A replay keeps the same restrictions as its original metered correction."""
+    job = run.metadata.get(JOB_KEY) or {}
+    contexts = [
+        source["review_repair"]
+        for source in (job, replay_response or {})
+        if source.get("review_repair") is not None
+    ]
+    if not contexts:
+        return None
+    context = contexts[0]
+    if (
+        not isinstance(context, dict)
+        or any(value != context for value in contexts[1:])
+        or set(context) != {"input", "verifier_version", "review", "wire", "digest"}
+        or context["input"] != input_identity
+        or context["verifier_version"] != VERIFIER_VERSION
+        or context["digest"]
+        != canonical_digest({key: value for key, value in context.items() if key != "digest"})
+        or not isinstance(context["review"], dict)
+        or GoalReview.model_validate(context["review"]).model_dump() != context["review"]
+    ):
+        raise ValueError("Original source repair checkpoint is invalid or changed")
+    wire = context["wire"]
+    if (
+        not isinstance(wire, dict)
+        or set(wire) != {"review", "errors", "allowed_fields"}
+        or wire["allowed_fields"] != ["goal_id", "source_id", "source"]
+        or not isinstance(wire["review"], dict)
+        or not isinstance(wire["review"].get("goals"), list)
+        or len(wire["review"]["goals"]) != len(context["review"]["goals"])
+        or not all(isinstance(goal, dict) for goal in wire["review"]["goals"])
+        or not isinstance(wire["errors"], list)
+        or not wire["errors"]
+        or not all(
+            isinstance(error, str) and error.startswith(REPAIRABLE_GOAL_REVIEW_ERRORS)
+            for error in wire["errors"]
+        )
+    ):
+        raise ValueError("Original source repair prompt is invalid")
+    return copy.deepcopy(context)
 
 
 def _current_rows(metadata: dict[str, Any]) -> list[dict[str, Any]]:
@@ -263,6 +341,8 @@ def begin_verification(
         }
         if same and previous.get("progress", {}).get("state") == "response_received":
             job["progress"] = copy.deepcopy(previous["progress"])
+        if same and "review_repair" in previous:
+            job["review_repair"] = copy.deepcopy(previous["review_repair"])
         run.metadata[JOB_KEY] = job
         metadata["active_phase"] = "verification"
         store._validate_current(run, metadata, generation)
@@ -301,9 +381,16 @@ def save_verification_progress(
             or run.status in {"cancelled", "paused", "completed", "rejected"}
         ):
             raise XiaoxBindingError("goal_verification_changed", "核验执行权或控制状态已变化")
+        if (
+            progress.get("state") == "requesting"
+            and _identity(run, _current_rows(metadata), job.get("output", ""))["job_id"] != job_id
+        ):
+            raise XiaoxBindingError("goal_verification_changed", "核验请求前原目标或证据已变化")
         # This is only an observation. It neither extends a deadline nor
         # publishes a verdict; completion rechecks live authority and evidence.
         job["progress"] = copy.deepcopy(progress)
+        if isinstance(progress.get("review_repair"), dict):
+            job["review_repair"] = copy.deepcopy(progress["review_repair"])
         job["observed_at"] = time.time()
 
     store.update(run_id, save)

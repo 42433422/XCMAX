@@ -6,6 +6,7 @@ import copy
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import ValidationError
@@ -28,6 +29,9 @@ from app.domain.task_lifecycle.goal_review_models import (
 from app.domain.task_lifecycle.goal_review_models import (
     PlanToolAction as PlanToolAction,
 )
+from app.domain.task_lifecycle.goal_review_models import (
+    goal_source_catalogue as goal_source_catalogue,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_error,
     execution_result_outcome_unknown,
@@ -49,6 +53,11 @@ def canonical_digest(value: Any) -> str:
 
 
 GOAL_PROTOCOL = "xcmax.agent-goal.v2"
+REPAIRABLE_GOAL_REVIEW_ERRORS = (
+    "goal_id_duplicate:",
+    "goal_source_unknown:",
+    "goal_source_mismatch:",
+)
 _SCOPE_FIELDS = (
     "user_id",
     "actor_id",
@@ -186,6 +195,7 @@ def review_schema(
     receipt_ids: tuple[str, ...] = (),
     source_block_ids: tuple[str, ...] = (),
     response_block_ids: tuple[str, ...] = (),
+    answers: Sequence[dict[str, Any]] = (),
 ) -> dict[str, Any]:
     schema = GoalReview.model_json_schema()
     assessment = schema["$defs"]["GoalAssessment"]
@@ -199,6 +209,23 @@ def review_schema(
             },
         }
     ]
+    sources = goal_source_catalogue(contract, answers)
+    properties["source_id"]["enum"] = list(sources)
+    source_kinds: dict[tuple[str, ...], list[str]] = {}
+    for identity, source in sources.items():
+        source_kinds.setdefault(tuple(source["allowed_kinds"]), []).append(identity)
+    for source_types, identities in source_kinds.items():
+        bound: dict[str, Any] = {"properties": {"kind": {"enum": list(source_types)}}}
+        if source_types == ("reply", "constraint"):
+            bound["properties"].update(
+                status={"enum": ["satisfied", "unmet"]},
+                evidence_ids={"items": {"const": "response"}, "maxItems": 1},
+            )
+            bound["if"] = {"properties": {"kind": {"const": "constraint"}}}
+            bound["then"] = {"properties": {"evidence_ids": {"minItems": 1}}}
+        assessment["allOf"].append(
+            {"if": {"properties": {"source_id": {"enum": identities}}}, "then": bound}
+        )
     plan_content = schema["properties"]["plan_content"]
     if contract["scope"].get("plan_delivery_version") == 1:
         plan_content.pop("default")
@@ -567,37 +594,24 @@ def validate_goal_review(
 ) -> tuple[dict[str, Any], list[str]]:
     """A model can associate facts with goals; it cannot mint execution evidence."""
     review = GoalReview.model_validate(raw)
-    sources = {"request": contract["request"]["text"]}
-    sources.update(
-        (row["source_id"], row["answer"])
-        for row in snapshot["answers"]
-        if isinstance(row.get("source_id"), str) and isinstance(row.get("answer"), str)
-    )
+    sources = goal_source_catalogue(contract, snapshot["answers"])
     constraints = contract["scope"].get("constraints") or {}
-    if isinstance(constraints.get("objective"), str):
-        sources["objective"] = constraints["objective"]
     # History can ground a retained term in today's reply, never serve as
     # the current objective or authorize a tool action.
     current_reply = any(
-        goal.source_id == "request"
+        (goal.source_id == "request" or goal.source_id.startswith("answer:"))
+        and goal.source_id in sources
         and goal.kind == "reply"
-        and goal.status == "satisfied"
-        and goal.evidence_ids == ["response"]
-        and goal.source in sources["request"]
+        and (
+            (goal.status == "satisfied" and goal.evidence_ids == ["response"])
+            or (goal.status == "unmet" and goal.evidence_ids in ([], ["response"]))
+        )
+        and goal.source in sources[goal.source_id]["text"]
         for goal in review.goals
     )
-    saved_history = contract["request"].get("history")
-    prior_requests = (
-        [
-            row["content"]
-            for row in saved_history
-            if isinstance(row, dict)
-            and row.get("role") == "user"
-            and isinstance(row.get("content"), str)
-        ]
-        if current_reply and isinstance(saved_history, list)
-        else []
-    )
+    prior_requests = [
+        source["text"] for key, source in sources.items() if key.startswith("history:")
+    ]
     evidence = {row["evidence_id"]: row for row in snapshot["evidence"]}
     verified = _verified_evidence(snapshot)
     if file_evidence is None:
@@ -637,15 +651,36 @@ def validate_goal_review(
         for call in goal.planned_calls:
             if not _quotes_planned_action(call, output):
                 errors.append(f"方案动作 {call.tool_id}.{call.action} 未见于当前成稿")
-        source_matches = goal.source in sources.get(goal.source_id, "")
+        source = sources.get(goal.source_id)
+        source_known = source is not None
+        source_matches = source is not None and goal.source in source["text"]
+        # Persisted v2 reports used a user-history alias. New reports receive
+        # granular IDs; compatibility must not promote assistant/tool text.
         if goal.source_id == "history":
-            source_matches = (
-                goal.kind in {"reply", "constraint"}
-                and goal.evidence_ids == ["response"]
-                and any(goal.source in text for text in prior_requests)
+            source_known = bool(prior_requests)
+            source_matches = any(goal.source in text for text in prior_requests)
+        if goal.goal_id in seen:
+            errors.append(f"goal_id_duplicate: 目标 {goal.goal_id} 的唯一标识重复")
+        if not source_known:
+            errors.append(
+                f"goal_source_unknown: 目标 {goal.goal_id} 的来源 {goal.source_id} 不存在，缺少原始请求证据"
             )
-        if goal.goal_id in seen or not source_matches:
-            errors.append(f"目标 {goal.goal_id} 缺少唯一标识或原始请求证据")
+        elif not source_matches:
+            errors.append(
+                f"goal_source_mismatch: 目标 {goal.goal_id} 的引用不匹配来源 {goal.source_id}，缺少原始请求证据"
+            )
+        if (goal.source_id == "history" or goal.source_id.startswith("history:")) and not (
+            current_reply
+            and goal.kind in {"reply", "constraint"}
+            and (goal.kind == "reply" or goal.evidence_ids == ["response"])
+            and (
+                (goal.status == "satisfied" and goal.evidence_ids == ["response"])
+                or (goal.status == "unmet" and goal.evidence_ids in ([], ["response"]))
+            )
+        ):
+            errors.append(
+                f"goal_history_scope_invalid: 目标 {goal.goal_id} 的历史来源仅能补充本轮回复条件，不能授权业务动作"
+            )
         seen.add(goal.goal_id)
         if file_evidence is not None and goal.kind in {"read", "reply"} and goal.file_basis is None:
             errors.append(f"目标 {goal.goal_id} 未区分附件事实与独立回复")

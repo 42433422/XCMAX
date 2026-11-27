@@ -13,6 +13,7 @@ from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_runtime import gateway
+from app.application.agent_runtime.verification_budget import VERIFIER_VERSION
 from app.db.models.purchase_unit import PurchaseUnit
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
@@ -260,7 +261,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch, request):
         assert not errors, errors
         report = {
             "protocol": GOAL_PROTOCOL,
-            "verifier_version": 1,
+            "verifier_version": VERIFIER_VERSION,
             "goal_digest": contract["digest"],
             "evidence_digest": snapshot["digest"],
             "response_digest": canonical_digest(output),

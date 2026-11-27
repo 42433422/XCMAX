@@ -11,6 +11,7 @@ import pytest
 from app.application.agent_orchestrator import run_lifecycle
 from app.application.agent_orchestrator.run_models import AgentRun, ToolCall
 from app.application.agent_runtime import xiaox_runtime as runtime
+from app.application.agent_runtime.verification_budget import VERIFIER_VERSION
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
     build_goal_contract,
@@ -258,7 +259,7 @@ def setup_runtime(tmp_path, monkeypatch):
         )
         report = {
             "protocol": GOAL_PROTOCOL,
-            "verifier_version": 1,
+            "verifier_version": VERIFIER_VERSION,
             "goal_digest": contract["digest"],
             "evidence_digest": snapshot["digest"],
             "response_digest": canonical_digest(output),
