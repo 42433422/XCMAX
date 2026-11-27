@@ -10,17 +10,22 @@ from __future__ import annotations
 
 from collections import Counter
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, or_, select
 
 from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
+from app.application.agent_orchestrator.verification_finance import (
+    FINANCE_ACTIONS as FINANCE_ACTIONS,
+    verify_finance_creation as verify_finance_creation,
+    verify_finance_deletion as verify_finance_deletion,
+    verify_finance_result as verify_finance_result,
+    verify_finance_update as verify_finance_update,
+)
 from app.application.agent_orchestrator.verification_readback import _report
 from app.db.models import (
     Customer,
-    FinancialTransaction,
     InventoryTransaction,
     JournalEntry,
     PurchaseInbound,
@@ -83,15 +88,6 @@ def sales_read_scope(context: dict[str, Any], action: str):
 
 def _order(db, tenant: int, order_id: Any, model):
     return db.scalar(select(model).where(model.tenant_id == tenant, model.id == int(order_id)))
-
-
-from app.application.agent_orchestrator.verification_finance import (  # noqa: E402
-    FINANCE_ACTIONS as FINANCE_ACTIONS,
-    verify_finance_creation as verify_finance_creation,
-    verify_finance_deletion as verify_finance_deletion,
-    verify_finance_result as verify_finance_result,
-    verify_finance_update as verify_finance_update,
-)
 
 
 def capture_sales_baseline(step, context: dict[str, Any]) -> dict[str, Any]:
