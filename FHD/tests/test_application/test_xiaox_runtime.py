@@ -123,10 +123,18 @@ def test_reply_delivers_final_answer_without_commentary(setup_runtime):
     events = completed("第一天游故宫，第二天游颐和园。")
     events[1]["payload"]["item"]["phase"] = "final_answer"
     events[1:1] = [
-        event("item/started", {"item": {
-            "id": "tool-progress", "type": "mcpToolCall", "server": "excel_analysis",
-            "tool": "read", "arguments": {"secret": "must-stay-private"},
-        }}),
+        event(
+            "item/started",
+            {
+                "item": {
+                    "id": "tool-progress",
+                    "type": "mcpToolCall",
+                    "server": "excel_analysis",
+                    "tool": "read",
+                    "arguments": {"secret": "must-stay-private"},
+                }
+            },
+        ),
         event("item/agentMessage/delta", {"delta": "我先检索"}, item_id="progress"),
         event(
             "item/completed",

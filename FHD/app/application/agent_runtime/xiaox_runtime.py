@@ -1243,7 +1243,12 @@ async def run_xiaox_agent(
                                         texts.pop(key, None)
                                     else:
                                         texts[key] = str(item.get("text") or "")
-                                if method in {"turn/started", "turn/completed", "item/started", "item/completed"}:
+                                if method in {
+                                    "turn/started",
+                                    "turn/completed",
+                                    "item/started",
+                                    "item/completed",
+                                }:
                                     data = {
                                         "thread_id": thread_id,
                                         "turn_id": turn_id,
@@ -1282,13 +1287,22 @@ async def run_xiaox_agent(
                                             "turn_id": turn_id,
                                             "item_id": event.get("item_id") or item.get("id"),
                                             "payload": (
-                                                {"item": {
-                                                    "type": item.get("type"),
-                                                    "id": event.get("item_id") or item.get("id"),
-                                                    "status": item.get("status"),
-                                                    **({"server": data["tool_id"], "tool": data["action"]}
-                                                       if item.get("type") == "mcpToolCall" else {}),
-                                                }}
+                                                {
+                                                    "item": {
+                                                        "type": item.get("type"),
+                                                        "id": event.get("item_id")
+                                                        or item.get("id"),
+                                                        "status": item.get("status"),
+                                                        **(
+                                                            {
+                                                                "server": data["tool_id"],
+                                                                "tool": data["action"],
+                                                            }
+                                                            if item.get("type") == "mcpToolCall"
+                                                            else {}
+                                                        ),
+                                                    }
+                                                }
                                                 if method.startswith("item/")
                                                 else {"turn": {"status": data["status"]}}
                                             ),

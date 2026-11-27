@@ -425,8 +425,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         try:
             from app.infrastructure.chat_stream_lifetime import (
                 watch_stream_deltas,
-                watch_stream_notes,
                 watch_stream_model_activity,
+                watch_stream_notes,
                 watch_stream_tool_records,
             )
             from app.utils.operational_errors import BOUNDARY_ERRORS

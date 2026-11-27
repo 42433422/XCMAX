@@ -177,7 +177,9 @@ def test_unverified_candidate_is_not_streamed_but_progress_is(monkeypatch, mode)
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_delta", delta)
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", note)
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_tool_record", tool)
-    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_model_activity", activity)
+    monkeypatch.setattr(
+        "app.infrastructure.chat_stream_lifetime.publish_stream_model_activity", activity
+    )
     chat.stream_runtime_event(
         {
             "method": "item/agentMessage/delta",
@@ -192,12 +194,19 @@ def test_unverified_candidate_is_not_streamed_but_progress_is(monkeypatch, mode)
             "payload": {"item": {"type": "mcpToolCall"}},
         }
     )
-    tool.assert_called_once_with({
-        "phase": "progress", "node_id": "", "tool_id": "", "action": "",
-        "label": "正在通过授权工具处理任务…",
-    })
+    tool.assert_called_once_with(
+        {
+            "phase": "progress",
+            "node_id": "",
+            "tool_id": "",
+            "action": "",
+            "label": "正在通过授权工具处理任务…",
+        }
+    )
     note.assert_not_called()
-    chat.stream_runtime_event({"method": "turn/started", "payload": {"turn": {"status": "inProgress"}}})
+    chat.stream_runtime_event(
+        {"method": "turn/started", "payload": {"turn": {"status": "inProgress"}}}
+    )
     activity.assert_called_once()
 
 
