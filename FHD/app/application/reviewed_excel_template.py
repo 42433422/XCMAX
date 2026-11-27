@@ -11,7 +11,7 @@ from zipfile import BadZipFile, ZipFile
 
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
-from openpyxl.utils import column_index_from_string, get_column_letter
+from openpyxl.utils import column_index_from_string
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
@@ -29,6 +29,7 @@ from app.application.reviewed_excel_formula_cells import (
     load_cached_workbook,
 )
 from app.application.reviewed_excel_io_lock import serialize_workbook_io
+from app.infrastructure.excel.cell_visual_facts import preview_layout
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
@@ -762,85 +763,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     min(_sheet_axis(sheet.max_row), 40),
                     min(_sheet_axis(sheet.max_column), 20),
                 )
-                merged = {}
-                covered: set[tuple[int, int]] = set()
-                for region in sheet.merged_cells.ranges:
-                    if region.min_row > max_row or region.min_col > max_col:
-                        continue
-                    end_row, end_col = min(region.max_row, max_row), min(region.max_col, max_col)
-                    merged[(region.min_row, region.min_col)] = (
-                        end_row - region.min_row + 1,
-                        end_col - region.min_col + 1,
-                    )
-                    covered.update(
-                        (r, c)
-                        for r in range(region.min_row, end_row + 1)
-                        for c in range(region.min_col, end_col + 1)
-                        if (r, c) != (region.min_row, region.min_col)
-                    )
-                rows = []
-                for r in range(1, max_row + 1):
-                    row_cells = []
-                    for c in range(1, max_col + 1):
-                        if (r, c) in covered:
-                            continue
-                        cell = sheet.cell(r, c)
-                        fact = facts_by_cell.get((sheet.title, cell.coordinate))
-                        formula = cell.data_type == "f" or fact is not None
-                        span = merged.get((r, c), (1, 1))
-                        rgb = (
-                            cell.fill.fgColor.rgb
-                            if cell.fill.patternType == "solid" and cell.fill.fgColor.type == "rgb"
-                            else None
-                        )
-                        row_cells.append(
-                            {
-                                "cell": cell.coordinate,
-                                "value": (
-                                    formula_text(cell.value) or (fact or {}).get("formula") or ""
-                                    if formula
-                                    else ""
-                                    if cell.value is None
-                                    else str(cell.value)
-                                ),
-                                "formula": formula,
-                                "rowspan": span[0],
-                                "colspan": span[1],
-                                "bold": bool(cell.font.bold),
-                                "italic": bool(cell.font.italic),
-                                "font_size": cell.font.sz or 11,
-                                "font_color": str(cell.font.color.rgb)[-6:]
-                                if cell.font.color
-                                and cell.font.color.type == "rgb"
-                                and isinstance(cell.font.color.rgb, str)
-                                else "",
-                                "fill": str(rgb)[-6:] if isinstance(rgb, str) else "",
-                                "align": cell.alignment.horizontal or "",
-                            }
-                        )
-                    rows.append(
-                        {
-                            "height": sheet.row_dimensions[r].height
-                            or sheet.sheet_format.defaultRowHeight
-                            or 15,
-                            "cells": row_cells,
-                        }
-                    )
-                layout.append(
-                    {
-                        "sheet": sheet.title,
-                        "rows": rows,
-                        "widths": [
-                            sheet.column_dimensions[get_column_letter(c)].width
-                            or sheet.sheet_format.defaultColWidth
-                            or 8.43
-                            for c in range(1, max_col + 1)
-                        ],
-                        "total_rows": sheet.max_row,
-                        "total_columns": sheet.max_column,
-                        "truncated": sheet.max_row > max_row or sheet.max_column > max_col,
-                    }
-                )
+                layout.append(preview_layout(sheet, facts_by_cell, formula_text, max_row, max_col))
         drawing_boundaries, drawing_columns = {}, {}
         if len(cells) + len(drawing_evidence) > MAX_CELLS:
             raise ReviewedExcelError("单元格和绘图对象超过安全预算")
