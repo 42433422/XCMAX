@@ -19,7 +19,6 @@ import java.util.Optional;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class RefundService {
 
     private static final List<String> OPEN_REFUND_STATUSES = List.of("pending", "approved");
@@ -30,6 +29,38 @@ public class RefundService {
     private final EntitlementService entitlementService;
     private final AccountLevelService accountLevelService;
     private final AssetInstallCommandService assetInstallCommandService;
+    private final AlipayService alipayService;
+
+    public RefundService(
+            RefundRepository refundRepository,
+            OrderRepository orderRepository,
+            WalletService walletService,
+            EntitlementService entitlementService,
+            AccountLevelService accountLevelService,
+            AssetInstallCommandService assetInstallCommandService
+    ) {
+        this(refundRepository, orderRepository, walletService, entitlementService,
+                accountLevelService, assetInstallCommandService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RefundService(
+            RefundRepository refundRepository,
+            OrderRepository orderRepository,
+            WalletService walletService,
+            EntitlementService entitlementService,
+            AccountLevelService accountLevelService,
+            AssetInstallCommandService assetInstallCommandService,
+            AlipayService alipayService
+    ) {
+        this.refundRepository = refundRepository;
+        this.orderRepository = orderRepository;
+        this.walletService = walletService;
+        this.entitlementService = entitlementService;
+        this.accountLevelService = accountLevelService;
+        this.assetInstallCommandService = assetInstallCommandService;
+        this.alipayService = alipayService;
+    }
 
     @Transactional
     public Refund apply(User user, String orderNo, String reason) {
@@ -87,6 +118,11 @@ public class RefundService {
 
     @Transactional
     public Refund review(User admin, Long refundId, String action, String adminNote) {
+        return review(admin, refundId, action, adminNote, "wallet");
+    }
+
+    @Transactional
+    public Refund review(User admin, Long refundId, String action, String adminNote, String refundTarget) {
         if (!admin.isAdmin()) {
             throw new IllegalArgumentException("需要管理员权限");
         }
@@ -97,10 +133,22 @@ public class RefundService {
         }
 
         String normalizedAction = requireText(action, "审核动作不能为空").toLowerCase();
+        String normalizedTarget = (refundTarget == null || refundTarget.isBlank())
+                ? "wallet"
+                : refundTarget.trim().toLowerCase();
         Order order = orderRepository.findByOutTradeNoForUpdate(refund.getOrder().getOutTradeNo())
                 .orElseThrow(() -> new IllegalArgumentException("订单不存在"));
         if ("approve".equals(normalizedAction) || "approved".equals(normalizedAction)) {
-            Transaction walletTransaction = walletService.refundToWallet(order, refund);
+            if ("original".equals(normalizedTarget) || "alipay".equals(normalizedTarget)) {
+                executeOriginalChannelRefund(order, refund, normalizedTarget);
+            } else if ("wallet".equals(normalizedTarget)) {
+                Transaction walletTransaction = walletService.refundToWallet(order, refund);
+                refund.setWalletTransactionId(walletTransaction.getId());
+                refund.setRefundChannel("wallet");
+                refund.setChannelRefundStatus("settled");
+            } else {
+                throw new IllegalArgumentException("不支持的退款目标: " + normalizedTarget);
+            }
             entitlementService.revokeOrderEntitlements(refund.getUser(), order.getOutTradeNo());
             assetInstallCommandService.revokeForOrder(order.getOutTradeNo());
             if ("plan".equals(order.getOrderKind())) {
@@ -121,9 +169,8 @@ public class RefundService {
             orderRepository.save(order);
 
             refund.setStatus("approved");
-            refund.setWalletTransactionId(walletTransaction.getId());
-            log.info("退款审核通过并退回钱包: refundNo={}, orderNo={}, amount={}",
-                    refund.getRefundNo(), order.getOutTradeNo(), refund.getAmount());
+            log.info("退款审核通过: refundNo={}, orderNo={}, amount={}, channel={}",
+                    refund.getRefundNo(), order.getOutTradeNo(), refund.getAmount(), refund.getRefundChannel());
         } else if ("reject".equals(normalizedAction) || "rejected".equals(normalizedAction)) {
             refund.setStatus("rejected");
             order.setStatus("paid");
@@ -137,6 +184,40 @@ public class RefundService {
         refund.setReviewedBy(admin);
         refund.setReviewedAt(LocalDateTime.now());
         return refundRepository.save(refund);
+    }
+
+    private void executeOriginalChannelRefund(Order order, Refund refund, String requestedTarget) {
+        String payType = order.getPayType() == null ? "" : order.getPayType().trim().toLowerCase();
+        boolean isWechat = payType.startsWith("wechat");
+        if (isWechat) {
+            throw new IllegalArgumentException("微信原路退款通道暂未启用，请确认渠道配置或选择退回钱包");
+        }
+        boolean isWallet = "wallet".equals(payType);
+        if (isWallet && "original".equals(requestedTarget)) {
+            Transaction walletTransaction = walletService.refundToWallet(order, refund);
+            refund.setWalletTransactionId(walletTransaction.getId());
+            refund.setRefundChannel("wallet");
+            refund.setChannelRefundStatus("settled");
+            return;
+        }
+        if (alipayService == null) {
+            throw new IllegalStateException("支付宝原路退款服务不可用");
+        }
+        java.util.Map<String, Object> channelResp = alipayService.refundOrder(
+                order.getOutTradeNo(),
+                order.getTradeNo(),
+                refund.getRefundNo(),
+                refund.getAmount(),
+                refund.getReason()
+        );
+        if (channelResp == null || !Boolean.TRUE.equals(channelResp.get("ok"))) {
+            String message = channelResp == null ? "渠道无响应" : String.valueOf(channelResp.getOrDefault("message", "渠道退款失败"));
+            throw new IllegalStateException("支付宝原路退款失败: " + message);
+        }
+        refund.setRefundChannel("alipay");
+        Object channelNo = channelResp.get("channel_refund_no");
+        refund.setChannelRefundNo(channelNo == null ? refund.getRefundNo() : String.valueOf(channelNo));
+        refund.setChannelRefundStatus("succeeded");
     }
 
     @Transactional(readOnly = true)

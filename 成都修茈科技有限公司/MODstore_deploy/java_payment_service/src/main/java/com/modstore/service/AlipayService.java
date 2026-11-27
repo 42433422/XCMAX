@@ -7,11 +7,13 @@ import com.alipay.api.request.AlipayTradePagePayRequest;
 import com.alipay.api.request.AlipayTradeCloseRequest;
 import com.alipay.api.request.AlipayTradePrecreateRequest;
 import com.alipay.api.request.AlipayTradeQueryRequest;
+import com.alipay.api.request.AlipayTradeRefundRequest;
 import com.alipay.api.request.AlipayTradeWapPayRequest;
 import com.alipay.api.response.AlipayTradePagePayResponse;
 import com.alipay.api.response.AlipayTradeCloseResponse;
 import com.alipay.api.response.AlipayTradePrecreateResponse;
 import com.alipay.api.response.AlipayTradeQueryResponse;
+import com.alipay.api.response.AlipayTradeRefundResponse;
 import com.alipay.api.response.AlipayTradeWapPayResponse;
 import com.alipay.api.internal.util.AlipaySignature;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -338,6 +340,63 @@ public class AlipayService {
             result.put("message", alipayResponseFailureMessage(response));
         } catch (Exception e) {
             putAlipayExecuteError(result, "支付宝关单失败", e);
+        }
+        return result;
+    }
+
+    /** 原路退回支付宝交易，使用 out_request_no（refundNo）保证渠道侧幂等。 */
+    public Map<String, Object> refundOrder(
+            String outTradeNo,
+            String tradeNo,
+            String outRequestNo,
+            BigDecimal refundAmount,
+            String refundReason
+    ) {
+        Map<String, Object> result = new HashMap<>();
+        if (alipayClient == null) {
+            result.put("ok", false);
+            result.put("message", "支付宝客户端未配置");
+            return result;
+        }
+        if (refundAmount == null || refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            result.put("ok", false);
+            result.put("message", "退款金额必须大于 0");
+            return result;
+        }
+        Map<String, Object> bizContent = new HashMap<>();
+        if (tradeNo != null && !tradeNo.isBlank()) {
+            bizContent.put("trade_no", tradeNo.trim());
+        } else if (outTradeNo != null && !outTradeNo.isBlank()) {
+            bizContent.put("out_trade_no", outTradeNo.trim());
+        } else {
+            result.put("ok", false);
+            result.put("message", "缺少原支付宝订单号或交易号");
+            return result;
+        }
+        bizContent.put("refund_amount", MoneyUtils.alipayTotalAmount(refundAmount));
+        if (outRequestNo != null && !outRequestNo.isBlank()) {
+            bizContent.put("out_request_no", outRequestNo.trim());
+        }
+        if (refundReason != null && !refundReason.isBlank()) {
+            bizContent.put("refund_reason", refundReason.trim());
+        }
+        AlipayTradeRefundRequest request = new AlipayTradeRefundRequest();
+        request.setBizContent(bizContentJson(bizContent));
+        try {
+            AlipayTradeRefundResponse response = alipayClient.execute(request);
+            if (response != null && response.isSuccess()) {
+                result.put("ok", true);
+                result.put("trade_no", response.getTradeNo());
+                result.put("channel_refund_no",
+                        outRequestNo != null && !outRequestNo.isBlank() ? outRequestNo.trim() : response.getTradeNo());
+                result.put("fund_change", response.getFundChange());
+                result.put("refund_fee", response.getRefundFee());
+                return result;
+            }
+            result.put("ok", false);
+            result.put("message", alipayResponseFailureMessage(response));
+        } catch (Exception e) {
+            putAlipayExecuteError(result, "支付宝原路退款失败", e);
         }
         return result;
     }
