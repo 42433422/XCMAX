@@ -305,3 +305,106 @@ def test_long_text_record_between_other_business_records_is_preserved(tmp_path):
         assert rows[1].values["地址"] == address
     finally:
         dataset.rows.close()
+
+
+def test_native_candidates_preserve_adjacent_tables_and_named_range(tmp_path):
+    from openpyxl.workbook.defined_name import DefinedName
+    from openpyxl.worksheet.table import Table
+
+    from app.application.elt.parser_table_structure import load_sheet_segmentations
+    from app.application.elt.table_segmentation import iter_structure_candidates
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws.append(["Product", "Count", "City", "Cost"])
+    ws.append(["A", 1, "Tokyo", 20])
+    ws.append(["B", 2, "Osaka", 30])
+    ws.add_table(Table(displayName="Products", ref="A1:B3"))
+    ws.add_table(Table(displayName="Cities", ref="C1:D3"))
+    wb.defined_names.add(DefinedName("Costs", attr_text="'Data'!$C$2:$D$3"))
+    path = tmp_path / "adjacent.xlsx"
+    wb.save(path)
+    wb.close()
+
+    result = load_sheet_segmentations(path)["Data"]
+    candidates = list(iter_structure_candidates(result))
+    # Boundaries are independently specified by the workbook fixture.
+    expected = {("Products", "A1:B3"), ("Cities", "C1:D3")}
+    actual = {
+        (item["source"], item["range"]) for item in candidates if item["basis"] == "excel_table"
+    }
+    assert actual == expected
+    assert any(item["basis"] == "defined_name" and item["range"] == "C2:D3" for item in candidates)
+    assert result.coverage()["nonempty_cells"] == 12
+
+
+def test_sparse_headerless_regions_are_retained_as_unresolved():
+    from openpyxl.utils.cell import range_boundaries
+
+    from app.application.elt.table_segmentation import iter_structure_candidates
+
+    cells = {(20, 1): 0, (20, 2): 5, (21, 1): 3, (21, 2): 7, (999999, 25): 99}
+    result = segment_sheet("Sparse", cells, [])
+    candidates = list(iter_structure_candidates(result))
+    assert not result.tables
+    assert {item["range"] for item in candidates} == {"A20:B21", "Y999999:Y999999"}
+    assert all(item["basis"] == "unresolved_occupied" for item in candidates)
+    assert all(
+        any(
+            r1 <= r <= r2 and c1 <= c <= c2
+            for c1, r1, c2, r2 in (range_boundaries(x["range"]) for x in candidates)
+        )
+        for r, c in cells
+    )
+
+
+def test_coverage_uses_source_positions_not_classified_cells():
+    cells = {(1, 1): "Name", (1, 2): "Count", (2, 1): "A", (2, 2): 0}
+    result = segment_sheet("Data", cells, [])
+    assert result.coverage()["nonempty_cells"] == len(cells)
+    result.cells.pop((2, 2))
+    result.cells[(999, 999)] = ("data", "invented")
+    coverage = result.coverage()
+    assert coverage["nonempty_cells"] == 4
+    assert coverage["assigned_cells"] == 3
+    assert coverage["unassigned_cells"] == 1
+    assert coverage["unexpected_cells"] == 1
+
+
+def test_candidate_contract_rejects_unoffered_and_duplicate_model_ids():
+    from app.application.elt.table_segmentation import (
+        iter_structure_candidates,
+        validate_candidate_selection,
+    )
+
+    result = segment_sheet("Data", {(1, 1): "Name", (1, 2): "Count", (2, 1): "A", (2, 2): 1}, [])
+    offered = list(iter_structure_candidates(result))
+    key = offered[0]["candidate_id"]
+    assert validate_candidate_selection(offered, [key]) == [offered[0]]
+    with pytest.raises(ValueError, match="unoffered"):
+        validate_candidate_selection(offered, ["not-offered"])
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_candidate_selection(offered, [key, key])
+    with pytest.raises(ValueError, match="unoffered"):
+        validate_candidate_selection([], [key])
+
+
+def test_candidate_iterator_retains_non_dominant_two_column_tables():
+    from app.application.elt.table_segmentation import iter_structure_candidates
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Product", "Count", "Price", None, "City", "Cost"])
+    ws.append(["A", 1, 3, None, "Tokyo", 10])
+    ws.append(["B", 2, 5])
+    ws.append(["C", 3, 7])
+
+    result = _segment(ws)
+    candidates = list(iter_structure_candidates(result))
+    assert {item["range"] for item in candidates if item["basis"] == "segmenter_fallback"} == {
+        "A1:C4",
+        "E1:F2",
+    }
+    assert len(result.dominant_group()) == 1
+    assert len(result.tables) == 2

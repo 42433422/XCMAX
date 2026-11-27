@@ -18,6 +18,7 @@ import warnings
 from collections import Counter
 from datetime import date, datetime
 from io import BytesIO
+from itertools import groupby
 from typing import Any
 
 from openpyxl import load_workbook
@@ -140,6 +141,22 @@ def _is_form_meta_text(text: str) -> bool:
     return bool(_FORM_META.search(primary))
 
 
+def _cell_value(ws, row: int, column: int):
+    cell = ws._cells.get((row, column))
+    return cell.value if cell is not None else None
+
+
+def _sparse_rows(ws, *, start: int = 1, columns: set[int] | None = None):
+    """Visit stored coordinates only; never materialize gaps in a sparse worksheet."""
+    cells = (
+        (row, col, cell.value)
+        for (row, col), cell in sorted(ws._cells.items())
+        if row >= start and (columns is None or col in columns)
+    )
+    for row, values in groupby(cells, key=lambda item: item[0]):
+        yield row, {col: value for _, col, value in values}
+
+
 def _detect_header_roles(ws, max_scan: int = 8) -> dict[str, dict]:
     roles: dict[str, dict] = {}
     patterns = [
@@ -151,7 +168,7 @@ def _detect_header_roles(ws, max_scan: int = 8) -> dict[str, dict]:
     max_col = min(ws.max_column or 1, 24)
     for row in range(1, max_row + 1):
         for col in range(1, max_col + 1):
-            value = ws.cell(row, col).value
+            value = _cell_value(ws, row, col)
             if not isinstance(value, str):
                 continue
             text = value.strip()
@@ -177,7 +194,7 @@ def _infer_ledger_cols(ws) -> dict[str, int] | None:
     short_name: Counter[int] = Counter()
     for row in range(1, max_r + 1):
         for col in range(1, max_c + 1):
-            value = ws.cell(row, col).value
+            value = _cell_value(ws, row, col)
             if _is_excel_serial(value) or isinstance(value, (datetime, date)):
                 serial_hits[col] += 1
             elif (
@@ -215,8 +232,8 @@ def _infer_ledger_cols(ws) -> dict[str, int] | None:
 def _sample_column_values(ws, col: int, start_row: int, limit: int = 8) -> list[str]:
     samples: list[str] = []
     seen: set[str] = set()
-    for row in range(start_row, (ws.max_row or 0) + 1):
-        text = _cell_text(ws.cell(row, col).value, 40)
+    for _, values in _sparse_rows(ws, start=start_row, columns={col}):
+        text = _cell_text(values.get(col), 40)
         if not text or text in seen:
             continue
         seen.add(text)
@@ -228,8 +245,8 @@ def _sample_column_values(ws, col: int, start_row: int, limit: int = 8) -> list[
 
 def _distinct_approx(ws, col: int, start_row: int, cap: int = 500) -> int:
     seen: set[str] = set()
-    for row in range(start_row, (ws.max_row or 0) + 1):
-        text = _cell_text(ws.cell(row, col).value, 40)
+    for _, values in _sparse_rows(ws, start=start_row, columns={col}):
+        text = _cell_text(values.get(col), 40)
         if text:
             seen.add(text)
         if len(seen) >= cap:
@@ -238,88 +255,77 @@ def _distinct_approx(ws, col: int, start_row: int, cap: int = 500) -> int:
 
 
 def _ledger_run_hint(ws, date_c: int, order_c: int, start_row: int) -> tuple[int, list[dict]]:
-    """Return consecutive (date, order) runs with start/end rows for atomic candidates.
-
-    Each run is one atomic order/date block. Caps stored runs for envelope size;
-    run count itself is exact.
-    """
+    """Count all runs; retain 120 atoms and one explicit remainder interval."""
     runs: list[dict] = []
     current: tuple[str, str] | None = None
-    start: int | None = None
-    last_data_row: int | None = None
-    for row in range(start_row, (ws.max_row or 0) + 1):
-        date_text = _cell_text(ws.cell(row, date_c).value, 32)
-        order_text = _cell_text(ws.cell(row, order_c).value, 32)
-        if not date_text and not order_text:
+    start = last_data_row = count = 0
+
+    def finish(end: int) -> None:
+        nonlocal count
+        assert current is not None
+        count += 1
+        if len(runs) <= 120:
+            runs.append(
+                {"start_row": start, "end_row": end, "date": current[0], "order_key": current[1]}
+            )
+        else:
+            runs[-1]["end_row"] = end
+
+    for row, values in _sparse_rows(ws, start=start_row, columns={date_c, order_c}):
+        key = (_cell_text(values.get(date_c), 32), _cell_text(values.get(order_c), 32))
+        if not any(key):
             continue
-        key = (date_text, order_text)
-        last_data_row = row
         if key != current:
-            if current is not None and start is not None:
-                runs.append(
-                    {
-                        "start_row": start,
-                        "end_row": row - 1,
-                        "date": current[0],
-                        "order_key": current[1],
-                    }
-                )
-            current = key
-            start = row
-    if current is not None and start is not None and last_data_row is not None:
-        runs.append(
-            {
-                "start_row": start,
-                "end_row": last_data_row,
-                "date": current[0],
-                "order_key": current[1],
-            }
-        )
-    # Fix end_row of each run to the row before next run's start (gap-aware).
-    for i in range(len(runs) - 1):
-        runs[i]["end_row"] = max(runs[i]["start_row"], runs[i + 1]["start_row"] - 1)
-    return len(runs), runs
+            if current is not None:
+                finish(row - 1)
+            current, start = key, row
+        last_data_row = row
+    if current is not None:
+        finish(last_data_row)
+    return count, runs
 
 
 def _cross_sheet_refs(ws, sheet_name: str, cap: int = 40) -> list[dict]:
     refs: list[dict] = []
-    for row in ws.iter_rows():
-        for cell in row:
-            if cell.data_type != "f" or cell.value is None:
+    for _, cell in sorted(ws._cells.items()):
+        if cell.data_type != "f" or cell.value is None:
+            continue
+        formula = str(cell.value)
+        if "!" not in formula:
+            continue
+        try:
+            tokens = Tokenizer(formula).items
+        except TokenizerError:
+            continue
+        targets = []
+        for token in tokens:
+            if token.type != "OPERAND" or token.subtype != "RANGE":
                 continue
-            formula = str(cell.value)
-            if "!" not in formula:
+            if "!" not in token.value:
                 continue
-            try:
-                tokens = Tokenizer(formula).items
-            except TokenizerError:
-                continue
-            targets = []
-            for token in tokens:
-                if token.type != "OPERAND" or token.subtype != "RANGE":
-                    continue
-                if "!" not in token.value:
-                    continue
-                targets.append(token.value.replace("$", "")[:80])
-            if not targets:
-                continue
-            refs.append(
-                {
-                    "from_cell": cell.coordinate,
-                    "formula_snippet": formula[:120],
-                    "targets": targets[:8],
-                }
-            )
-            if len(refs) >= cap:
-                return refs
+            targets.append(token.value.replace("$", "")[:80])
+        if not targets:
+            continue
+        refs.append(
+            {
+                "from_cell": cell.coordinate,
+                "formula_snippet": formula[:120],
+                "targets": targets[:8],
+            }
+        )
+        if len(refs) >= cap:
+            return refs
     return refs
 
 
 @serialize_workbook_io
 def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
     """Extract a general structural index from workbook bytes."""
+    from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
+
     if not body:
         raise ValueError("empty workbook body")
+    inspect_office_archive(body)
     digest = hashlib.sha256(body).hexdigest()
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
@@ -327,8 +333,23 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
     try:
         sheets_out: list[dict] = []
         edge_counter: Counter[tuple[str, str]] = Counter()
-        for ws in wb.worksheets:
+        for sheet_index, sheet_name in enumerate(wb.sheetnames):
+            ws = wb[sheet_name]
             state = ws.sheet_state or "visible"
+            if not hasattr(ws, "_cells"):
+                sheets_out.append(
+                    {
+                        "sheet": sheet_name,
+                        "sheet_index": sheet_index,
+                        "sheet_state": state,
+                        "status": "unsupported",
+                        "rows": 0,
+                        "columns": 0,
+                        "block_title_rows": [],
+                        "ledger_run_hint_count": 0,
+                    }
+                )
+                continue
             roles = _detect_header_roles(ws)
             inferred = None
             if "date" not in roles or "order_no" not in roles:
@@ -349,12 +370,11 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
 
             block_titles: list[dict] = []
             header_rows: list[dict] = []
-            for row in range(1, (ws.max_row or 0) + 1):
+            for row, values in _sparse_rows(ws, columns=set(range(1, 17))):
                 bits = []
                 is_title = False
                 is_header = False
-                for col in range(1, min((ws.max_column or 1), 16) + 1):
-                    value = ws.cell(row, col).value
+                for col, value in values.items():
                     if value is None:
                         continue
                     text = _cell_text(value, 80)
@@ -397,8 +417,8 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                 if start <= 1:
                     start = 1
                     for row in range(1, min(8, (ws.max_row or 1) + 1)):
-                        if _is_excel_serial(ws.cell(row, date_c).value) or isinstance(
-                            ws.cell(row, date_c).value, (datetime, date)
+                        if _is_excel_serial(_cell_value(ws, row, date_c)) or isinstance(
+                            _cell_value(ws, row, date_c), (datetime, date)
                         ):
                             start = row
                             break
@@ -527,21 +547,28 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                 {
                     "sheet": ws.title,
                     "sheet_state": state,
+                    "sheet_index": sheet_index,
+                    "status": "indexed",
                     "rows": ws.max_row or 0,
                     "columns": ws.max_column or 0,
                     "headers": header_rows,
                     "order_key_columns": order_key_columns,
                     "block_title_rows": block_titles[:80],
+                    "block_title_row_total": len(block_titles),
                     "candidate_row_ranges": _cap_candidate_ranges(candidate_ranges, 80),
                     "candidate_row_range_total": len(candidate_ranges),
                     "ledger_run_hint_count": ledger_run_hint,
                     "cross_sheet_formula_refs": xref,
+                    "formula_refs_may_be_truncated": len(xref) == 40,
                 }
             )
 
         index = {
             "schema_version": SCHEMA_VERSION,
             "source_sha256": digest,
+            "view": "structural_navigation",
+            "is_full_facts": False,
+            "sheet_inventory_complete": True,
             "sheets": sheets_out,
             "cross_sheet_edges": [
                 {"from_sheet": a, "to_sheet": b, "count": n}
@@ -552,7 +579,7 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                 "hidden_sheet_count": sum(
                     1 for s in sheets_out if s["sheet_state"] in {"hidden", "veryHidden"}
                 ),
-                "block_title_count": sum(len(s["block_title_rows"]) for s in sheets_out),
+                "block_title_count": sum(s.get("block_title_row_total", 0) for s in sheets_out),
                 "ledger_run_hint_total": sum(s["ledger_run_hint_count"] for s in sheets_out),
                 "cross_sheet_edge_count": sum(edge_counter.values()),
             },
@@ -587,110 +614,95 @@ def _cap_candidate_ranges(ranges: list[dict], limit: int) -> list[dict]:
 def compress_structural_index_for_model(
     index: dict[str, Any], *, budget_bytes: int = STRUCTURAL_INDEX_MODEL_BUDGET_BYTES
 ) -> dict[str, Any]:
-    """Return a size-bounded summary safe to inject into classify/group payloads."""
+    """Bound navigation bytes without removing sheets or claiming full-fact coverage."""
     if not isinstance(index, dict):
         return {}
+    if type(budget_bytes) is not int or budget_bytes <= 0:
+        raise ValueError("structural index budget must be a positive byte count")
     summary: dict[str, Any] = {
         "schema_version": index.get("schema_version") or SCHEMA_VERSION,
         "source_sha256": index.get("source_sha256"),
+        "view": "structural_navigation",
+        "is_full_facts": False,
+        "sheet_inventory_complete": bool(index.get("sheet_inventory_complete", True))
+        and (index.get("stats") or {}).get("sheet_count", len(index.get("sheets") or []))
+        == len(index.get("sheets") or []),
+        "truncated": bool(index.get("truncated")),
         "stats": index.get("stats") or {},
         "notes": (index.get("notes") or [])[:4],
         "cross_sheet_edges": (index.get("cross_sheet_edges") or [])[:40],
+        "readback": {
+            "tool_id": "excel_analysis",
+            "action": "read",
+            "view": "cells",
+            "expected_sha256": index.get("source_sha256"),
+        },
         "sheets": [],
+        "model_budget_bytes": budget_bytes,
+        "encoded_bytes": 0,
     }
+    if len(index.get("cross_sheet_edges") or []) > 40 or not summary["sheet_inventory_complete"]:
+        summary["truncated"] = True
     for sheet in index.get("sheets") or []:
+        ranges = sheet.get("candidate_row_ranges") or []
+        titles = sheet.get("block_title_rows") or []
+        refs = sheet.get("cross_sheet_formula_refs") or []
         entry = {
             "sheet": sheet.get("sheet"),
             "sheet_state": sheet.get("sheet_state", "visible"),
+            "status": sheet.get("status", "indexed"),
             "rows": sheet.get("rows"),
             "columns": sheet.get("columns"),
-            "block_title_rows": [
-                {
-                    "row": t.get("row"),
-                    "kind_hint": t.get("kind_hint"),
-                    "text": (t.get("text") or "")[:100],
-                }
-                for t in (sheet.get("block_title_rows") or [])[:40]
-            ],
+            "block_title_rows": [dict(item) for item in titles[:40]],
+            "block_title_row_total": sheet.get("block_title_row_total", len(titles)),
             "order_key_columns": [
-                {
-                    "role": c.get("role"),
-                    "col": c.get("col"),
-                    "header_text": (c.get("header_text") or "")[:40],
-                    "distinct_approx": c.get("distinct_approx"),
-                    "sample_values": (c.get("sample_values") or [])[:5],
-                    "inferred_from_data_shape": bool(c.get("inferred_from_data_shape")),
-                }
-                for c in (sheet.get("order_key_columns") or [])[:6]
+                dict(item) for item in (sheet.get("order_key_columns") or [])[:6]
             ],
-            "candidate_row_ranges": [],
+            "candidate_row_ranges": _cap_candidate_ranges([dict(item) for item in ranges], 80),
+            "candidate_row_range_total": sheet.get("candidate_row_range_total", len(ranges)),
             "ledger_run_hint_count": sheet.get("ledger_run_hint_count") or 0,
-            "cross_sheet_formula_refs": [
-                {
-                    "from_cell": r.get("from_cell"),
-                    "targets": (r.get("targets") or [])[:4],
-                }
-                for r in (sheet.get("cross_sheet_formula_refs") or [])[:12]
-            ],
+            "cross_sheet_formula_refs": [dict(item) for item in refs[:12]],
+            "formula_refs_may_be_truncated": bool(sheet.get("formula_refs_may_be_truncated")),
         }
-        for rng in sheet.get("candidate_row_ranges") or []:
-            compact = {
-                "start_row": rng.get("start_row"),
-                "end_row": rng.get("end_row"),
-                "basis": rng.get("basis"),
-            }
-            if "run_hint_count" in rng:
-                compact["run_hint_count"] = rng["run_hint_count"]
-                compact["run_boundary_samples"] = (rng.get("run_boundary_samples") or [])[:12]
-            if rng.get("basis") == "ledger_key_run":
-                if rng.get("order_key"):
-                    compact["order_key"] = str(rng.get("order_key"))[:24]
-                if rng.get("date"):
-                    compact["date"] = str(rng.get("date"))[:24]
-            if "kind_hint" in rng:
-                compact["kind_hint"] = rng["kind_hint"]
-            if "title_text" in rng:
-                compact["title_text"] = (rng.get("title_text") or "")[:80]
-            entry["candidate_row_ranges"].append(compact)
-            if len(entry["candidate_row_ranges"]) >= 80:
-                break
+        if (
+            entry["block_title_row_total"] > len(entry["block_title_rows"])
+            or entry["candidate_row_range_total"] > len(entry["candidate_row_ranges"])
+            or len(refs) > 12
+            or entry["formula_refs_may_be_truncated"]
+        ):
+            summary["truncated"] = True
         summary["sheets"].append(entry)
 
-    def encoded_size(payload: dict) -> int:
-        return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    def encoded_size() -> int:
+        # Include the size field itself, including changes to its decimal width.
+        while True:
+            size = len(json.dumps(summary, ensure_ascii=False, separators=(",", ":")).encode())
+            if size == summary["encoded_bytes"]:
+                return size
+            summary["encoded_bytes"] = size
 
-    # Progressive trim if over budget.
-    while encoded_size(summary) > budget_bytes and summary["sheets"]:
-        trimmed = False
-        for sheet in summary["sheets"]:
-            if sheet.get("cross_sheet_formula_refs"):
-                sheet["cross_sheet_formula_refs"] = sheet["cross_sheet_formula_refs"][:-1]
-                trimmed = True
-                break
-            ranges = sheet.get("candidate_row_ranges") or []
-            if ranges and ranges[-1].get("run_boundary_samples"):
-                ranges[-1]["run_boundary_samples"] = ranges[-1]["run_boundary_samples"][:-2]
-                trimmed = True
-                break
-            if sheet.get("block_title_rows") and len(sheet["block_title_rows"]) > 3:
-                sheet["block_title_rows"] = sheet["block_title_rows"][:-1]
-                trimmed = True
-                break
-            if ranges and len(ranges) > 1:
-                sheet["candidate_row_ranges"] = ranges[:-1]
-                trimmed = True
-                break
-        if not trimmed:
-            # Drop trailing sheets' verbose fields entirely.
-            last = summary["sheets"][-1]
-            if last.get("candidate_row_ranges"):
-                last["candidate_row_ranges"] = []
-            elif len(summary["sheets"]) > 1:
-                summary["sheets"].pop()
-            else:
-                break
-    summary["model_budget_bytes"] = budget_bytes
-    summary["encoded_bytes"] = encoded_size(summary)
+    # Trim whole optional detail categories. Work is linear in stored navigation,
+    # not one serialization per discarded cell or sheet.
+    for field in (
+        "cross_sheet_formula_refs",
+        "order_key_columns",
+        "block_title_rows",
+        "candidate_row_ranges",
+    ):
+        if encoded_size() <= budget_bytes:
+            return summary
+        summary["truncated"] = True
+        for entry in summary["sheets"]:
+            entry[field] = []
+    if encoded_size() > budget_bytes:
+        summary["notes"] = []
+        summary["cross_sheet_edges"] = []
+    if encoded_size() > budget_bytes:
+        # A workbook with more sheets than fit the navigation envelope must be
+        # read with excel_analysis.read(view=sheets), not silently shortened.
+        raise ReviewedExcelError(
+            "结构导航预算不足以容纳完整工作表清单；请使用 excel_analysis.read 的 view=sheets 分页读取"
+        )
     return summary
 
 
@@ -711,10 +723,13 @@ def ensure_review_structural_index(
 ) -> dict[str, Any]:
     """Attach full+compressed index onto a review dict when missing."""
     existing = review.get("workbook_structural_index")
-    if isinstance(existing, dict) and existing.get("schema_version"):
-        review.setdefault(
-            "workbook_structural_index_for_model",
-            compress_structural_index_for_model(existing),
+    if (
+        isinstance(existing, dict)
+        and existing.get("schema_version")
+        and (body is None or existing.get("source_sha256") == hashlib.sha256(body).hexdigest())
+    ):
+        review["workbook_structural_index_for_model"] = compress_structural_index_for_model(
+            existing
         )
         return existing
     if body is None:
@@ -770,14 +785,17 @@ def classification_from_structural_index(
 ) -> dict[str, Any]:
     """Build a classify-shaped result from layout + date-block structural candidates.
 
-    Used when model/keyword classify misses: each visible candidate becomes one
-    region and one suggested document (atomic). No workbook-title hardcodes.
+    Used when the model result is unavailable or invalid. Every candidate remains
+    an unconfirmed suggestion; this projection never certifies semantic coverage.
     """
     from openpyxl.utils.cell import get_column_letter
 
     index = index or review.get("workbook_structural_index") or {}
     if not isinstance(index, dict) or not index.get("sheets"):
         raise ValueError("structural index missing")
+    if not review.get("sha256") or index.get("source_sha256") != review["sha256"]:
+        raise ReviewedExcelError("结构索引与原件摘要不一致")
+    dimensions = {item["sheet"]: item for item in review.get("sheet_overview", [])}
     sheet_states = {
         overview["sheet"]: overview.get("sheet_state", "visible")
         for overview in review.get("sheet_overview", [])
@@ -796,6 +814,12 @@ def classification_from_structural_index(
     for i, cand in enumerate(candidates, 1):
         c2 = cand["columns"]
         area = f"A{cand['start_row']}:{get_column_letter(c2)}{cand['end_row']}"
+        bounds = dimensions.get(cand["sheet"]) or {}
+        if not (
+            1 <= cand["start_row"] <= cand["end_row"] <= int(bounds.get("rows") or 0)
+            and 1 <= c2 <= int(bounds.get("columns") or 0)
+        ):
+            raise ReviewedExcelError("结构候选坐标超出原件范围")
         reason = (
             f"结构索引{cand['basis']}原子"
             + (f"（{cand['title_text'][:40]}）" if cand.get("title_text") else "")
@@ -845,7 +869,9 @@ def classification_from_structural_index(
         )
     return {
         "source_sha256": review.get("sha256"),
-        "model_status": "returned",
+        "model_status": "fallback",
+        "needs_confirmation": True,
+        "coverage_status": "unknown",
         "regions": regions,
         "suggested_documents": suggested,
         "logical_documents": suggested,
@@ -865,47 +891,34 @@ def prefer_structural_classification_if_undersegmented(
     review: dict[str, Any],
     classification: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Prefer layout/date-block atoms when keyword/model classify under-segments.
+    """Keep valid model decisions; rule candidates are explicit unavailable-model fallback.
 
-    Structural index is an independent atom inventory. Prefer it when classify is
-    missing, model produced zero regions, or visible structural candidates strictly
-    outnumber model regions (under-segmentation). Also prefer it when the model
-    left multiple 1x1 orphan slices while structural has strictly more atoms.
-    No workbook-specific count thresholds.
+    Candidate counts are not semantic ground truth. The original function name
+    remains for archived callers, but fewer model regions never trigger replacement.
     """
+    dimensions = {item["sheet"]: item for item in review.get("sheet_overview", [])}
+    valid = (
+        isinstance(classification, dict)
+        and classification.get("model_status") == "returned"
+        and bool(review.get("sha256"))
+        and classification.get("source_sha256") == review["sha256"]
+        and isinstance(classification.get("regions"), list)
+        and bool(classification["regions"])
+    )
+    if valid and classification is not None:
+        for region in classification["regions"]:
+            try:
+                sheet = dimensions[region["sheet"]]
+                c1, r1, c2, r2 = bounded_range(region["range"])
+                if not (1 <= r1 <= r2 <= sheet["rows"] and 1 <= c1 <= c2 <= sheet["columns"]):
+                    valid = False
+                    break
+            except (KeyError, TypeError, ValueError):
+                valid = False
+                break
+        if valid:
+            return classification
     index = review.get("workbook_structural_index") or {}
-    candidates = iter_visible_structural_candidates(index) if index else []
-    sheet_states = {
-        overview["sheet"]: overview.get("sheet_state", "visible")
-        for overview in review.get("sheet_overview", [])
-    }
-    candidates = [
-        c
-        for c in candidates
-        if sheet_states.get(c["sheet"], "visible") not in {"hidden", "veryHidden"}
-    ]
-    if not candidates:
-        if classification is None:
-            raise ReviewedExcelError("无结构索引候选且模型分类不可用")
-        return classification
-
-    if classification is None:
-        return classification_from_structural_index(review, index=index)
-
-    regions = classification.get("regions") or []
-    model_n = len(regions)
-    struct_n = len(candidates)
-    orphan_singles = 0
-    for region in regions:
-        try:
-            c1, r1, c2, r2 = bounded_range(region["range"])
-        except (ReviewedExcelError, TypeError, ValueError):
-            continue
-        if c1 == c2 and r1 == r2:
-            orphan_singles += 1
-
-    undersegmented = struct_n > model_n
-    orphan_promote = orphan_singles >= 2 and struct_n > model_n
-    if undersegmented or orphan_promote or model_n == 0:
-        return classification_from_structural_index(review, index=index)
-    return classification
+    if not index:
+        raise ReviewedExcelError("模型分类不可用且缺少结构索引")
+    return classification_from_structural_index(review, index=index)

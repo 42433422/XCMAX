@@ -8,8 +8,10 @@ import logging
 import os
 import zipfile
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import dataclass
 from itertools import groupby, islice
+from math import fsum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, cast
@@ -25,6 +27,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
 _EXCEL_ANALYSIS_MAX_PAGE_ROWS = 5000
+_EXCEL_ANALYSIS_MAX_DENSE_CELLS = 500_000
 # 依赖列语义的动作和自然语言问题需要确认表头；原始读取和显式筛选沿用指定表头。
 _AUTO_HEADER_ACTIONS = frozenset({"statistics", "structure", "aggregate"})
 _TOTAL_ROW_MARKERS = ("合计", "总计", "小计", "累计")
@@ -59,20 +62,89 @@ def page_budget(args: Payload) -> tuple[int, int]:
     return offset, page_rows(args.get("max_rows"))
 
 
+class _DenseWorkbookBudgetExceeded(ValueError):
+    def __init__(self, sheet: str, rows: int, columns: int):
+        super().__init__(
+            "工作表坐标范围超过稠密读取预算；请使用 read 的 view=cells 分页读取原生单元格"
+        )
+        self.details = {
+            "sheet_name": sheet,
+            "observed_rows": rows,
+            "observed_columns": columns,
+            "minimum_rectangular_cells": rows * columns,
+            "max_rectangular_cells": _EXCEL_ANALYSIS_MAX_DENSE_CELLS,
+            "readback": {"action": "read", "view": "cells", "sheet_name": sheet},
+        }
+
+
+def _guard_dense_workbook_read(path: Path, sheet_name: Any) -> None:
+    """Bound pandas' padded rectangle using the pinned parser's actual row/cell positions."""
+    suffix = path.suffix.lower()
+    if suffix == ".csv" or (
+        suffix not in {".xlsx", ".xlsm", ".xltx", ".xltm"} and not zipfile.is_zipfile(path)
+    ):
+        return
+    if sheet_name and not isinstance(sheet_name, (str, int)):
+        raise ValueError("A single worksheet name or index is required")
+    from openpyxl import load_workbook
+
+    from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
+    from app.infrastructure.excel.sparse_rows import _native_rows
+
+    inspect_office_archive(path)
+    # pandas detects OOXML bytes independently of the filename suffix.
+    try:
+        with (
+            path.open("rb") as source,
+            closing(
+                load_workbook(source, read_only=True, data_only=False, keep_links=False)
+            ) as workbook,
+        ):
+            sheets = workbook.worksheets
+            if isinstance(sheet_name, str) and sheet_name:
+                sheet = next((item for item in sheets if item.title == sheet_name), None)
+                if sheet is None:
+                    raise ValueError(f"Worksheet named '{sheet_name}' not found")
+            else:
+                try:
+                    sheet = sheets[sheet_name if isinstance(sheet_name, int) else 0]
+                except IndexError as exc:
+                    raise ValueError("Worksheet index is out of range") from exc
+            rows = columns = 0
+            for row_number, cells in _native_rows(sheet):
+                # pandas places rows by row@r, even if a contained c@r disagrees.
+                # The native parser also resolves omitted row/cell coordinates.
+                rows = max(rows, row_number)
+                for cell in cells:
+                    rows = max(rows, cell["row"])
+                    columns = max(columns, cell["column"])
+                if rows * max(columns, 1) > _EXCEL_ANALYSIS_MAX_DENSE_CELLS:
+                    raise _DenseWorkbookBudgetExceeded(sheet.title, rows, max(columns, 1))
+    except KeyError as exc:
+        raise ValueError("invalid_ooxml_package") from exc
+
+
 def read_excel_dataframe(
     p: Path, *, sheet_name: Any, header_row_1based: int | None
 ) -> pd.DataFrame:
+    _guard_dense_workbook_read(p, sheet_name)
     if p.suffix.lower() == ".csv":
-        header = 0 if header_row_1based is None else header_row_1based - 1
-        return _clean_header_columns(pd.read_csv(p, header=header))
-    options: Payload = {}
-    if p.suffix.lower() in (".xlsx", ".xlsm"):
-        options["engine"] = "openpyxl"
-    if sheet_name:
-        options["sheet_name"] = sheet_name
-    if header_row_1based is not None:
-        options["header"] = header_row_1based - 1
-    return _clean_header_columns(cast(pd.DataFrame, pd.read_excel(p, **options)))
+        df = pd.read_csv(p, header=None if header_row_1based == 0 else (header_row_1based or 1) - 1)
+    else:
+        options: Payload = {}
+        if p.suffix.lower() in (".xlsx", ".xlsm"):
+            options["engine"] = "openpyxl"
+        if sheet_name:
+            options["sheet_name"] = sheet_name
+        if header_row_1based is not None:
+            options["header"] = header_row_1based - 1 if header_row_1based else None
+        df = cast(pd.DataFrame, pd.read_excel(p, **options))
+    if header_row_1based == 0:
+        from openpyxl.utils.cell import get_column_letter
+
+        df.columns = [get_column_letter(index) for index in range(1, len(df.columns) + 1)]
+        return df
+    return _clean_header_columns(df)
 
 
 def _clean_header_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -128,23 +200,22 @@ def _suspected_total_rows(df: pd.DataFrame, limit: int = 20) -> list[int]:
     return rows
 
 
-def first_sheet_name(path: Path) -> str | None:
-    """未指定工作表时返回默认打开的工作表名，供后续步骤引用。"""
-    if path.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
-        return None
-    if not zipfile.is_zipfile(path):
-        return None
+def workbook_sheet_names(path: Path) -> list[str]:
+    """Read the worksheet directory without scanning cell rows."""
+    if path.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"} or not zipfile.is_zipfile(
+        path
+    ):
+        return []
     try:
         from openpyxl import load_workbook
 
         workbook = load_workbook(str(path), read_only=True)
         try:
-            names = list(workbook.sheetnames)
+            return [sheet.title for sheet in workbook.worksheets]
         finally:
             workbook.close()
-        return str(names[0]) if names else None
     except RECOVERABLE_ERRORS:
-        return None
+        return []
 
 
 def frame_records(df: pd.DataFrame, limit: int = 200) -> list[Payload]:
@@ -294,17 +365,23 @@ def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
         raise ValueError("missing_aggregation_metrics")
     if any(column not in df.columns for column in group_by):
         raise ValueError("invalid_group_by")
-    if not group_by:
-        return pd.DataFrame(
-            [
-                {
-                    f"{column}_{op}": df[column].agg(op)
-                    for column, ops in operations.items()
-                    for op in ops
-                }
-            ]
-        )
-    result = df.groupby(group_by, dropna=False).agg(operations).reset_index()
+    try:
+        if not group_by:
+            return pd.DataFrame(
+                [
+                    {
+                        f"{column}_{op}": df[column].agg(op)
+                        for column, ops in operations.items()
+                        for op in ops
+                    }
+                ]
+            )
+        result = df.groupby(group_by, dropna=False).agg(operations)
+    except TypeError as exc:
+        raise ValueError(
+            "aggregation requires compatible column types; use an explicit conversion"
+        ) from exc
+    result = result.reset_index()
     result.columns = [
         "_".join(str(part) for part in column if str(part)).strip("_")
         if isinstance(column, tuple)
@@ -312,6 +389,86 @@ def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
         for column in result.columns
     ]
     return result
+
+
+def physical_range_sum(
+    path: Path, sheet: str, frame: pd.DataFrame, args: Payload, *, offset: int, max_rows: int
+) -> Payload:
+    from openpyxl import load_workbook
+    from openpyxl.utils.cell import get_column_letter, range_boundaries
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    metrics = args["metrics"]
+    invalid = {"success": False, "error": "invalid_sum_cell_range"}
+    if len(metrics) != 1 or args.get("group_by") or frame.attrs.get("source_header") != 0:
+        return invalid
+    metric = metrics[0]
+    try:
+        left, start, right, stop = range_boundaries(str(metric.get("cell_range") or ""))
+    except ValueError:
+        return invalid
+    column = metric.get("column")
+    if left is None or start is None or right is None or stop is None:
+        return invalid
+    if (
+        metric.get("op") != "sum"
+        or left != right
+        or not 1 <= start <= stop <= len(frame)
+        or not isinstance(column, str)
+        or column not in frame.columns
+        or get_column_letter(left) != column
+    ):
+        return invalid
+
+    numbers: list[float] = []
+    ignored: list[int] = []
+    read_errors: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (
+        InvalidFileException,
+        KeyError,
+        zipfile.BadZipFile,
+    )
+    try:
+        with (
+            closing(
+                load_workbook(path, read_only=True, data_only=True, keep_links=False)
+            ) as values,
+            closing(load_workbook(path, read_only=True, keep_links=False)) as formulas,
+        ):
+            cells = zip(
+                values[sheet].iter_rows(min_row=start, max_row=stop, min_col=left, max_col=left),
+                formulas[sheet].iter_rows(min_row=start, max_row=stop, min_col=left, max_col=left),
+                strict=True,
+            )
+            for row, ((value,), (formula,)) in enumerate(cells, start):
+                if value.data_type == "e" or (formula.data_type == "f" and value.value is None):
+                    error = (
+                        "sum_cell_error"
+                        if value.data_type == "e"
+                        else "sum_formula_value_unavailable"
+                    )
+                    return {"success": False, "error": error, "cell": f"{column}{row}"}
+                if value.data_type == "d":
+                    return {
+                        "success": False,
+                        "error": "sum_range_date_cell",
+                        "cell": f"{column}{row}",
+                    }
+                if type(value.value) is int or type(value.value) is float:
+                    numbers.append(value.value)
+                elif value.value is not None:
+                    ignored.append(row - 1)
+    except read_errors:
+        return {"success": False, "error": "read_excel_failed"}
+    evidence = {
+        "cell_range": f"{column}{start}:{column}{stop}",
+        "source_rows": _row_evidence(pd.RangeIndex(start - 1, stop), 0),
+        "ignored_non_numeric_rows": _row_evidence(pd.Index(ignored), 0),
+        "numeric_cell_count": len(numbers),
+    }
+    if ignored and not numbers:
+        return {**evidence, "success": False, "error": "sum_range_has_no_numeric_cells"}
+    result = pd.DataFrame([{f"{column}_sum": fsum(numbers)}])
+    return {**evidence, **table_result(result, offset=offset, max_rows=max_rows)}
 
 
 def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
@@ -353,7 +510,12 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
         if any(column not in result.columns for column in plan.get(field, [])):
             raise ValueError(f"unknown dataframe column in {field}")
     if plan.get("sort_by"):
-        result = result.sort_values(plan["sort_by"], ascending=plan.get("ascending", True))
+        try:
+            result = result.sort_values(plan["sort_by"], ascending=plan.get("ascending", True))
+        except TypeError as exc:
+            raise ValueError(
+                "query sort requires comparable column values; use an explicit conversion"
+            ) from exc
     if plan.get("columns"):
         result = result.loc[:, plan["columns"]]
     if "limit" in plan:
@@ -365,6 +527,23 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _native_workbook_page(path: Path, args: Payload) -> Payload:
+    """Read an exact page within the caller's current authorized snapshot."""
+    from app.application.tabular_workbook import read_workbook_page
+
+    offset, limit = page_budget(args)
+    data = read_workbook_page(
+        path,
+        view=args["view"],
+        sheet_name=args.get("sheet_name"),
+        cell_range=args.get("cell_range"),
+        offset=offset,
+        limit=limit,
+        expected_sha256=args.get("expected_sha256"),
+    )
+    return {"success": True, "action": "read", "file_path": str(path), **data, "data": data}
+
+
 @dataclass(frozen=True)
 class ExcelAnalysis:
     io: ExcelIO
@@ -373,12 +552,20 @@ class ExcelAnalysis:
     logger: logging.Logger
 
     def analyze(self, args: Payload, workspace_root: str | None = None) -> Payload:
-        from app.infrastructure.excel.header_detection import HeaderConfirmationRequired
+        from app.infrastructure.excel.header_detection import (
+            HeaderConfirmationRequired,
+            HeaderDetectionFailed,
+        )
 
         file_path = str(args.get("file_path") or "")
         action = str(args.get("action") or "read")
         sheet = args.get("sheet_name")
+        raw_header = args.get("header_row")
+        if raw_header is not None and (type(raw_header) is not int or raw_header < 0):
+            return {"success": False, "error": "invalid_header_row", "required_field": "header_row"}
         header = self.io.header(args)
+        if type(args.get("header_row")) is int and args["header_row"] == 0:
+            header = 0
         if not file_path:
             return {"success": False, "error": "file_path is required"}
         expression = args.get("query_expression")
@@ -420,13 +607,28 @@ class ExcelAnalysis:
                 "workspace_root": root,
                 "resolved_path": str(path),
             }
+        if action == "read" and args.get("view", "table") != "table":
+            if args.get("view") not in {"cells", "sheets"}:
+                return {"success": False, "error": "invalid_read_view"}
+            try:
+                return _native_workbook_page(path, args)
+            except (ValueError, OSError, zipfile.BadZipFile) as exc:
+                return {"success": False, "error": "native_facts_read_failed", "message": str(exc)}
         try:
+            _guard_dense_workbook_read(path, sheet)
             infer_header = action in _AUTO_HEADER_ACTIONS or (
                 action == "query" and isinstance(question, str) and bool(question.strip())
             )
             if header is None and infer_header:
                 header = auto_header_row(path, str(sheet).strip() if sheet else None)
             df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
+        except _DenseWorkbookBudgetExceeded as exc:
+            return {
+                "success": False,
+                "error": "excel_dense_materialization_budget_exceeded",
+                "message": str(exc),
+                **exc.details,
+            }
         except HeaderConfirmationRequired as exc:
             return {
                 "success": False,
@@ -434,6 +636,14 @@ class ExcelAnalysis:
                 "message": str(exc),
                 "required_field": "header_row",
                 "header_candidates": list(exc.candidate_rows),
+                "physical_preview": exc.sample_rows,
+            }
+        except HeaderDetectionFailed as exc:
+            return {
+                "success": False,
+                "error": "header_detection_failed",
+                "message": str(exc),
+                "required_field": "header_row",
             }
         except RECOVERABLE_ERRORS:
             return {
@@ -445,7 +655,8 @@ class ExcelAnalysis:
                 "header_row": header,
             }
         offset, max_rows = page_budget(args)
-        source_sheet = str(sheet).strip() if sheet else first_sheet_name(path)
+        sheets = workbook_sheet_names(path) if action == "structure" or not sheet else []
+        source_sheet = str(sheet).strip() if sheet else next(iter(sheets), None)
         source_header = header if header is not None else 1
         if source_sheet and path.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
             df.attrs["source_header"] = source_header
@@ -460,7 +671,7 @@ class ExcelAnalysis:
             snapshot = dataframe_schema_snapshot(df)
             return {
                 **base,
-                "data": json_safe(snapshot),
+                "data": {**json_safe(snapshot), "sheet_names": sheets},
                 "row_count": snapshot["row_count"],
                 "columns": snapshot["columns"],
                 "dtypes": snapshot["dtypes"],
@@ -509,6 +720,16 @@ class ExcelAnalysis:
                 }
             return {**base, **table_result(result, offset=offset, max_rows=max_rows)}
         if action == "aggregate":
+            if any(
+                isinstance(metric, dict) and "cell_range" in metric
+                for metric in args.get("metrics") or []
+            ):
+                return {
+                    **base,
+                    **physical_range_sum(
+                        path, source_sheet or "", df, args, offset=offset, max_rows=max_rows
+                    ),
+                }
             try:
                 result = aggregate_frame(df, args)
             except (ValueError, TypeError) as exc:

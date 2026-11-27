@@ -10,12 +10,18 @@ reason, so callers can prove that nothing was silently dropped.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
+from app.application.elt.table_structure_candidates import (
+    iter_structure_candidates,
+    validate_candidate_selection,
+    worksheet_native_regions,
+)
 
 Grid = dict[tuple[int, int], Any]
 Merge = tuple[int, int, int, int]  # min_row, min_col, max_row, max_col
@@ -53,6 +59,7 @@ ROLE_REASONS = {
     "side_annotation": "表头范围之外的旁注，不纳入业务记录",
     "out_of_schema": "缺少表格主列的值，按汇总或说明行排除",
     "data": "业务记录",
+    "unknown": "未能判定结构角色，保留原坐标供后续识别",
 }
 EXCLUDED_ROLES = frozenset(ROLE_REASONS) - {"data", "header", "parent_header"}
 
@@ -113,6 +120,8 @@ class SheetSegmentation:
     tables: list[SegmentedTable]
     cells: dict[tuple[int, int], tuple[str, str]]
     row_roles: list[dict[str, Any]]
+    source_positions: frozenset[tuple[int, int]]
+    native_regions: tuple[tuple[Merge, str, str], ...] = ()
 
     def groups(self) -> dict[str, list[SegmentedTable]]:
         result: dict[str, list[SegmentedTable]] = {}
@@ -129,11 +138,15 @@ class SheetSegmentation:
         return max(scored, key=lambda item: (item[0], item[1]))[2] if scored else []
 
     def coverage(self) -> dict[str, Any]:
-        counts = Counter(role for role, _ in self.cells.values())
+        assigned = self.source_positions.intersection(self.cells)
+        counts = Counter(self.cells[position][0] for position in assigned)
         return {
-            "nonempty_cells": len(self.cells),
-            "assigned_cells": sum(counts.values()),
-            "unassigned_cells": 0,
+            "scope": "input_nonblank_cells",
+            "nonempty_cells": len(self.source_positions),
+            "assigned_cells": len(assigned),
+            "unassigned_cells": len(self.source_positions - assigned),
+            "unexpected_cells": len(self.cells.keys() - self.source_positions),
+            "unknown_cells": counts["unknown"],
             "by_role": dict(sorted(counts.items())),
         }
 
@@ -141,6 +154,7 @@ class SheetSegmentation:
         return {
             "sheet": self.sheet,
             "tables": [table.public() for table in self.tables],
+            "structure_status": "fallback",
             "coverage": self.coverage(),
             "excluded_rows": [item for item in self.row_roles if item["role"] in EXCLUDED_ROLES],
         }
@@ -197,6 +211,7 @@ class _Sheet:
         self.by_row: dict[int, list[int]] = {}
         for r, c in sorted(self.cells):
             self.by_row.setdefault(r, []).append(c)
+        self.rows = sorted(self.by_row)
 
     def value(self, r: int, c: int, *, through_merge: bool = False) -> Any:
         if (r, c) in self.cells:
@@ -204,6 +219,10 @@ class _Sheet:
         if through_merge and (r, c) in self.covered:
             return self.cells.get(self.covered[(r, c)])
         return None
+
+    def rows_after(self, r: int, end: int):
+        for index in range(bisect_right(self.rows, r), bisect_right(self.rows, end)):
+            yield self.rows[index]
 
     def row_cols(self, r: int, c1: int, c2: int) -> list[int]:
         return [c for c in self.by_row.get(r, ()) if c1 <= c <= c2]
@@ -425,8 +444,11 @@ def _periodic_split(sheet: _Sheet, leaf: int, c1: int, c2: int) -> list[tuple[in
 
 
 class _Segmenter:
-    def __init__(self, sheet: _Sheet, sheet_name: str) -> None:
+    def __init__(
+        self, sheet: _Sheet, sheet_name: str, native_regions: tuple[tuple[Merge, str, str], ...]
+    ) -> None:
         self.sheet = sheet
+        self.native_regions = native_regions
         self.name = sheet_name
         self.tables: list[SegmentedTable] = []
         self.cells: dict[tuple[int, int], tuple[str, str]] = {}
@@ -453,20 +475,21 @@ class _Segmenter:
         )
 
     def run(self) -> SheetSegmentation:
-        rows = sorted(self.sheet.by_row)
+        rows = self.sheet.rows
+        source_positions = frozenset(self.sheet.cells)
         if rows:
             for c1, c2 in _column_bands(self.sheet):
                 self.segment_band(rows[0], rows[-1], c1, c2, allow_split=True)
         for (r, c), _value in self.sheet.cells.items():
             if (r, c) not in self.cells:
-                self.cells[(r, c)] = ("note", "")
+                self.cells[(r, c)] = ("unknown", "")
                 self.row_roles.append(
                     {
                         "row": r,
                         "columns": [c, c],
-                        "role": "note",
+                        "role": "unknown",
                         "table_id": "",
-                        "reason": ROLE_REASONS["note"],
+                        "reason": ROLE_REASONS["unknown"],
                     }
                 )
         first_leaf: dict[str, int] = {}
@@ -499,13 +522,20 @@ class _Segmenter:
                         item["role"] = "repeated_header"
                         item["reason"] = ROLE_REASONS["repeated_header"]
         self.row_roles.sort(key=lambda item: (item["row"], item["columns"][0]))
-        return SheetSegmentation(self.name, self.tables, self.cells, self.row_roles)
+        return SheetSegmentation(
+            self.name,
+            self.tables,
+            self.cells,
+            self.row_roles,
+            source_positions,
+            self.native_regions,
+        )
 
     def _next_rows(
         self, r: int, end: int, c1: int, c2: int, limit: int = 3
     ) -> list[tuple[int, str]]:
         found: list[tuple[int, str]] = []
-        for nr in range(r + 1, end + 1):
+        for nr in self.sheet.rows_after(r, end):
             kind = _row_kind(self.sheet, nr, c1, c2)
             if kind == "blank":
                 continue
@@ -547,7 +577,7 @@ class _Segmenter:
         while r <= end:
             kind = _row_kind(self.sheet, r, c1, c2)
             if kind == "blank":
-                r += 1
+                r = next(self.sheet.rows_after(r, end), end + 1)
                 continue
             starts_table = self._is_leaf(r, end, c1, c2) or (
                 kind in {"header", "weekday_header", "single", "data", "banner"}
@@ -824,7 +854,7 @@ class _Segmenter:
                 continue
             self.tables.remove(table)
             lo, hi = table.min_col, table.max_col
-            for r in range(first_row, last_row + 1):
+            for r in self.sheet.rows_after(first_row - 1, last_row):
                 for c in self.sheet.row_cols(r, lo, hi):
                     self.cells.pop((r, c), None)
             self.row_roles = [
@@ -877,9 +907,15 @@ class _Segmenter:
         table.data_rows = kept
 
 
-def segment_sheet(sheet_name: str, cells: Grid, merges: list[Merge]) -> SheetSegmentation:
-    """Segment one sheet. ``cells`` maps 1-based (row, col) to raw values."""
-    return _Segmenter(_Sheet(cells, merges), sheet_name).run()
+def segment_sheet(
+    sheet_name: str,
+    cells: Grid,
+    merges: list[Merge],
+    *,
+    native_regions: tuple[tuple[Merge, str, str], ...] = (),
+) -> SheetSegmentation:
+    """Segment one sheet; legacy table roles remain fallback interpretations."""
+    return _Segmenter(_Sheet(cells, merges), sheet_name, native_regions).run()
 
 
 def worksheet_grid(worksheet: Any) -> tuple[Grid, list[Merge]]:
@@ -932,7 +968,10 @@ __all__ = [
     "ROLE_REASONS",
     "SegmentedTable",
     "SheetSegmentation",
+    "iter_structure_candidates",
     "review_grid",
     "segment_sheet",
+    "validate_candidate_selection",
     "worksheet_grid",
+    "worksheet_native_regions",
 ]

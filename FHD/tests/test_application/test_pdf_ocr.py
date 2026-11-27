@@ -68,3 +68,17 @@ def test_ocr_result_lines_are_joined(monkeypatch):
     monkeypatch.setattr(ocr, "_engine_or_none", lambda: FakeEngine())
     monkeypatch.setitem(__import__("sys").modules, "numpy", __import__("numpy"))
     assert ocr.ocr_page_text(FakeImage()) == "第一行\n第二行"
+
+
+def test_rapidocr_array_blocks_preserve_real_geometry(monkeypatch):
+    class Engine:
+        def __call__(self, array):
+            return [([[1, 2], [5, 2], [5, 7], [1, 7]], "货物", 0.91)], None
+
+    monkeypatch.setattr(ocr, "_engine_or_none", lambda: Engine())
+    blocks = ocr.ocr_array_blocks(object())
+    assert blocks[0]["text"] == "货物"
+    assert blocks[0]["confidence"] == 0.91
+    assert blocks[0]["left"] == 1
+    assert blocks[0]["height"] == 5
+    assert blocks[0]["coordinate_space"] == "engine_input_pixels"

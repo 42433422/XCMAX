@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -24,13 +24,22 @@ from app.infrastructure.rag.semantic_chunker import SemanticChunker
 # ---------------------------------------------------------------------------
 
 
-@patch("app.application.tools.workflow_tools.excel_analysis.pd.read_excel")
-def test_read_excel_dataframe_passes_header(mock_read: MagicMock, tmp_path) -> None:
+def test_read_excel_dataframe_passes_header(tmp_path) -> None:
+    from openpyxl import Workbook
+
     fp = tmp_path / "t.xlsx"
-    fp.write_bytes(b"x")
-    mock_read.return_value = pd.DataFrame({"a": [1]})
-    df = _read_excel_dataframe(Path(fp), sheet_name="S1", header_row_1based=2)
+    workbook = Workbook()
+    workbook.active.title = "S1"
+    for row in (["report title"], ["a"], [1]):
+        workbook.active.append(row)
+    workbook.save(fp)
+    workbook.close()
+    with patch(
+        "app.application.tools.workflow_tools.excel_analysis.pd.read_excel", wraps=pd.read_excel
+    ) as mock_read:
+        df = _read_excel_dataframe(Path(fp), sheet_name="S1", header_row_1based=2)
     assert len(df) == 1
+    assert df.to_dict(orient="records") == [{"a": 1}]
     mock_read.assert_called_once_with(fp, engine="openpyxl", sheet_name="S1", header=1)
 
 

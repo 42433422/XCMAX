@@ -1,26 +1,11 @@
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-
-def _decode_bytes(data: bytes) -> tuple[str, str]:
-    for enc in ("utf-8-sig", "utf-8", "gb18030", "latin-1"):
-        try:
-            return data.decode(enc), enc
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace"), "utf-8-replace"
-
-
-def _sniff_delimiter(sample: str) -> str:
-    try:
-        dialect = csv.Sniffer().sniff(sample[:4096], delimiters=",;\t|")
-        return dialect.delimiter
-    except csv.Error:
-        return ","
+from app.mod_sdk.host_services import read_native_document
+from app.mod_sdk.host_services import tabular_column_keys as column_keys
 
 
 def convert_file(
@@ -33,8 +18,8 @@ def convert_file(
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
     suffix = src_path.suffix.lower()
-    if suffix != ".csv":
-        raise ValueError(f"不支持的文件类型：{suffix or '(无后缀)'}，仅支持 .csv")
+    if suffix not in {".csv", ".tsv"}:
+        raise ValueError(f"不支持的文件类型：{suffix or '(无后缀)'}，仅支持 .csv/.tsv")
 
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -44,24 +29,35 @@ def convert_file(
     elif str(rule_spec.get("default_output_relpath") or "").endswith(".json"):
         json_path = output_dir / Path(str(rule_spec.get("default_output_relpath"))).name
 
-    raw_bytes = src_path.read_bytes()
-    text, encoding = _decode_bytes(raw_bytes)
-    delimiter = _sniff_delimiter(text)
-    reader = csv.DictReader(text.splitlines(), delimiter=delimiter)
-    rows: List[Dict[str, Any]] = [dict(r) for r in reader]
-    columns = list(reader.fieldnames or [])
-    if not columns and rows:
-        columns = list(rows[0].keys())
+    facts = read_native_document(src_path)
+    if facts["status"] != "complete":
+        raise ValueError(f"CSV 全量读取未完成：{facts['warnings']}")
+    table = facts["tables"][0]
+    records = {record["record"]: [] for record in table["records"]}
+    for cell in table["cells"]:
+        records[cell["source_ref"]["record"]].append(cell["value"])
+    values = list(records.values())
+    columns = values[0] if values else []
+    keys = column_keys(columns, max((len(row) for row in values), default=0))
+    rows = [
+        {key: row[index] if index < len(row) else None for index, key in enumerate(keys)}
+        for row in values[1:]
+    ]
+    delimiter, encoding = table["delimiter"], table["encoding"]
 
     payload_data: Dict[str, Any] = {
         "columns": columns,
+        "column_keys": keys,
         "rows": rows,
+        "document_facts": facts,
         "row_count": len(rows),
         "meta": {
             "source": src_path.name,
             "delimiter": delimiter,
             "encoding": encoding,
-            "byte_size": len(raw_bytes),
+            "byte_size": src_path.stat().st_size,
+            "source_ref": facts["source_ref"],
+            "rows_are_compatibility_projection": True,
         },
     }
     json_path.write_text(json.dumps(payload_data, ensure_ascii=False, indent=2), encoding="utf-8")
