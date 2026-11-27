@@ -160,10 +160,10 @@
     "FHD/app/application/agent_runtime/gateway.py": {
       "base_file": "FHD/app/application/agent_runtime/gateway.py",
       "base_blob": "becdc5860b5812bb9b0bce2f1b631ccf75ce6133",
-      "head_blob": "033f137c8d5c47da6eb66251a64d29a95e26d86b",
+      "head_blob": "71baa53170808f7f762b5f22cc95d6bea41c6142",
       "before_lines": 833,
-      "after_lines": 862,
-      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；原任务准入封存授权模型路由，并在同一事务追加初始状态审计。 本登记不是人工架构批准。",
+      "after_lines": 863,
+      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；原任务准入封存授权模型路由，并在同一事务追加初始状态审计。 本登记不是人工架构批准。 本次仅将原SQL中的ReAct恢复控制与隔离输出排除于公开结果投影；不是人工批准。",
       "boundary": "仍是原Xiaox任务准入、配置绑定与恢复责任；不新增Runtime、任务账本或备用入口。旧任务只补原主模型列表，完整runtime_config等值门禁保留。 集成冲突以当前main与来源提交共同祖先三方核对，用户已追加授权纳入01/06，合并共享状态投影和原预算内独立核验。",
       "validation": "本轮pytest运行MCP协议、stale_run与handoff恢复、Xiaox gateway及tools共8模块：218通过，原PG条件用例随后在真实PostgreSQL补跑1通过；另目标核验/MCP五模块145通过（存在重叠，不累计）。最终完整CI、真实模型及生产验收分别核对，不沿用旧2386项汇总冒充当前HEAD。",
       "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
