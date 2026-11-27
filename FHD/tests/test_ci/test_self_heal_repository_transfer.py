@@ -192,10 +192,12 @@ def test_new_incident_persists_verified_api_id_but_does_not_dedupe_on_it():
     github = GitHub()
     github.responses[f"/repos/{REPO}/issues"] = (
         200,
-        [{
-            "state": "open",
-            "html_url": f"https://github.com/{REPO}/issues/9",
-            "body": f"- Head Repository ID: `{REPO_ID}`\n",
-        }],
+        [
+            {
+                "state": "open",
+                "html_url": f"https://github.com/{REPO}/issues/9",
+                "body": f"- Head Repository ID: `{REPO_ID}`\n",
+            }
+        ],
     )
     assert freshness.find_marked_issue(github, REPO, markers) == ""
