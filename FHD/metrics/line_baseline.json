@@ -1,5 +1,5 @@
 {
-  "lines": 2794009,
+  "lines": 2794011,
   "updated": "2026-11-27",
-  "note": "#3686: stable-ID GitHub transfer source binding with fail-closed negative tests; fixes historical 42433422/XCMAX to xcagi/XCMAX without treating deployment as healed. Delta 294 maintained lines (source+93, new regression+199, changelog+2). No security, authority or coverage threshold changed."
+  "note": "#3686: stable-ID GitHub transfer source binding with fail-closed negative tests; fixes historical 42433422/XCMAX to xcagi/XCMAX without treating deployment as healed. Delta 296 maintained lines (source+93, new regression+201, changelog+2). No security, authority or coverage threshold changed."
 }
