@@ -47,3 +47,12 @@ def test_requires_boolean_result_and_known_column() -> None:
         safe_filter_dataframe(frame, "qty + 1")
     with pytest.raises(ValueError, match="unknown dataframe column"):
         safe_filter_dataframe(frame, "missing > 1")
+
+
+def test_incompatible_comparison_requires_explicit_conversion() -> None:
+    frame = pd.DataFrame({"value": ["title", 8, None]})
+    with pytest.raises(ValueError, match="incompatible types"):
+        safe_filter_dataframe(frame, "value > 0")
+    with pytest.raises(ValueError, match="literal list"):
+        safe_filter_dataframe(frame, "3 in 8")
+    assert safe_filter_dataframe(frame, "3 not in [1, 2]").equals(frame)

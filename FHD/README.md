@@ -105,6 +105,47 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 
 ELT 仍沿原 `EltRun` / `EltRunRow` 与 Codex、LangGraph 的批准任务执行，不新增调度器或状态账本。重复表头和天然后缀碰撞由现有表头生成器消歧，原标签、列坐标和表头行保存在来源信息中，字段含义继续由模型判断。SQL 保存点、加密、文件锁、表格解析和重试均来自上述固定组件；保留的产品适配只负责原租户/账号、审批版本、行数守恒和业务回执，通用库不能替代这些产品事实。
 
+### 通用表格事实与读取支持
+
+`app.domain.tabular_facts` 定义 `tabular-facts-v1`；`app.application.tabular_workbook` 编排已授权 Excel 快照，格式读取器归 `infrastructure`，员工经 `host_services` 薄适配。文档与位置 ID 绑定原件 SHA256、解析器版本和授权作用域，ID 本身不授予读取权限。原 `ParsedDataset`、`workbook.json` 和 Office 工具返回继续提供兼容投影，原始事实与模型推断分别保留。
+
+| 输入 | 复用来源、现有 uv.lock 版本与许可 | 本次读取范围与明确限制 |
+|---|---|---|
+| XLSX / XLSM | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)（MIT）及标准库 OOXML ZIP（PSF-2.0） | 实际原生单元格、全部工作表目录、类型、公式/缓存、样式和原生对象；宏和外部链接仅作来源证据，不执行；图表页与未解释对象明确 partial。 |
+| CSV / TSV | Python 标准库 `csv`（PSF-2.0） | 共用流式读取，保留重复/空表头、引号内换行、空白及物理行区间；兼容列名消歧不覆盖原表头。 |
+| JSON / XML | 标准库 `json`（PSF-2.0）、[defusedxml 0.7.1](https://github.com/tiran/defusedxml)（PSF-2.0） | 原生嵌套树、JSON Pointer/XML 节点路径；拒绝重复 JSON 键、非有限数、DTD/外部实体及超预算结构。 |
+| DOCX | [python-docx 1.2.0](https://github.com/python-openxml/python-docx)（MIT） | 段落/表格原顺序、合并、嵌套表格、页眉页脚及 OOXML 来源；绘图与分页渲染不计完整支持。 |
+| PPTX | [python-pptx 1.0.2](https://github.com/scanny/python-pptx)（MIT） | 幻灯片、形状、表格合并、备注及 EMU 坐标；组内坐标保留原坐标系，不声称像素渲染等价。 |
+| 文本 PDF | [pdfplumber 0.11.10](https://github.com/jsvine/pdfplumber)（MIT）、[pypdf 6.21.4](https://github.com/py-pdf/pypdf)（BSD-3-Clause） | 逐页文字/表格几何与原件来源；无文本页要求 OCR，复杂版面识别不以文字提取成功代替。 |
+| HTML | [lxml 6.1.3](https://github.com/lxml/lxml)（BSD-3-Clause） | 静态 DOM、节点路径及 rowspan/colspan；禁网络解析、不执行脚本，动态内容缺失明确 partial。 |
+| 复杂版面 / 扫描 PDF / 图片 | [Docling 2.150.1](https://github.com/docling-project/docling)（MIT）、[RapidOCR 1.4.4](https://github.com/RapidAI/RapidOCR)（Apache-2.0）；PP-StructureV3 准入见下文 | Docling 原生导出与 provenance 保留；混合 PDF 按页路由；缺结构后端不能将文本兜底标为完整表格。真实 OCR 权重与中文标注集尚待资格验证。 |
+| XLS | [xlrd 2.0.2](https://github.com/python-excel/xlrd)（BSD-3-Clause） | 保留既有 ELT 读取/转换入口；尚未证明与 XLSX 原生事实层逐格等价，不能据此宣称统一保真。 |
+| XLSB / ODS / Parquet / Arrow | 本次未引入新依赖 | 新事实读取接口明确 unsupported；Calamine/Arrow 仍为候选，不能把候选或旧 SQL 查询能力计作格式验收。 |
+
+运行库版本保持现有依赖锁；新增 HTML 适配的开发类型检查采用固定 [types-lxml 2026.2.16](https://pypi.org/project/types-lxml/2026.2.16/)（Apache-2.0）及锁定传递类型包，不升级运行库。格式适配只增加来源、预算、完整度与兼容投影，不自行实现计算引擎、调度器或第二业务库。Word/PPT 旧二进制格式沿既有转换能力，缺转换后端须拒绝，不能改后缀冒充新格式。
+
+Excel 原件读取上限 40 MiB，压缩包先检查解压体积、成员、XML 实体与合并物化预算；完整原生事实读取另设 500000 个实际单元格加合并面积的物化上限，预算不足明确拒绝或报告 partial。兼容 pandas 的 OOXML 表格视图另按真实行列位置限制 500000 个矩形槽，在表头识别和物化前拒绝超限；不信任 dimension 或输出 max_rows，超限返回原生 cells 回读指引。原生稀疏路径不受该矩形阈值影响。ELT 仍复用 `ParsedRows` 磁盘分页，远坐标不扫描整片空矩形。导航只用于定位：`excel_analysis.read` 的原生分页/范围回读重新核对当前账号、租户、文件版本与 SHA256，40 KB 导航预算、Office 结果预览预算和业务筛选都不得静默删除原始事实。公式缓存存在只代表原件携带该值，`data_only` 不证明重算，读取不执行公式、宏、DDE 或外部链接。
+
+原生读取复用固定 openpyxl 3.1.5 的 `ExcelReader` 和 `WorkSheetParser.parse_cell`：一次原生加载，直接在已有 OOXML 扫描中解码公式缓存，不再为缓存建立第二份工作簿或重复执行公式扫描。两者属于该版本内部 API，升级须通过日期历元、共享/数组公式、合并覆盖及缓存类型回归。样式键按原生样式元组复用，完整事实读取不再构造随后丢弃的逐格视觉对象。兼容 `workbook.json` 按记录生成投影，经标准库 JSON 编码器写出，保留原字段、顺序、非有限值拒绝及 `fsync` 后原子替换。
+
+分页复用现役 `LRUTTLCache`，只保留已经验证的账号、租户、Mod、会话及原件摘要对应的临时压缩索引；宿主在每次文件授权后绑定作用域，工具参数不能设置它。每页仍重验当前权限、上传收据及实际文件 SHA256，缓存键同时绑定格式、解析版本和资源预算。复用现有 Python 运行时的 [json](https://docs.python.org/3.11/library/json.html)、[array](https://docs.python.org/3.11/library/array.html)、[bisect](https://docs.python.org/3.11/library/bisect.html) 与 [zlib](https://docs.python.org/3.11/library/zlib.html)（Python 封装 PSF-2.0；底层 zlib 使用 zlib 许可），没有新增依赖或持久化事实库。最多缓存两份索引，每份连同 Python 索引对象及压缩块不超过 64 MiB；120 秒 TTL 由现有缓存惰性淘汰，不承诺定时物理擦除。无可信绑定或索引超预算时仍从完整原件回读。每块最多 128 个单元格且解压不超过 128 KiB，范围查询先查行坐标、扫描相关紧凑列坐标计数，只解压实际返回页；40,000 字节预算约束返回的 cells/sheets 数组，外层元数据另计。返回对象不与缓存共享，源文件和授权状态变化不能沿用旧缓存。
+
+#### 原生读取性能对照（2026-11-27）
+
+基线为 `f1801d1be5a3c110dba9835f141ff867b92bab35`。共享 Linux worker、Python 3.12.14、openpyxl 3.1.5；每种模式分别启动进程，串行各测一次，本地文件系统已预热。下表是 100001 条记录加表头、3 列、300006 个实际单元格的合成工作簿；原件 2,032,380 字节，SHA256 `8c24cd64bd61079840d6031cddfb86232824bb2a093edaf5125ba450b1e1e9dc`。
+
+| 操作 | 基线耗时 | 优化后耗时 | 进程峰值 RSS：基线 → 优化后 |
+|---|---:|---:|---:|
+| 完整原生事实读取 | 15.534 秒 | 11.823 秒 | 529.84 → 507.65 MiB |
+| 连续三页，每页 64 格、各低于 40 KB | 52.662 秒 | 14.956 秒 | 593.75 → 578.22 MiB |
+| 完整兼容 JSON 转换、写盘及原子发布 | 28.950 秒 | 15.459 秒 | 576.17 → 523.44 MiB |
+
+候选首个分页请求为 14.951 秒，其中索引构建 2.490 秒；后两页为 3.110 / 2.769 毫秒，全批原生解析由三次变为一次。分页测量经过实际 `_native_workbook_page`，每页重新读取并摘要校验文件，显式模拟已验证作用域；不包含外层登录/数据库授权、上传收据校验及临时快照创建，不能据此承诺用户端毫秒延迟。索引驻留 25,757,721 字节（24.56 MiB），不等同整个进程内存；首次仍完整解析，范围计数、并发锁和文件读取成本仍存在。本轮七个优化生产文件的实测冻结版与提交版仅差分页索引四处 `array[int]` 类型注解；没有用单次样本推算生产吞吐或百分位延迟。
+
+全量原生事实在固定 `benchmark:synthetic-regression` 作用域下的 canonical SHA256 一致：`92a29c19b0b312bde80c32e4ed0e9558aac15db3803b573cd0270a347f23803d`。两份完整 JSON 均为 287,145,411 字节，SHA256 `c6648823df6ca784c7853a5b5c55574199202bf65f4932ad978db357bf6557c6`；独立重开逐格核对原生、兼容单元格及全部行投影。另用含 `XFD1048576`、veryHidden 表、零/False 与无缓存公式的六格原件验证，原件 SHA256 `857fa5d049a7d96a88a4451e3c9c6c0ccbf62aa542216c2c647a07114a4022af`，两版输出 SHA256 同为 `46bcf2176869396030cf758c572e14316d307bee607109a2bcd19e032c8abe76`。两样本所有实测页经独立重算授权作用域及派生位置 ID 后，全字段和游标一致；真实工具入口另测逐页鉴权、会话隔离、撤权、过期、字节篡改及伪造参数拒绝。合成样本不代替客户原件验收。
+
+实际消费者为 ELT 解析、Excel/CSV/Word/PPT/PDF 员工、Office 解析、Agent 附件/本地文件和 RAG 的既有文档路由；模板与 QC 保留原独立核验链。回滚使用原 Git 版本与原入口合同，不修改历史原件、审批或回执。`verify_tabular_migration_evidence.py` 核对迁移证据身份和完整性；合成格式回归只能证明对应代码路径，不能替代客户原件、原考试、实际公式重算、真实模型/权重留出集、正式部署或客户签收。
+
 Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回执，原样携带 `run_id`、`chunk_index`、`idempotency_key`，并返回 `executed_rows` 与该分片行数相同、`committed: true`。202、204、明确失败、无回执或身份/行数不符进入待核对，不根据响应猜测完成或再次发送。回执的 `business_verified: false` 明确表示接收方自报提交尚不等于其业务数据库已独立对账；空分片连接测试只证明连通性。文件回读亦只证明产物字节与批准内容一致，`formulas_recalculated: false` 不冒充公式重算，客户原件 B31 对账与实际部署验收仍需另取证据。
 
 生产稳定性继续使用既有 Prometheus / Grafana 与原发布流程，组件固定如下：
@@ -131,6 +172,8 @@ AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolAct
 桌面语音沿用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.28.1)（BSD-3-Clause）和 websockets 16.1（BSD-3-Clause），由 XCAGI 绑定配置的出站地址。通话断句使用 [Pipecat Smart Turn v3.2 CPU](https://huggingface.co/pipecat-ai/smart-turn-v3/commit/f766f81d3cfdf7737ac64aad813d91bbfd56bf93)（BSD-2-Clause），桌面后端构建校验并打包固定权重。
 
 扫描件与图片兜底复用 [RapidOCR](https://github.com/RapidAI/RapidOCR) `rapidocr-onnxruntime` `1.4.4`（Apache-2.0，ONNX，无 torch）：仅在 pdfplumber 提取不到文本的页面渲染后识别，`XCAGI_PDF_OCR=off` 可关闭，默认最多处理 30 个空页；同时支持直接导入 png/jpg/webp/bmp 图片。文本版 PDF 仍走 pdfplumber 的文本与表格。
+
+ELT 图片表格候选复用 [PaddleOCR PP-StructureV3](https://github.com/PaddlePaddle/PaddleOCR)（Apache-2.0；模型许可须另验）。默认离线初始化要求 `FHD_ETL_TABLE_STRUCTURE_MODEL_MANIFEST`，JSON 包含 `paddleocr_version` 与 `models`（键为 `table_structure_ocr._MODEL_ENV` 的模型参数名，每项含来源 `source` 和目录 `sha256`）。目录摘要为排序后相对路径及各文件 SHA256 二元组的紧凑 UTF-8 JSON 再取 SHA256；缺少任何目录、版本不符或摘要不符时不启用结构模型。只有运维显式设置 `FHD_ETL_TABLE_STRUCTURE_ALLOW_DOWNLOAD=1` 才允许供应方下载模型，不属于已验收离线配置。实际 PaddleOCR/PaddleX/权重版本仍须按部署资格锁定。RapidOCR 只提供文本证据，结构降级结果需人工确认；不把候选标为已验证表格。
 
 知识库网页导入复用 [trafilatura](https://github.com/adbar/trafilatura) `2.3.1`（Apache-2.0，纯 Python）提取正文与标题，URL 导入与本地 `.html/.htm` 文件共用同一实现；联网复用锁定的 [urllib3](https://github.com/urllib3/urllib3/tree/2.8.0) `2.8.0`（MIT）连接池，把经全部 DNS 结果校验的数字 IP 作为连接目标，保留原域名的 Host、TLS SNI 与证书校验，不继承环境代理。产品侧只保留 SSRF 防护（拒绝内网/回环/保留地址、逐跳校验重定向、5MB/15s 限制）与租户隔离胶水；真实传输层回归确认路径中的地址不能更改连接目标。`XCAGI_KB_ALLOW_PRIVATE_URLS=1` 仅用于受控内网调试。
 

@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -97,25 +97,22 @@ class TestHandleExcelAnalysis:
         assert result["success"] is False
         assert "file_path" in result["error"]
 
-    def test_unsupported_action(self):
+    def test_unsupported_action(self, tmp_path):
+        from openpyxl import Workbook
+
         from app.application.tools.workflow import handle_excel_analysis
 
-        with (
-            patch("app.application.tools.workflow.resolve_safe_excel_path") as mock_resolve,
-            patch("app.application.tools.workflow._read_excel_dataframe") as mock_read,
-        ):
-            from pathlib import Path
-
-            mock_path = Mock(spec=Path)
-            mock_path.exists.return_value = True
-            mock_path.__str__ = lambda self: "/tmp/fake.xlsx"
-            mock_resolve.return_value = mock_path
-            mock_read.return_value = __import__("pandas").DataFrame({"a": [1]})
-            result = handle_excel_analysis(
-                {"file_path": "/tmp/fake.xlsx", "action": "unknown_action"}
-            )
-            assert result["success"] is False
-            assert "unsupported_action" in result["error"]
+        path = tmp_path / "sample.xlsx"
+        workbook = Workbook()
+        workbook.active.append(["a"])
+        workbook.active.append([1])
+        workbook.save(path)
+        workbook.close()
+        result = handle_excel_analysis(
+            {"file_path": str(path), "action": "unknown_action"}, workspace_root=str(tmp_path)
+        )
+        assert result["success"] is False
+        assert "unsupported_action" in result["error"]
 
 
 def test_excel_query_reports_original_rows_after_filter_and_aggregation(tmp_path):

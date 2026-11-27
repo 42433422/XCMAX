@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 import os
 import re
 from pathlib import Path
@@ -161,11 +159,11 @@ def _pick(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     )
 
 
-# 规则置信度低于此值、或判定为未确认时，交给模型做一次有界分类。
+# 无模型时，仅高置信规则结果可直接作为兼容预演候选。
 _LLM_ESCALATION_THRESHOLD = 0.7
 # 模型答案低于此置信度不采纳，仍按原判定（通常就是 knowledge 兜底）。
 _LLM_ACCEPT_CONFIDENCE = 0.75
-# 已经明确「不是主数据」的形态不再升级，避免模型把配方/台账改判成产品。
+# 无模型时保留旧的非主数据安全退路，不把流水表强制写进主数据。
 _NO_LLM_ESCALATION_REASONS = frozenset(
     {
         "recipe_sheet_not_master_data",
@@ -177,7 +175,7 @@ _KNOWN_TARGETS = frozenset(_TARGET_PRIORITY) | {"knowledge", "abnormal"}
 
 
 def _llm_classification(lines: list[str]) -> dict[str, Any] | None:
-    """Ask the advisory model only when deterministic rules are unsure."""
+    """Ask the existing advisory model before considering rule fallback."""
     # 测试默认关闭外部模型调用，避免用例依赖网络；需要覆盖时显式打开。
     if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("FHD_ELT_LLM_CLASSIFY_TESTS"):
         return None
@@ -200,14 +198,15 @@ def _llm_classification(lines: list[str]) -> dict[str, Any] | None:
         confidence = float(data.get("confidence") or 0)
     except (TypeError, ValueError):
         return None
-    if target not in _KNOWN_TARGETS or confidence < _LLM_ACCEPT_CONFIDENCE:
+    if target not in _KNOWN_TARGETS or not 0.0 <= confidence <= 1.0:
         return None
+    accepted = confidence >= _LLM_ACCEPT_CONFIDENCE
     return {
-        "target_type": target,
+        "target_type": target if accepted else "abnormal",
         "document_type": "llm_classified",
         "confidence": confidence,
         "reason": f"llm:{str(data.get('reason') or '')[:180]}",
-        "confirmed": target != "abnormal",
+        "confirmed": accepted and target != "abnormal",
     }
 
 
@@ -216,37 +215,41 @@ def _escalate(
     lines: list[str],
     row_sets: list[list[list[Any]]] | None = None,
 ) -> dict[str, Any]:
-    """Return the most specific trustworthy target; AI schema inference is last."""
-    target = str(detected.get("target_type") or "")
-    confidence = float(detected.get("confidence") or 0)
-    if target != "abnormal" and confidence >= _LLM_ESCALATION_THRESHOLD:
-        return detected
-    classified = (
-        None
-        if str(detected.get("reason") or "") in _NO_LLM_ESCALATION_REASONS
-        else _llm_classification(lines)
-    )
-    if classified is not None and classified.get("target_type") not in {"knowledge", "abnormal"}:
-        if detected.get("sheet_name"):
-            classified["sheet_name"] = detected["sheet_name"]
-        return classified
-    # 已明确判定「不是主数据」的配方/台账不再走动态建表兜底：保留原始判定与原因，
-    # 交给人工改选目标，避免把流水表静默落成通用表。
-    if str(detected.get("reason") or "") in _NO_LLM_ESCALATION_REASONS:
-        return detected
+    """Prefer model interpretation; keep rule results explicitly as fallback evidence."""
+    classified = _llm_classification(lines)
+    rule = {**detected, "decision_source": "rule_fallback"}
+    if classified is not None:
+        # A workbook-level answer cannot inherit a sheet location from a rule.
+        model = {**classified, "decision_source": "model", "rule_candidate": rule}
+        if (
+            model["target_type"] not in {"knowledge", "abnormal"}
+            and float(model.get("confidence") or 0) >= _LLM_ACCEPT_CONFIDENCE
+        ):
+            return model
+        dynamic = _infer_dynamic_schema(row_sets or [])
+        if dynamic is not None:
+            return _dynamic_result(model, dynamic, "ai_schema")
+        if model["target_type"] == "knowledge" and _best_table_sample(row_sets or []) is None:
+            return model
+        return {
+            **model,
+            "target_type": "abnormal",
+            "confirmed": False,
+            "needs_review": True,
+        }
+
+    if (
+        rule["target_type"] != "abnormal"
+        and float(rule.get("confidence") or 0) >= _LLM_ESCALATION_THRESHOLD
+    ) or rule.get("reason") in _NO_LLM_ESCALATION_REASONS:
+        return rule
     dynamic = _infer_dynamic_schema(row_sets or [])
     if dynamic is not None:
-        return _dynamic_result(detected, dynamic, "ai_schema")
-    # 模型不可用时不能把整张表当成「没有业务意义」丢掉：按表头建通用表兜底，
-    # 数据先落库，后续仍可由模型补全语义。
+        return _dynamic_result(rule, dynamic, "ai_schema")
     fallback = _fallback_dynamic_schema(row_sets or [])
     if fallback is not None:
-        return _dynamic_result(detected, fallback, "header_fallback")
-    if classified is not None:
-        if detected.get("sheet_name"):
-            classified["sheet_name"] = detected["sheet_name"]
-        return classified
-    return detected
+        return _dynamic_result(rule, fallback, "header_fallback")
+    return rule
 
 
 def _dynamic_result(
@@ -255,9 +258,12 @@ def _dynamic_result(
     result = {
         "target_type": "dynamic_table",
         "document_type": "ai_inferred_table" if source == "ai_schema" else "header_table",
-        "confidence": float(dynamic.get("confidence") or 0.6),
+        "confidence": float(dynamic.get("confidence") or 0.0),
         "reason": f"{source}:{dynamic.get('table_name') or ''}",
-        "confirmed": True,
+        "confirmed": source == "ai_schema",
+        "needs_review": source != "ai_schema",
+        "decision_source": source,
+        "prior_candidate": detected,
         "dynamic_schema": {
             "table_name": dynamic.get("table_name") or "",
             "columns": dynamic.get("columns") or [],
@@ -265,8 +271,6 @@ def _dynamic_result(
             "headers": dynamic.get("headers") or [],
         },
     }
-    if detected.get("sheet_name"):
-        result["sheet_name"] = detected["sheet_name"]
     return result
 
 
@@ -354,7 +358,11 @@ def _infer_dynamic_schema(
     if not result.used_llm or result.degraded:
         return None
     data = result.data if isinstance(result.data, dict) else {}
-    if not data.get("is_table") or not data.get("columns"):
+    if (
+        not data.get("is_table")
+        or not data.get("columns")
+        or not _LLM_ACCEPT_CONFIDENCE <= float(data.get("confidence") or 0) <= 1.0
+    ):
         return None
     return {
         "table_name": data.get("table_name") or "",
@@ -368,6 +376,20 @@ def _infer_dynamic_schema(
 def detect_elt_target(
     path: str | Path, *, suffix: str = "", owner_user_id: int | None = None
 ) -> dict[str, Any]:
+    if owner_user_id is None:
+        return _detect_elt_target(path, suffix=suffix, owner_user_id=None)
+    from app.application.elt.llm_session_provider import bind_elt_llm_owner, reset_elt_llm_owner
+
+    token = bind_elt_llm_owner(owner_user_id)
+    try:
+        return _detect_elt_target(path, suffix=suffix, owner_user_id=owner_user_id)
+    finally:
+        reset_elt_llm_owner(token)
+
+
+def _detect_elt_target(
+    path: str | Path, *, suffix: str, owner_user_id: int | None
+) -> dict[str, Any]:
     source = Path(path)
     ext = str(suffix or source.suffix).lower()
     if ext in KNOWLEDGE_ONLY_SUFFIXES:
@@ -377,15 +399,20 @@ def detect_elt_target(
             "confidence": 1.0,
             "reason": "knowledge_only_suffix",
         }
-    if ext == ".csv":
+    if ext in {".csv", ".tsv"}:
+        from app.infrastructure.document_parsing.delimited import delimited_reader
+        from app.infrastructure.document_parsing.native import MAX_SOURCE_BYTES
+
         lines: list[str] = []
         rows: list[list[Any]] = []
-        with (
-            open_elt_input_file(source, owner_user_id=owner_user_id) as stream,
-            io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline="") as handle,
-        ):
+        with open_elt_input_file(source, owner_user_id=owner_user_id) as stream:
+            raw = stream.read(MAX_SOURCE_BYTES + 1)
+        if len(raw) > MAX_SOURCE_BYTES:
+            raise ValueError("CSV/TSV exceeds the source byte budget")
+        handle, reader, _dialect = delimited_reader(raw, suffix=ext)
+        with handle:
             scanned = 0
-            for row in csv.reader(handle):
+            for row in reader:
                 scanned += 1
                 if scanned > 500:
                     break
@@ -397,7 +424,10 @@ def detect_elt_target(
                 lines.append(_joined(values))
                 if len(rows) >= 31:
                     break
-        return _escalate(_classify(lines, suffix=ext), lines, [rows])
+        return {
+            **_escalate(_classify(lines, suffix=ext), lines, [rows]),
+            "evidence_scope": "bounded_csv_sample",
+        }
     if ext in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
 
@@ -424,7 +454,10 @@ def detect_elt_target(
         # 先按工作表独立判定：多工作表文件里真正的业务页往往不是第一页，
         # 合并成一个文本块会被备注/合同文字带偏。
         best = _pick(candidates) if candidates else _classify(workbook_lines, suffix=ext)
-        return _escalate(best, workbook_lines, row_sets)
+        return {
+            **_escalate(best, workbook_lines, row_sets),
+            "evidence_scope": "bounded_visible_sheet_sample",
+        }
     filename = source.name
     if _DELIVERY_RE.search(filename):
         return {

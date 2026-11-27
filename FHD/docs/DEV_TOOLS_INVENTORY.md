@@ -58,6 +58,7 @@
 | verify_no_legacy_shims.py | `scripts/dev/verify_no_legacy_shims.py` | verify | no | stdlib |
 | verify_shipment_excel_elt_closed_loop.py | `scripts/dev/verify_shipment_excel_elt_closed_loop.py` | verify | no | stdlib |
 | verify_surface_audit_demo_market.py | `scripts/dev/verify_surface_audit_demo_market.py` | verify | no | stdlib |
+| verify_tabular_migration_evidence.py | `scripts/dev/verify_tabular_migration_evidence.py` | verify（手动提供证据目录、候选/基线 SHA 及清单摘要） | no | stdlib |
 | verify_task_benchmark_evidence.py | `scripts/dev/verify_task_benchmark_evidence.py` | verify | no | stdlib |
 | verify_version_anchors.py | `scripts/dev/verify_version_anchors.py` | verify | yes | stdlib |
 | version_sync.py | `scripts/dev/version_sync.py` | normative | yes | stdlib |
@@ -78,4 +79,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：17 已纳入 ssot / 53 已登记清单 / 0 新游离
+合计：17 已纳入 ssot / 55 已登记清单 / 0 新游离

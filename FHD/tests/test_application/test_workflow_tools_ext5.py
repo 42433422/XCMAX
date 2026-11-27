@@ -65,6 +65,21 @@ class TestHandleExcelAnalysisActions:
         assert result["success"] is True
         assert result.get("header_row") == 2
 
+    def test_structure_reports_workbook_names_and_selected_sheet_columns(self, tmp_path: Path):
+        from app.application.tools.workflow import handle_excel_analysis
+
+        p = tmp_path / "data.xlsx"
+        with pd.ExcelWriter(p) as writer:
+            pd.DataFrame({"name": ["item"]}).to_excel(writer, sheet_name="订单", index=False)
+            pd.DataFrame({"amount": [20]}).to_excel(writer, sheet_name="金额", index=False)
+        result = handle_excel_analysis(
+            {"file_path": p.name, "action": "structure", "sheet_name": "金额", "header_row": 1},
+            workspace_root=str(tmp_path),
+        )
+        assert result["sheet_name"] == "金额"
+        assert result["data"]["sheet_names"] == ["订单", "金额"]
+        assert result["data"]["columns"] == ["amount"]
+
     def test_action_query_with_expression(self, tmp_path: Path):
         from app.application.tools.workflow import handle_excel_analysis
 

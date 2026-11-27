@@ -46,7 +46,8 @@
     "perception": {
       "type": "csv",
       "accepted_extensions": [
-        ".csv"
+        ".csv",
+        ".tsv"
       ]
     },
     "memory": {

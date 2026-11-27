@@ -358,25 +358,28 @@ def probe_sheet_rows(
     limit: int = 60,
     scan_limit: int = 2000,
 ) -> tuple[list[list[Any]], int]:
-    """取工作表开头的有效行，返回 ``(rows, 首行绝对行号)``。
+    """Bound the header probe by actual rows, keeping physical gaps within its window."""
+    from contextlib import closing
 
-    报表模板常在真实表格前留几百行带格式的空白占位；只读前 60 行会看到全空，
-    进而把整表判成「没有表格」。这里跳过表前的整片空行，并对扫描行数设上限，
-    保证大文件也不会被拖慢。
-    """
+    from app.infrastructure.excel.sparse_rows import iter_present_rows
+
     rows: list[list[Any]] = []
     first_row_number = 1
-    started = False
-    for index, values in enumerate(worksheet.iter_rows(values_only=True)):
-        if index >= scan_limit or len(rows) >= limit:
-            break
-        row = list(values)
-        if not started:
-            if all(value in (None, "") for value in row):
-                continue
-            started = True
-            first_row_number = index + 1
-        rows.append(row)
+    with closing(iter_present_rows(worksheet)) as source:
+        for scanned, (number, cells) in enumerate(source):
+            if scanned >= scan_limit or len(rows) >= limit:
+                break
+            row = [cell.value for cell in cells]
+            if not rows:
+                if all(value in (None, "") for value in row):
+                    continue
+                first_row_number = number
+            else:
+                gap = number - first_row_number - len(rows)
+                rows.extend([] for _ in range(min(max(0, gap), limit - len(rows))))
+                if len(rows) >= limit:
+                    break
+            rows.append(row)
     return rows, first_row_number
 
 
