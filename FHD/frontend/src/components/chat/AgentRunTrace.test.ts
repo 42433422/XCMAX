@@ -57,13 +57,24 @@ describe('AgentRunTrace', () => {
       phases: [{ kind: 'run', title: '执行失败', status: 'failed', started_event_id: 'failed',
         trace_id: 'trace-a', span_id: 'span-a', error_code: 'tool_timeout', detail: '等待工具回执超时', duration_ms: 0 }],
     }
-    const wrapper = mount(AgentRunTrace, { props: { trace } })
+    const wrapper = mount(AgentRunTrace, { props: { trace, showDiagnosticMetadata: true } })
     expect(wrapper.get('.art-duration').text()).toBe('0ms')
     expect(wrapper.text()).toContain('等待工具回执超时')
     expect(wrapper.text()).toContain('tool_timeout')
     expect(wrapper.text()).toContain('trace-a')
     expect(wrapper.text()).toContain('run-failed')
     expect(wrapper.text()).toContain('span-a')
+  })
+
+  it('keeps successful run identities out of the user-facing execution trace', () => {
+    const trace = makeTrace('success')
+    trace.trace_id = 'trace-hidden'
+    trace.phases[0].trace_id = 'phase-hidden'
+    const wrapper = mount(AgentRunTrace, { props: { trace } })
+    expect(wrapper.text()).not.toContain('诊断信息')
+    expect(wrapper.text()).not.toContain('trace-hidden')
+    expect(wrapper.text()).not.toContain('phase-hidden')
+    expect(wrapper.find('.art-step.is-planner.has-detail').exists()).toBe(false)
   })
 
   afterEach(() => {

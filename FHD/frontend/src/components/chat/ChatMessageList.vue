@@ -60,11 +60,13 @@
             <AgentRunTrace
               v-if="hasOrchestrationTrace(msg) && !prefersToolSteps(msg)"
               :trace="orchestrationTraceFor(msg)"
+              :show-diagnostic-metadata="showDiagnosticMetadata"
               @auto-approve-tool="approveMessage(msg)"
             />
             <AgentStepChain
               v-else-if="stepChainFor(msg).length"
               :steps="stepChainFor(msg)"
+              :show-diagnostic-metadata="showDiagnosticMetadata"
             />
             <div v-if="waitingRunId(msg)" class="run-approve-row">
               <button type="button" class="run-approve-btn" data-testid="chat-run-approve" @click="$emit('approve-run', waitingRunId(msg))">

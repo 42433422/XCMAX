@@ -15,7 +15,7 @@ export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
   if (type === 'runtime.goal.verification.started')
     return [{ type: 'thinking', delta: '正在独立核对任务目标与操作回执…' }]
   if (type === 'runtime.goal.verified')
-    return [{ type: 'thinking', delta: data.accepted === true ? '目标核验已通过。' : '目标核验未通过，请查看原任务回执。' }]
+    return [{ type: 'thinking', delta: data.status === 'verified' ? '目标核验已通过。' : '目标核验未通过，请查看原任务回执。' }]
   if (type === 'runtime.xiaox.turn.completed')
     return [{ type: 'thinking', delta: '执行轮次已结束，正在读取原任务回执…' }]
   if (type !== 'runtime.xiaox.item.started' && type !== 'runtime.xiaox.item.completed') return []

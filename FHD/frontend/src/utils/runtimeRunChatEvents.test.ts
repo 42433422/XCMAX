@@ -22,4 +22,11 @@ describe('durable runtime events in chat', () => {
       item_type: 'mcpToolCall', item_id: 'call-1', status: 'completed',
     }))).toMatchObject([{ type: 'tool_call', phase: 'progress', node_id: 'call-1' }])
   })
+
+  it('uses the runtime goal status when reporting verification', () => {
+    expect(runtimeRunChatEvents(event('runtime.goal.verified', { status: 'verified' })))
+      .toEqual([{ type: 'thinking', delta: '目标核验已通过。' }])
+    expect(runtimeRunChatEvents(event('runtime.goal.verified', { status: 'needs_work' })))
+      .toEqual([{ type: 'thinking', delta: '目标核验未通过，请查看原任务回执。' }])
+  })
 })

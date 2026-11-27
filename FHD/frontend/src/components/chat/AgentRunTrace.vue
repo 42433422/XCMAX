@@ -14,7 +14,7 @@
     </summary>
 
     <div class="art-body">
-      <details v-if="trace.trace_id" class="art-tool-meta">
+      <details v-if="showDiagnosticMetadata && trace.trace_id" class="art-tool-meta">
         <summary>诊断信息</summary>
         <pre>{{ executionObservationDetails(trace) }}</pre>
       </details>
@@ -88,7 +88,7 @@
             </template>
             <pre v-else-if="isRun(phase) && phase.final_output_preview" class="art-final-output">{{ phase.final_output_preview }}</pre>
             <pre v-else-if="phase.detail || phase.error" class="art-final-output is-error">{{ phase.detail || phase.error }}</pre>
-            <details v-if="phase.trace_id || phase.error_code" class="art-tool-meta">
+            <details v-if="showDiagnosticMetadata && (phase.trace_id || phase.error_code)" class="art-tool-meta">
               <summary>诊断信息</summary>
               <pre>{{ executionObservationDetails(phase) }}</pre>
             </details>
@@ -120,6 +120,7 @@ import { getToolPermission, setToolPermission, type ToolPermissionScope } from '
 
 const props = defineProps<{
   trace: AgentRunTraceData
+  showDiagnosticMetadata?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -273,7 +274,7 @@ function phaseDisplaySubtitle(phase: TracePhase): string {
 }
 
 function hasPhaseDetails(phase: TracePhase): boolean {
-  if (phase.trace_id || phase.error_code || phase.error || phase.detail) return true
+  if ((props.showDiagnosticMetadata && (phase.trace_id || phase.error_code)) || phase.error || phase.detail) return true
   if (isTool(phase)) {
     return Boolean(
       phase.params_json ||
