@@ -282,10 +282,15 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
 
     state = dynamic_chat_runtime
     state.actions = []
-    state.reply = "已查看附件"
 
     def inspect_turn(binding):
-        seen.append(binding.run.metadata["runtime_goal_contract"]["request"])
+        original = binding.run.metadata["runtime_goal_contract"]["request"]
+        seen.append(original)
+        state.reply = (
+            "已查看附件：paint 的价格为 3.5。"
+            if original["attachments"]
+            else "未提供可读取的附件，请上传需要解释的文档。"
+        )
 
     def review(prompt):
         reviewed.append(prompt)
@@ -293,8 +298,24 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
             "Summarize attached prices.",
             "Explain the attached document.",
         }
-        assert prompt["response"] == "已查看附件"
-        return fixture_goal_review(prompt, kind="reply")
+        assert prompt["response"] == state.reply
+        assessment = fixture_goal_review(prompt, kind="reply")
+        files = prompt.get("file_evidence")
+        if files:
+            [source] = files.values()
+            assert source["name"] == "prices.csv" and not source["coverage"]["truncated"]
+            [source_block] = [key for key, text in source["blocks"].items() if text == "paint,3.5"]
+            [response_block] = [
+                key for key, text in prompt["response_blocks"].items() if text == state.reply
+            ]
+            assessment["feedback_disposition"] = "none"
+            assessment["goals"][0].update(
+                file_basis="complete",
+                file_citations=[
+                    {"source_block_id": source_block, "response_block_id": response_block}
+                ],
+            )
+        return assessment
 
     state.on_turn = inspect_turn
     state.review = review
@@ -368,5 +389,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         assert len(seen) == 2
         assert len(reviewed) == 2
         assert "PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ" not in str(seen[-1])
+        assert state.transports[-1].history
+        assert "PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ" not in str(state.transports[-1].history)
         assert seen[-1]["attachments"] == []
         assert "owned_upload" not in str(completed)

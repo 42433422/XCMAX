@@ -30,8 +30,8 @@ def is_employee_memory(metadata: object) -> bool:
 def employee_memory_rows(db, **scope: str):
     raw = AIConversation.conversation_metadata
     if db.get_bind().dialect.name == "postgresql":
-        doc = cast(case((func.pg_input_is_valid(raw, "jsonb"), raw), else_="{}"), JSONB)
-        fields = [doc[k].astext == v for k, v in (EMPLOYEE_MEMORY_SOURCE | scope).items()]
+        postgres_doc = cast(case((func.pg_input_is_valid(raw, "jsonb"), raw), else_="{}"), JSONB)
+        fields = [postgres_doc[k].astext == v for k, v in (EMPLOYEE_MEMORY_SOURCE | scope).items()]
     else:
         doc = case((func.json_valid(raw), raw), else_="{}")
         fields = [

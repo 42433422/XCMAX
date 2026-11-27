@@ -17,16 +17,7 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 @pytest.fixture
 def owned(monkeypatch, tmp_path):
-    from app.utils.path_io import path_utils
-
-    monkeypatch.setattr(path_utils, "get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(
-        "app.application.tools.workflow_spreadsheet_scope.get_app_data_dir",
-        lambda: str(tmp_path),
-    )
-    monkeypatch.setattr(
-        "app.application.elt.service_uploads.get_app_data_dir", lambda: str(tmp_path)
-    )
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     client = SimpleNamespace(headers={})
     with _authenticated_route_fixture(client, role_name="admin"):
         request = Request(

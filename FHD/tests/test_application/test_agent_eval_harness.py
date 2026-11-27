@@ -97,6 +97,28 @@ def test_owned_attachment_reply_review_is_bound_to_its_explicit_fixture(invalid_
     assert _scripted_model_response(task, prompt) is None
 
 
+@pytest.mark.parametrize("missing_field", ["feedback_disposition", "file_basis"])
+def test_ocr_eval_does_not_count_a_malformed_blocked_review_as_success(tmp_path, missing_field):
+    task = next(
+        row
+        for row in eval_module.load_tasks()
+        if row["id"] == "multimodal_ocr_artifact_autonomous_plan"
+    )
+    if missing_field == "feedback_disposition":
+        task["runtime_review"].pop(missing_field)
+    else:
+        task["runtime_review"]["goals"][0].pop(missing_field)
+    path = tmp_path / "invalid-ocr-review.jsonl"
+    path.write_text(json.dumps(task) + "\n", encoding="utf-8")
+    result = run_eval(path)["results"][0]
+    assert result["passed"] is False
+    assert result["details"]["run"]["status"] == "blocked"
+    assert {check["name"] for check in result["failed_checks"]} == {
+        "ocr_review_status",
+        "ocr_review_error_code",
+    }
+
+
 @pytest.mark.parametrize("fail_task", [False, True])
 def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -> None:
     from app.application.agent_orchestrator import task_execution_repository as queues

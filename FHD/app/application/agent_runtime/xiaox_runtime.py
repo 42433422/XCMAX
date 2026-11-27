@@ -182,7 +182,8 @@ def _split_conversation_history(binding: Any) -> tuple[list[dict[str, str]], lis
         or len(ids) != len(rows)
     ):
         return [], rows
-    messages, evidence = [], []
+    messages: list[dict[str, str]] = []
+    evidence: list[dict[str, Any]] = []
     for row, message_id in zip(rows, ids, strict=True):
         target = (
             messages
@@ -1116,7 +1117,7 @@ async def run_xiaox_agent(
                 try:
                     store.authenticate(grant.model_token, "model")
                     thread_id = binding.thread_id
-                    quoted_history = []
+                    quoted_history: list[dict[str, Any]] = []
                     if thread_id:
                         resumed = await active.resume_thread(
                             thread_id, developer_instructions=developer_instructions
@@ -1186,16 +1187,14 @@ async def run_xiaox_agent(
                         texts.clear()
                         result.pop("goal_response", None)
                         runtime_status = "running"
-                        stream = (
-                            active.stream_turn(
-                                text,
-                                **({"output_schema": action_schema} if structured_plan else {}),
-                            )
-                            if goal_feedback is None
-                            else active.stream_turn(
+                        if goal_feedback is not None:
+                            stream = active.stream_turn(
                                 None, goal_feedback=goal_feedback, output_schema=action_schema
                             )
-                        )
+                        elif structured_plan:
+                            stream = active.stream_turn(text, output_schema=action_schema)
+                        else:
+                            stream = active.stream_turn(text)
                         iterator = stream.__aiter__()
                         pending = asyncio.ensure_future(anext(iterator))
                         turn_id = ""
@@ -1368,6 +1367,8 @@ async def run_xiaox_agent(
                         ):
                             break
                         goal_feedback = _compensation_feedback(binding, rows)
+                        if goal_feedback is None:
+                            break
                         if not structured_plan:
                             action_schema = None
                         proposal_options = {}
@@ -1402,13 +1403,16 @@ async def run_xiaox_agent(
                                     denied_proposal,
                                 )
                                 if denied_proposal:
-                                    error = {
+                                    proposal_error = {
                                         key: denied_proposal[key]
                                         for key in ("status", "error_code", "schema_violation")
                                         if denied_proposal.get(key) is not None
                                     }
                                     goal_feedback = json.dumps(
-                                        {"feedback": goal_feedback, "proposal_error": error},
+                                        {
+                                            "feedback": goal_feedback,
+                                            "proposal_error": proposal_error,
+                                        },
                                         ensure_ascii=False,
                                     )
                     if runtime_status != "completed":

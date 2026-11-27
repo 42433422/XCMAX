@@ -83,8 +83,11 @@ test.describe('P0 critical paths', () => {
       expect(denied.status(), await denied.text()).toBe(403)
 
       await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
       await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
-      await expect(page.locator('#view-business-docking')).toContainText('上传 → 自动分类 → 选模板并入库')
+      await expect(page.getByRole('list', { name: '导入流程' }).getByRole('listitem')).toHaveText([
+        /^1\s*上传$/, /^2\s*自动分类$/, /^3\s*选模板并入库$/,
+      ])
       await expect(page.getByRole('button', { name: '历史导入任务' })).toHaveCount(0)
       await captureEvidence(page, '06-customer-data-loop.png')
       await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 })
@@ -171,6 +174,7 @@ test.describe('P0 critical paths', () => {
     expect(denied.status(), await denied.text()).toBe(403)
 
     await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
     await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
     await expect(page.getByRole('button', { name: '历史导入任务' })).toHaveCount(0)
     await captureEvidence(page, '07-product-data-loop.png')

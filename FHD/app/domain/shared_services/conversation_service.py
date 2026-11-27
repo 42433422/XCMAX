@@ -153,7 +153,12 @@ def queued_chat_binding(
             and "queued_reply" not in harness
             and summary.get("status") == "queued"
         )
-        and all(isinstance(value, str) and value for value in (turn, run, scope))
+        and isinstance(turn, str)
+        and turn
+        and isinstance(run, str)
+        and run
+        and isinstance(scope, str)
+        and scope
         and summary.get("turn_id") == turn
         and summary.get("run_id") == run
     ):

@@ -298,7 +298,8 @@ def dynamic_chat_runtime(runtime_entry, monkeypatch):
         async def __aexit__(self, *_exc):
             return None
 
-        async def start_thread(self, *, developer_instructions):
+        async def start_thread(self, *, developer_instructions, history=None):
+            self.history = copy.deepcopy(history or [])
             return "dynamic-chat-fixture"
 
         async def resume_thread(self, thread_id, *, developer_instructions):

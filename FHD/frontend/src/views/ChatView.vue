@@ -1099,7 +1099,7 @@ function emitSwitchView(view: string) {
 .chat-composer :deep(.el-sender) {
   border-radius: 14px;
   background: var(--xc-color-surface);
-  &, &:focus-within { box-shadow: var(--xc-shadow-sm); }
+  box-shadow: var(--xc-shadow-sm);
   &::after { content: none; }
 }
 
@@ -1122,8 +1122,13 @@ function emitSwitchView(view: string) {
   padding: 7px 3px;
   font-size: 16px;
   line-height: 1.55;
-  outline: none;
   caret-color: var(--xc-color-primary);
+}
+
+.chat-composer :deep(.el-sender .el-sender-content .el-sender-input .el-textarea__inner:focus-visible) {
+  outline: var(--xc-token-focus-ring-width, 3px) solid var(--xc-color-primary);
+  outline-offset: 2px;
+  box-shadow: var(--app-focus-ring);
 }
 
 .composer-attachments {

@@ -99,7 +99,8 @@ def verified_document(request):
             ],
             "violations": [],
             "uncovered_sources": [],
-            "feedback": "",
+            "feedback_disposition": "none",
+            "feedback": "The cited original receipt confirms the unchanged reply.",
         },
     }
     report["report_digest"] = canonical_digest(report)

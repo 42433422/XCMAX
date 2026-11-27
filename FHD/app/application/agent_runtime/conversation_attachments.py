@@ -95,7 +95,14 @@ def conversation_upload_evidence(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def recalled_conversation_uploads(request: dict[str, Any]) -> list[dict[str, str]]:
-    return conversation_upload_evidence(request).get("entries", [])
+    entries = conversation_upload_evidence(request).get("entries", [])
+    if not isinstance(entries, list) or not all(
+        isinstance(item, dict)
+        and all(isinstance(key, str) and isinstance(value, str) for key, value in item.items())
+        for item in entries
+    ):
+        return []
+    return entries
 
 
 def conversation_upload_directory(run: AgentRun, context: dict[str, Any]) -> list[dict[str, str]]:

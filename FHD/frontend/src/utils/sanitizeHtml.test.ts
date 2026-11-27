@@ -8,12 +8,16 @@ describe('chatMarkdownFromContent', () => {
       .toBe('C++ <vector> & © \u00a0🚀 € &unknown;')
   })
 
+  const imageFixture = new DOMParser().parseFromString('<img src=x> &amp; literal', 'text/html')
+  imageFixture.querySelector('img')?.setAttribute('onerror', 'alert(1)')
+
   it.each([
     '&lt;script&gt;alert(1)&lt;/script&gt;',
     '&lt;/textarea&gt;&lt;img src=x onerror=alert(1)&gt;',
     '&#60;svg onload=alert(1)&#62;',
-    '<img src=x onerror=alert(1)> &amp; literal',
+    imageFixture.body.innerHTML,
   ])('keeps decoded markup as literal text through Markdown rendering: %s', (raw) => {
+    expect(raw).toContain('alert(1)')
     const markdown = chatMarkdownFromContent(raw)
     const body = new DOMParser().parseFromString(sanitizeChatBubbleMarkdown(markdown), 'text/html').body
     expect(body.querySelector('script, img, svg, textarea')).toBeNull()

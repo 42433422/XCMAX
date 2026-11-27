@@ -468,6 +468,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const action = ['cancelled', 'rejected'].includes(asString(binding.status)) ? asString(binding.status) : receipt.workflowAction
         finishObservedTurn(observation, action, asString(receipt.savedMessage.content), undefined, receipt.savedMessage)
         return
+      } else if (data.success === true && data.durable === true && data.id === observation.sessionId
+        && typeof data.revision === 'number' && binding.receipt_kind === 'run' && binding.durable === true
+        && binding.turn_id === observation.turn.turnId && binding.run_id === observation.turn.runId
+        && requiresTurnReconciliation(binding) && asString(binding.message).trim()) {
+        finishObservedTurn(observation, 'unknown', asString(binding.message))
+        return
       }
     } catch (error) {
       const status = Number(asRecord(error).status)

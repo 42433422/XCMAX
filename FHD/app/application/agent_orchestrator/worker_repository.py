@@ -1,7 +1,13 @@
 """Bind worker run writes to the durable queue claim that authorized execution."""
 
+from __future__ import annotations
+
 import copy
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 
 
 class WorkerLeaseLost(RuntimeError):
@@ -29,7 +35,7 @@ def lock_execution_claim(db, *, run_id, owner_id, execution_count):
 
 
 class ClaimedRunRepository:
-    def __init__(self, repository, execution, owner_id):
+    def __init__(self, repository: SQLAlchemyAgentRunRepository, execution, owner_id):
         self._repository = repository
         self._execution = copy.deepcopy(execution)
         self._owner_id = owner_id

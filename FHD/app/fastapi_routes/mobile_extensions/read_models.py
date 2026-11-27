@@ -88,9 +88,10 @@ class MobileReadModels:
                             AIConversation.session_id == AIConversationSession.session_id,
                         )
                         .filter(
+                            # The session owns the transcript; legacy message owner
+                            # fields cannot grant or revoke access to that session.
                             AIConversationSession.user_id == uid,
                             AIConversationSession.deleted_at.is_(None),
-                            AIConversation.user_id == str(uid),
                             public_messages(db),
                         )
                         .order_by(AIConversation.id.desc())

@@ -433,7 +433,16 @@ def test_unknown_image_keeps_billing_evidence_without_claiming_completion():
     assert result["success"] is False and result["requires_reconciliation"] is True
     assert result["business_completed"] is False and result["execution_state"] == "unknown"
     assert result["data"]["business_receipts"][0]["receipt"]["result"]["billed"] is True
-    assert result["runtime_context_update"]["agent_runtime_run_id"] == "image-run"
+    assert result["data"]["business_receipts"] == [row]
+    assert result["run_id"] == result["agent_run_id"] == result["data"]["run_id"] == "image-run"
+    assert result["retryable"] is False
+    # Billing keeps the original receipt and run identity for reconciliation.
+    # An unverified image cannot grant a conversational continuation.
+    assert result["runtime_context_update"] == {
+        "agent_runtime_run_id": None,
+        "conversation_id": "image-conversation",
+        "status": "reconciliation_required",
+    }
     assert "https://example.test/unconfirmed.png" not in result["response"]
 
 

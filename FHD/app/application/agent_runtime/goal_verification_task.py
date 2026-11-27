@@ -172,7 +172,8 @@ def resumable_verification(
     ):
         return False
     try:
-        return job.get("job_id") == _identity(run, rows, job["output"])["job_id"]
+        job_id = job.get("job_id")
+        return isinstance(job_id, str) and job_id == _identity(run, rows, job["output"])["job_id"]
     except (KeyError, TypeError, ValueError):
         return False
 
@@ -401,7 +402,8 @@ def finish_verification(
             },
         )
 
-    return store.update(run_id, finish).run.metadata[JOB_KEY]
+    persisted: dict[str, Any] = store.update(run_id, finish).run.metadata[JOB_KEY]
+    return persisted
 
 
 def interrupted_verification(
@@ -440,6 +442,7 @@ def enqueue_pending_goal_verifications(
 ) -> int:
     """Use the existing durable queue; this scan never calls a model or tool."""
     from sqlalchemy import JSON, and_, case, cast, func, or_
+    from sqlalchemy.sql.elements import ColumnElement
 
     from app.application.agent_orchestrator.run_models import utc_now_iso
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
@@ -453,6 +456,8 @@ def enqueue_pending_goal_verifications(
     now = time.time()
     with repository.transaction(read_only=True) as db:
         column = AgentRunRecord.payload_json
+        payload: ColumnElement[Any]
+        due: ColumnElement[Any]
         if db.get_bind().dialect.name == "sqlite":
             payload = case((func.json_valid(column) == 1, column), else_="{}")
             state = func.json_extract(payload, f"$.metadata.{JOB_KEY}.state")

@@ -105,6 +105,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
     for (const stream of [...resumed, ...otherStreams]) stream.close()
     await flushPromises()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     vi.useRealTimers()
     resetChatMessageStores()
   })
@@ -120,6 +121,83 @@ describe('persisted chat turn observation through the real SDK and task workspac
         uri: '/api/agent/runs/original-run/artifacts/xlsx_result', metadata: { sha256: 'a'.repeat(64), size_bytes: 123 },
       }] },
     } }],
+  })
+
+  async function beginQueuedTurn(transport: 'stream' | 'json') {
+    sessionId.value = 'fresh'
+    await api.syncSessionMessages({ required: true })
+    vi.stubEnv('VITE_CHAT_STREAM', transport === 'stream' ? 'true' : 'false')
+    const originalFetch = fetchMock.getMockImplementation()!
+    let turnId = ''
+    taskStatus = 'queued'
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = new URL(String(input), window.location.origin)
+      if (url.pathname === '/api/conversations/fresh' && !url.searchParams.has('turn_id') && turnId) {
+        return Response.json({ success: true, id: 'fresh', durable: true, revision: 1, messages: [
+          ...conversation('fresh').messages,
+          { id: 73, role: 'user', content: '请整理本次资料', metadata: { ui: { turnId } } },
+          { id: 74, role: 'assistant', content: '等待后台执行', metadata: {
+            business_harness: { queued_reply: true },
+            summary: { turn_id: turnId, run_id: 'original-run', status: 'queued' },
+            ui: { turnId, workflowAction: 'queued' },
+          } },
+        ] })
+      }
+      if (['/api/ai/chat/stream', '/api/ai/unified_chat'].includes(url.pathname) && init?.method === 'POST') {
+        turnId = JSON.parse(String(init.body)).context.turn_id
+        const result = { success: false, runtime: 'xiaox', execution_state: 'queued',
+          run_id: 'original-run', response: '等待后台执行',
+          history_persistence: { status: 'saved', turn_id: turnId, revision: 1, message_ids: [73, 74] },
+        }
+        return transport === 'stream'
+          ? new Response(`data: ${JSON.stringify({ type: 'done', result })}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
+          : Response.json(result)
+      }
+      return originalFetch(input, init)
+    })
+    await api.sendMessage('请整理本次资料')
+    await api.refreshTasks()
+    await flushPromises()
+    const reply = api.messages.value.find(message => message.role === 'ai' && message.turnId === turnId)!
+    expect(reply.workflowAction).toBe('queued')
+    const publishReceipt = async (receipt: unknown) => {
+      readReceipt = async () => receipt
+      taskStatus = 'completed'
+      await api.refreshTasks()
+      await flushPromises()
+    }
+    return { turnId, reply, publishReceipt }
+  }
+
+  it.each(['stream', 'json'] as const)('replaces the original queued turn with its persisted %s reply without another send', async transport => {
+    const { turnId, reply, publishReceipt } = await beginQueuedTurn(transport)
+    const content = transport === 'stream' ? '本轮正式结果' : '原任务的持久化答复'
+    await publishReceipt({ success: true, id: 'fresh', durable: true, revision: 1,
+      turn_receipt: { turn_id: turnId, run_id: 'original-run', status: 'completed', message_id: 74 },
+      messages: [{ id: 74, role: 'assistant', content }],
+    })
+    await flushPromises()
+    expect(reply).toMatchObject({ content, serverMessageId: 74, workflowAction: 'completed',
+      persistence: { id: 'server:74', status: 'saved', durable: true } })
+    expect(api.messages.value.filter(message => message.role === 'ai' && message.turnId === turnId)).toEqual([reply])
+    const reads = fetchMock.mock.calls.filter(([url]) => String(url).includes(`/conversations/fresh?turn_id=${turnId}`))
+    expect(reads).toHaveLength(1)
+    const writes = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(writes).toHaveLength(1)
+    expect(String(writes[0][0])).toContain(transport === 'stream' ? '/api/ai/chat/stream' : '/api/ai/unified_chat')
+  })
+
+  it('shows the bound persisted run-only reconciliation receipt in the original queued bubble', async () => {
+    const { turnId, reply, publishReceipt } = await beginQueuedTurn('stream')
+    await publishReceipt({ success: true, id: 'fresh', durable: true, revision: 1,
+      turn_receipt: { turn_id: turnId, run_id: 'original-run', status: 'unknown', receipt_kind: 'run',
+        durable: true, requires_reconciliation: true, message: '原任务结果尚待核对，请勿重复提交。' },
+      messages: [{ id: 74, role: 'assistant', content: '等待后台执行' }],
+    })
+    await flushPromises()
+    expect(reply).toMatchObject({ turnId, workflowAction: 'unknown', content: '原任务结果尚待核对，请勿重复提交。' })
+    expect(api.messages.value.filter(message => message.role === 'ai' && message.turnId === turnId)).toEqual([reply])
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 
   it.each(['missing', 'queued', 'queued_row'])('keeps a newly queued turn observed while its original history is %s beyond 30 seconds', async pending => {

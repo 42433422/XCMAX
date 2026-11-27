@@ -173,7 +173,14 @@ def workspace_model_choice(prefs: dict[str, Any]) -> tuple[str, str, str] | None
     if not isinstance(value, dict):
         raise ValueError("Invalid persisted enterprise model")
     provider, model, key_source = (value.get(key) for key in ("provider", "model", "key_source"))
-    if not all(isinstance(item, str) and item for item in (provider, model, key_source)):
+    if not (
+        isinstance(provider, str)
+        and provider
+        and isinstance(model, str)
+        and model
+        and isinstance(key_source, str)
+        and key_source
+    ):
         raise ValueError("Invalid persisted enterprise model")
     return provider, model, key_source
 

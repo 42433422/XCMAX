@@ -24,10 +24,11 @@ def strip_client_recall_binding(metadata: str) -> str:
     )
     if not employee_memory and not recall_bound and not file_fields:
         return metadata
-    if recall_bound:
+    if recall_bound and isinstance(binding, dict):
         binding.pop("recall_bound")
-    for key in file_fields:
-        ui.pop(key)
+    if isinstance(ui, dict):
+        for key in file_fields:
+            ui.pop(key)
     if employee_memory:
         for key in EMPLOYEE_MEMORY_SOURCE:
             payload.pop(key)

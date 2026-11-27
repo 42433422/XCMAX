@@ -149,7 +149,10 @@ def _stopped_workbook_files(
         return []
 
     try:
-        _, execution = _stopped_queue_proof(repository, run)
+        proof = _stopped_queue_proof(repository, run)
+        if proof is None:
+            return []
+        _, execution = proof
         if execution.state != "unknown":
             return []
         store = XiaoxBindingStore(repository)
@@ -298,7 +301,7 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
             and isinstance(result, dict)
             and result.get("run_id") == run_id
         ):
-            projected = {}
+            projected: dict[str, Any] = {}
             if not ui.get("outputArtifacts") and (files := runtime_chat_files(result)):
                 projected["outputArtifacts"] = files
             if row.get("content") == result.get("output") and (

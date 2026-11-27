@@ -33,7 +33,6 @@ const h = vi.hoisted(() => {
     sendChatStream: vi.fn(),
     resumeChatStream: vi.fn(),
     getConversation: vi.fn(),
-    waitForAgentRunTerminal: vi.fn(),
     parseChatStreamErrorResponse: vi.fn(async () => '流式请求失败'),
     searchProducts: vi.fn(),
     generateAndInstallAiMod: vi.fn(),
@@ -77,10 +76,6 @@ vi.mock('../useChatSessionActivity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../useChatSessionActivity')>()),
   recordProductFastPathTask: h.recordProductFastPathTask,
   persistDetachedPlannerResult: h.persistDetachedPlannerResult,
-}))
-vi.mock('../useAgentRunEvents', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../useAgentRunEvents')>()),
-  waitForAgentRunTerminal: h.waitForAgentRunTerminal,
 }))
 vi.mock('@/utils/chatSseStream', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/utils/chatSseStream')>()),
@@ -206,7 +201,6 @@ beforeEach(() => {
   h.resumeChatStream.mockReset().mockResolvedValue({ ok: true, status: 200, body: {} })
   h.getConversation.mockReset()
   h.getConversation.mockRejectedValue(new Error('history unavailable'))
-  h.waitForAgentRunTerminal.mockReset().mockResolvedValue(null)
   h.searchProducts.mockResolvedValue({ success: true, data: [], total: 0 })
   h.generateAndInstallAiMod.mockResolvedValue({ modId: 'mod-self-1', installMessage: '已安装到自用 MOD' })
   h.probeEnterpriseSession.mockResolvedValue('invalid')
@@ -699,49 +693,6 @@ describe('executeRemoteChatRound 流式回合', () => {
 })
 
 describe('executeRemoteChatRound 断线续传与超时', () => {
-  it('排队回复从同轮的服务端消息替换原气泡，不再次追加历史', async () => {
-    const { round, deps, messages } = setup()
-    h.waitForAgentRunTerminal.mockResolvedValue({ run_id: 'run-1', status: 'completed' })
-    h.getConversation.mockResolvedValue({
-      success: true,
-      durable: true,
-      turn_receipt: { turn_id: 'turn-1', run_id: 'run-1', status: 'completed', message_id: 74 },
-      messages: [{ id: 74, role: 'assistant', content: '本轮正式结果' }],
-    })
-    feed([{ type: 'done', result: {
-      runtime: 'xiaox', execution_state: 'queued', run_id: 'run-1', response: '等待后台执行',
-      history_persistence: { status: 'saved', message_ids: [73, 74], turn_id: 'turn-1' },
-    } }])
-    await round.executeRemoteChatRound(['执行'], undefined, scope())
-    await vi.waitFor(() => expect(messages.value[0]?.content).toBe('本轮正式结果'))
-    expect(messages.value).toHaveLength(1)
-    expect(messages.value[0]).toMatchObject({ serverMessageId: 74, workflowAction: 'completed',
-      persistence: { id: 'server:74', status: 'saved', durable: true } })
-    expect(h.getConversation).toHaveBeenCalledWith('session-1', { turn_id: 'turn-1' })
-    expect(deps.saveMessage).not.toHaveBeenCalled()
-  })
-
-  it('排队回执缺少终态消息行时，在原气泡展示同一运行的持久核对状态', async () => {
-    const { round, deps, messages } = setup()
-    h.waitForAgentRunTerminal.mockResolvedValue({ run_id: 'run-1', status: 'blocked' })
-    h.getConversation.mockResolvedValue({
-      success: true,
-      durable: true,
-      turn_receipt: { turn_id: 'turn-1', run_id: 'run-1', status: 'unknown', receipt_kind: 'run',
-        durable: true, requires_reconciliation: true, message: '原任务结果尚待核对，请勿重复提交。' },
-      messages: [{ id: 74, role: 'assistant', content: '等待后台执行' }],
-    })
-    feed([{ type: 'done', result: {
-      runtime: 'xiaox', execution_state: 'queued', run_id: 'run-1', response: '等待后台执行',
-      history_persistence: { status: 'saved', message_ids: [73, 74], turn_id: 'turn-1' },
-    } }])
-    await round.executeRemoteChatRound(['执行'], undefined, scope())
-    await vi.waitFor(() => expect(messages.value[0]?.workflowAction).toBe('unknown'))
-    expect(messages.value).toHaveLength(1)
-    expect(messages.value[0]).toMatchObject({ turnId: 'turn-1', content: '原任务结果尚待核对，请勿重复提交。' })
-    expect(deps.saveMessage).not.toHaveBeenCalled()
-  })
-
   it.each(['queued', 'running', 'waiting_user', 'waiting_input', 'waiting_auth', 'paused', 'unknown', 'future_state'])('JSON 与 SSE 保留 %s 原运行状态，不触发成功动作', async execution_state => {
     const payload = { success: false, execution_state, run_id: 'original-run',
       response: '原任务进度', task: { type: 'custom' }, autoAction: { type: 'should-not-run' } }

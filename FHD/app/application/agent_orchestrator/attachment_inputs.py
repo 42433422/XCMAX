@@ -351,6 +351,7 @@ def read_bound_chat_attachment(upload_id: str, context: dict[str, Any]) -> dict[
     reference = (
         resolve_conversation_upload(upload_id, context) if isinstance(upload_id, str) else None
     )
+    expected: str | None
     if reference:
         selected, expected = reference.upload_id, reference.sha256
     else:

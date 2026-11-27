@@ -184,7 +184,9 @@ def test_cancelled_child_preserves_partial_success_and_cannot_complete_parent(re
         row["child_run_id"] == state.child_id and row["receipt"]["verified"]
         for row in result["business_receipts"]
     )
-    assert state.queue.get(parent.run_id).state == "failed"
+    assert result["reconciliation_required"] is True and result["retryable"] is False
+    execution = state.queue.get(parent.run_id)
+    assert execution.state == "unknown" and execution.last_error_code == "needs_verification"
     assert resume_ready_xiaox_runs(repository=state.repository) == 0
     assert state.effect_count() == 1
 

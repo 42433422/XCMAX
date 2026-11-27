@@ -303,21 +303,28 @@ def test_process_limits_preserve_stricter_inherited_limits(tmp_path):
     from app.application.employee_runtime.continuity_tool_wait import run_process
 
     script = """
-import json, resource, sys
+import json, os, resource, sys
+from pathlib import Path
 from app.application.employee_runtime.continuity_tool_wait import ProcessLimits, run_process
 kinds = (resource.RLIMIT_CPU, resource.RLIMIT_AS, resource.RLIMIT_FSIZE, resource.RLIMIT_NOFILE)
-caps = (3, 192 * 1024**2, 2048, 64)
+# Importing the full runtime may map more than 192 MiB in CI. Leave the parent
+# space to launch; the requested child limit must still preserve its lower cap.
+mapped = int(Path('/proc/self/statm').read_text().split()[0]) * os.sysconf('SC_PAGE_SIZE')
+memory_limit = max(192 * 1024**2, mapped + 64 * 1024**2)
+caps = (3, memory_limit, 2048, 64)
 for kind, cap in zip(kinds, caps):
     resource.setrlimit(kind, (cap, cap))
 child = 'import json,resource;print(json.dumps([resource.getrlimit(k) for k in '+repr(kinds)+']))'
 result = run_process([sys.executable, '-c', child], input=None, cwd='.', timeout=5,
-    limits=ProcessLimits(6, 512 * 1024**2, 4096, 128))
+    limits=ProcessLimits(6, 2 * memory_limit, 4096, 128))
 assert result.returncode == 0, result.stderr
-print(result.stdout.strip())
+print(json.dumps({'memory_limit': memory_limit, 'child_limits': json.loads(result.stdout)}))
 """
     result = run_process([sys.executable, "-c", script], input=None, cwd=tmp_path, timeout=8)
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == [[3, 3], [192 * 1024**2] * 2, [2048, 2048], [64, 64]]
+    report = json.loads(result.stdout)
+    assert report["memory_limit"] >= 192 * 1024**2
+    assert report["child_limits"] == [[3, 3], [report["memory_limit"]] * 2, [2048, 2048], [64, 64]]
 
 
 @_REQUIRES_LIMITER

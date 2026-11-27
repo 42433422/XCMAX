@@ -226,7 +226,7 @@ def prepare_runtime_goal(
         )
 
         if previous := conversation_upload_directory(run, context):
-            directory = {"source": EVIDENCE_SOURCE, "entries": previous}
+            directory: dict[str, Any] = {"source": EVIDENCE_SOURCE, "entries": previous}
             if verified_read := conversation_upload_context(run, context, previous):
                 key = "verified_reads" if isinstance(verified_read, list) else "verified_read"
                 directory[key] = verified_read

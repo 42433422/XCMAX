@@ -529,6 +529,8 @@
   "/api/voice/transcribe",
   "/api/voice/turn-detect",
   "/api/voice/warm",
+  "/api/workspace/intelligence",
+  "/api/workspace/model",
   "/api/workspace/prefs",
   "/api/xcmax/admin/action-items",
   "/api/xcmax/admin/action-items/stats",

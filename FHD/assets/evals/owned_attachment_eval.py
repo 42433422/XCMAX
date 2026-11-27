@@ -338,14 +338,9 @@ def run_owned_attachment_task(task):
     raw.seek(0)
     checks = []
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as root, ExitStack() as stack:
+        stack.enter_context(patch.dict("os.environ", {"XCAGI_DATA_DIR": root}))
         client = SimpleNamespace(headers={})
         stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
-        stack.enter_context(
-            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=root)
-        )
-        stack.enter_context(
-            patch("app.application.elt.service_uploads.get_app_data_dir", return_value=root)
-        )
         runtime = xiaox_eval_runtime(stack, Path(root), client, task)
         if kind == "image":
             stack.enter_context(
@@ -448,6 +443,39 @@ def run_owned_attachment_task(task):
         )
         _check_equal(checks, "initial_status", initial, expected["initial_status"])
         _check_equal(checks, "final_status", run.status, expected["final_status"])
+        if kind == "image":
+            # OCR is model context, not independently verified file evidence.
+            # A malformed review also blocks: require an actual unmet assessment.
+            report = run.metadata.get("runtime_goal_verification") or {}
+            for key, value in (
+                ("status", "needs_work"),
+                ("accepted", False),
+                ("error_code", "goal_verification_required"),
+            ):
+                _check_equal(checks, "ocr_review_" + key, report.get(key), value)
+            _check_equal(
+                checks,
+                "ocr_has_no_verified_file_evidence",
+                bool(runtime.reviews)
+                and all(prompt.get("file_evidence") == {} for prompt in runtime.reviews),
+                True,
+            )
+            from app.application.agent_runtime.chat_file_sources import released_chat_file_sources
+
+            _check_equal(
+                checks,
+                "ocr_publishes_no_verified_sources",
+                released_chat_file_sources(
+                    run,
+                    {
+                        "run_id": run.run_id,
+                        "ok": run.status == "completed",
+                        "execution_state": run.status,
+                        "output": run.final_output,
+                    },
+                ),
+                [],
+            )
         from app.infrastructure.xiaox.binding import XiaoxBindingStore
 
         children = [

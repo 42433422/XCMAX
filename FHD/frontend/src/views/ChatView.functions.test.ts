@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { defineComponent, h, nextTick, ref } from 'vue'
@@ -8,6 +8,8 @@ import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { resetChatMessageStores, useChatMessages } from '@/composables/useChatMessages'
 import { startupPageReadyKey, startupReadyKey, useStartupSplash } from '@/composables/useStartupSplash'
+
+enableAutoUnmount(afterEach)
 
 const { getActiveConversation, getConversation } = vi.hoisted(() => ({
   getActiveConversation: vi.fn(async () => {
@@ -358,7 +360,7 @@ describe('ChatView functions – sendMessage', () => {
     await vm.sendMessage()
     expect(mockChatSendMessage).not.toHaveBeenCalled()
     expect(wrapper.get('#sendMessageBtn').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('#chat-composer-status').text()).toContain('请输入内容')
+    expect(wrapper.get('#sendMessageBtn').attributes('title')).toBe('请先输入内容')
     wrapper.unmount()
   })
 
@@ -452,7 +454,7 @@ describe('ChatView functions – sendQuick', () => {
   })
 })
 
-describe('ChatView functions – handleKeyDown', () => {
+describe('ChatView composer keyboard', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -465,10 +467,11 @@ describe('ChatView functions – handleKeyDown', () => {
 
   it('Enter 键触发发送', async () => {
     const { wrapper } = await mountChatView()
-    const vm = wrapper.vm as any
-    vm.messageInput = '测试'
-    const event = { key: 'Enter', shiftKey: false, preventDefault: vi.fn() } as any
-    vm.handleKeyDown(event)
+    const input = wrapper.get('#messageInput')
+    await input.setValue('测试')
+    const event = new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true })
+    vi.spyOn(event, 'preventDefault')
+    input.element.dispatchEvent(event)
     await flushPromises()
     expect(event.preventDefault).toHaveBeenCalled()
     expect(mockChatSendMessage).toHaveBeenCalledWith('测试')
@@ -477,10 +480,11 @@ describe('ChatView functions – handleKeyDown', () => {
 
   it('Shift+Enter 不触发发送', async () => {
     const { wrapper } = await mountChatView()
-    const vm = wrapper.vm as any
-    vm.messageInput = '测试'
-    const event = { key: 'Enter', shiftKey: true, preventDefault: vi.fn() } as any
-    vm.handleKeyDown(event)
+    const input = wrapper.get('#messageInput')
+    await input.setValue('测试')
+    const event = new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, shiftKey: true, bubbles: true, cancelable: true })
+    vi.spyOn(event, 'preventDefault')
+    input.element.dispatchEvent(event)
     await flushPromises()
     expect(event.preventDefault).not.toHaveBeenCalled()
     expect(mockChatSendMessage).not.toHaveBeenCalled()
@@ -489,10 +493,11 @@ describe('ChatView functions – handleKeyDown', () => {
 
   it('非 Enter 键不触发发送', async () => {
     const { wrapper } = await mountChatView()
-    const vm = wrapper.vm as any
-    vm.messageInput = '测试'
-    const event = { key: 'Escape', shiftKey: false, preventDefault: vi.fn() } as any
-    vm.handleKeyDown(event)
+    const input = wrapper.get('#messageInput')
+    await input.setValue('测试')
+    const event = new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true })
+    vi.spyOn(event, 'preventDefault')
+    input.element.dispatchEvent(event)
     await flushPromises()
     expect(event.preventDefault).not.toHaveBeenCalled()
     expect(mockChatSendMessage).not.toHaveBeenCalled()
