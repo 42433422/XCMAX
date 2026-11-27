@@ -478,6 +478,101 @@ def test_only_catalog_versions_can_be_reported():
         mod.resolve_product_version("9.9.9.9")
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        None,
+        {"head_sha": "0" * 40},
+        {"head_branch": "candidate"},
+        {"head_repository": {"full_name": "untrusted/fork"}},
+        {"status": "in_progress"},
+        {"event": "pull_request"},
+        {"run_attempt": True},
+        {"id": 99},
+    ],
+)
+def test_stability_workflow_executes_original_run_identity_guard(tmp_path, mutation):
+    """An artifact from a fork, another SHA or an unfinished run never reaches the auditor."""
+    repo = Path(__file__).resolve().parents[3]
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    run = {
+        "id": 5,
+        "run_attempt": 1,
+        "repository": {"full_name": "xcagi/XCMAX"},
+        "head_repository": {"full_name": "xcagi/XCMAX"},
+        "head_sha": sha,
+        "head_branch": "main",
+        "status": "completed",
+        "event": "workflow_dispatch",
+    }
+    run.update(mutation or {})
+    raw = tmp_path / "original-run.json"
+    raw.write_text(json.dumps(run))
+    commands = tmp_path / "bin"
+    commands.mkdir()
+    gh = commands / "gh"
+    gh.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\nfrom pathlib import Path\n"
+        "assert sys.argv[1:] == ['api', 'repos/xcagi/XCMAX/actions/runs/5']\n"
+        "sys.stdout.write(Path(os.environ['ORIGINAL_RUN_FIXTURE']).read_text())\n"
+    )
+    gh.chmod(0o700)
+    for relative in (
+        "FHD/.github/workflows/closure-evidence-report.yml",
+        ".github/workflows/fhd-closure-evidence-report.yml",
+    ):
+        workflow = yaml.safe_load((repo / relative).read_text())
+        job = workflow["jobs"]["agent-stability"]
+        step = next(row for row in job["steps"] if "Bind the original" in row.get("name", ""))
+        raw.write_text(json.dumps(run))
+        environment = {
+            **os.environ,
+            "PATH": os.pathsep.join(
+                [str(commands), str(Path(sys.executable).parent), os.environ["PATH"]]
+            ),
+            "RELEASE_SHA": sha,
+            "SOURCE_RUN_ID": "5",
+            "GITHUB_REPOSITORY": "xcagi/XCMAX",
+            "GITHUB_OUTPUT": str(tmp_path / "step-output"),
+            "RUNNER_TEMP": str(tmp_path),
+            "ORIGINAL_RUN_FIXTURE": str(raw),
+        }
+        result = subprocess.run(
+            ["bash", "-c", step["run"]],
+            cwd=repo / "FHD",
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert (result.returncode == 0) is (mutation is None), result.stdout + result.stderr
+        if mutation is None:
+            reread = next(
+                row for row in job["steps"] if "Recheck the source" in row.get("name", "")
+            )
+            for race in ({}, {"run_attempt": 2}, {"head_sha": "0" * 40}, {"status": "in_progress"}):
+                raw.write_text(json.dumps({**run, **race}))
+                checked = subprocess.run(
+                    ["bash", "-c", reread["run"]],
+                    cwd=repo / "FHD",
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                assert (checked.returncode == 0) is (not race), checked.stdout + checked.stderr
+        assert "github.ref_protected" in job["if"]
+        assert job["environment"] == "xcmax-independent-acceptance"
+        audit = next(row for row in job["steps"] if "Recompute K01-K10" in row.get("name", ""))
+        assert "--profile agent-stability" in audit["run"]
+        upload = job["steps"][-1]
+        assert upload["with"]["path"] == "${{ runner.temp }}/agent-stability-report.json"
+        # The new intermediate audit never substitutes 30 days for formal release closure.
+        closure = workflow["jobs"]["build-reports"]
+        assert any("--required-days 90" in row.get("run", "") for row in closure["steps"])
+
+
 def test_desktop_workflow_routes_and_aggregates_all_three_native_architectures(tmp_path):
     fhd = Path(__file__).resolve().parents[2]
     workflow = yaml.safe_load((fhd / ".github/workflows/desktop-soak.yml").read_text())
