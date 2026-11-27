@@ -9,7 +9,6 @@ from app.application.excel_export_limits import (
 )
 from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
 from app.domain.enterprise_cognition.contracts import ENTERPRISE_INPUT_SCHEMAS
-from app.domain.excel import EXCEL_HEADER_ROW
 from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
 
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
@@ -397,8 +396,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("inventory", "stock_out"): _object_schema(
         ["product_id", "warehouse_id", "quantity"],
         {
-            "product_id": {},
-            "warehouse_id": {},
+            "product_id": {"not": {"type": "null"}},
+            "warehouse_id": {"not": {"type": "null"}},
             "quantity": {"type": "number"},
             "batch_no": {"type": "string"},
             "location_id": {},
@@ -412,9 +411,9 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("inventory", "transfer"): _object_schema(
         ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
         {
-            "product_id": {},
-            "from_warehouse_id": {},
-            "to_warehouse_id": {},
+            "product_id": {"not": {"type": "null"}},
+            "from_warehouse_id": {"not": {"type": "null"}},
+            "to_warehouse_id": {"not": {"type": "null"}},
             "quantity": {"type": "number"},
             "batch_no": {"type": "string"},
             "from_location_id": {},
@@ -618,8 +617,112 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "unit_name": {"type": "string"},
             "purchase_unit": {"type": "string"},
-            "products": deepcopy(_SHIPMENT_PRODUCTS_SCHEMA),
-            "items": deepcopy(_SHIPMENT_PRODUCTS_SCHEMA),
+            "products": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "required": ["unit_price"],
+                    "allOf": [
+                        {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
+                        {
+                            "anyOf": [
+                                {"required": ["quantity_kg"]},
+                                {
+                                    "required": ["quantity", "unit"],
+                                    "properties": {
+                                        "unit": {
+                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
+                                            "type": "string",
+                                        }
+                                    },
+                                },
+                                {
+                                    "required": ["quantity", "quantity_unit"],
+                                    "properties": {
+                                        "quantity_unit": {
+                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
+                                            "type": "string",
+                                        }
+                                    },
+                                },
+                                {
+                                    "allOf": [
+                                        {
+                                            "anyOf": [
+                                                {"required": ["quantity_tins"]},
+                                                {"required": ["quantity", "unit"]},
+                                                {"required": ["quantity", "quantity_unit"]},
+                                            ]
+                                        },
+                                        {
+                                            "anyOf": [
+                                                {"required": ["tin_spec"]},
+                                                {"required": ["spec_per_tin"]},
+                                                {"required": ["spec"]},
+                                                {"required": ["weight_per_unit"]},
+                                            ]
+                                        },
+                                    ]
+                                },
+                            ]
+                        },
+                    ],
+                },
+            },
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "required": ["unit_price"],
+                    "allOf": [
+                        {"anyOf": [{"required": ["product_name"]}, {"required": ["name"]}]},
+                        {
+                            "anyOf": [
+                                {"required": ["quantity_kg"]},
+                                {
+                                    "required": ["quantity", "unit"],
+                                    "properties": {
+                                        "unit": {
+                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
+                                            "type": "string",
+                                        }
+                                    },
+                                },
+                                {
+                                    "required": ["quantity", "quantity_unit"],
+                                    "properties": {
+                                        "quantity_unit": {
+                                            "pattern": "^(?:[kK][gG]|公斤|千克)$",
+                                            "type": "string",
+                                        }
+                                    },
+                                },
+                                {
+                                    "allOf": [
+                                        {
+                                            "anyOf": [
+                                                {"required": ["quantity_tins"]},
+                                                {"required": ["quantity", "unit"]},
+                                                {"required": ["quantity", "quantity_unit"]},
+                                            ]
+                                        },
+                                        {
+                                            "anyOf": [
+                                                {"required": ["tin_spec"]},
+                                                {"required": ["spec_per_tin"]},
+                                                {"required": ["spec"]},
+                                                {"required": ["weight_per_unit"]},
+                                            ]
+                                        },
+                                    ]
+                                },
+                            ]
+                        },
+                    ],
+                },
+            },
             "contact_person": {"type": "string"},
             "contact_phone": {"type": "string"},
         },
@@ -724,10 +827,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("excel_analysis", "export"): _object_schema(
         ["file_path", "rows"],
         {
-            "file_path": {
-                "type": "string",
-                "pattern": r"\.(?:[cC][sS][vV]|[xX][lL][sS][xX])$",
-            },
+            "file_path": {"type": "string"},
             "rows": {
                 "type": "array",
                 "minItems": 1,
@@ -741,9 +841,17 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         {
             "file_path": {"type": "string"},
             "sheet_name": {"type": "string"},
-            "header_row": EXCEL_HEADER_ROW,
+            "header_row": {"type": "integer"},
             "offset": {"type": "integer"},
             "max_rows": {"type": "integer"},
+        },
+    ),
+    ("excel_analysis", "structure"): _object_schema(
+        ["file_path"],
+        {
+            "file_path": {"type": "string"},
+            "sheet_name": {"type": "string"},
+            "header_row": {"type": "integer"},
         },
     ),
     ("excel_analysis", "query"): {
@@ -766,7 +874,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                     "description": "按真实列样本生成有界只读JSON查询计划；与query_expression互斥，不接受Python代码",
                 },
                 "sheet_name": {"type": "string"},
-                "header_row": EXCEL_HEADER_ROW,
+                "header_row": {"type": "integer"},
                 "offset": {"type": "integer"},
                 "max_rows": {"type": "integer"},
             },
@@ -871,7 +979,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("document_template", "update"): _object_schema(
         ["id"],
         {
-            "id": {},
+            "id": {"not": {"type": "null"}},
             "name": {"type": "string"},
             "template_name": {"type": "string"},
             "template_type": {"type": "string"},
@@ -886,7 +994,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "replace_mode": {"type": "boolean"},
         },
     ),
-    ("document_template", "delete"): _object_schema(["id"], {"id": {}}),
+    ("document_template", "delete"): _object_schema(["id"], {"id": {"not": {"type": "null"}}}),
     ("document_template", "clear"): _object_schema([], {}),
     ("document_template", "ingest"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
     ("document_template", "upload"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
@@ -1115,7 +1223,11 @@ _SPECIAL_INPUT_SCHEMAS[("desktop_automation", "computer_execute")] = {
                 "type": "array",
                 "minItems": 1,
                 "maxItems": 20,
-                "items": {"type": "object", "required": ["action"]},
+                "items": {
+                    "type": "object",
+                    "required": ["action"],
+                    "properties": {"action": {"type": "string"}},
+                },
                 "description": 'browser: navigate(url), click(target), fill(target,text), press(target,key), select(target,value), check(target,checked); target 如 {"role":"button","name":"保存"}、{"label":"姓名"}、{"test_id":"save"} 或 {"selector":"#save"}。desktop: click(x,y), move(x,y), drag(x,y,to_x,to_y), type(text), press(keys), scroll(x,y,clicks)；坐标使用截图返回的 input_width/input_height。',
             },
             "verification": {
@@ -1142,7 +1254,7 @@ def _workbook_input_schema(name: str, required: list[str]) -> dict[str, Any]:
 
 def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
     """Reuse the public catalog after ToolSpec initialization, without eager tool imports."""
-    from app.domain.workbook_write_contract import WORKBOOK_READER, WORKBOOK_WRITE_INPUT, WORKBOOK_WRITER
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT, WORKBOOK_WRITER
 
     schemas = {
         ("excel_analysis", "structure"): _workbook_input_schema("excel_analysis", ["file_path"]),
@@ -1171,27 +1283,7 @@ def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
                 ]
             },
             "then": {"required": ["input"], "properties": {"input": WORKBOOK_WRITE_INPUT}},
-        },
-        {
-            "if": {
-                "anyOf": [
-                    {"required": [key], "properties": {key: {"const": WORKBOOK_READER}}}
-                    for key in ("employee_id", "pack_id", "tool_name", "id")
-                ]
-            },
-            "then": {
-                "required": ["input"],
-                "properties": {
-                    "input": {
-                        "type": "object",
-                        "anyOf": [
-                            {"required": [key], "properties": {key: {"type": "string", "minLength": 1}}}
-                            for key in ("upload_id", "file_path", "path", "excel_path")
-                        ],
-                    }
-                },
-            },
-        },
+        }
     ]
     schemas[("employee", "execute")] = employee
     return schemas

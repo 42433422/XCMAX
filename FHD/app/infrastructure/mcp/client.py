@@ -65,6 +65,12 @@ class McpToolInfo:
     read_only: bool
 
 
+class McpToolList(list[McpToolInfo]):
+    """Tools and the optional protocol operations negotiated on their same session."""
+
+    resource_actions: tuple[str, ...] = ()
+
+
 class McpClientError(RuntimeError):
     """MCP 连接或调用失败；调用方按工具失败处理。"""
 
@@ -203,27 +209,51 @@ async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
 
     collected: list[Any] = []
     cursor: str | None = None
+    seen_cursors: set[str] = set()
     for _ in range(max_pages):
         params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
         result = await session.list_tools(params=params) if params else await session.list_tools()
         collected.extend(getattr(result, "tools", None) or [])
         cursor = _field(result, "next_cursor", "nextCursor")
         if not cursor:
-            break
-    return collected
+            return collected
+        if cursor in seen_cursors:
+            raise McpClientError("MCP 工具发现分页游标重复，未发布不完整目录")
+        seen_cursors.add(cursor)
+    raise McpClientError("MCP 工具发现超过分页预算，未发布不完整目录")
+
+
+async def _list_discovered_tools(session: Any) -> tuple[list[Any], tuple[str, ...]]:
+    capabilities = getattr(session, "server_capabilities", None)
+    # MCP 2 exposes the initialize result through the official SDK property.
+    raw_tools = (
+        await _list_all_tools(session)
+        if capabilities is None or capabilities.tools is not None
+        else []
+    )
+    actions: tuple[str, ...] = ()
+    if capabilities is not None:
+        if capabilities.resources is not None:
+            actions += RESOURCE_ACTIONS[:2]
+        if capabilities.prompts is not None:
+            actions += RESOURCE_ACTIONS[2:]
+    return raw_tools, actions
 
 
 def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
     """列出一个 MCP 服务器暴露的工具（含分页）；失败时返回空列表。"""
     try:
-        raw_tools = _sync(lambda: _with_session(config, _list_all_tools), config.timeout_seconds)
+        raw_tools, resource_actions = _sync(
+            lambda: _with_session(config, _list_discovered_tools), config.timeout_seconds
+        )
     except McpClientError as exc:
         logger.warning("MCP 服务器 %s 工具发现失败：%s", config.name, exc)
         return []
     except RECOVERABLE_ERRORS as exc:
         logger.warning("MCP 服务器 %s 工具发现异常：%s", config.name, exc)
         return []
-    tools: list[McpToolInfo] = []
+    tools = McpToolList()
+    tools.resource_actions = resource_actions
     for tool in raw_tools:
         name = str(getattr(tool, "name", "") or "").strip()
         if not name:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import os
 import time
@@ -167,7 +168,9 @@ def controlled_tool_context(tool_id, action):
     return dict(held[2]) if held and held[:2] == (tool_id, action) else None
 
 
-def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]:
+def _execute_catalog(
+    step: AgentStep, params: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
     from app.application.agent_orchestrator.business_action_ledger import (
         BusinessActionLedger,
         canonical_hash,
@@ -189,8 +192,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         verify_catalog_action,
     )
 
-    params = dict(step.params)
-    if _QUERY_IDENTITY_FIELDS.intersection(params) or any(
+    if _QUERY_IDENTITY_FIELDS.intersection(step.params) or any(
         k.startswith("_catalog") for k in context
     ):
         return _query_failure("catalog_identity_override")
@@ -509,6 +511,8 @@ class AgentToolExecutor:
                     "action": validation.action,
                 }
             )
+        if validation.normalized_params is not None:
+            params = validation.normalized_params
         expected_schema = context.get("tool_schema_digest")
         if expected_schema is not None:
             from app.application.capability_catalog import authorized_tool_specs
@@ -552,10 +556,11 @@ class AgentToolExecutor:
                     "retryable": False,
                     "message": "此工具需通过已授权的 AIOPEN 入口执行",
                 }
+        from app.application.chat_turn_guard import _is_mutation
+
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
         guard_action = validation.action or step.action
-        call_read_only = bool(validation.spec and validation.spec.is_read_only_call(params))
-        if not call_read_only:
+        if _is_mutation(f"{validation.tool_id} {guard_action}", json.dumps(params, default=str)):
             if guard_policy in {"block", "model_only"} or (
                 guard_policy == "allow_once"
                 and (validation.tool_id, guard_action)
@@ -593,7 +598,7 @@ class AgentToolExecutor:
         if refusal is not None:
             return _pre_dispatch_refusal(refusal)
         if validation.tool_id == "catalog_products_v1":
-            return _execute_catalog(step, dict(runtime_context or {}))
+            return _execute_catalog(step, params, dict(runtime_context or {}))
         business_db_read = (validation.tool_id, validation.action) == (
             "business_db",
             "read",
@@ -768,7 +773,8 @@ class AgentToolExecutor:
                     from app.infrastructure.llm.retry_policy import is_transport_error
 
                     safe_read_retry = (
-                        call_read_only
+                        validation.spec is not None
+                        and validation.spec.read_only
                         and is_transport_error(exc)
                         and not isinstance(
                             exc, (FileNotFoundError, IsADirectoryError, NotADirectoryError)
@@ -831,7 +837,7 @@ class AgentToolExecutor:
             result = {**result, **classify_http_status(status_value)}
         empty = reject_empty_business_result(
             result,
-            action="read" if call_read_only else action,
+            action="read" if validation.spec is not None and validation.spec.read_only else action,
         )
         if empty is not None:
             result = {**empty, "outcome": "unknown", "reconciliation_required": True}
@@ -841,7 +847,8 @@ class AgentToolExecutor:
             # A completed read with an invalid response is a contract failure.
             # Mutations and any pre-existing uncertainty must retain their claim.
             requires_reconciliation = (
-                not call_read_only
+                validation.spec is None
+                or not validation.spec.read_only
                 or invocation_requires_reconciliation()
                 or execution_result_requires_reconciliation(result)
                 or result.get("outcome_unknown") is True
@@ -879,7 +886,7 @@ class AgentToolExecutor:
                 execution_result_requires_reconciliation(result)
                 or (
                     result.get("success") is not True
-                    and not call_read_only
+                    and (validation.spec is None or not validation.spec.read_only)
                 )
             )
         ):

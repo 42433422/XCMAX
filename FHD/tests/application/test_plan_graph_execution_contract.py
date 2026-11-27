@@ -10,6 +10,7 @@ from app.application.workflow.workflow_types import (
     Branch,
     PlanGraph,
     WorkflowNode,
+    step_plan_nodes,
     validate_plan_graph,
 )
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
@@ -85,6 +86,48 @@ def test_invalid_graph_has_zero_side_effects_across_runtimes(nodes):
     with pytest.raises(ValueError):
         WorkflowEngine(tool_dispatcher=lambda *a: calls.append(a)).run(plan)
     assert calls == []
+
+
+@pytest.mark.parametrize("cycle", [False, True])
+def test_deep_mixed_dependency_graph_is_checked_without_recursion(cycle):
+    # A long deterministic plan must be accepted/rejected before dispatch,
+    # rather than crashing the worker inside the former recursive cycle check.
+    nodes = [node(f"n{index}") for index in range(6000)]
+    for index, current in enumerate(nodes[1:], 1):
+        previous = nodes[index - 1]
+        if index % 3 == 0:
+            current.depends_on = [previous.node_id]
+        elif index % 3 == 1:
+            previous.next = current.node_id
+        else:
+            previous.branches = [Branch(current.node_id, {"key": "success", "equals": True})]
+    if cycle:
+        nodes[0].depends_on = [nodes[-1].node_id]
+    plan = PlanGraph(plan_id="deep-plan", intent="read", nodes=nodes[::-1])
+    ordered, error = step_plan_nodes(plan)
+    if cycle:
+        assert error and "形成环" in error
+        assert ordered == []
+        with patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as dispatch:
+            run = run_plan(plan)
+        assert run.status == "blocked"
+        dispatch.assert_not_called()
+    else:
+        assert error is None
+        assert [item.node_id for item in ordered] == [item.node_id for item in nodes]
+
+
+def test_topological_layers_keep_declared_order_and_all_prerequisites():
+    first, second, child, final = [node(name) for name in ("first", "second", "child", "final")]
+    child.depends_on = ["first"]
+    final.depends_on = ["child", "second"]
+    first.next = "child"
+    plan = PlanGraph(plan_id="layers", intent="read", nodes=[final, second, child, first])
+    ordered, error = step_plan_nodes(plan)
+    assert error is None
+    assert [item.node_id for item in ordered] == ["second", "first", "child", "final"]
 
 
 @pytest.mark.parametrize("available,chosen", [(True, "yes"), (False, "no")])

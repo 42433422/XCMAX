@@ -220,7 +220,35 @@ async def test_list_all_tools_follows_pagination() -> None:
     assert session.cursors[1].cursor == "page-2"
 
 
-def test_resource_actions_are_registered(monkeypatch) -> None:
+@pytest.mark.asyncio
+@pytest.mark.parametrize("repeat", [False, True])
+async def test_discovery_never_publishes_truncated_or_cyclic_tool_pages(repeat):
+    from mcp.types import ListToolsResult, Tool
+
+    from app.infrastructure.mcp.client import McpClientError, _list_all_tools
+
+    class Session:
+        count = 0
+
+        async def list_tools(self, params=None):
+            self.count += 1
+            return ListToolsResult(
+                tools=[Tool(name=f"tool_{self.count}", input_schema={})],
+                next_cursor="same" if repeat else f"page-{self.count}",
+            )
+
+    session = Session()
+    with pytest.raises(McpClientError, match="未发布不完整目录"):
+        await _list_all_tools(session, max_pages=3)
+    assert session.count == (2 if repeat else 3)
+
+
+@pytest.mark.parametrize(
+    "resource_actions",
+    [(), ("mcp_list_resources", "mcp_read_resource"), ("mcp_list_prompts", "mcp_get_prompt")],
+)
+def test_only_negotiated_resource_actions_are_registered(monkeypatch, resource_actions) -> None:
+    from app.infrastructure.mcp.client import McpToolList
     from app.infrastructure.mcp.config import McpServerConfig
 
     monkeypatch.setattr(
@@ -228,22 +256,20 @@ def test_resource_actions_are_registered(monkeypatch) -> None:
         "load_server_configs",
         lambda *a, **k: [McpServerConfig(name="demo", command="x")],
     )
-    monkeypatch.setattr(
-        mcp_registry,
-        "list_tools",
-        lambda config: [
-            McpToolInfo(name="search", description="", input_schema={}, read_only=True)
-        ],
+    tools = McpToolList(
+        [McpToolInfo(name="search", description="", input_schema={}, read_only=True)]
     )
+    tools.resource_actions = resource_actions
+    monkeypatch.setattr(mcp_registry, "list_tools", lambda config: tools)
     monkeypatch.setattr(
         "app.domain.autonomy.autonomy_guard.get_autonomy_guard",
         lambda: type("G", (), {"register_actions": lambda *a, **k: None})(),
     )
     merged = mcp_registry.merge_mcp_tools({})
     actions = merged["mcp__demo"]["actions"]
-    assert actions["mcp_list_resources"]["risk"] == "low"
-    assert actions["mcp_read_resource"]["required_params"] == ["uri"]
-    assert actions["mcp_get_prompt"]["required_params"] == ["name"]
+    assert set(actions) == {"search", *resource_actions}
+    for action in resource_actions:
+        assert actions[action]["risk"] == "low"
 
 
 @pytest.mark.asyncio
@@ -829,3 +855,51 @@ asyncio.run(main())
             assert output["error_code"] == (
                 "mcp_tool_error" if protocol_error else "mcp_business_error"
             )
+
+
+@pytest.mark.parametrize("capability", ["tools", "resources", "prompts"])
+def test_real_sdk_discovery_registers_only_negotiated_operations(tmp_path, monkeypatch, capability):
+    import sys
+
+    server = tmp_path / "capability_server.py"
+    server.write_text(
+        """import asyncio, sys
+from mcp import types
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+
+async def tools(context, params):
+    return types.ListToolsResult(tools=[types.Tool(name="inspect", input_schema={"type":"object"})])
+async def resources(context, params):
+    return types.ListResourcesResult(resources=[])
+async def prompts(context, params):
+    return types.ListPromptsResult(prompts=[])
+
+async def main():
+    kind = sys.argv[1]
+    server = Server("capability-test", **{"on_list_" + kind: globals()[kind]})
+    async with stdio_server() as (read, write):
+        await server.run(read, write, server.create_initialization_options())
+asyncio.run(main())
+""",
+        encoding="utf-8",
+    )
+    config = mcp_config.McpServerConfig(
+        name="capability-test",
+        command=sys.executable,
+        args=(str(server), capability),
+        timeout_seconds=10,
+    )
+    monkeypatch.setattr(mcp_registry, "mcp_enabled", lambda: True)
+    monkeypatch.setattr(mcp_registry, "load_server_configs", lambda: [config])
+    catalog = mcp_registry.merge_mcp_tools({})
+    actions = set(catalog["mcp__capability_test"]["actions"])
+    expected = {
+        "tools": {"inspect"},
+        "resources": {"mcp_list_resources", "mcp_read_resource"},
+        "prompts": {"mcp_list_prompts", "mcp_get_prompt"},
+    }
+    assert actions == expected[capability]
+    if capability != "tools":
+        result = mcp_registry.call_mcp_tool("mcp__capability_test", f"mcp_list_{capability}", {})
+        assert result["success"] is True
