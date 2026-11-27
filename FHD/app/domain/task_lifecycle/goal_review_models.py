@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from itertools import islice
 from typing import Any, Literal
 
+from jsonschema.exceptions import ValidationError as SchemaValidationError
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -191,6 +193,19 @@ def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     if len(result) != len(pairs):
         raise ValueError("Duplicate key in goal review JSON")
     return result
+
+
+def review_schema_defects(errors: Iterable[SchemaValidationError]) -> list[dict[str, object]]:
+    """Bounded contract defects only; never include document or response values."""
+    defects: list[dict[str, object]] = []
+    for error in islice(errors, 128):
+        defect: dict[str, object] = {"path": list(error.absolute_path), "rule": error.validator}
+        if error.validator == "required" and isinstance(error.instance, dict):
+            defect["missing"] = [
+                field for field in error.validator_value if field not in error.instance
+            ]
+        defects.append(defect)
+    return defects
 
 
 def review_json_text(value: str) -> str:

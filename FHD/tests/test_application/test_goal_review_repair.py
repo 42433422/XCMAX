@@ -53,7 +53,7 @@ def test_attachment_format_repair_reports_missing_contract_field_without_file_va
 
     assert report["status"] == "needs_work" and not report["accepted"]
     assert len(verifier.requests) == 2
-    assert report["attempts"][0]["validation_error"] == {
+    assert report["attempts"][0]["validation_errors"][0] == {
         "path": ["goals", 0],
         "rule": "required",
         "missing": ["file_basis"],
@@ -96,17 +96,25 @@ def test_completed_file_goal_without_own_citation_is_repaired_before_final_verdi
             file_basis="complete",
             file_citations=[{"source_block_id": "s1", "response_block_id": "r1"}],
         )
+    extra = copy.deepcopy(corrected["goals"][1])
+    extra["goal_id"] = "another-retained"
+    corrected["goals"].append(extra)
     rejected = copy.deepcopy(corrected)
     rejected["goals"][1]["file_citations"] = []
+    rejected["goals"][2]["file_citations"] = []
     verifier.replies = [response(rejected), response(corrected)]
 
     report = verifier.verify()
 
     assert report["accepted"] and len(verifier.requests) == 2
-    assert report["attempts"][0]["validation_error"] == {
+    assert report["attempts"][0]["validation_errors"][0] == {
         "path": ["goals", 1, "file_citations"],
         "rule": "minItems",
     }
+    assert len(report["attempts"][0]["validation_errors"]) == 2
+    repair = json.loads(verifier.requests[1].content)["input"][-1]["content"]
+    assert '["goals", 1, "file_citations"]' in repair
+    assert '["goals", 2, "file_citations"]' in repair
     assert all(json.loads(request.content)["tools"] == [] for request in verifier.requests)
 
 

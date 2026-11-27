@@ -16,7 +16,6 @@ from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any, cast
 
 from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError as SchemaValidationError
 from pydantic import ValidationError
 
 from app.application.agent_runtime.goal_verification_task import (
@@ -759,24 +758,21 @@ def verify_runtime_goal(
                 decoded = review_protocol.normalize_review_provenance(decoded, contract)
                 wire_review = copy.deepcopy(decoded)
                 if wire_validator is not None:
-                    wire_validator.validate(decoded)
+                    wire_defects = review_protocol.review_schema_defects(
+                        wire_validator.iter_errors(decoded)
+                    )
+                    if wire_defects:
+                        diagnostic["validation_errors"] = wire_defects
+                        raise ValueError("Invalid goal review schema")
                     _resolve_file_citations(decoded, source_blocks, response_blocks)
                 review, errors = validate_goal_review(
                     decoded, contract, snapshot, output, file_evidence=file_evidence
                 )
-            except (ValueError, TypeError, ValidationError, SchemaValidationError) as exc:
+            except (ValueError, TypeError, ValidationError):
                 diagnostic["state"] = "invalid_format"
                 error = "JSON或字段格式无效，请严格按output_schema完整输出"
-                # Return contract locations, never raw file/model values. A bounded
-                # format repair must know which field failed, not blindly regenerate.
-                if isinstance(exc, SchemaValidationError):
-                    defect = {"path": list(exc.absolute_path), "rule": exc.validator}
-                    if exc.validator == "required" and isinstance(exc.instance, dict):
-                        defect["missing"] = [
-                            field for field in exc.validator_value if field not in exc.instance
-                        ]
-                    diagnostic["validation_error"] = defect
-                    error += "：" + json.dumps(defect, ensure_ascii=False)
+                if format_defects := diagnostic.get("validation_errors"):
+                    error += "：" + json.dumps(format_defects, ensure_ascii=False)
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"

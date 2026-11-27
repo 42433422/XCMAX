@@ -1178,16 +1178,16 @@
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_runtime/goal_verifier.py": {
-      "reason": "实际Word多轮概览已读全文且完成回复，但目标声明文件依赖后漏引文被错误送入业务缺口阻断；本次复用原jsonschema在格式准入要求已完成文件目标具备引文，沿原一次格式修复补齐，不降低最终证据标准。不是人工架构批准。",
-      "boundary": "固定原权限、业务回执与最终完整性检查；只将已有文件证据约束前移至原Schema及有限格式修复。协议纯函数归入已有goal_review_models供核验与方案交付共用，不新建Runtime或状态源。",
+      "reason": "Review request only: collect bounded schema defects in one pass with existing python-jsonschema. Returning only the first defect left later missing fields unresolved after the single allowed format repair.",
+      "boundary": "Only contract paths, rule names and missing schema fields are returned. No document values, added retries, budget reset, weaker citations, or alternate runtime. Shared pure protocol helpers remain in the existing domain module.",
       "follow_up": "请@42433422按精确blob审查目标证据、响应重放和报告持久化边界；新HEAD正式CI、真实模型和原卷数值验收分别取证，本登记不代表人工批准。",
       "review_owner": "@42433422",
       "base_file": "FHD/app/application/agent_runtime/goal_verifier.py",
       "base_blob": "17e6327f3732f050cfe7e490b2b402cb0b388e18",
-      "head_blob": "7751b5ab5791d682cd760c6e3326d8d2bab692a2",
+      "head_blob": "8dd877d46d4e4a007bdb9ba81f93561d8bffc275",
       "before_lines": 913,
-      "after_lines": 892,
-      "validation": "补当前约束/历史回复缺引用两类反例，核验只读且不得发业务工具；原目标报告/恢复/方案/预算回归，真实Word多轮桌面验收另记。"
+      "after_lines": 888,
+      "validation": "Regressions cover two missing citation bindings and both current/history targets in one format repair, with the original verifier and restart tests. Native acceptance is separate."
     },
     "FHD/app/infrastructure/xiaox/binding.py": {
       "reason": "#3682 工作组03与06在原SQL绑定中合并全部工具调用预算、无进展识别、独立核验阶段隔离与费用预留；保留原授权、原任务身份和代际，不新增账本。",
