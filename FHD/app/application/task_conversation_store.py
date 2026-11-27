@@ -430,7 +430,7 @@ class TaskConversationStore:
         context["_conversation_revision"] = revision = (session or {}).get("revision")
         restore_runtime_history_files(page, context)
         selected_turn = None
-        if turn_id:
+        if turn_id and type(revision) is int:
             for row, queued_turn, run_id, status, _ in _queued_history_rows(page, context):
                 if queued_turn == turn_id and status != "queued":
                     selected_turn = {
