@@ -687,14 +687,14 @@
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
       "base_file": "FHD/frontend/src/composables/useChatOrchestration.ts",
-      "base_blob": "8e71eff9bc0501a6f82aafb7b67ae5f879d7148b",
-      "head_blob": "614abf23157e7e6a82c4526af45d5d5e6ed0cc53",
-      "before_lines": 1039,
-      "after_lines": 1048,
-      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。让运行观察、消息更新和审批卡保留原 Codex 父任务引用，续接时跳过新手首单等本地分支，并禁止把父 run 当业务子任务批准。",
-      "boundary": "仅连接现有编排与卡片控制；runtime 审批卡不走前端自动确认，仍向原 child API 领取并消费批准，续接引用只在同会话传播。",
-      "validation": "本轮最终前端源码的原12文件续接回归443/443通过（43.06秒），覆盖消息恢复、审批、批量、流式与原父任务引用；blocked原父保留场景在单JSON与真实batch均精确断言失败提示。串行原npm run type-check:build通过（23.16秒），未改编译配置或门禁；最终head完整CI另行核验。",
-      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，按最新授权在完整检查后合入。",
+      "base_blob": "3ff496507d39d6f5214626051770e29aa2ae927f",
+      "head_blob": "1f6a1ec88123faea4e13e14aded5093206833660",
+      "before_lines": 1024,
+      "after_lines": 1086,
+      "reason": "工作组08评审请求：业务终态后聊天回执修复晚于短时读取窗口，原界面会停止自动接收。统一复用已有observedTurn与任务工作区刷新，等待有效原消息后再结束观察，并恢复文件与会话状态。",
+      "boundary": "删除远程轮次内的独立一次性回传流程，现有观察器只读原session/turn/run回执，single-flight加有界退避；切号、停止、卸载、撤权、删除和revision变化使旧观察失效，不重发业务请求或新增调度器。",
+      "validation": "最终11文件前端组合459项通过、零跳过，包含超过30秒后最终文字及文件自动回传、重新打开旧queued行、授权/会话失效及迟到响应负控；服务端对应组合379项通过。真实四端和长时生产验收仍独立取证。",
+      "follow_up": "请原责任人@42433422按本记录精确base/head blob审查观察器生命周期与既有任务刷新复用；本记录只是评审请求，不是批准，最终主线CI和生产验收待完成。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useVoiceCall.ts": {
@@ -1139,6 +1139,18 @@
       "boundary": "仅扩展既有事务内状态与事件写入，不新增并行存储或放宽原 claim/租约校验；未绑定候选的 life 状态变更不得替代已批准执行的 portfolio 停止。",
       "validation": "覆盖原状态 CAS、重复事件幂等、授权过期与跨进程恢复回归，并在原生 PostgreSQL 工作流中执行；全仓原生测试与客户签收仍待完成。",
       "follow_up": "请 @42433422 复核 revision 比较、事件不可变性与 SLO 证据回读的边界；后续评估状态存取与治理职责拆分；本记录是评审请求，不代表人工审批。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/ai_chat/conversation_history.py": {
+      "base_file": "FHD/app/application/ai_chat/conversation_history.py",
+      "base_blob": "831d8d5bd6a927fc9be54fc50a573d9ccb03f33d",
+      "head_blob": "be006ebc5da640e8635024264959b4260249b13e",
+      "before_lines": 794,
+      "after_lines": 845,
+      "reason": "工作组08评审请求：原任务已经返回但聊天写回失败时，旧快照可能覆盖取消状态，等待后合法续跑也可能停留旧提示。原回执投影新增当前SQL快照复读、原控制状态及受事务保护的源版本校验。",
+      "boundary": "后台扫描与Host到Mod锁保护已提取到queued_chat_delivery，现有history仅负责原回执到原assistant行的投影；复用Xiaox和SQL账本，不增加执行入口、状态表或业务重试，保留owner、tenant、Mod及conversation revision约束。",
+      "validation": "最终15文件后端组合379项通过、零跳过，覆盖实际SQLite重开、双库并发锁顺序、原行补送、等待续跑及取消后的迟到回执。外部模型I/O由fixture替换；真实模型、PostgreSQL服务与四端实机尚未验收。",
+      "follow_up": "请原责任人@42433422按本记录精确base/head blob复核投影与事务边界；这是架构评审请求，不代表人工审批，正式CI及主线集成仍待完成。",
       "review_owner": "@42433422"
     }
   }

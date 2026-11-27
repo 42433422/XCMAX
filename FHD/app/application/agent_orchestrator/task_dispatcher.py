@@ -94,6 +94,7 @@ class AgentTaskDispatcher:
         self._outcome_worker: threading.Thread | None = None
         self._last_outcome_recovery = float("-inf")
         self._xiaox_resume_cursor: dict[str, str] = {}
+        self._chat_delivery_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -202,6 +203,7 @@ class AgentTaskDispatcher:
             from app.application.agent_orchestrator.verification_recovery import (
                 reconcile_pending_verifications,
             )
+            from app.application.ai_chat.queued_chat_delivery import reconcile_pending_chat_replies
             from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
             from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
 
@@ -223,6 +225,14 @@ class AgentTaskDispatcher:
                 )
             except RECOVERABLE_ERRORS:
                 logger.warning("original Xiaox continuation remains pending", exc_info=True)
+            try:
+                reconcile_pending_chat_replies(
+                    repository=self._run_repo,
+                    stopped=self._stop.is_set,
+                    cursor=self._chat_delivery_cursor,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original chat delivery remains pending", exc_info=True)
             self._wake.set()
 
         self._outcome_worker = threading.Thread(

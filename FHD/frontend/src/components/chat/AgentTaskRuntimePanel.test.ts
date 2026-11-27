@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
@@ -33,6 +34,13 @@ const task = {
 describe('AgentTaskRuntimePanel', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  function artifactResponse(content: string): Response {
+    return new Response(content, { headers: {
+      'X-Artifact-SHA256': createHash('sha256').update(content).digest('hex'),
+      'X-Artifact-Size': String(content.length),
+    } })
+  }
+
   const mountTask = (overrides: Record<string, unknown> = {}) =>
     mount(AgentTaskRuntimePanel, {
       props: { task: { ...task, ...overrides } },
@@ -56,11 +64,11 @@ describe('AgentTaskRuntimePanel', () => {
   }
 
   it('downloads an owned artifact and retains a retry action after failure', async () => {
-    const blob = new Blob(['spreadsheet'])
+    const content = 'spreadsheet'
     const download = vi
       .spyOn(agentRunsApi, 'downloadArtifact')
       .mockRejectedValueOnce(new Error('expired session'))
-      .mockResolvedValueOnce({ blob: async () => blob } as Response)
+      .mockResolvedValueOnce(artifactResponse(content))
     const wrapper = mountTask({
       status: 'success',
       payload: {
@@ -78,30 +86,35 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('下载失败')
     expect(downloadBlob).not.toHaveBeenCalled()
     await button.trigger('click')
-    await flushPromises()
+    await vi.waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce())
     expect(download).toHaveBeenLastCalledWith('run-1', 'xlsx-1')
-    expect(downloadBlob).toHaveBeenCalledWith(blob, '销售报表.xlsx')
+    expect(vi.mocked(downloadBlob).mock.calls[0]?.[0].size).toBe(content.length)
+    expect(vi.mocked(downloadBlob).mock.calls[0]?.[1]).toBe('销售报表.xlsx')
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     download.mockRestore()
   })
 
   it.each(['run', 'task', 'account', 'session', 'mod', 'unmount'])('does not deliver old artifact bytes after the %s changes', async change => {
     vi.mocked(downloadBlob).mockClear()
-    let finish!: (blob: Blob) => void
-    const bytes = new Promise<Blob>(resolve => { finish = resolve })
-    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: () => bytes } as Response)
+    const content = 'isolated business evidence'
+    let finish!: (bytes: ArrayBuffer) => void
+    const bytes = new Promise<ArrayBuffer>(resolve => { finish = resolve })
+    const reply = artifactResponse(content)
+    const readBytes = vi.spyOn(reply, 'arrayBuffer').mockReturnValue(bytes)
+    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue(reply)
     const source = { ...task, payload: { activeRunId: 'run-1', artifacts: [
       { artifact_id: 'xlsx-1', artifact_type: 'file', name: '隔离验收报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
     ] } }
     const wrapper = mountTask(source)
     await wrapper.get('.agent-artifact-downloads button').trigger('click'); await flushPromises()
+    expect(readBytes).toHaveBeenCalledOnce()
     if (change === 'run') await wrapper.setProps({ task: { ...source, payload: { ...source.payload, activeRunId: 'run-2' } } })
     if (change === 'task') await wrapper.setProps({ task: { ...source, id: 'agent_task_task-2' } })
     if (change === 'account') productReadAccountEpoch.value++
     if (change === 'session') invalidateEnterpriseSessionCache()
     if (change === 'mod') writeActiveExtensionModIdToStorage('other-customer-mod')
     if (change === 'unmount') wrapper.unmount()
-    finish(new Blob(['isolated business evidence']))
+    finish(new TextEncoder().encode(content).buffer)
     await flushPromises()
     expect(downloadBlob).not.toHaveBeenCalled()
     if (change !== 'unmount') wrapper.unmount()
@@ -110,17 +123,21 @@ describe('AgentTaskRuntimePanel', () => {
 
   it('keeps a legitimate artifact download when only the same run status advances', async () => {
     vi.mocked(downloadBlob).mockClear()
-    let finish!: (blob: Blob) => void
-    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: () => new Promise(resolve => { finish = resolve }) } as Response)
+    const content = 'isolated business evidence'
+    let finish!: (bytes: ArrayBuffer) => void
+    const reply = artifactResponse(content)
+    vi.spyOn(reply, 'arrayBuffer').mockReturnValue(new Promise(resolve => { finish = resolve }))
+    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue(reply)
     const source = { ...task, payload: { activeRunId: 'run-1', rawRunStatus: 'running', artifacts: [
       { artifact_id: 'xlsx-1', artifact_type: 'file', name: '隔离验收报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
     ] } }
     const wrapper = mountTask(source)
     await wrapper.get('.agent-artifact-downloads button').trigger('click'); await flushPromises()
     await wrapper.setProps({ task: { ...source, payload: { ...source.payload, rawRunStatus: 'completed' } } })
-    const blob = new Blob(['isolated business evidence']); finish(blob)
-    await flushPromises()
-    expect(downloadBlob).toHaveBeenCalledExactlyOnceWith(blob, '隔离验收报表.xlsx')
+    finish(new TextEncoder().encode(content).buffer)
+    await vi.waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce())
+    expect(vi.mocked(downloadBlob).mock.calls[0]?.[0].size).toBe(content.length)
+    expect(vi.mocked(downloadBlob).mock.calls[0]?.[1]).toBe('隔离验收报表.xlsx')
     wrapper.unmount()
   })
 

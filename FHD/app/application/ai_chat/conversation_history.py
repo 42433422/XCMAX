@@ -7,6 +7,8 @@ import logging
 import os
 import re
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any, Protocol
 
 from app.infrastructure.modstore_transport import safe_route_metadata
@@ -65,6 +67,7 @@ class ConversationStore(Protocol):
         expected_revision: int,
         assistant: dict[str, Any],
         allow_retry_repair: bool = False,
+        source_guard: Callable[[Any], AbstractContextManager[bool]] | None = None,
     ) -> int | None: ...
 
 
@@ -109,7 +112,9 @@ def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _stopped_workbook_files(repository, run: AgentRun, request_key: str, turn_id: str) -> list[dict[str, Any]]:
+def _stopped_workbook_files(
+    repository, run: AgentRun, request_key: str, turn_id: str
+) -> list[dict[str, Any]]:
     """Observe the already verified child of the interrupted original queue turn."""
     from app.application.agent_orchestrator.artifact_files import read_verified_run_file
     from app.application.agent_orchestrator.verification_recovery import (
@@ -172,7 +177,11 @@ def _stopped_workbook_files(repository, run: AgentRun, request_key: str, turn_id
             if (receipt.get("verification") or {}).get("status") != "verified":
                 continue
             for file in verified_receipt_artifacts([{**call, "receipt": receipt}]):
-                artifact = next(item for item in receipt["artifacts"] if item["artifact_id"] == file["artifact_id"])
+                artifact = next(
+                    item
+                    for item in receipt["artifacts"]
+                    if item["artifact_id"] == file["artifact_id"]
+                )
                 read_verified_run_file(file["run_id"], artifact)
                 files[file["uri"]] = file
         return list(files.values())
@@ -182,12 +191,12 @@ def _stopped_workbook_files(repository, run: AgentRun, request_key: str, turn_id
 
 def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any]) -> None:
     """Project scoped inputs, completed replies and stopped-turn files into the history response."""
-    from app.application.ai_chat.dialogue_memory import conversation_key
     from app.application.agent_orchestrator.run_models import RunContextScope
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.application.agent_runtime.chat import runtime_chat_files
     from app.application.agent_runtime.chat_file_sources import released_chat_file_sources
     from app.application.agent_runtime.conversation_attachments import original_conversation_uploads
+    from app.application.ai_chat.dialogue_memory import conversation_key
     from app.domain.shared_services.conversation_service import queued_chat_binding
     from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
 
@@ -195,7 +204,9 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
     if type(revision) is not int or not context["tenant_id"]:
         return
     owner = str(context["local_user_id"])
-    scope = RunContextScope(str(context["tenant_id"]), context["mod_id"], context["session_id"], revision)
+    scope = RunContextScope(
+        str(context["tenant_id"]), context["mod_id"], context["session_id"], revision
+    )
     repository = get_agent_run_repository()
     runs = {}
     for row in page["messages"]:
@@ -207,7 +218,9 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
             continue
         if not isinstance(metadata, dict):
             continue
-        binding, summary, ui = (metadata.get(key) or {} for key in ("business_harness", "summary", "ui"))
+        binding, summary, ui = (
+            metadata.get(key) or {} for key in ("business_harness", "summary", "ui")
+        )
         if not all(isinstance(value, dict) for value in (binding, summary, ui)):
             continue
         # A persisted or client-supplied projection is never historical evidence.
@@ -218,8 +231,10 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
         if (
             binding.get("recall_bound") is not True
             or binding.get("conversation_id") != context["session_id"]
-            or not isinstance(run_id, str) or not isinstance(turn_id, str)
-            or summary.get("run_id") != run_id or summary.get("turn_id") != turn_id
+            or not isinstance(run_id, str)
+            or not isinstance(turn_id, str)
+            or summary.get("run_id") != run_id
+            or summary.get("turn_id") != turn_id
         ):
             continue
         if row["role"] == "assistant" and (
@@ -232,8 +247,10 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
             runs[run_id] = repository.get(run_id)
         run = runs[run_id]
         if (
-            run is None or run.user_id != owner
-            or run.metadata.get("runtime_type") != "xiaox" or not scope.matches(run)
+            run is None
+            or run.user_id != owner
+            or run.metadata.get("runtime_type") != "xiaox"
+            or not scope.matches(run)
         ):
             continue
         if row["role"] == "user":
@@ -242,35 +259,44 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
                 if uploads:
                     files = [{"name": item.name, "reference": item.reference} for item in uploads]
                     row["metadata"] = json.dumps(
-                        {**metadata, "ui": {**ui, "inputAttachments": files}}, ensure_ascii=False,
+                        {**metadata, "ui": {**ui, "inputAttachments": files}},
+                        ensure_ascii=False,
                     )
             continue
         key = canonical_digest({"turn_id": turn_id, "owner": owner})
         if summary.get("status") == "queued":
-            if (
-                queued_chat_binding(metadata) == (turn_id, run_id, conversation_key(context))
-                and (files := _stopped_workbook_files(repository, run, key, turn_id))
+            if queued_chat_binding(metadata) == (turn_id, run_id, conversation_key(context)) and (
+                files := _stopped_workbook_files(repository, run, key, turn_id)
             ):
                 row["content"] = "本轮已结束，原任务结果仍待核对。"
-                row["metadata"] = json.dumps({
-                    **metadata,
-                    "summary": {**summary, "status": "unknown", "success": False},
-                    "ui": {
-                        **ui,
-                        "workflowAction": "unknown",
-                        "execution": {"effect": "unknown", "outcome": "unknown"},
-                        "runtimeContinuation": {"runId": None, "status": "unknown", "sessionId": scope.session_id},
-                        "outputArtifacts": files,
+                row["metadata"] = json.dumps(
+                    {
+                        **metadata,
+                        "summary": {**summary, "status": "unknown", "success": False},
+                        "ui": {
+                            **ui,
+                            "workflowAction": "unknown",
+                            "execution": {"effect": "unknown", "outcome": "unknown"},
+                            "runtimeContinuation": {
+                                "runId": None,
+                                "status": "unknown",
+                                "sessionId": scope.session_id,
+                            },
+                            "outputArtifacts": files,
+                        },
                     },
-                }, ensure_ascii=False)
+                    ensure_ascii=False,
+                )
             continue
         if run.status != "completed":
             continue
         request = (run.metadata.get("runtime_requests") or {}).get(key) or {}
         result = request.get("result")
         if (
-            request.get("state") == "returned" and request.get("turn_id") == turn_id
-            and isinstance(result, dict) and result.get("run_id") == run_id
+            request.get("state") == "returned"
+            and request.get("turn_id") == turn_id
+            and isinstance(result, dict)
+            and result.get("run_id") == run_id
         ):
             projected = {}
             if not ui.get("outputArtifacts") and (files := runtime_chat_files(result)):
@@ -280,7 +306,9 @@ def restore_runtime_history_files(page: dict[str, Any], context: dict[str, Any])
             ):
                 projected["fileSources"] = sources
             if projected:
-                row["metadata"] = json.dumps({**metadata, "ui": {**ui, **projected}}, ensure_ascii=False)
+                row["metadata"] = json.dumps(
+                    {**metadata, "ui": {**ui, **projected}}, ensure_ascii=False
+                )
 
 
 def persist_chat_turn(
@@ -292,6 +320,7 @@ def persist_chat_turn(
     store: ConversationStore | None = None,
     _settle_queued: bool = False,
     _repair_retry: bool = False,
+    _source_guard: Callable[[Any], AbstractContextManager[bool]] | None = None,
 ) -> dict[str, Any]:
     """
     在请求携带 session_id / conversation_id 时，将会话与工具结果摘要写入 ai_conversations，
@@ -503,6 +532,7 @@ def persist_chat_turn(
             expected_revision=context["_conversation_revision"],
             assistant=assistant,
             allow_retry_repair=_repair_retry,
+            **({"source_guard": _source_guard} if _source_guard is not None else {}),
         )
         return {"message_ids": [message_id] if message_id is not None else []}
     message_ids = store.save_turn(
@@ -550,8 +580,10 @@ def reconcile_queued_chat_reply(
     """Project the committed outcome of the original queue turn into its chat message."""
     from app.application.agent_orchestrator.run_models import RunContextScope
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.application.agent_runtime.chat import runtime_chat_payload
     from app.application.agent_runtime.gateway import public_runtime_result
+    from app.application.ai_chat.queued_chat_delivery import _queued_chat_source_guard
     from app.application.task_conversation_store import durable_user_id
     from app.domain.shared_services.conversation_service import ConversationRevisionError
     from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
@@ -567,7 +599,13 @@ def reconcile_queued_chat_reply(
     if not owner or (tenant_id and tenant is None) or not session or type(revision) is not int:
         return False
     try:
-        run = run if run is not None else get_agent_run_repository().get(run_id)
+        repository = get_agent_run_repository()
+        if not isinstance(repository, SQLAlchemyAgentRunRepository):
+            return False
+        observed = run
+        run = repository.get(run_id)
+        if observed is not None and (run is None or run.to_dict() != observed.to_dict()):
+            return False
         if (
             run is None
             or run.run_id != run_id
@@ -589,12 +627,19 @@ def reconcile_queued_chat_reply(
         else:
             from app.infrastructure.xiaox.queued_runtime import recover_interrupted_queue_request
 
-            result = recover_interrupted_queue_request(get_agent_run_repository(), run, key)
+            result = recover_interrupted_queue_request(repository, run, key)
+            if result is not None:
+                # Recovery itself commits the original returned receipt. Fence
+                # that new snapshot, never the pre-recovery read or a later control.
+                run = repository.get(run_id)
+                if run is None:
+                    return False
+                receipt = (run.metadata.get("runtime_requests") or {}).get(key) or {}
+                if receipt.get("state") != "returned" or receipt.get("result") != result:
+                    return False
         repair_retry = False
         pending = run.metadata.get("_xiaox_queued_request") or {}
-        latest = (run.metadata.get("runtime_requests") or {}).get(
-            pending.get("request_key"), {}
-        )
+        latest = (run.metadata.get("runtime_requests") or {}).get(pending.get("request_key"), {})
         if (
             run.status == "completed"
             and receipt.get("state") == "returned"
@@ -617,6 +662,11 @@ def reconcile_queued_chat_reply(
             repair_retry = True
         if not publish or not isinstance(result, dict) or result.get("run_id") != run_id:
             return False
+        if (
+            run.status in {"paused", "cancelled", "rejected"}
+            and result.get("execution_state") != run.status
+        ):
+            return False
         payload = runtime_chat_payload(public_runtime_result(result), conversation_id=session)
         token = set_request_active_mod_id(mod)
         try:
@@ -628,6 +678,7 @@ def reconcile_queued_chat_reply(
                     payload,
                     _settle_queued=True,
                     _repair_retry=repair_retry,
+                    _source_guard=lambda db: _queued_chat_source_guard(db, run),
                 )
                 return bool(ack["message_ids"])
         finally:

@@ -80,17 +80,8 @@ export async function waitForAgentRunTerminal(
   const normalized = String(runId || '').trim()
   if (!normalized) return null
   const started = Date.now()
-  let afterEventId = ""
   while (isCurrent() && Date.now() - started < timeoutMs) {
     try {
-      const response = await agentRunsApi.listEvents(
-        normalized,
-        afterEventId ? { after_event_id: afterEventId } : {},
-      )
-      if (!isCurrent()) return null
-      const rows = Array.isArray(response?.data) ? response.data : []
-      const lastEventId = asString(rows[rows.length - 1]?.event_id).trim()
-      if (lastEventId) afterEventId = lastEventId
       const run = (await agentRunsApi.getRun(normalized))?.data
       if (!isCurrent()) return null
       if (run?.run_id === normalized && FOLLOW_TERMINAL.has(String(run.status))) return run
@@ -207,6 +198,7 @@ export function buildAgentRunTaskUpdate(params: {
 export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const lastEventByRunId = new Map<string, string>()
   const eventsByRunId = new Map<string, AgentRunEvent[]>()
+  const observations = new Map<string, symbol>()
   // 模板库页可能一直开着；对话里改了模板就通知它刷新一次，已通知过的事件不重复触发。
   const notifiedTemplateEvents = new Set<string>()
   let lastIdentity = ''
@@ -253,45 +245,54 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   async function syncAgentRunEvents(runId: string, userText = '', isGenerationCurrent: () => boolean = () => true): Promise<void> {
     const identity = resolveChatIdentity()
     const messageRef = options.getLastAiMessageRef?.() || ''
-    const isCurrent = () => isGenerationCurrent() && identity === resolveChatIdentity()
     if (lastIdentity !== identity) {
       lastEventByRunId.clear()
       eventsByRunId.clear()
+      observations.clear()
+      notifiedTemplateEvents.clear()
       lastIdentity = identity
     }
     const normalizedRunId = String(runId || '').trim()
     if (!normalizedRunId) return
+    const observation = Symbol()
+    observations.set(normalizedRunId, observation)
+    const isCurrent = () => isGenerationCurrent() && identity === resolveChatIdentity()
+      && observations.get(normalizedRunId) === observation
     const afterEventId = lastEventByRunId.get(normalizedRunId)
-    try {
-      const response = await agentRunsApi.listEvents(normalizedRunId, afterEventId ? { after_event_id: afterEventId } : {})
+    let run: AgentRun | undefined
+    const publish = () => {
       if (!isCurrent()) return
-      const incoming = Array.isArray(response?.data) ? response.data : []
-      if (!incoming.length) return
-      const events = mergeEvents(normalizedRunId, incoming)
-      notifyTemplateMutation(incoming)
-      const last = incoming[incoming.length - 1]
-      if (last?.event_id) {
-        lastEventByRunId.set(normalizedRunId, last.event_id)
-      }
-      let run: AgentRun | undefined
-      try {
-        const runResponse = await agentRunsApi.getRun(normalizedRunId)
-        run = runResponse?.data
-      } catch {
-        // Older/offline runtimes may expose the event feed before the run detail route.
-      }
-      if (!isCurrent()) return
+      const events = eventsByRunId.get(normalizedRunId) || []
       const durableTask = run ? groupAgentRunsIntoTasks([{ ...run, events }])[0] : null
-      if (run) completeFirstAiTaskFromRun(run)
       if (durableTask) {
         options.removeTask?.(`agent_${normalizedRunId}`)
         options.upsertTask({ ...durableTask, messageRef })
       } else {
         syncTaskPanel(normalizedRunId, userText, events, messageRef)
       }
-    } catch {
-      if (isCurrent()) options.removeTask?.(`agent_${normalizedRunId}`)
     }
+    // Either read may fail or stall. Publish the authoritative status as soon as
+    // it arrives, and retain the last known task when diagnostics are unavailable.
+    await Promise.all([
+      (async () => {
+        const response = await agentRunsApi.getRun(normalizedRunId).catch(() => undefined)
+        if (!isCurrent() || response?.data?.run_id !== normalizedRunId) return
+        run = response.data
+        completeFirstAiTaskFromRun(run)
+        publish()
+      })(),
+      (async () => {
+        const response = await agentRunsApi.listEvents(normalizedRunId, afterEventId ? { after_event_id: afterEventId } : {}).catch(() => undefined)
+        if (!isCurrent()) return
+        const incoming = Array.isArray(response?.data) ? response.data : []
+        if (!incoming.length) return
+        mergeEvents(normalizedRunId, incoming)
+        notifyTemplateMutation(incoming)
+        const last = incoming[incoming.length - 1]
+        if (last?.event_id) lastEventByRunId.set(normalizedRunId, last.event_id)
+        publish()
+      })(),
+    ])
   }
 
   async function syncAgentRunFromPayload(payload: unknown, userText = '', isCurrent: () => boolean = () => true): Promise<void> {

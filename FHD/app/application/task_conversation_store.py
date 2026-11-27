@@ -420,9 +420,17 @@ class TaskConversationStore:
         for _, queued_turn, run_id, status, marked in _queued_history_rows(
             page, context, include_legacy=True
         ):
-            if status in {"queued", "unknown", "blocked", "failed"} and reconcile_queued_chat_reply(
-                context, queued_turn, run_id, publish=marked
-            ):
+            if status in {
+                "queued",
+                "unknown",
+                "blocked",
+                "failed",
+                "running",
+                "paused",
+                "waiting_user",
+                "waiting_approval",
+                "waiting_auth",
+            } and reconcile_queued_chat_reply(context, queued_turn, run_id, publish=marked):
                 repaired = True
         if repaired:
             page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
@@ -430,7 +438,7 @@ class TaskConversationStore:
         context["_conversation_revision"] = revision = (session or {}).get("revision")
         restore_runtime_history_files(page, context)
         selected_turn = None
-        if turn_id:
+        if turn_id and type(revision) is int:
             for row, queued_turn, run_id, status, _ in _queued_history_rows(page, context):
                 if queued_turn == turn_id and status != "queued":
                     selected_turn = {

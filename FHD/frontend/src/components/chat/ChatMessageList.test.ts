@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { nextTick, ref } from 'vue'
 import { afterEach } from 'vitest'
 enableAutoUnmount(afterEach)
@@ -87,8 +88,10 @@ describe('ChatMessageList', () => {
   })
 
   it.each(['completed', 'unknown'])('downloads the original child file from %s history', async (status) => {
+    const content = 'verified result'
+    const metadata = { sha256: createHash('sha256').update(content).digest('hex'), size_bytes: content.length }
     const file = { artifact_type: 'file', name: '明细.xlsx', artifact_id: 'verified-xlsx',
-      run_id: 'run-child', uri: '/api/agent/runs/run-child/artifacts/verified-xlsx' }
+      run_id: 'run-child', uri: '/api/agent/runs/run-child/artifacts/verified-xlsx', metadata }
     const unsafe = { ...file, uri: '/api/agent/runs/run-parent/artifacts/verified-xlsx' }
     const outputArtifacts = readRuntimeOutputDownloads({ success: true, data: { output_artifacts: [file, unsafe],
       artifacts: [{ artifact_type: 'file_analysis', name: '原始附件.xlsx' }] } })
@@ -97,8 +100,9 @@ describe('ChatMessageList', () => {
       summary: { status, success: status === 'completed', turn_id: 'original-turn' },
       ui: { outputArtifacts, ...(status === 'unknown' ? { execution: { effect: 'unknown', outcome: 'unknown' } } : {}) },
     } })
-    const blob = new Blob(['verified result'])
-    const download = vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: async () => blob } as Response)
+    const download = vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue(new Response(content, {
+      headers: { 'X-Artifact-SHA256': metadata.sha256, 'X-Artifact-Size': String(metadata.size_bytes) },
+    }))
     const save = vi.spyOn(downloadUtilities, 'downloadBlob').mockImplementation(() => {})
     const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
       { role: 'ai', content: '明细.xlsx', time: '12:00', ...extras },
@@ -108,9 +112,10 @@ describe('ChatMessageList', () => {
     expect(wrapper.text().includes('已核验文件可下载供核对。')).toBe(status === 'unknown')
     expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
     await button.trigger('click')
-    await flushPromises()
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce())
     expect(download).toHaveBeenCalledExactlyOnceWith('run-child', 'verified-xlsx')
-    expect(save).toHaveBeenCalledExactlyOnceWith(blob, '明细.xlsx')
+    expect(save.mock.calls[0]?.[0].size).toBe(metadata.size_bytes)
+    expect(save.mock.calls[0]?.[1]).toBe('明细.xlsx')
     download.mockRestore()
     save.mockRestore()
   })
