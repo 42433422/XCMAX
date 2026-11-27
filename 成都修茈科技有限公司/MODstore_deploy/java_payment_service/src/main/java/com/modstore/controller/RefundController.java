@@ -68,12 +68,12 @@ public class RefundController {
     public Map<String, Object> review(@PathVariable Long refundId, @RequestBody Map<String, Object> body) {
         try {
             User user = currentUserService.requireCurrentUser();
-            Refund refund = refundService.review(
-                    user,
-                    refundId,
-                    String.valueOf(body.getOrDefault("action", "")),
-                    String.valueOf(body.getOrDefault("admin_note", ""))
-            );
+            String action = String.valueOf(body.getOrDefault("action", ""));
+            String adminNote = String.valueOf(body.getOrDefault("admin_note", ""));
+            Object refundTargetObj = body.get("refund_target");
+            Refund refund = (refundTargetObj == null || String.valueOf(refundTargetObj).isBlank())
+                    ? refundService.review(user, refundId, action, adminNote)
+                    : refundService.review(user, refundId, action, adminNote, String.valueOf(refundTargetObj));
             return Map.of("ok", true, "refund", refundToMap(refund));
         } catch (Exception e) {
             log.warn("退款审核失败: {}", e.getMessage());
@@ -91,6 +91,9 @@ public class RefundController {
         row.put("status", refund.getStatus());
         row.put("admin_note", refund.getAdminNote() == null ? "" : refund.getAdminNote());
         row.put("wallet_transaction_id", refund.getWalletTransactionId());
+        row.put("refund_channel", refund.getRefundChannel() == null ? "wallet" : refund.getRefundChannel());
+        row.put("channel_refund_no", refund.getChannelRefundNo());
+        row.put("channel_refund_status", refund.getChannelRefundStatus());
         row.put("created_at", refund.getCreatedAt());
         row.put("updated_at", refund.getUpdatedAt());
         row.put("reviewed_at", refund.getReviewedAt());
