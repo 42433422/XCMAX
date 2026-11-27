@@ -806,7 +806,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       queued = true
       enqueueChatBatchMessage(message, debounceMs, (msgs) => {
         void executeRemoteChatRound(msgs, turn, requestScope).finally(async () => {
-          if (localScope.isCurrent()) await syncFromServer()
+          if (localScope.isCurrent()) await syncFromServer({ onConversation: observeConversation })
           await refreshHistorySessions()
         })
       }, taskSessionId)
@@ -814,7 +814,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       origin?.release()
       if (!queued) {
         generation.setLoading(false)
-        if (localScope.isCurrent()) await syncFromServer()
+        if (localScope.isCurrent()) await syncFromServer({ onConversation: observeConversation })
       }
     }
   }
