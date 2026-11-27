@@ -46,7 +46,11 @@ def test_falls_back_when_docling_missing(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("XCAGI_DOC_PARSER", "auto")
     monkeypatch.setattr(router, "docling_available", lambda: False)
     path = tmp_path / "a.docx"
-    path.write_bytes(b"docx")
+    from docx import Document
+
+    document = Document()
+    document.add_paragraph("native text")
+    document.save(path)
     text, parser, meta = router.parse_document(path, _legacy)
     assert (text, parser) == ("legacy text", "pdfplumber")
     assert meta["docling_skipped"] == "not_installed"
@@ -61,7 +65,11 @@ def test_falls_back_when_docling_raises(tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(router, "parse_with_docling", boom)
     path = tmp_path / "a.pptx"
-    path.write_bytes(b"pptx")
+    from pptx import Presentation
+
+    presentation = Presentation()
+    presentation.slides.add_slide(presentation.slide_layouts[6])
+    presentation.save(path)
     text, parser, meta = router.parse_document(path, _legacy)
     assert (text, parser) == ("legacy text", "pdfplumber")
     assert "conversion failed" in meta["docling_error"]

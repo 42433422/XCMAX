@@ -37,10 +37,7 @@ def _assert_finance_run(repo: InMemoryAgentRunRepository, run_id: str, action: s
     assert call.output["success"] is True
     report = call.metadata["verification"]
     assert report["accepted"] is False
-    if action == "create_transaction":
-        assert report["code"] == "result_source_unavailable"
-    else:
-        assert report["code"] == "result_verifier_unavailable"
+    assert report["code"] == "result_source_unavailable"
     events = {event.event_type for event in run.events}
     assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
     assert not {"tool.completed", "run.completed"} & events

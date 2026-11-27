@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+WORKBOOK_READER = "excel-full-read-employee"
 WORKBOOK_WRITER = "excel-template-write-employee"
 WORKBOOK_QC = "excel-qc-employee"
 _TEXT = {"type": "string", "minLength": 1}

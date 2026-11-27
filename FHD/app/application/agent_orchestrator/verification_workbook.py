@@ -164,6 +164,14 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
                 filled = Path(directory) / ("result" + suffix)
                 filled.write_bytes(read_verified_run_file(run.run_id, artifacts[0]))
                 report = module.run_qc(filled, plan, template_path=template)
+                from app.application.workbook_formula_evidence import summarize_formula_evidence
+
+                formula_evidence = summarize_formula_evidence(
+                    filled.read_bytes(),
+                    qc_formula_count=(
+                        (report.get("sections") or {}).get("formulas", {}).get("stats") or {}
+                    ).get("formulas_total"),
+                )
     sections = report.get("sections") or {}
     checked = {name: item.get("status") for name, item in sections.items()}
     native_count = sum(
@@ -209,6 +217,7 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
         artifact_sha256=artifacts[0]["metadata"]["sha256"],
         sections=checked,
         formula_recalculation_verified=False,
+        formula_evidence=formula_evidence,
     )
     quality["checks"] = files["checks"] + quality["checks"]
     return quality

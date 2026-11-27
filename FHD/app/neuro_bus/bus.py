@@ -34,6 +34,7 @@ from app.neuro_bus.bus_primitives import _deployment_is_production as _deploymen
 from app.neuro_bus.bus_primitives import _deployment_is_staging as _deployment_is_staging
 from app.neuro_bus.bus_primitives import _neuro_trace_sample_rate as _neuro_trace_sample_rate
 from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
+from app.neuro_bus.command_gateway import _COMMAND_REPLY_KEY
 from app.neuro_bus.delivery_metrics import record_delivery_metric, record_event_outcome
 from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
@@ -596,11 +597,16 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             record_event_outcome(self._enable_metrics, "rejected")
             return False
 
+        # CommandGateway futures belong to this process; neither transport has
+        # cross-process replies. Correlated commands must not be forwarded.
+        local_only = event.payload.get("local_only") is True or bool(
+            event.payload.get(_COMMAND_REPLY_KEY)
+        )
         # A stream group is a work queue, not a broadcast to a second local copy.
         # Only the consumer enters the existing partition queue for these events.
         if (
             isinstance(self._redis_bridge, RedisStreamsBridge)
-            and event.payload.get("local_only") is not True
+            and not local_only
             and not event.payload.get("_neuro_remote_ingest")
         ):
             accepted = self._redis_bridge.publish_remote(event) is not None
@@ -640,7 +646,11 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")
             record_event_outcome(self._enable_metrics, "accepted")
-            if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
+            if (
+                self._redis_bridge is not None
+                and not local_only
+                and not event.payload.get("_neuro_remote_ingest")
+            ):
                 self._redis_bridge.publish_remote(event)
             self._wake_processor()
         else:

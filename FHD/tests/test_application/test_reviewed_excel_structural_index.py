@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from io import BytesIO
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from app.application.reviewed_excel_reference_ids import neutralize_messages
 from app.application.reviewed_excel_structural_index import (
@@ -15,6 +16,7 @@ from app.application.reviewed_excel_structural_index import (
     attach_structural_index_to_draft,
     build_workbook_structural_index,
     compress_structural_index_for_model,
+    ensure_review_structural_index,
     prefer_structural_classification_if_undersegmented,
 )
 
@@ -118,12 +120,21 @@ def test_neutralize_keeps_structural_index_drops_structure_map():
     assert kept.get("labels") == ["a"]
 
 
-def test_prefer_structural_when_strictly_more_atoms():
-    """Generic rule: promote when struct_n > model_n; keep model when equal or model has more."""
+def test_valid_model_regions_are_never_overridden_by_candidate_counts():
+    """A model may correctly keep a continuous ledger despite multiple rule candidates."""
     review = {
-        "sheet_overview": [{"sheet": "期间块", "sheet_state": "visible", "merged_regions": []}],
+        "sheet_overview": [
+            {
+                "sheet": "期间块",
+                "sheet_state": "visible",
+                "merged_regions": [],
+                "rows": 30,
+                "columns": 4,
+            }
+        ],
         "workbook_structural_index": {
             "schema_version": SCHEMA_VERSION,
+            "source_sha256": "x",
             "sheets": [
                 {
                     "sheet": "期间块",
@@ -139,31 +150,37 @@ def test_prefer_structural_when_strictly_more_atoms():
         },
         "sha256": "x",
     }
-    # model under-segments (1 region vs 3 structural) → promote
-    under = {"regions": [{"sheet": "期间块", "range": "A1:D30"}]}
-    promoted = prefer_structural_classification_if_undersegmented(review, under)
-    assert promoted.get("workbook_structural_index_source") == "layout_dateblock_fallback"
-    assert len(promoted["regions"]) == 3
+    # One valid model region remains one continuous document.
+    under = {
+        "model_status": "returned",
+        "source_sha256": "x",
+        "regions": [{"sheet": "期间块", "range": "A1:D30"}],
+    }
+    assert prefer_structural_classification_if_undersegmented(review, under) is under
 
     # equal counts → keep model
     equal = {
+        "model_status": "returned",
+        "source_sha256": "x",
         "regions": [
             {"sheet": "期间块", "range": "A1:D9"},
             {"sheet": "期间块", "range": "A10:D20"},
             {"sheet": "期间块", "range": "A21:D30"},
-        ]
+        ],
     }
     kept = prefer_structural_classification_if_undersegmented(review, equal)
     assert kept is equal
 
     # model has more → keep model
     over = {
+        "model_status": "returned",
+        "source_sha256": "x",
         "regions": [
             {"sheet": "期间块", "range": "A1:D5"},
             {"sheet": "期间块", "range": "A6:D9"},
             {"sheet": "期间块", "range": "A10:D20"},
             {"sheet": "期间块", "range": "A21:D30"},
-        ]
+        ],
     }
     kept2 = prefer_structural_classification_if_undersegmented(review, over)
     assert kept2 is over
@@ -171,6 +188,23 @@ def test_prefer_structural_when_strictly_more_atoms():
     # missing classification → structural
     from_none = prefer_structural_classification_if_undersegmented(review, None)
     assert len(from_none["regions"]) == 3
+    assert from_none["model_status"] == "fallback"
+    assert from_none["needs_confirmation"] is True
+    assert from_none["coverage_status"] == "unknown"
+    for invalid in ("A0:D2", "A1:E30", "A1:D31", "A:D"):
+        bad = {**under, "regions": [{"sheet": "期间块", "range": invalid}]}
+        assert (
+            prefer_structural_classification_if_undersegmented(review, bad)["model_status"]
+            == "fallback"
+        )
+    stale = {**under, "source_sha256": "old"}
+    assert (
+        prefer_structural_classification_if_undersegmented(review, stale)["model_status"]
+        == "fallback"
+    )
+    review["workbook_structural_index"]["sheets"][0]["candidate_row_ranges"][0]["end_row"] = 99
+    with pytest.raises(ValueError, match="超出原件范围"):
+        prefer_structural_classification_if_undersegmented(review, None)
 
 
 def test_additional_return_note_absorbs_form_meta():
@@ -232,3 +266,110 @@ def test_candidate_range_limit_retains_overflow_evidence_through_projection(coun
     )
     tail = projected["sheets"][0]["candidate_row_ranges"][-1]
     assert {key: tail[key] for key in capped[-1]} == capped[-1]
+
+
+def test_sparse_index_keeps_remote_formula_without_materializing_gaps(monkeypatch):
+    from app.application import reviewed_excel_structural_index as structural
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["日期", "单号"])
+    sheet.append([45000, "one"])
+    sheet["A1000000"] = 45001
+    sheet["B1000000"] = "two"
+    sheet["XFD1048576"] = "=Hidden!A1"
+    hidden = workbook.create_sheet("Hidden")
+    hidden.sheet_state = "veryHidden"
+    hidden["A1"] = 0
+    output = BytesIO()
+    workbook.save(output)
+    body = output.getvalue()
+    original_load = load_workbook
+    loaded = []
+
+    def sparse_load(*args, **kwargs):
+        result = original_load(*args, **kwargs)
+        for item in result:
+            before = len(item._cells)
+            loaded.append((item, before))
+
+            def forbidden(*args, **kwargs):
+                pytest.fail("navigation must not materialize cells or scan a dense rectangle")
+
+            monkeypatch.setattr(item, "cell", forbidden)
+            monkeypatch.setattr(item, "iter_rows", forbidden)
+        return result
+
+    monkeypatch.setattr(structural, "load_workbook", sparse_load)
+    index = build_workbook_structural_index(body)
+    assert all(len(sheet._cells) == before for sheet, before in loaded)
+    assert index["sheets"][0]["rows"] == 1048576
+    assert index["sheets"][0]["columns"] == 16384
+    assert index["sheets"][0]["ledger_run_hint_count"] == 2
+    assert index["sheets"][0]["cross_sheet_formula_refs"][0]["from_cell"] == "XFD1048576"
+    assert index["sheets"][1]["sheet_state"] == "veryHidden"
+
+
+def test_model_budget_retains_every_sheet_and_counts_its_own_metadata():
+    index = {
+        "source_sha256": "a" * 64,
+        "sheets": [
+            {
+                "sheet": f"工作表{i}",
+                "sheet_state": "hidden" if i % 2 else "visible",
+                "rows": 1000,
+                "columns": 40,
+                "block_title_rows": [{"row": j, "text": "标题" * 60} for j in range(40)],
+                "candidate_row_ranges": [
+                    {"start_row": j, "end_row": j + 1, "basis": "candidate"} for j in range(80)
+                ],
+            }
+            for i in range(70)
+        ],
+    }
+    before = deepcopy(index)
+    summary = compress_structural_index_for_model(index)
+    encoded = json.dumps(summary, ensure_ascii=False, separators=(",", ":")).encode()
+    assert len(encoded) == summary["encoded_bytes"] <= 40000
+    assert summary["truncated"] is True
+    assert summary["is_full_facts"] is False
+    assert summary["sheet_inventory_complete"] is True
+    assert [sheet["sheet"] for sheet in summary["sheets"]] == [
+        sheet["sheet"] for sheet in index["sheets"]
+    ]
+    assert summary["readback"]["expected_sha256"] == index["source_sha256"]
+    assert index == before
+    with pytest.raises(ValueError, match="完整工作表清单"):
+        compress_structural_index_for_model(index, budget_bytes=100)
+
+
+def test_changed_source_rebuilds_index_and_model_view():
+    review = {}
+    old = ensure_review_structural_index(review, _sample_workbook())
+    workbook = Workbook()
+    workbook.active.title = "New"
+    workbook.active["A1"] = "changed"
+    output = BytesIO()
+    workbook.save(output)
+    new = ensure_review_structural_index(review, output.getvalue())
+    assert new["source_sha256"] != old["source_sha256"]
+    assert review["workbook_structural_index_for_model"]["source_sha256"] == new["source_sha256"]
+    assert [sheet["sheet"] for sheet in new["sheets"]] == ["New"]
+
+
+def test_complete_sheet_inventory_keeps_unsupported_chart_sheets():
+    from openpyxl.chart import BarChart, Reference
+
+    workbook = Workbook()
+    workbook.active["A1"] = 1
+    chart = BarChart()
+    chart.add_data(Reference(workbook.active, min_col=1, min_row=1))
+    workbook.create_chartsheet("Chart").add_chart(chart)
+    output = BytesIO()
+    workbook.save(output)
+    summary = compress_structural_index_for_model(
+        build_workbook_structural_index(output.getvalue())
+    )
+    assert summary["sheet_inventory_complete"] is True
+    assert [item["sheet"] for item in summary["sheets"]] == workbook.sheetnames
+    assert summary["sheets"][1]["status"] == "unsupported"
