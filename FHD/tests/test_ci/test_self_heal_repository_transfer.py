@@ -190,14 +190,10 @@ def test_new_incident_persists_verified_api_id_but_does_not_dedupe_on_it():
     assert f"Self-Heal-Run: `{RUN_ID}/1`" in markers
 
     github = GitHub()
-    github.responses[f"/repos/{REPO}/issues"] = (
-        200,
-        [
-            {
-                "state": "open",
-                "html_url": f"https://github.com/{REPO}/issues/9",
-                "body": f"- Head Repository ID: `{REPO_ID}`\n",
-            }
-        ],
-    )
+    marker_only_issue = {
+        "state": "open",
+        "html_url": f"https://github.com/{REPO}/issues/9",
+        "body": f"- Head Repository ID: `{REPO_ID}`\n",
+    }
+    github.responses[f"/repos/{REPO}/issues"] = (200, [marker_only_issue])
     assert freshness.find_marked_issue(github, REPO, markers) == ""
