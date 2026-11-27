@@ -40,13 +40,13 @@
     "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py",
       "base_blob": "36da1ae98aaff876f9783791add1d34f74c687a2",
-      "head_blob": "c436c400b185c7468f21e6d570244c21339ca620",
+      "head_blob": "db4ccb491bf5b83f0f7c71ac5e6f6de574e04531",
       "before_lines": 915,
-      "after_lines": 926,
-      "reason": "工作组07架构评审请求，尚未批准：以整合基线d76cf1e3为准，在原回执投影事务中接受既有blocked/partial组合，语义净增1行及按现有Ruff格式净增10行，共915→926（+11）；保留整合侧严格的原已核验子任务恢复条件。",
+      "after_lines": 921,
+      "reason": "工作组07架构评审请求，尚未批准：以整合基线d76cf1e3为准，在原回执投影事务中接受既有blocked/partial组合，语义净增1行及按现有Ruff格式净增10行，共915→926（+11）；保留整合侧严格的原已核验子任务恢复条件。；WG01 #3716 在本次合并将结果映射复用 xiaox_queue_outcome，净减5行。",
       "boundary": "仍由原SQL仓储执行同库事务、父状态CAS、原子任务快照及所有者/租户核对；不增加调度或新状态，活租约、取消、unknown及重试对账防线保持，verified_child_recovery仍要求全部原回执已核验。",
-      "validation": "整合后424项联合回归421 passed/3 skipped，跳过仅缺本地PostgreSQL服务的原队列3例；另聊天入口42 passed及前端相邻31 passed，保留原断言。旧d7aba候选主CI已成功且PostgreSQL主套件448 passed/3 skipped，但不作为本次新整合树的CI证据；新树正式CI与人工架构审查待完成。",
-      "follow_up": "沿用原登记负责人@42433422在PR #3690核对相对d76cf1e3的精确blob及+11行；语义投影留在receipt_projection，事务职责留在本仓储，无新增拆分计划。该登记不表示评审批准。",
+      "validation": "整合后424项联合回归421 passed/3 skipped，跳过仅缺本地PostgreSQL服务的原队列3例；另聊天入口42 passed及前端相邻31 passed，保留原断言。旧d7aba候选主CI已成功且PostgreSQL主套件448 passed/3 skipped，但不作为本次新整合树的CI证据；新树正式CI与人工架构审查待完成。；本次合并后需要按新集成SHA运行正式CI，旧测试不等同于此提交通过。",
+      "follow_up": "请@42433422就当前精确 head_blob、915→921 行及两组相互作用完成实际架构审查；尚未批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_executor.py": {

@@ -16,7 +16,10 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
-from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+from app.application.agent_orchestrator.task_execution_models import (
+    dispatched_run_state,
+    xiaox_queue_outcome,
+)
 from app.application.agent_orchestrator.task_execution_repository import (
     AgentTaskExecution,
     TaskExecutionRepository,
@@ -313,20 +316,7 @@ class AgentTaskDispatcher:
                     raise RuntimeError("queued Xiaox execution requires durable SQL storage")
                 with worker_claim_scope(self._run_repo, execution, owner_id):
                     result = execute_queued_runtime(self._run_repo, execution, owner_id)
-                state = {
-                    "completed": "succeeded",
-                    "waiting_user": "waiting_approval",
-                    "waiting_approval": "waiting_approval",
-                    "running": "waiting_approval",
-                    "paused": "waiting_approval",
-                    "cancelled": "cancelled",
-                }.get(str(result.get("execution_state") or ""), "failed")
-                if state == "failed":
-                    error_code = (
-                        "needs_verification"
-                        if result.get("reconciliation_required")
-                        else str(result.get("error_code") or "xiaox_request_failed")
-                    )
+                state, error_code = xiaox_queue_outcome(result)
                 return
             if preview is not None and cross_module_ready(preview):
                 receipt = execute_claimed_cross_module(

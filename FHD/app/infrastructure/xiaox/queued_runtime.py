@@ -409,7 +409,9 @@ def _execute_queued_runtime(
             state = result.get("execution_state")
             if state in {"completed", "waiting_user", "running", "paused", "cancelled"}:
                 parent.status = state
-            elif result.get("reconciliation_required"):
+            elif state in {"waiting_input", "waiting_auth", "waiting_approval"}:
+                parent.status = "waiting_user"
+            elif state == "blocked" or result.get("reconciliation_required"):
                 parent.status = "blocked"
             else:
                 parent.status = "failed"
