@@ -15,7 +15,7 @@ import openai
 import pytest
 
 from app.application.agent_orchestrator.run_models import AgentRun
-from app.application.agent_runtime.goal_verifier import verify_runtime_goal
+from app.application.agent_runtime.goal_verifier import _review_evidence_view, verify_runtime_goal
 from app.domain.task_lifecycle.agent_runtime_contract import (
     build_goal_contract,
     canonical_digest,
@@ -56,6 +56,39 @@ def receipt(name="first", *, read_only=True):
     }
 
 
+def test_review_evidence_keeps_business_facts_without_duplicate_transport_metadata():
+    row = {
+        "evidence_id": "child-1", "tool_id": "employee", "action": "execute",
+        "params": {"employee_id": "reader", "input": {"file_path": "owned-file"}},
+        "read_only": True, "state": "completed",
+        "receipt": {
+            "success": True, "verified": True, "status": "completed", "message": "已回读",
+            "verification": {"status": "verified", "accepted": True, "steps": [
+                {"status": "verified", "accepted": True, "code": "checked", "checks": [
+                    {"source": "run_artifact", "status": "passed", "evidence": {"sha256": "a" * 64}}
+                ], "credential_scope_sha256": "private-scope"},
+            ]},
+            "tool_calls": [{
+                "tool_id": "employee", "action": "execute", "status": "completed",
+                "params": {"employee_id": "reader", "input": {"file_path": "owned-file"}},
+                "output": {"success": True, "data": {"sheet": "Sales", "cell": "=SUM(A1:A3)"}},
+                "error": "", "metadata": {"credential": "private-token"},
+            }],
+            "artifacts": [{
+                "artifact_id": "artifact-1", "artifact_type": "file", "name": "result.xlsx",
+                "uri": "/api/agent/runs/child-1/artifacts/artifact-1", "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "metadata": {"sha256": "a" * 64, "owner_user_id": "private-owner"},
+            }],
+        },
+    }
+    view = _review_evidence_view([row])[0]
+    serialized = json.dumps(view, ensure_ascii=False)
+    assert "=SUM(A1:A3)" in serialized and "artifact-1" in serialized
+    assert '"status": "verified"' in serialized
+    assert all(secret not in serialized for secret in ("private-token", "private-scope", "private-owner"))
+    assert len(serialized) < len(json.dumps(row, ensure_ascii=False))
+
+
 def goal(
     source="查询first",
     *,
@@ -76,12 +109,13 @@ def goal(
     }
 
 
-def review(*goals, violations=None, feedback=""):
+def review(*goals, violations=None, feedback="", feedback_disposition="none"):
     return {
         "goals": list(goals),
         "violations": violations or [],
         "uncovered_sources": [],
         "feedback": feedback,
+        "feedback_disposition": feedback_disposition,
     }
 
 
@@ -537,6 +571,10 @@ def test_pure_reply_needs_no_tool_but_does_need_complete_review(verifier):
         ("upload_as_business_receipt", False),
         ("provider_authored_quote", False),
         ("truncated_aggregate", False),
+        ("fact_feedback", False),
+        ("advisory_feedback", True),
+        ("positive_none_feedback", True),
+        ("missing_disposition", False),
         ("complete_source", True),
         ("unrelated_reply", True),
     ],
@@ -570,8 +608,8 @@ def test_file_facts_need_evidence_distinct_from_chat_history(verifier, monkeypat
     verifier.output = (
         "Welcome to the team." if case == "unrelated_reply" else "Green: 23. Orange: 12."
     )
-    if case in {"no_source", "old_response_only"}:
-        verifier.output = "Green: 18. Orange: 17."
+    if case in {"no_source", "old_response_only", "fact_feedback"}:
+        verifier.output = "Green: 24. Orange: 12." if case == "fact_feedback" else "Green: 18. Orange: 17."
     result = goal(verifier.run.message, kind="reply", evidence_ids=["response"])
     if case == "unrelated_reply":
         result.update(file_basis="independent")
@@ -590,7 +628,19 @@ def test_file_facts_need_evidence_distinct_from_chat_history(verifier, monkeypat
         result["evidence_ids"].append(view["upload_id"])
     if case == "provider_authored_quote":
         result["file_citations"][0]["source_excerpt"] = "green,23"
-    verifier.replies = [response(review(result))] * 2
+    assessment = review(
+        result,
+        feedback="Green is 23, not 24." if case == "fact_feedback" else "",
+        feedback_disposition=("blocking" if case == "fact_feedback" else
+                              "advisory" if case == "advisory_feedback" else "none"),
+    )
+    if case == "advisory_feedback":
+        assessment["feedback"] = "The two source rows were checked."
+    if case == "positive_none_feedback":
+        assessment["feedback"] = "The source rows support the answer."
+    if case == "missing_disposition":
+        assessment.pop("feedback_disposition")
+    verifier.replies = [response(assessment)] * 2
     report = verifier.verify()
     assert report["accepted"] is accepted
     status, classified = verifier.classify(report)

@@ -420,8 +420,8 @@ class TaskConversationStore:
         for _, queued_turn, run_id, status, marked in _queued_history_rows(
             page, context, include_legacy=True
         ):
-            if status in {"queued", "unknown"} and reconcile_queued_chat_reply(
-                context, queued_turn, run_id, publish=marked and status == "queued"
+            if status in {"queued", "unknown", "blocked", "failed"} and reconcile_queued_chat_reply(
+                context, queued_turn, run_id, publish=marked
             ):
                 repaired = True
         if repaired:

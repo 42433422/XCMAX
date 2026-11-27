@@ -97,11 +97,25 @@ async function save() {
   saving.value = true
   saveError.value = notice.value = ''
   try {
-    const next = await api.put<Snapshot>(path, {
-      ...choice, expected_owner_id: current.owner_id, expected_revision: current.revision,
-    }, { signal, retry: false, quiet: true })
+    let token = current
+    let next: Snapshot | undefined
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        next = await api.put<Snapshot>(path, {
+          ...choice, expected_owner_id: token.owner_id, expected_revision: token.revision,
+        }, { signal, retry: false, quiet: true })
+        break
+      } catch (error) {
+        if ((error as { status?: number })?.status !== 409 || attempt > 0 || signal.aborted) throw error
+        const fresh = await api.get<Snapshot>(path, {}, { signal, cache: 'no-store', quiet: true })
+        // A different account or model choice is a real conflict. Only an
+        // unrelated preference update may be retried with a fresh CAS token.
+        if (fresh.owner_id !== token.owner_id || !fresh.editable || modelKey(fresh) !== modelKey(token)) throw error
+        token = fresh
+      }
+    }
     if (signal.aborted) return
-    if (next.owner_id !== current.owner_id || next.revision !== current.revision + 1 ||
+    if (!next || next.owner_id !== token.owner_id || next.revision !== token.revision + 1 ||
       modelKey(next) !== modelKey(choice)) throw new Error('invalid receipt')
     snapshot.value = next
     notifyPlatformModelChanged()

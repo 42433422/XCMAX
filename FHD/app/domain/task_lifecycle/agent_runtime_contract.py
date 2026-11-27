@@ -215,6 +215,7 @@ class GoalReview(BaseModel):
     violations: list[str] = Field(max_length=64)
     uncovered_sources: list[str] = Field(max_length=64)
     feedback: str = Field(max_length=12000)
+    feedback_disposition: Literal["none", "advisory", "blocking"] | None = None
     plan_content: Literal["steps", "narrative"] | None = Field(
         default=None,
         description=(
@@ -282,6 +283,8 @@ def review_schema(
         properties.pop("file_citations")
         schema["$defs"].pop("FileCitation")
     else:
+        schema["properties"]["feedback_disposition"].pop("default")
+        schema["required"].append("feedback_disposition")
         properties["file_basis"].pop("anyOf")
         properties["file_basis"].pop("default")
         properties["file_basis"]["enum"] = ["independent", "passages", "complete"]
@@ -438,16 +441,46 @@ def runtime_file_evidence(
                     sources[read["upload_id"]] = source
     if not upload_ids:
         return None
-    for identity, row in _verified_evidence(snapshot).items():
+    verified = _verified_evidence(snapshot)
+    verified_files = {
+        artifact.get("uri")
+        for row in verified.values()
+        if row["read_only"] is False
+        for artifact in row["receipt"].get("artifacts") or []
+        if isinstance(artifact, dict) and artifact.get("artifact_type") == "file"
+    }
+    for identity, row in verified.items():
         calls = row["receipt"].get("tool_calls") or []
         if row["read_only"] is not True or len(calls) != 1:
             continue
-        upload_id = (row.get("params") or {}).get("upload_id")
-        if not isinstance(upload_id, str) or upload_id not in upload_ids:
-            continue
+        params = row.get("params") or {}
+        input_data = params.get("input") if isinstance(params, dict) else None
         call = calls[0]
         output = call.get("output") if isinstance(call, dict) else None
         data = output.get("data") if isinstance(output, dict) else None
+        if (
+            (row.get("tool_id"), row.get("action")) == ("employee", "execute")
+            and params.get("employee_id") == "excel-full-read-employee"
+            and isinstance(input_data, dict)
+            and input_data.get("file_path") in verified_files
+            and isinstance(data, dict)
+            and isinstance(readback := data.get("readback"), dict)
+        ):
+            artifacts = row["receipt"].get("artifacts") or []
+            proof = (call.get("metadata") or {}).get("verification") or {}
+            checks = proof.get("checks") or []
+            if len(artifacts) == 1 and any(
+                check.get("source") == "run_artifact"
+                and check.get("status") == "passed"
+                and (check.get("evidence") or {}).get("sha256") == readback.get("sha256")
+                and (check.get("evidence") or {}).get("artifact_id") == artifacts[0].get("artifact_id")
+                for check in checks if isinstance(check, dict)
+            ) and artifacts[0].get("metadata", {}).get("sha256") == readback.get("sha256"):
+                if source := _file_source(readback, origin="verified_workbook_readback"):
+                    sources[identity] = source
+        upload_id = (row.get("params") or {}).get("upload_id")
+        if not isinstance(upload_id, str) or upload_id not in upload_ids:
+            continue
         if not isinstance(data, dict) or data.get("upload_id") != upload_id:
             continue
         proof = (call.get("metadata") or {}).get("verification") or {}
@@ -490,16 +523,31 @@ def is_deferred_reply_preference(request_text: str, goal: GoalAssessment) -> boo
 
 
 def _batch_goal_capacity(row: dict[str, Any]) -> int:
-    """A verified employee batch can cover one goal per declared phase."""
+    """Bound a workbook batch by independently checked changes, not plan grouping."""
     params = row.get("params")
     if (row.get("tool_id"), row.get("action")) != ("employee", "execute") or not isinstance(
         params, dict
     ):
         return 1
-    payload = params.get("input") if isinstance(params.get("input"), dict) else params
-    plan = payload.get("plan") if isinstance(payload, dict) else None
-    phases = plan.get("phases") if isinstance(plan, dict) else None
-    return len(phases) if isinstance(phases, list) and phases else 1
+    if params.get("employee_id") != "excel-template-write-employee":
+        return 1
+    for step in row["receipt"].get("verification", {}).get("steps") or []:
+        for check in step.get("checks") or []:
+            evidence = check.get("evidence") or {}
+            changes = evidence.get("cell_changes") or {}
+            if (
+                check.get("source") == "workbook_qc"
+                and check.get("status") == "passed"
+                and evidence.get("sections", {}).get("conformance") == "pass"
+                and changes.get("scan_complete") is True
+            ):
+                count = sum(
+                    group.get("count", 0)
+                    for group in changes.get("groups") or []
+                    if isinstance(group, dict) and type(group.get("count")) is int
+                )
+                return min(64, max(1, count))
+    return 1
 
 
 def planned_tool_calls(review: dict[str, Any]) -> list[dict[str, Any]]:
@@ -587,6 +635,11 @@ def validate_goal_review(
     if file_evidence is None:
         file_evidence = runtime_file_evidence(contract, snapshot)
     errors = list(snapshot["conflicts"])
+    if file_evidence is not None:
+        if review.feedback_disposition is None:
+            errors.append("附件核验缺少反馈结论")
+        elif review.feedback_disposition == "blocking":
+            errors.append(review.feedback or "附件事实未通过核验")
     seen: set[str] = set()
     used_writes: set[str] = set()
     assigned: dict[str, list[str]] = {}

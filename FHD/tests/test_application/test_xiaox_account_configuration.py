@@ -683,7 +683,7 @@ def test_incomplete_previous_binding_never_triggers_silent_paid_retry(account, d
 
 def test_turn_timeout_is_bounded_by_chat_budget(monkeypatch):
     monkeypatch.delenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", raising=False)
-    assert configuration._turn_timeout_seconds() == 300
+    assert configuration._turn_timeout_seconds() == 540
     monkeypatch.setenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "540")
     assert configuration._turn_timeout_seconds() == 540
     monkeypatch.setenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "9999")

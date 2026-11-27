@@ -275,6 +275,82 @@ def test_queued_turn_preserves_one_durable_assistant_id(runtime, monkeypatch, se
     assert _rows(runtime) == [("user", body.message), ("assistant", "本轮结果")]
 
 
+def test_same_input_retry_repairs_original_chat_reply(runtime, monkeypatch):
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.application.ai_chat.conversation_history import (
+        persist_chat_turn,
+        reconcile_queued_chat_reply,
+    )
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    body = compat._prepare_compat_chat_body(runtime.actor.request, _body())
+    context = body.context
+    turn = context["turn_id"]
+    owner = str(runtime.actor.user_id)
+    run = AgentRun(user_id=owner, message=body.message, run_id="retry-run")
+    original_key = canonical_digest({"turn_id": turn, "owner": owner})
+    original = {"state": "queued", "turn_id": turn}
+    run.metadata.update(
+        runtime_context=context,
+        runtime_type="xiaox",
+        runtime_requests={original_key: original},
+        _xiaox_input_data={"attachment_upload_ids": ["owned-file"]},
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: SimpleNamespace(get=lambda _: run),
+    )
+    queued = runtime_chat_payload(
+        {"run_id": run.run_id, "execution_state": "queued", "output": "已排队"}
+    )
+    ack = persist_chat_turn(owner, body.message, context, queued)
+    original.update(
+        state="returned",
+        result={
+            "run_id": run.run_id,
+            "execution_state": "blocked",
+            "ok": False,
+            "reconciliation_required": True,
+            "output": "需核对",
+        },
+    )
+    run.status = "blocked"
+    assert reconcile_queued_chat_reply(context, turn, run.run_id)
+
+    latest = {
+        "run_id": run.run_id,
+        "execution_state": "completed",
+        "ok": True,
+        "output": "校验后的答复",
+    }
+    retry_key = canonical_digest({"turn_id": "retry-turn", "owner": owner})
+    run.metadata["runtime_requests"][retry_key] = {
+        "state": "returned",
+        "turn_id": "retry-turn",
+        "result": latest,
+    }
+    run.metadata["_xiaox_queued_request"] = {
+        "request_key": retry_key,
+        "task": run.message,
+        "input_data": run.metadata["_xiaox_input_data"],
+        "answer_to_waiting_input": False,
+    }
+    run.final_output["xiaox_result"] = latest
+    run.status = "completed"
+    with tenant_scope(runtime.actor.tenant_id):
+        history = store.get_history(
+            session_id="boundary-session", user_id=runtime.actor.user_id, turn_id=turn
+        )
+    assert _rows(runtime) == [("user", body.message), ("assistant", "校验后的答复")]
+    assert history["message_count"] == 2
+    assert history["turn_receipt"]["status"] == "completed"
+    assert history["turn_receipt"]["message_id"] == ack["message_ids"][1]
+    assert [row["id"] for row in history["messages"]] == ack["message_ids"]
+    assert not reconcile_queued_chat_reply(context, turn, run.run_id)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["offline", "online"])
 @pytest.mark.parametrize("streaming", [False, True])

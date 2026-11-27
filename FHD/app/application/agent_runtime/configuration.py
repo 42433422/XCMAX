@@ -418,12 +418,12 @@ def validate_account_model_choice(owner: str, selected: tuple[str, str]) -> str:
 
 
 def _turn_timeout_seconds() -> int:
-    """单轮预算；默认 300 秒，可通过环境变量放宽但不得超过对话总预算。"""
-    raw = os.environ.get("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "300").strip()
+    """单轮预算；默认 540 秒，保留对话总预算的收尾时间。"""
+    raw = os.environ.get("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "540").strip()
     try:
         value = int(float(raw))
     except ValueError:
-        value = 300
+        value = 540
     return max(60, min(value, 570))
 
 

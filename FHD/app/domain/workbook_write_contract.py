@@ -96,6 +96,10 @@ _COMBO_CHART = _flat_phase(
     bar_title=_TEXT,
     line_title=_TEXT,
 )
+_CREATE_SHEET = _flat_phase(
+    "create_sheet",
+    sheet={**_TEXT, "maxLength": 31, "pattern": r"^[^\\/*?:\[\]\x00-\x1f]+$"},
+)
 _INSERT_ROWS = _flat_phase(
     "insert_rows",
     sheet=_TEXT,
@@ -189,7 +193,7 @@ _PRINT_LAYOUT = _flat_phase(
 WORKBOOK_CONTROL_PHASES = frozenset({"conditional_format", "data_validation", "print_layout"})
 WORKBOOK_NATIVE_PHASES = WORKBOOK_CONTROL_PHASES | {"create_table", "create_combo_chart"}
 WORKBOOK_STRUCTURAL_PHASES = frozenset(
-    {"insert_rows", "merge_cells", "set_row_height", "set_column_width", "freeze_panes"}
+    {"create_sheet", "insert_rows", "merge_cells", "set_row_height", "set_column_width", "freeze_panes"}
 )
 
 
@@ -236,6 +240,7 @@ WORKBOOK_WRITE_INPUT = {
                             _TABLE,
                             _COMBO_CHART,
                             _CELL_STYLES,
+                            _CREATE_SHEET,
                             _INSERT_ROWS,
                             _MERGE_CELLS,
                             _SET_ROW_HEIGHT,

@@ -39,6 +39,62 @@ def is_workbook_write(params: dict) -> bool:
     return scoped_workbook_employee(params) == WORKBOOK_WRITER
 
 
+def trusted_workbook_reader(params: dict) -> bool:
+    """Only the signed bundled reader may run as an isolated read task."""
+    if scoped_workbook_employee(params) != WORKBOOK_READER:
+        return False
+    from app.application.employee_runtime.loader import load_employee_pack_from_disk
+    from app.application.employee_runtime.office_workers import is_trusted_workbook_pack
+
+    try:
+        return is_trusted_workbook_pack(
+            WORKBOOK_READER, load_employee_pack_from_disk(WORKBOOK_READER)
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+class WorkbookFormulaSyntaxError(ValueError):
+    def __init__(self, field_path: str) -> None:
+        super().__init__("工作簿公式语法无效")
+        self.field_path = field_path
+
+
+class WorkbookPlanError(ValueError):
+    """The pinned writer rejected a plan before any file was saved."""
+
+
+def _validate_formula_tokens(plan: dict) -> None:
+    from openpyxl.formula import Tokenizer
+    from openpyxl.formula.tokenizer import TokenizerError
+
+    if not isinstance(plan, dict):
+        return
+    for phase_index, phase in enumerate(plan.get("phases") or []):
+        if not isinstance(phase, dict) or phase.get("phase") != "formula_writes":
+            continue
+        writes = phase.get("writes")
+        if not isinstance(writes, list):
+            continue
+        for write_index, write in enumerate(writes):
+            formula = write.get("formula") if isinstance(write, dict) else None
+            if not isinstance(formula, str) or not formula.startswith("="):
+                continue  # The pinned writer owns the remaining plan-schema checks.
+            field_path = f"input.plan.phases[{phase_index}].writes[{write_index}].formula"
+            try:
+                tokens = Tokenizer(formula).items
+            except TokenizerError as exc:
+                raise WorkbookFormulaSyntaxError(field_path) from exc
+            array_depth = 0
+            for token in tokens:
+                if token.type == "ARRAY":
+                    array_depth += 1 if token.subtype == "OPEN" else -1
+                elif token.type == "SEP" and token.subtype == "ROW" and array_depth == 0:
+                    # OOXML uses semicolons for array rows only; outside an
+                    # array they cannot separate function arguments.
+                    raise WorkbookFormulaSyntaxError(field_path)
+
+
 @contextmanager
 def _owned_template(source: str, context: dict):
     from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
@@ -130,6 +186,7 @@ def review_workbook_write(params: dict, context: dict) -> tuple[dict, list[dict]
     from app.application.employee_runtime.loader import load_employee_pack_from_disk
     from app.application.employee_runtime.office_workers import is_trusted_workbook_pack
 
+    _validate_formula_tokens((params.get("input") or {}).get("plan") or {})
     pack = load_employee_pack_from_disk(WORKBOOK_WRITER)
     if not is_trusted_workbook_pack(WORKBOOK_WRITER, pack):
         raise PermissionError("没有可信的工作簿写入员")
@@ -143,7 +200,9 @@ def review_workbook_write(params: dict, context: dict) -> tuple[dict, list[dict]
     with _owned_template(payload["template_path"], context) as template:
         try:
             changes = writer.review_literal_changes(template, payload["plan"])
-        except (writer.PlanError, BadZipFile, InvalidFileException) as exc:
+        except writer.PlanError as exc:
+            raise WorkbookPlanError(str(exc)[:500]) from exc
+        except (BadZipFile, InvalidFileException) as exc:
             raise ValueError("写入计划与原工作簿不兼容") from exc
         return {
             "template_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),

@@ -724,7 +724,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("excel_analysis", "export"): _object_schema(
         ["file_path", "rows"],
         {
-            "file_path": {"type": "string"},
+            "file_path": {
+                "type": "string",
+                "pattern": r"\.(?:[cC][sS][vV]|[xX][lL][sS][xX])$",
+            },
             "rows": {
                 "type": "array",
                 "minItems": 1,
@@ -1139,7 +1142,7 @@ def _workbook_input_schema(name: str, required: list[str]) -> dict[str, Any]:
 
 def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
     """Reuse the public catalog after ToolSpec initialization, without eager tool imports."""
-    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT, WORKBOOK_WRITER
+    from app.domain.workbook_write_contract import WORKBOOK_READER, WORKBOOK_WRITE_INPUT, WORKBOOK_WRITER
 
     schemas = {
         ("excel_analysis", "structure"): _workbook_input_schema("excel_analysis", ["file_path"]),
@@ -1168,7 +1171,27 @@ def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
                 ]
             },
             "then": {"required": ["input"], "properties": {"input": WORKBOOK_WRITE_INPUT}},
-        }
+        },
+        {
+            "if": {
+                "anyOf": [
+                    {"required": [key], "properties": {key: {"const": WORKBOOK_READER}}}
+                    for key in ("employee_id", "pack_id", "tool_name", "id")
+                ]
+            },
+            "then": {
+                "required": ["input"],
+                "properties": {
+                    "input": {
+                        "type": "object",
+                        "anyOf": [
+                            {"required": [key], "properties": {key: {"type": "string", "minLength": 1}}}
+                            for key in ("upload_id", "file_path", "path", "excel_path")
+                        ],
+                    }
+                },
+            },
+        },
     ]
     schemas[("employee", "execute")] = employee
     return schemas

@@ -46,6 +46,7 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
             file_basis="passages",
             file_citations=[{"source_block_id": source_id, "response_block_id": response_id}],
         )
+        assessment["feedback_disposition"] = "none"
         content = json.dumps(assessment)
         return httpx.Response(
             200,

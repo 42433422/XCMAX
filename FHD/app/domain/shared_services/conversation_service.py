@@ -336,6 +336,7 @@ class ConversationService(NeuroEventPublisherMixin):
         user_id: str,
         expected_revision: int,
         assistant: dict[str, Any],
+        allow_retry_repair: bool = False,
     ) -> int | None:
         """Replace the trusted queue acknowledgement under the original session fence."""
         replacement = json.loads(assistant["metadata"])
@@ -366,7 +367,12 @@ class ConversationService(NeuroEventPublisherMixin):
                     continue
                 if not isinstance(prior, dict) or queued_chat_binding(prior) != binding:
                     continue
-                if prior["summary"].get("status") == "queued":
+                prior_status = prior["summary"].get("status")
+                if prior_status == "queued" or (
+                    allow_retry_repair
+                    and prior_status in {"blocked", "failed", "unknown"}
+                    and replacement["summary"].get("status") == "completed"
+                ):
                     replacement["idempotency_key"] = prior["idempotency_key"]
                     replacement["queued_ack_intent"] = row.intent or ""
                     row.content = assistant["content"]
@@ -380,7 +386,8 @@ class ConversationService(NeuroEventPublisherMixin):
                     ):
                         session.summary = _message_title(row.content)[:120]
                     db.commit()
-                return int(row.id)
+                    return int(row.id)
+                return None
         return None
 
     def save_employee_memory(

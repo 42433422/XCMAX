@@ -79,6 +79,13 @@ class ToolActionSpecV2:
         """Resolve host-declared effects from the validated call, before dispatch."""
         if self.read_only:
             return True
+        if (self.tool_id, self.action) == ("employee", "execute") and _validate_schema_payload(
+            self.input_schema, params, subject="工具参数"
+        )[0]:
+            from app.application.agent_orchestrator.verification_workbook import trusted_workbook_reader
+
+            if trusted_workbook_reader(params):
+                return True
         return (
             bool(self.read_only_if_unset)
             and _validate_schema_payload(self.input_schema, params, subject="工具参数")[0]

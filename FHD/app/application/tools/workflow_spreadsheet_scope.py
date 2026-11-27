@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
 import re
 from collections.abc import Callable, Iterator
@@ -454,6 +455,56 @@ def store_employee_output(
     )
 
 
+def _attach_workbook_readback(
+    employee_id: str, result: dict[str, Any], receipts: list[dict[str, Any]], run_id: str,
+) -> None:
+    """Carry checked reader bytes into the same durable employee receipt."""
+    from app.domain.workbook_write_contract import WORKBOOK_READER
+
+    if employee_id != WORKBOOK_READER or len(receipts) != 1:
+        return
+    receipt = receipts[0]
+    if Path(str(receipt.get("name") or "")).suffix.lower() != ".json":
+        return
+    content = read_verified_run_file(run_id, receipt)
+    if len(content) > 2_000_000:
+        return
+    workbook = json.loads(content)
+    sheets = workbook.get("sheets") if isinstance(workbook, dict) else None
+    if not isinstance(sheets, list) or not sheets:
+        return
+    projected = []
+    for sheet in sheets:
+        if not isinstance(sheet, dict) or not isinstance(sheet.get("cells"), list):
+            return
+        cells = sheet["cells"]
+        if any(not isinstance(cell, dict) for cell in cells):
+            return
+        projected.append({
+            "name": sheet.get("name"),
+            "max_row": sheet.get("max_row"),
+            "max_column": sheet.get("max_column"),
+            "cells": [
+                {"ref": f"{cell.get('letter')}{cell.get('row')}",
+                 "value": cell.get("value"), "formula": cell.get("formula")}
+                for cell in cells
+            ],
+        })
+    text = json.dumps({"sheets": projected}, ensure_ascii=False, separators=(",", ":"))
+    if len(text.encode("utf-8")) > 128_000:
+        return
+    result["readback"] = {
+        "name": receipt["name"],
+        "text": text,
+        "sha256": receipt["metadata"]["sha256"],
+        "coverage": {
+            "method": WORKBOOK_READER,
+            "truncated": any(sheet.get("truncated") is not False for sheet in sheets),
+            "sheet_count": len(sheets),
+        },
+    }
+
+
 def employee_output_receipts(
     employee_id: str,
     result: dict[str, Any],
@@ -487,7 +538,9 @@ def employee_output_receipts(
             ):
                 raise PermissionError("员工产物不属于当前原调用")
             read_verified_run_file(str(context["run_id"]), receipt)
-        return copy.deepcopy(published)
+        receipts = copy.deepcopy(published)
+        _attach_workbook_readback(employee_id, result, receipts, str(context["run_id"]))
+        return receipts
 
     paths = {
         resolve_elt_path(raw, workspace_root=workspace_root)
@@ -500,5 +553,7 @@ def employee_output_receipts(
             result["file_path"] = str(path)
             run_id = str(context.get("run_id") or "")
             if run_id and path.suffix.lower() in RUN_FILE_MIME_TYPES:
-                return [store_employee_output(run_id, path, source.read(), context)]
+                receipts = [store_employee_output(run_id, path, source.read(), context)]
+                _attach_workbook_readback(employee_id, result, receipts, run_id)
+                return receipts
     return []

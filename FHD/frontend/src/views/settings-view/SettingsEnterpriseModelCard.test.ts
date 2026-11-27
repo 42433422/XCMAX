@@ -36,6 +36,22 @@ describe('enterprise model settings', () => {
     wrapper.unmount()
   })
 
+  it('retries an unrelated preference revision without overwriting a changed model', async () => {
+    get.mockResolvedValueOnce(settings).mockResolvedValueOnce({ ...settings, revision: 4 })
+    put.mockRejectedValueOnce({ status: 409 }).mockResolvedValueOnce({ ...settings, provider: 'p', model: 'runtime', revision: 5 })
+    const wrapper = mount(SettingsEnterpriseModelCard, { props: { owner: 'tenant:2' } })
+    await flushPromises()
+    wrapper.getComponent(ElSelect).vm.$emit('update:modelValue', JSON.stringify(['p', 'runtime']))
+    await flushPromises()
+    await wrapper.get('[data-testid="enterprise-model-save"]').trigger('click')
+    await flushPromises()
+    expect(put).toHaveBeenCalledTimes(2)
+    expect(put).toHaveBeenLastCalledWith('/api/workspace/model',
+      { provider: 'p', model: 'runtime', expected_owner_id: 'tenant:2', expected_revision: 4 }, expect.objectContaining({ retry: false }))
+    expect(changed).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
   it('retires an in-flight response across an account epoch change', async () => {
     let resolve!: (value: typeof settings) => void
     get.mockReturnValueOnce(new Promise(done => { resolve = done }))

@@ -779,6 +779,16 @@ def _run_create_combo_chart(wb, phase: Dict[str, Any]) -> None:
     wb.create_sheet(name).add_chart(bar, "A1")
 
 
+def _run_create_sheet(wb, phase: Dict[str, Any], stats: dict) -> None:
+    name = phase["sheet"]
+    if (not name.strip() or len(name) > 31 or re.search(r"[\\/*?:\[\]\x00-\x1f]", name)
+            or name.startswith("'") or name.endswith("'")
+            or name.casefold() in {item.casefold() for item in wb.sheetnames}):
+        raise PlanError(f"需要合法且未占用的新工作表名称：{name!r}")
+    wb.create_sheet(name)
+    stats["sheets_created"].append(name)
+
+
 def _run_sheet_prune(wb, phase: Dict[str, Any], stats: Dict[str, Any]) -> None:
     kind = str(phase.get("phase"))
     names = phase.get("names")
@@ -848,10 +858,25 @@ def _apply_plan(wb, plan: dict, warnings: list[str], *, strict_protected: bool) 
         "row_heights_set": 0,
         "frozen_sheets": 0,
         "sheets_removed": [],
+        "sheets_created": [],
         "violations": [],
     }
+    written: Dict[Tuple[str, int, int], Tuple[str, Any]] = {}
     for ph in _normalize_phases(plan):
         kind = str(ph.get("phase"))
+        if kind == "insert_rows":
+            # Row insertion changes later addresses; only compare writes in one stable layout.
+            written.clear()
+        if kind in {"cell_writes", "formula_writes"}:
+            for index, item in enumerate(ph.get("writes") or []):
+                if not isinstance(item, dict):
+                    raise PlanError(f"{kind}[{index}] 必须是对象。")
+                sheet, row, col = _resolve_target(wb.sheetnames, item, index, kind)
+                key = (sheet, row, col)
+                value = (kind, item.get("formula") if kind == "formula_writes" else item.get("value"))
+                if key in written and written[key] != value:
+                    raise PlanError(f"同一单元格被不同写入项覆盖：{sheet}!{wb[sheet].cell(row, col).coordinate}")
+                written[key] = value
         if kind == "clear_ranges":
             _run_clear_ranges(wb, ph, protected, stats)
         elif kind == "cell_writes":
@@ -864,6 +889,8 @@ def _apply_plan(wb, plan: dict, warnings: list[str], *, strict_protected: bool) 
             _run_create_table(wb, ph, protected, stats)
         elif kind == "create_combo_chart":
             _run_create_combo_chart(wb, ph)
+        elif kind == "create_sheet":
+            _run_create_sheet(wb, ph, stats)
         elif kind == "insert_rows":
             _run_insert_rows(wb, ph, protected, stats)
         elif kind == "merge_cells":
@@ -925,7 +952,7 @@ def review_literal_changes(template: Path, plan: dict) -> list[dict]:
     phases = _normalize_phases(plan)
     value_phases = {
         "cell_writes", "formula_writes", "clear_ranges", "insert_rows",
-        "retain_sheets", "remove_sheets", "create_table",
+        "retain_sheets", "remove_sheets", "create_table", "create_sheet",
     }
     if not value_phases.intersection(phase["phase"] for phase in phases):
         return []

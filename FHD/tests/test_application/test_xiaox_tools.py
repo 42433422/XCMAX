@@ -35,6 +35,65 @@ def _bind_goal(run):
     run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
 
 
+def test_employee_mcp_action_uses_live_nested_schema_only_when_visible():
+    from jsonschema import Draft202012Validator
+
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.infrastructure.xiaox.tools import mcp_tool_definitions
+
+    generic = next(tool for tool in mcp_tool_definitions([("customers", "query")])
+                   if tool.name == "execute_action")
+    assert "allOf" not in generic.input_schema
+    tool = next(
+        tool for tool in mcp_tool_definitions([("employee", "execute")])
+        if tool.name == "execute_action"
+    )
+    spec = get_tool_action_spec("employee", "execute")
+    assert tool.input_schema["allOf"][0]["then"]["properties"]["params"] == spec.input_schema
+    validator = Draft202012Validator(tool.input_schema)
+    base = {"tool_id": "employee", "action": "execute", "call_id": "one",
+            "schema_digest": "a" * 64}
+    assert any(error.validator == "type" for error in validator.iter_errors({
+        **base, "params": {"employee_id": "excel-template-write-employee",
+                           "task": "写入工作簿", "input": "{\"plan\":{}}"},
+    }))
+    assert not list(validator.iter_errors({
+        **base, "params": {"employee_id": "quote-agent", "task": "Prepare a quote",
+                           "input": {"customer": "Acme Trading"}},
+    }))
+    reader = {
+        "employee_id": "excel-full-read-employee",
+        "task": "读取工作簿", "input": {"user_request": "读取原卷"},
+    }
+    assert list(validator.iter_errors({**base, "params": reader}))
+    assert not list(validator.iter_errors({
+        **base, "params": {**reader, "input": {"upload_id": "owned-upload-id"}},
+    }))
+
+
+def test_direct_workbook_reader_exposes_required_source_to_model():
+    from jsonschema import Draft202012Validator
+
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.infrastructure.xiaox.tools import mcp_tool_definitions
+
+    tools = mcp_tool_definitions([("excel_analysis", "read")])
+    reader = next(tool for tool in tools if tool.name == "execute_excel_read")
+    assert reader.input_schema["properties"]["file_path"] == get_tool_action_spec(
+        "excel_analysis", "read"
+    ).input_schema["properties"]["file_path"]
+    validator = Draft202012Validator(reader.input_schema)
+    base = {"call_id": "read-once", "schema_digest": "a" * 64}
+    assert any(error.validator == "required" for error in validator.iter_errors(base))
+    assert not list(validator.iter_errors({**base, "file_path": "owned-upload-id"}))
+    assert not any(tool.name == "execute_excel_structure" for tool in tools)
+    generic = next(tool for tool in tools if tool.name == "execute_action")
+    generic_validator = Draft202012Validator(generic.input_schema)
+    envelope = {"tool_id": "excel_analysis", "action": "read", **base}
+    assert list(generic_validator.iter_errors({**envelope, "params": {}}))
+    assert not list(generic_validator.iter_errors({**envelope, "params": {"file_path": "owned-upload-id"}}))
+
+
 @pytest.fixture
 def bridge_setup(trusted_actor, monkeypatch, tmp_path):
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
@@ -93,6 +152,26 @@ def test_authority_arguments_and_unbound_tools_never_publish_tasks(bridge_setup)
         )
     assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
     assert len(setup.store.repository.list_recent()) == 1
+
+
+def test_dispatch_exception_settles_child_and_releases_next_call(bridge_setup, monkeypatch):
+    setup = bridge_setup
+
+    def fail_before_tool(_run_id):
+        raise AssertionError("vendored source mismatch")
+
+    monkeypatch.setattr(setup.bridge.orchestrator, "execute_dispatched_run", fail_before_tool)
+    args = {"tool_id": "customers", "action": "query", "params": {}, "call_id": "first"}
+    first = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
+    assert first["status"] == "failed"
+    assert setup.store.repository.get(first["run_id"]).status == "failed"
+    assert setup.store.get(setup.run.run_id).metadata.get("reserved_cost_units", 0) == 0
+
+    next_call = _invoke(
+        setup.bridge, setup.grant.mcp_token, "execute_action", {**args, "call_id": "second"}
+    )
+    assert next_call["status"] == "failed"
+    assert next_call["run_id"] != first["run_id"]
 
 
 def test_write_uses_original_approval_and_stable_task_for_repeated_model_calls(bridge_setup):
@@ -726,8 +805,8 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
             MCP_PATH, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
         )
         assert response.status_code == 200, response.text
-        assert {tool["name"] for tool in response.json()["result"]["tools"]} == set(
-            XIAOX_TOOL_NAMES
+        assert {tool["name"] for tool in response.json()["result"]["tools"]} == (
+            set(XIAOX_TOOL_NAMES) - {"execute_employee", "execute_excel_read", "execute_excel_structure"}
         )
         # MCP SDK v2 removed automatic lowlevel tool-schema validation.
         # Extra model-supplied authority fields must fail before the business bridge.

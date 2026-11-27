@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 import time
 from collections.abc import Callable, Iterable, Iterator
@@ -35,13 +36,14 @@ from app.infrastructure.xiaox.binding import (
     canonical_digest,
 )
 from app.infrastructure.xiaox.receipts import read_call_receipt
-from app.infrastructure.xiaox.tool_names import XIAOX_TOOL_NAMES
+from app.infrastructure.xiaox.tool_names import DIRECT_ACTION_TOOLS, XIAOX_TOOL_NAMES
 
 if TYPE_CHECKING:
     from jsonschema import ValidationError
     from mcp.types import Tool
 
 _CONTROL_TOOLS = frozenset({"conversation", "clarify"})
+logger = logging.getLogger(__name__)
 _NAVIGATION_ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}")
 _NAVIGATION_LABEL = re.compile(r"[\w ·&/()（）【】、，+\-]{1,80}")
 
@@ -303,7 +305,7 @@ class XiaoxToolBridge:
         for _, spec in sorted(specs.items()):
             if words:
                 text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
-                if not all(word in text for word in words):
+                if not any(word in text for word in words):
                     continue
             if cls._allowed(spec, binding):
                 yield spec
@@ -335,6 +337,12 @@ class XiaoxToolBridge:
                     }
                     for spec in self.visible_actions(binding, words)
                 ]
+                if words:
+                    matches.sort(key=lambda row: (
+                        -sum(word in f"{row['tool_id']}.{row['action']} {row['description']}".casefold()
+                             for word in words),
+                        row["tool_id"], row["action"],
+                    ))
                 end = offset + limit
                 # These are display-only rows from this run's renderer. Describe and
                 # _execute resolve exclusive authority from the server tool catalog.
@@ -394,7 +402,7 @@ class XiaoxToolBridge:
                 }
             if name == "task_evidence":
                 return self._evidence(binding, str(arguments.get("call_id") or ""))
-            if name == "execute_action":
+            if name in {"execute_action", "execute_employee", *DIRECT_ACTION_TOOLS}:
                 from app.application.tool_execution_deadline import invocation_deadline
 
                 # The MCP server thread predates begin_active. Restore its
@@ -410,6 +418,20 @@ class XiaoxToolBridge:
                     else nullcontext()
                 )
                 with budget:
+                    if name == "execute_employee" or name in DIRECT_ACTION_TOOLS:
+                        tool_id, action = (
+                            ("employee", "execute") if name == "execute_employee"
+                            else DIRECT_ACTION_TOOLS[name]
+                        )
+                        arguments = {
+                            "tool_id": tool_id, "action": action,
+                            "call_id": arguments.get("call_id"),
+                            "schema_digest": arguments.get("schema_digest"),
+                            "params": {
+                                key: value for key, value in arguments.items()
+                                if key not in {"call_id", "schema_digest"}
+                            },
+                        }
                     return self._execute(binding, arguments)
             raise XiaoxBindingError("unknown_tool", "工具不属于当前运行接口")
 
@@ -523,24 +545,19 @@ class XiaoxToolBridge:
         isolated_artifact = False
         if (spec.tool_id, spec.action) == ("employee", "execute"):
             from app.application.agent_orchestrator.verification_workbook import (
+                WorkbookFormulaSyntaxError,
+                WorkbookPlanError,
                 review_workbook_write,
                 scoped_workbook_employee,
+                trusted_workbook_reader,
             )
 
             workbook_employee = scoped_workbook_employee(params)
             if workbook_employee == WORKBOOK_READER:
-                from app.application.employee_runtime.loader import load_employee_pack_from_disk
-                from app.application.employee_runtime.office_workers import is_trusted_workbook_pack
-
-                try:
-                    isolated_artifact = is_trusted_workbook_pack(
-                        workbook_employee, load_employee_pack_from_disk(workbook_employee)
-                    )
-                    # The signed reader only inspects the caller-owned upload; it
-                    # creates no business write and needs no write approval card.
-                    safe_read = isolated_artifact
-                except (OSError, ValueError):
-                    pass
+                isolated_artifact = trusted_workbook_reader(params)
+                # The signed reader only inspects the caller-owned upload; it
+                # creates no business write and needs no write approval card.
+                safe_read = isolated_artifact
             fingerprint = canonical_digest(
                 {"tool_id": spec.tool_id, "action": spec.action, "params": params}
             )
@@ -551,6 +568,18 @@ class XiaoxToolBridge:
                 context = self._child_context(binding, {"child_task_id": ""})
                 try:
                     reviewed, changes = review_workbook_write(params, context)
+                except WorkbookFormulaSyntaxError as exc:
+                    return {
+                        "success": False, "verified": False, "status": "not_started",
+                        "error_code": "workbook_formula_syntax_invalid",
+                        "field_path": exc.field_path,
+                        "message": "工作簿公式未通过语法校验；请修正指定写入项后重试。",
+                    }
+                except WorkbookPlanError as exc:
+                    return {
+                        "success": False, "verified": False, "status": "not_started",
+                        "error_code": "workbook_plan_invalid", "message": str(exc),
+                    }
                 except (OSError, ValueError):
                     return {
                         "success": False, "verified": False, "status": "not_started",
@@ -651,7 +680,14 @@ class XiaoxToolBridge:
             raise
         if child.status in {"queued", "running"}:
             # 只读子任务必须派发；自动审批模式下的写子任务也不再停在审批断点。
-            self.orchestrator.execute_dispatched_run(child.run_id)
+            try:
+                self.orchestrator.execute_dispatched_run(child.run_id)
+            except Exception:
+                logger.exception("Xiaox child dispatch failed: %s", child.run_id)
+                # Reuse the orchestrator's durable failure transition. A started
+                # effect remains blocked for reconciliation; an untouched read
+                # can fail without stranding the parent's call reservation.
+                self.orchestrator.fail_dispatched_run(child.run_id, open_effects=not safe_read)
         return self._evidence(self.store.get(binding.run_id), call_id)
 
     @staticmethod
@@ -768,7 +804,7 @@ def mcp_tool_definitions(
     definitions_by_name = {
         name: (description, props, required) for name, description, props, required in definitions
     }
-    return [
+    tools = [
         Tool(
             name=name,
             description=description,
@@ -780,6 +816,69 @@ def mcp_tool_definitions(
             },
         )
         for name in XIAOX_TOOL_NAMES
+        if name not in {"execute_employee", *DIRECT_ACTION_TOOLS}
         if visible != [] or name not in {"capability_describe", "execute_action"}
         for description, props, required in [definitions_by_name[name]]
     ]
+    if visible is None or ("employee", "execute") in visible:
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+        employee = get_tool_action_spec("employee", "execute")
+        if employee is not None:
+            action = next(tool for tool in tools if tool.name == "execute_action")
+            action.input_schema["allOf"] = [{
+                "if": {
+                    "required": ["tool_id", "action"],
+                    "properties": {
+                        "tool_id": {"const": "employee"},
+                        "action": {"const": "execute"},
+                    },
+                },
+                "then": {"properties": {"params": employee.input_schema}},
+            }]
+            direct_schema = copy.deepcopy(employee.input_schema)
+            direct_schema["properties"].update({
+                "call_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            })
+            direct_schema["required"] = [
+                *direct_schema.get("required", []), "call_id", "schema_digest",
+            ]
+            tools.append(Tool(
+                name="execute_employee",
+                description=(
+                    "直接执行已授权 AI 员工。参数使用 employee.execute 的原生对象契约；"
+                    "先从 capability_describe 读取 schema_digest。写入仍走原审批与独立质检。"
+                ),
+                inputSchema=direct_schema,
+            ))
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    for name, (tool_id, action_name) in DIRECT_ACTION_TOOLS.items():
+        if visible is not None and (tool_id, action_name) not in visible:
+            continue
+        spec = get_tool_action_spec(tool_id, action_name)
+        if spec is None:
+            continue
+        generic = next(tool for tool in tools if tool.name == "execute_action")
+        generic.input_schema.setdefault("allOf", []).append({
+            "if": {
+                "required": ["tool_id", "action"],
+                "properties": {"tool_id": {"const": tool_id}, "action": {"const": action_name}},
+            },
+            "then": {"properties": {"params": spec.input_schema}},
+        })
+        direct_schema = copy.deepcopy(spec.input_schema)
+        direct_schema["properties"].update({
+            "call_id": {"type": "string", "minLength": 1, "maxLength": 160},
+            "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        })
+        direct_schema["required"] = [
+            *direct_schema.get("required", []), "call_id", "schema_digest",
+        ]
+        tools.append(Tool(
+            name=name,
+            description=f"执行已授权的 {tool_id}.{action_name}；参数直接使用原能力契约，先读取 schema_digest。",
+            inputSchema=direct_schema,
+        ))
+    return tools

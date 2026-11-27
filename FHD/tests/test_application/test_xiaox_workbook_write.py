@@ -34,7 +34,12 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.employee_runtime.executor import execute_employee_task_local
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
-from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    _batch_goal_capacity,
+    build_goal_contract,
+    goal_evidence_snapshot,
+    runtime_file_evidence,
+)
 from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY
 from app.domain.workbook_write_contract import WORKBOOK_READER, WORKBOOK_WRITER
 from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
@@ -215,6 +220,65 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path, request):
         set_agent_run_repository_for_tests(None)
 
 
+@pytest.mark.parametrize("workbook_runtime", [1], indirect=True)
+def test_l1_retry_reads_owned_workbook_without_write_approval(workbook_runtime):
+    state = workbook_runtime
+    parent = state.repository.get(state.parent.run_id)
+    parent.metadata["runtime_context"]["mutation_policy"] = "model_only"
+    state.repository.save(parent)
+
+    structure = state.invoke(
+        "structure", {"file_path": state.upload["upload_id"]},
+        tool="excel_analysis", action="structure",
+    )
+    # The synthetic sheet may need header confirmation, but policy must not
+    # misclassify this registered read as a write during a model-only retry.
+    assert structure.get("message") == "header_confirmation_required", structure
+    reader = state.invoke(
+        "reader", {
+            "employee_id": WORKBOOK_READER,
+            "task": "读取上传的工作簿",
+            "input": {"upload_id": state.upload["upload_id"]},
+        },
+    )
+    assert reader["status"] == "completed" and reader["verified"] is True, reader
+    assert reader.get("pending_approval") is not True
+
+
+def test_reader_bad_file_reference_is_terminal_failure_without_reconciliation(workbook_runtime):
+    state = workbook_runtime
+    result = state.invoke("missing-reader", {
+        "employee_id": WORKBOOK_READER,
+        "task": "读取上传的工作簿",
+        "input": {"upload_id": "missing-upload-id"},
+    })
+    assert result["status"] == "failed"
+    assert result["reconciliation_required"] is False
+    assert result["message"] == "文件不属于当前账号或当前任务，请明确选择 upload_id"
+
+
+def test_writer_missing_sheet_reports_original_plan_error_before_dispatch(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"]["phases"][0]["writes"][0]["sheet"] = "不存在的汇总页"
+    result = state.invoke("missing-sheet", params)
+    assert result["status"] == "not_started"
+    assert result["error_code"] == "workbook_plan_invalid"
+    assert "不存在的汇总页" in result["message"]
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+def test_invalid_formula_is_rejected_before_workbook_approval(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"]["phases"][1]["writes"][0]["formula"] = "=SUM(A1;B1)"
+    result = state.invoke("invalid-formula", params)
+    assert result["status"] == "not_started"
+    assert result["error_code"] == "workbook_formula_syntax_invalid"
+    assert result["field_path"] == "input.plan.phases[1].writes[0].formula"
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
 def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_runtime):
     state = workbook_runtime
     upload_id = state.upload["upload_id"]
@@ -307,6 +371,8 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
         source_digest = upload.sha256
     assert source_digest == hashlib.sha256(state.original).hexdigest()
     assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
+
+
     params = copy.deepcopy(state.params)
     assert params["input"]["template_path"] == upload_id
     output_name = "小C-Excel制表考卷.xlsx"
@@ -386,6 +452,85 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
     assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
 
 
+def test_new_sheet_is_written_and_independently_verified(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"] = {
+        "plan_version": 1,
+        "template": {"sheet_names": ["Data"]},
+        "phases": [
+            {"phase": "create_sheet", "sheet": "Summary"},
+            {"phase": "cell_writes", "writes": [
+                {"sheet": "Summary", "ref": "A1", "value": "Total"},
+            ]},
+            {"phase": "formula_writes", "writes": [
+                {"sheet": "Summary", "ref": "B1", "formula": "=SUM(Data!B2:B3)"},
+            ]},
+        ],
+    }
+    pending = state.invoke("new-sheet", params)
+    assert pending["pending_approval"] is True, pending
+    child = state.approve(pending)
+    receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
+    assert child.status == "completed" and receipt["verified"] is True, (child.error, receipt)
+    [artifact] = receipt["artifacts"]
+    with io.BytesIO(read_verified_run_file(child.run_id, artifact)) as stream:
+        book = load_workbook(stream, data_only=False)
+        try:
+            assert book.sheetnames == ["Data", "Summary"]
+            assert book["Summary"]["A1"].value == "Total"
+            assert book["Summary"]["B1"].value == "=SUM(Data!B2:B3)"
+        finally:
+            book.close()
+    checks = receipt["verification"]["steps"][0]["checks"]
+    quality = next(row["evidence"] for row in checks if row["source"] == "workbook_qc")
+    assert quality["sections"]["conformance"] == "pass"
+    assert state.workspace_copy.read_bytes() == state.original
+
+
+def test_verified_workbook_readback_reaches_goal_evidence(workbook_runtime):
+    state = workbook_runtime
+    written = state.approve(state.invoke("write-for-readback", state.params))
+    assert written.status == "completed"
+    write_row = state.store.receipt_snapshot(state.parent.run_id)[0]
+    assert _batch_goal_capacity(write_row) >= 2
+    artifact = write_row["receipt"]["artifacts"][0]
+    read = state.invoke("read-answer-copy", {
+        "employee_id": WORKBOOK_READER,
+        "task": "回读已验证的答题副本",
+        "input": {"file_path": artifact["uri"]},
+    })
+    assert read["status"] == "completed" and read["verified"] is True, read
+    rows = state.store.receipt_snapshot(state.parent.run_id)
+    contract = state.repository.get(state.parent.run_id).metadata["runtime_goal_contract"]
+    snapshot = goal_evidence_snapshot(contract, rows, "副本已回读")
+    sources = runtime_file_evidence(contract, snapshot)
+    assert sources is not None
+    source = sources[read["run_id"]]
+    assert source["origin"] == "verified_workbook_readback"
+    assert source["coverage"]["truncated"] is False
+    assert '"ref":"C2","value":null,"formula":"=B2*2"' in source["text"]
+
+
+def test_unverified_workbook_readback_cannot_be_cited(workbook_runtime):
+    state = workbook_runtime
+    written = state.approve(state.invoke("write-for-untrusted-readback", state.params))
+    assert written.status == "completed"
+    artifact = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]["artifacts"][0]
+    read = state.invoke("read-untrusted", {
+        "employee_id": WORKBOOK_READER,
+        "task": "回读已验证的答题副本",
+        "input": {"file_path": artifact["uri"]},
+    })
+    assert read["status"] == "completed"
+    rows = state.store.receipt_snapshot(state.parent.run_id)
+    read_row = next(row for row in rows if row["child_run_id"] == read["run_id"])
+    read_row["receipt"]["tool_calls"][0]["output"]["data"]["readback"]["sha256"] = "0" * 64
+    contract = state.repository.get(state.parent.run_id).metadata["runtime_goal_contract"]
+    snapshot = goal_evidence_snapshot(contract, rows, "副本已回读")
+    assert read["run_id"] not in (runtime_file_evidence(contract, snapshot) or {})
+
+
 @pytest.mark.parametrize(("field", "value"), [
     ("workspace_root", "/outside/private.xlsx"),
     ("output_relpath", "/outside/private.xlsx"),
@@ -409,6 +554,99 @@ def test_writer_rejects_output_name_with_different_workbook_format(workbook_runt
     child = state.approve(state.invoke("format-mismatch", params))
     assert child.status != "completed" and not child.artifacts
     assert not any(record.output.get("success") is True for record in child.tool_calls)
+
+
+def test_writer_rejects_conflicting_writes_before_approval(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"]["phases"][1]["writes"].append(
+        {"sheet": "Data", "ref": "A2", "formula": "=B2*2"}
+    )
+    denied = state.invoke("conflicting-cell", params)
+    assert denied["status"] == "not_started"
+    assert denied["error_code"] == "workbook_plan_invalid"
+    assert "Data!A2" in denied["message"]
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+@pytest.mark.parametrize("child_status, expected", [
+    ("running", "running"),
+    ("blocked", "unknown"),
+])
+def test_writer_receipt_waits_for_independent_qc_without_latching_unknown(
+    workbook_runtime, child_status, expected
+):
+    from app.infrastructure.xiaox.receipts import read_call_receipt
+
+    state = workbook_runtime
+    admitted = state.invoke("qc-race", state.params)
+    child = state.approve(admitted)
+    assert child.status == "completed"
+    child = copy.deepcopy(child)
+    child.status = child_status
+    child.tool_calls[0].metadata["verification"] = {
+        "status": "pending", "accepted": False, "checks": [],
+    }
+    binding = state.store.get(state.parent.run_id)
+    call = binding.metadata["calls"]["qc-race"]
+    store = SimpleNamespace(
+        repository=SimpleNamespace(get=lambda run_id: child if run_id == child.run_id else None),
+        _validate_goal=lambda _run, _metadata: None,
+    )
+
+    receipt = read_call_receipt(store, binding, call)
+
+    assert receipt["status"] == expected
+    assert receipt["reconciliation_required"] is (expected == "unknown")
+    assert receipt["verified"] is False
+
+
+@pytest.mark.parametrize("replaced_attempt", [False, True])
+@pytest.mark.parametrize("interrupted_parent", [False, True])
+def test_verified_original_writer_can_reconcile_a_provisional_parent_lock(
+    workbook_runtime, replaced_attempt, interrupted_parent
+):
+    from app.db.models.agent import AgentTaskRecord
+
+    state = workbook_runtime
+    child = state.approve(state.invoke("qc-recovery", state.params))
+    assert child.status == "completed"
+    state.store.close(state.parent.run_id, reason="waiting_user")
+    rows = state.store.receipt_snapshot(state.parent.run_id)
+    assert len(rows) == 1 and rows[0]["receipt"]["verified"] is True
+    prior = copy.deepcopy(rows[0])
+    prior.update(state="running")
+    prior["receipt"].update(status="running", success=False, verified=False)
+    parent = state.repository.get(state.parent.run_id)
+    parent.metadata["xiaox_runtime"]["runtime_status"] = "completed"
+    parent.metadata.update(
+        runtime_completion_mode="auto",
+        non_retryable=True,
+        recovery={"state": "manual_reconciliation_required"},
+    )
+    parent.final_output["xiaox_result"] = {
+        "exit_status": "running", "business_receipts": [prior],
+    }
+    if interrupted_parent:
+        parent.status = "unknown"
+        parent.error = "启动清扫误判等待中的父任务"
+    state.repository.save(parent)
+    if replaced_attempt:
+        with state.actor.factory.begin() as db:
+            task = db.query(AgentTaskRecord).filter_by(task_id=rows[0]["child_task_id"]).one()
+            task.run_count = 2
+
+    current = state.repository.get(parent.run_id)
+    reconciled = state.queue.reconcile_xiaox_receipts(state.repository, current)
+    if replaced_attempt:
+        assert reconciled is None
+        assert state.repository.get(parent.run_id).metadata["recovery"]["state"] == "manual_reconciliation_required"
+    else:
+        assert reconciled is not None
+        assert reconciled.final_output["xiaox_result"]["exit_status"] == "continuation_pending"
+        assert "recovery" not in reconciled.metadata
+        assert "non_retryable" not in reconciled.metadata
+        assert state.repository.get(child.run_id).status == "completed"
 
 
 @pytest.mark.parametrize("workbook_runtime", range(1, 7), indirect=True)
@@ -722,6 +960,41 @@ def test_writer_context_reports_the_input_contract_instead_of_a_write_denial(mon
     assert result["input_schema"]["required"] == ["template_path", "plan"]
 
 
+def test_multiterm_capability_search_finds_authorized_workbook_writer(workbook_runtime):
+    state = workbook_runtime
+    result = state.bridge.invoke(
+        state.grant.mcp_token, "capability_search",
+        {"query": "Excel 工作簿 生成 公式 导出 回读 下载"},
+    )
+    assert result["success"] is True
+    assert ("employee", "execute") in {
+        (row["tool_id"], row["action"]) for row in result["capabilities"]
+    }
+
+
+def test_native_employee_mcp_tool_keeps_review_and_approval(workbook_runtime):
+    from jsonschema import Draft202012Validator
+
+    from app.infrastructure.xiaox.tools import mcp_tool_definitions
+
+    state = workbook_runtime
+    tools = mcp_tool_definitions([("employee", "execute")])
+    direct = next(tool for tool in tools if tool.name == "execute_employee")
+    assert "execute_employee" not in {
+        tool.name for tool in mcp_tool_definitions([("customers", "query")])
+    }
+    digest = state.bridge.invoke(
+        state.grant.mcp_token, "capability_describe",
+        {"tool_id": "employee", "action": "execute"},
+    )["capability"]["schema_digest"]
+    args = {**state.params, "call_id": "direct-writer", "schema_digest": digest}
+    assert not list(Draft202012Validator(direct.input_schema).iter_errors(args))
+    result = state.bridge.invoke(state.grant.mcp_token, "execute_employee", args)
+    assert result["status"] == "waiting_user"
+    assert result["pending_approval"] is True
+    assert not state.workspace_copy.with_name("answer.xlsx").exists()
+
+
 def test_write_contract_declares_which_structural_capabilities_exist():
     """卷二 A2 需要插入行、合并、字号、行高与冻结；契约必须如实声明。
 
@@ -739,6 +1012,7 @@ def test_write_contract_declares_which_structural_capabilities_exist():
         "cell_writes",
         "formula_writes",
         "cell_styles",
+        "create_sheet",
         "insert_rows",
         "merge_cells",
         "set_row_height",

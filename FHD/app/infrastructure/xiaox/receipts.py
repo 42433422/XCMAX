@@ -303,14 +303,22 @@ def read_call_receipt(
         for record in child.tool_calls
         if _pending_step(child, steps.get(record.step_id), record)
     }
-    unverified_effect = not verification["accepted"] and any(
-        (record.metadata.get("verification_contract") or {}).get("read_only") is not True
-        and record.call_id not in pending_calls
-        and (
-            record.output.get("success") is True
-            or (child.status in {"blocked", "failed"} and execution is None)
+    # The worker can persist the effect before its independent verification.
+    # While that same child is active, keep the parent pending; only a stopped
+    # unverified effect needs reconciliation. The stale-run lease reconciler
+    # settles abandoned active children separately.
+    unverified_effect = (
+        child.status not in {"queued", "planning", "running", "retrying"}
+        and not verification["accepted"]
+        and any(
+            (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+            and record.call_id not in pending_calls
+            and (
+                record.output.get("success") is True
+                or (child.status in {"blocked", "failed"} and execution is None)
+            )
+            for record in child.tool_calls
         )
-        for record in child.tool_calls
     )
     unknown = (
         bool(child.metadata.get("non_retryable"))

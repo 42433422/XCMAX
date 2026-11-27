@@ -230,6 +230,7 @@ def preserve_run_evidence(
     *,
     allow_safe_retry: bool = False,
     allow_planning_replacement: bool = False,
+    allow_verified_xiaox_recovery: bool = False,
 ) -> None:
     """Keep receipts across mutable context updates; only a verified CAS replaces a plan."""
     if previous is None:
@@ -259,13 +260,27 @@ def preserve_run_evidence(
             return
     old = previous.metadata
     settled_pending = allow_planning_replacement and verified_pending_settlement(run, previous)
-    if old.get("non_retryable") and not settled_pending:
+    settled_xiaox = bool(
+        allow_verified_xiaox_recovery
+        and previous.metadata.get("runtime_type") == "xiaox"
+        and previous.status in {"running", "waiting_user", "unknown"}
+        and (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+        and not old.get("stream_interruption")
+        and not run.metadata.get("recovery")
+        and not run.metadata.get("non_retryable")
+        and (run.final_output.get("xiaox_result") or {}).get("exit_status")
+        == "continuation_pending"
+        and any(event.event_type == "runtime.reconciliation.verified" for event in run.events)
+    )
+    if allow_verified_xiaox_recovery and not settled_xiaox:
+        raise ValueError("Xiaox recovery requires the verified original child transition")
+    if old.get("non_retryable") and not (settled_pending or settled_xiaox):
         run.metadata["non_retryable"] = True
     recovery = {
-        **({} if settled_pending else copy.deepcopy(old.get("recovery") or {})),
+        **({} if settled_pending or settled_xiaox else copy.deepcopy(old.get("recovery") or {})),
         **(run.metadata.get("recovery") or {}),
     }
-    if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required":
+    if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required" and not settled_xiaox:
         recovery["state"] = "manual_reconciliation_required"
     if recovery:
         run.metadata["recovery"] = recovery
@@ -378,7 +393,7 @@ def preserve_run_evidence(
     for event in run.events:
         events.setdefault(event.event_id, event)
     run.events = list(events.values())
-    if not allow_safe_retry and (
+    if not (allow_safe_retry or settled_xiaox) and (
         (previous.status in terminal and run.status != previous.status)
         or (
             previous.status == "unknown"
@@ -614,7 +629,10 @@ class SQLAlchemyAgentRunRepository:
             run, previous
         )
 
-    def save_if_unchanged_in_session(self, db: Session, run: AgentRun, previous: AgentRun) -> bool:
+    def save_if_unchanged_in_session(
+        self, db: Session, run: AgentRun, previous: AgentRun,
+        *, allow_verified_xiaox_recovery: bool = False,
+    ) -> bool:
         from app.db.models.agent import AgentRunRecord
 
         record = db.get(AgentRunRecord, previous.run_id)
@@ -633,7 +651,10 @@ class SQLAlchemyAgentRunRepository:
         )
         if matched != 1:
             return False
-        self.save_in_session(db, run, allow_planning_replacement=True)
+        self.save_in_session(
+            db, run, allow_planning_replacement=True,
+            allow_verified_xiaox_recovery=allow_verified_xiaox_recovery,
+        )
         return True
 
     def save_in_session(
@@ -643,6 +664,7 @@ class SQLAlchemyAgentRunRepository:
         *,
         allow_safe_retry: bool = False,
         allow_planning_replacement: bool = False,
+        allow_verified_xiaox_recovery: bool = False,
     ) -> None:
         """Lock then persist in the caller's transaction, preserving concurrent receipts."""
         from app.application.agent_orchestrator.business_harness import (
@@ -671,6 +693,7 @@ class SQLAlchemyAgentRunRepository:
             previous,
             allow_safe_retry=allow_safe_retry,
             allow_planning_replacement=allow_planning_replacement,
+            allow_verified_xiaox_recovery=allow_verified_xiaox_recovery,
         )
         if catalog_fenced:
             # A signed permanent dispatch fence supersedes a previous failure;

@@ -111,6 +111,51 @@ def _finish_report(report: dict[str, Any]) -> dict[str, Any]:
     return {**report, "report_digest": canonical_digest(report)}
 
 
+def _review_evidence_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Send outcome facts once; keep full receipts for host-side verification."""
+    view = []
+    for row in rows:
+        receipt = row["receipt"]
+        verification = receipt.get("verification") or {}
+        calls = []
+        for call in receipt.get("tool_calls") or []:
+            item = {key: call.get(key) for key in ("tool_id", "action", "status", "output", "error")}
+            if call.get("params") != row.get("params"):
+                item["params"] = call.get("params")
+            calls.append(item)
+        view.append({
+            "evidence_id": row["evidence_id"],
+            "tool_id": row["tool_id"],
+            "action": row["action"],
+            "params": row["params"],
+            "read_only": row["read_only"],
+            "state": row["state"],
+            "receipt": {
+                key: receipt.get(key) for key in (
+                    "success", "verified", "status", "message", "pending_approval",
+                    "needs_user_input", "reconciliation_required",
+                )
+            } | {
+                "verification": {
+                    "status": verification.get("status"),
+                    "accepted": verification.get("accepted"),
+                    "steps": [
+                        {key: step.get(key) for key in ("status", "accepted", "code", "checks")}
+                        for step in verification.get("steps") or []
+                    ],
+                },
+                "tool_calls": calls,
+                "artifacts": [
+                    {key: artifact.get(key) for key in (
+                        "artifact_id", "artifact_type", "name", "uri", "mime_type",
+                    )} | {"sha256": (artifact.get("metadata") or {}).get("sha256")}
+                    for artifact in receipt.get("artifacts") or []
+                ],
+            },
+        })
+    return view
+
+
 def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result = dict(pairs)
     if len(result) != len(pairs):
@@ -380,9 +425,8 @@ def verify_runtime_goal(
     started = time.monotonic()
     persisted_deadline = float(binding.metadata.get("deadline_at") or 0)
     seconds = min(float(config.turn_timeout_seconds), persisted_deadline - time.time(), 90.0)
-    # A MiMo reasoning review can exceed the CLI RPC timeout. Its gateway
-    # request stays bounded by the verifier and the original task's deadline.
-    request_limit = seconds if mimo_reasoning else float(config.timeout_seconds)
+    # Verification can outlast a normal tool RPC; the original task still bounds it.
+    request_limit = seconds
     capacity = int(config.context_window) - int(config.auto_compact_token_limit or 0)
     if (
         not math.isfinite(persisted_deadline)
@@ -426,7 +470,7 @@ def verify_runtime_goal(
         **({"requested_deliverable": contract["scope"]["requested_deliverable"]}
            if "requested_deliverable" in contract["scope"] else {}),
         "answers": answers,
-        "evidence": snapshot["evidence"],
+        "evidence": _review_evidence_view(snapshot["evidence"]),
         "response": output,
         "output_schema": schema,
     }

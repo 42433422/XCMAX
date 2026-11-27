@@ -64,6 +64,7 @@ class ConversationStore(Protocol):
         user_id: str,
         expected_revision: int,
         assistant: dict[str, Any],
+        allow_retry_repair: bool = False,
     ) -> int | None: ...
 
 
@@ -290,6 +291,7 @@ def persist_chat_turn(
     *,
     store: ConversationStore | None = None,
     _settle_queued: bool = False,
+    _repair_retry: bool = False,
 ) -> dict[str, Any]:
     """
     在请求携带 session_id / conversation_id 时，将会话与工具结果摘要写入 ai_conversations，
@@ -500,6 +502,7 @@ def persist_chat_turn(
             user_id=history_user_id,
             expected_revision=context["_conversation_revision"],
             assistant=assistant,
+            allow_retry_repair=_repair_retry,
         )
         return {"message_ids": [message_id] if message_id is not None else []}
     message_ids = store.save_turn(
@@ -587,6 +590,31 @@ def reconcile_queued_chat_reply(
             from app.infrastructure.xiaox.queued_runtime import recover_interrupted_queue_request
 
             result = recover_interrupted_queue_request(get_agent_run_repository(), run, key)
+        repair_retry = False
+        pending = run.metadata.get("_xiaox_queued_request") or {}
+        latest = (run.metadata.get("runtime_requests") or {}).get(
+            pending.get("request_key"), {}
+        )
+        if (
+            run.status == "completed"
+            and receipt.get("state") == "returned"
+            and isinstance(result, dict)
+            and result.get("ok") is False
+            and pending.get("request_key") != key
+            and pending.get("task") == run.message
+            and pending.get("input_data") == run.metadata.get("_xiaox_input_data")
+            and pending.get("answer_to_waiting_input") is False
+            and latest.get("state") == "returned"
+            and isinstance(latest.get("result"), dict)
+            and latest["result"].get("ok") is True
+            and latest["result"].get("execution_state") == "completed"
+            and latest["result"].get("output")
+            == (run.final_output.get("xiaox_result") or {}).get("output")
+        ):
+            # A same-input retry has its own receipt; the original chat turn must
+            # follow that terminal outcome without replacing unrelated later turns.
+            result = latest["result"]
+            repair_retry = True
         if not publish or not isinstance(result, dict) or result.get("run_id") != run_id:
             return False
         payload = runtime_chat_payload(public_runtime_result(result), conversation_id=session)
@@ -594,7 +622,12 @@ def reconcile_queued_chat_reply(
         try:
             with tenant_scope(tenant):
                 ack = persist_chat_turn(
-                    str(owner), "", {**context, "turn_id": turn_id}, payload, _settle_queued=True
+                    str(owner),
+                    "",
+                    {**context, "turn_id": turn_id},
+                    payload,
+                    _settle_queued=True,
+                    _repair_retry=repair_retry,
                 )
                 return bool(ack["message_ids"])
         finally:

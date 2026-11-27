@@ -519,7 +519,12 @@ def _check_structural(wb, plan, template_wb, planned_targets, cleared, f) -> int
             continue
         ws = wb[sheet]
         try:
-            if kind == "insert_rows":
+            if kind == "create_sheet":
+                if template_wb is None:
+                    f.fail("缺少原模板，无法核验新增工作表", sheet=sheet)
+                elif sheet.casefold() in {name.casefold() for name in template_wb.sheetnames}:
+                    f.fail("计划新增的工作表已存在于原模板", sheet=sheet)
+            elif kind == "insert_rows":
                 insertions.append(_row_insertion(ph))
             elif kind == "merge_cells":
                 left, top, right, bottom = range_boundaries(str(ph.get("range")).upper())
