@@ -23,7 +23,9 @@ def verify_dynamic_effects(db, native, rows, receipt) -> dict:
         if isinstance(item, dict) and str(item.get("target") or "").strip()
     ]
     schema = draft.get("dynamic_schema") or {}
-    dedupe = [str(key) for key in schema.get("dedupe_keys") or [] if str(key) in set(headers)]
+    # Use the original proposal, as the writer does. Removing a missing column
+    # would verify a different business key and reject an intact source row.
+    dedupe = [str(key) for key in schema.get("dedupe_keys") or []]
     payloads = []
     for row in rows:
         if row.final_action not in {"new", "update"}:

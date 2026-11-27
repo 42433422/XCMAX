@@ -14,7 +14,7 @@ EMPLOYEE_ID = "pdf-full-read-employee"
 EMPLOYEE_LABEL = "PDF 生成员"
 SYSTEM_PROMPT = "你是PDF 生成员。你必须按 direct_python 方式处理真实文件，读取 payload 中的 file_path/path/excel_path，必要时使用打包模板，成功条件是实际写出输出文件。任何输入缺失、模板缺失、转换模块异常都要返回明确错误，禁止编造已完成。"
 RULE_SPEC = {
-    "brief": "制作 PDF 全量读取员工包。上传 .pdf：只读原生文字层写入 outputs/document_full.txt；内嵌图片导出到 outputs/images/{figures,photos,diagrams,icons,uncategorized}/，并通过 VLM（ctx.call_llm vision）生成 .vlm.json 描述；元数据 outputs/document_meta.json。使用 direct_python，handlers 仅 direct_python。",
+    "brief": "PDF 全量读取：原生文字写入 outputs/document_full.txt；内嵌图片本地导出至 outputs/images/，结构与来源写入 outputs/document_meta.json。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义描述标记 blocked，原生读取结果仍保留。",
     "mode": "direct_python_file_transform",
     "accepted_extensions": [".pdf"],
     "default_action": "convert",
@@ -30,12 +30,14 @@ RULE_SPEC = {
         "images",
         "image_categories",
         "source",
+        "status",
+        "image_semantics",
     ],
     "requirements": [
         'Use direct_python only; handlers must be ["direct_python"].',
         "Extract native text and embedded images with pypdf; never use LLM for body text.",
         "Export images to outputs/images/{figures,photos,diagrams,icons,uncategorized}/.",
-        "When ctx.call_llm supports vision, describe each image to outputs/images/<cat>/<name>.vlm.json.",
+        "Preserve extracted images locally; no implicit VLM call without verified document-content egress authorization.",
         "Write document_full.txt, document_meta.json, images_index.json.",
         "Return {ok, summary, items, warnings, error, meta}.",
     ],

@@ -7,6 +7,38 @@ from typing import Any
 _WORKBOOK_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("excel_analysis", "read"): [
         {
+            "name": "workbook_typed_native_value_lookup_contract",
+            "input": {
+                "file_path": "sample.xlsx",
+                "view": "cells",
+                "sheet_name": "Sheet1",
+                "value_match": {"value_type": "boolean", "value_state": "present", "value": False},
+                "expected_sha256": "a" * 64,
+                "max_rows": 1,
+            },
+            "output": {
+                "success": True,
+                "data": {
+                    "view": "cells",
+                    "sheet_name": "Sheet1",
+                    "source_sha256": "a" * 64,
+                    "lookup_binding": "b" * 64,
+                    "total_items": 1,
+                    "cells": [
+                        {
+                            "address": "A2",
+                            "value_type": "boolean",
+                            "value_state": "present",
+                            "value": False,
+                        }
+                    ],
+                    "has_more": False,
+                    "next_offset": None,
+                    "next_cursor": None,
+                },
+            },
+        },
+        {
             "name": "workbook_native_cells_page_contract",
             "input": {
                 "file_path": "sample.xlsx",

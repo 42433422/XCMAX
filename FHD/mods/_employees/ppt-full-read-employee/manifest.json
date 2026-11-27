@@ -3,7 +3,7 @@
   "name": "PPT 全量读取员",
   "version": "1.1.0",
   "author": "XCAGI",
-  "description": "PPT全量读取员工：上传 .pptx，输出 presentation_full.json 中介；解析大纲与每页正文；图片 VLM 识图；按「为这份PPT生成每页的演讲备注」生成演讲备注。direct_python，禁止编造幻灯片正文。",
+  "description": "PPT 全量读取：大纲、原生正文、表格和已有备注写入 outputs/presentation_full.json，内嵌图片本地导出至 outputs/images/，已有备注写入 outputs/speaker_notes.md。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义与备注生成标记 blocked。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -13,9 +13,7 @@
     "id": "ppt-full-read-employee",
     "label": "PPT 全量读取员",
     "capabilities": [
-      "ppt.parse",
-      "ppt.notes_generate",
-      "vision.vlm"
+      "ppt.parse"
     ]
   },
   "workflow_employees": [
@@ -23,11 +21,9 @@
       "id": "ppt-full-read-employee",
       "label": "PPT 全量读取员",
       "panel_title": "PPT 全量读取员",
-      "panel_summary": "上传 .pptx，全量解析并生成演讲备注；图片 VLM 识图。",
+      "panel_summary": "本地读取原生正文、表格、图片和已有备注；模型增强需独立外发授权。",
       "capabilities": [
-        "ppt.parse",
-        "ppt.notes_generate",
-        "vision.vlm"
+        "ppt.parse"
       ],
       "api_base_path": "employees/ppt-full-read-employee",
       "entry_action": "run"
@@ -43,7 +39,7 @@
       "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "PPT 全量读取员",
-      "description": "制作 PPT 全量读取员工包"
+      "description": "PPT 全量读取：大纲、原生正文、表格和已有备注写入 outputs/presentation_full.json，内嵌图片本地导出至 outputs/images/，已有备注写入 outputs/speaker_notes.md。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义与备注生成标记 blocked。"
     },
     "perception": {
       "type": "file_or_text",
@@ -56,21 +52,21 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是PPT 生成员。你负责全量解析 PPT：大纲、每页正文、导出图片并 VLM 描述；按「为这份PPT生成每页的演讲备注」生成 notes_generated。正文禁止 LLM 编造；必须真实执行 direct_python。",
+        "system_prompt": "PPT 全量读取：大纲、原生正文、表格和已有备注写入 outputs/presentation_full.json，内嵌图片本地导出至 outputs/images/，已有备注写入 outputs/speaker_notes.md。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义与备注生成标记 blocked。禁止编造原生正文，必须执行 direct_python 并保留未完成状态。",
         "role": {
           "name": "PPT 生成员",
           "persona": "严谨的 PPT 全量读取员工",
           "tone": "professional",
           "expertise": [
             "PPT 解析",
-            "演讲备注",
-            "VLM 识图"
+            "已有演讲备注",
+            "本地图片提取"
           ]
         },
         "behavior_rules": [
-          "幻灯片正文必须来自 pptx 真实解析，禁止 LLM 编造。",
-          "必须写出 presentation_full.json 与 speaker_notes.md。",
-          "图片尽量生成 VLM sidecar。"
+          "正文和已有备注必须来自原件，禁止编造。",
+          "图片只在本地导出；不能把 call_llm 可用、文档文字或文件读取权限视为内容外发授权。",
+          "未执行模型增强必须显式标记 blocked/partial，保留原生事实与实际产物。"
         ],
         "few_shot_examples": [],
         "model": {
@@ -84,7 +80,7 @@
       "skills": [
         {
           "name": "ppt.full_read",
-          "brief": "上传 pptx → JSON 中介 + 演讲备注 + 图片 VLM。"
+          "brief": "原生文字、表格、图片与来源的本地读取；不隐式向模型发送内容。"
         }
       ]
     },

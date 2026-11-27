@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -146,104 +144,6 @@ def _write_image_files(images: List[Dict[str, Any]], images_root: Path) -> List[
     return catalog
 
 
-async def _vlm_describe_image(
-    img_path: Path,
-    ctx: Dict[str, Any],
-    *,
-    slide: int,
-    category: str,
-) -> Optional[Dict[str, Any]]:
-    call_llm = ctx.get("call_llm")
-    if not callable(call_llm):
-        return None
-    try:
-        raw = img_path.read_bytes()
-    except OSError:
-        return None
-    b64 = base64.b64encode(raw).decode("ascii")
-    ext = img_path.suffix.lower().lstrip(".") or "png"
-    mime = "jpeg" if ext in ("jpg", "jpeg") else ext if ext in ("png", "gif", "webp") else "png"
-    url = f"data:image/{mime};base64,{b64}"
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        f"这是 PPT 第 {slide} 页嵌入的图片（分类：{category}）。"
-                        "请用中文简要描述图中文字与关键信息，输出 JSON："
-                        '{"description":"","detected_text":"","tags":[]}'
-                    ),
-                },
-                {"type": "image_url", "image_url": {"url": url}},
-            ],
-        }
-    ]
-    try:
-        res = await asyncio.wait_for(
-            call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0
-        )
-    except RECOVERABLE_ERRORS:
-        return None
-    if not isinstance(res, dict) or not res.get("ok"):
-        return None
-    content = str(res.get("content") or "").strip()
-    sidecar = {"description": content[:2000], "vlm_ok": True}
-    try:
-        if "{" in content:
-            parsed = json.loads(content[content.index("{") : content.rindex("}") + 1])
-            if isinstance(parsed, dict):
-                sidecar = {**sidecar, **parsed}
-    except (json.JSONDecodeError, ValueError):
-        pass
-    return sidecar
-
-
-async def _generate_speaker_note(
-    slide: Dict[str, Any],
-    ctx: Dict[str, Any],
-    *,
-    deck_title: str,
-    vlm_summaries: List[str],
-) -> str:
-    call_llm = ctx.get("call_llm")
-    if not callable(call_llm):
-        return ""
-    title = str(slide.get("title") or "")
-    bullets = slide.get("bullets") if isinstance(slide.get("bullets"), list) else []
-    bullets_txt = "\n".join(f"- {b}" for b in bullets[:10])
-    notes_existing = str(slide.get("notes_existing") or "").strip()
-    vlm_txt = "\n".join(vlm_summaries[:5])
-    user_msg = (
-        f"{_SPEAKER_NOTES_PROMPT}\n\n"
-        f"演示标题：{deck_title}\n"
-        f"当前页：第 {slide.get('index')} 页\n"
-        f"页标题：{title}\n"
-        f"正文要点：\n{bullets_txt or '(无)'}\n"
-    )
-    if notes_existing:
-        user_msg += f"\n已有备注（可参考，勿照抄）：\n{notes_existing[:1500]}\n"
-    if vlm_txt:
-        user_msg += f"\n图片识别摘要：\n{vlm_txt}\n"
-    user_msg += (
-        "\n请只输出本页演讲备注正文（中文，200-400字），不要 JSON，不要编造幻灯片上没有的信息。"
-    )
-    messages = [
-        {"role": "system", "content": "你是专业的演示文稿演讲稿撰写助手。"},
-        {"role": "user", "content": user_msg},
-    ]
-    try:
-        res = await asyncio.wait_for(
-            call_llm(messages, max_tokens=800, temperature=0.3), timeout=120.0
-        )
-    except RECOVERABLE_ERRORS:
-        return ""
-    if not isinstance(res, dict) or not res.get("ok"):
-        return ""
-    return str(res.get("content") or "").strip()[:4000]
-
-
 async def convert_file(
     src_path: Path,
     output_path: Path,
@@ -273,35 +173,29 @@ async def convert_file(
         raise ValueError(f"PPT 解析失败：{exc}") from exc
 
     catalog = _write_image_files(images_raw, images_root)
-    slide_vlm: Dict[int, List[str]] = {}
-    for entry in catalog:
-        rel = str(entry.get("relpath") or "")
-        img_abs = images_root.parent / rel if rel else None
-        if not img_abs or not img_abs.is_file():
-            continue
-        sidecar = await _vlm_describe_image(
-            img_abs,
-            ctx,
-            slide=int(entry.get("slide") or 0),
-            category=str(entry.get("category") or "uncategorized"),
-        )
-        if sidecar:
-            sidecar_path = img_abs.with_suffix(img_abs.suffix + ".vlm.json")
-            sidecar_path.write_text(
-                json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            entry["vlm_sidecar"] = str(sidecar_path.relative_to(output_dir)).replace("\\", "/")
-            desc = str(sidecar.get("description") or sidecar.get("detected_text") or "")[:500]
-            slide_no = int(entry.get("slide") or 0)
-            slide_vlm.setdefault(slide_no, []).append(desc)
-        else:
-            warnings.append(f"图片 {entry.get('id')} 未获得 VLM 描述")
+    # File access and a callable LLM do not authorize sending images or notes.
+    # Preserve the source and explicitly report the unavailable enrichment.
+    image_semantics = {
+        "status": "blocked" if catalog else "not_applicable",
+        "reason": "model_content_egress_not_authorized" if catalog else "no_embedded_images",
+    }
+    notes_generation = {"status": "blocked", "reason": "model_content_egress_not_authorized"}
+    status = presentation["document_facts"]["status"]
+    if status == "complete":
+        status = "partial"
+    presentation.update(
+        status=status, image_semantics=image_semantics, notes_generation=notes_generation
+    )
+    warnings.append("未取得文档内容外发授权，未生成演讲备注；原有备注已保留。")
+    if catalog:
+        warnings.append("未生成图片语义描述；原始图片已保留。")
 
     images_index_path = output_dir / "images_index.json"
     images_index = {
         "images": catalog,
         "categories": list(_CATEGORY_DIRS),
-        "vlm_count": sum(1 for i in catalog if i.get("vlm_sidecar")),
+        "vlm_count": 0,
+        "image_semantics": image_semantics,
     }
     images_index_path.write_text(
         json.dumps(images_index, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -313,14 +207,6 @@ async def convert_file(
         if not isinstance(slide, dict):
             continue
         idx = int(slide.get("index") or 0)
-        vlm_hints = slide_vlm.get(idx, [])
-        generated = await _generate_speaker_note(
-            slide, ctx, deck_title=deck_title, vlm_summaries=vlm_hints
-        )
-        if generated:
-            slide["notes_generated"] = generated
-        elif not ctx.get("call_llm"):
-            warnings.append(f"第 {idx} 页：ctx.call_llm 不可用，未生成演讲备注")
         slide_images = [e for e in catalog if int(e.get("slide") or 0) == idx]
         slide["images"] = slide_images
         notes_lines.append(f"## 第 {idx} 页 · {slide.get('title') or ''}")
@@ -348,6 +234,9 @@ async def convert_file(
     notes_md_path.write_text("\n".join(notes_lines), encoding="utf-8")
 
     meta = {
+        "status": status,
+        "image_semantics": image_semantics,
+        "notes_generation": notes_generation,
         "title": deck_title,
         "slide_count": presentation.get("slide_count"),
         "source": src_path.name,
@@ -358,6 +247,9 @@ async def convert_file(
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {
+        "status": status,
+        "image_semantics": image_semantics,
+        "notes_generation": notes_generation,
         "output_path": str(json_path),
         "meta_output_path": str(meta_path),
         "notes_output_path": str(notes_md_path),

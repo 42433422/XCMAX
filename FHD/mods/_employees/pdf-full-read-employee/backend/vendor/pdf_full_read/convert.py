@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-from app.mod_sdk.errors import RECOVERABLE_ERRORS
 
 _CATEGORY_DIRS = ("figures", "photos", "diagrams", "icons", "uncategorized")
 
@@ -92,58 +88,6 @@ def _write_image_files(images: List[Dict[str, Any]], images_root: Path) -> List[
     return catalog
 
 
-async def _vlm_describe_image(
-    img_path: Path,
-    ctx: Dict[str, Any],
-    *,
-    page: int,
-    category: str,
-) -> Optional[Dict[str, Any]]:
-    call_llm = ctx.get("call_llm")
-    if not callable(call_llm):
-        return None
-    try:
-        raw = img_path.read_bytes()
-    except OSError:
-        return None
-    b64 = base64.b64encode(raw).decode("ascii")
-    url = f"data:image/png;base64,{b64}"
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        f"这是 PDF 第 {page} 页提取的图片（分类：{category}）。"
-                        "请用中文简要描述图中文字与关键信息，输出 JSON："
-                        '{"description":"","detected_text":"","tags":[]}'
-                    ),
-                },
-                {"type": "image_url", "image_url": {"url": url}},
-            ],
-        }
-    ]
-    try:
-        res = await asyncio.wait_for(
-            call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0
-        )
-    except RECOVERABLE_ERRORS:
-        return None
-    if not isinstance(res, dict) or not res.get("ok"):
-        return None
-    content = str(res.get("content") or "").strip()
-    sidecar = {"description": content[:2000], "vlm_ok": True}
-    try:
-        if "{" in content:
-            parsed = json.loads(content[content.index("{") : content.rindex("}") + 1])
-            if isinstance(parsed, dict):
-                sidecar = {**sidecar, **parsed}
-    except (json.JSONDecodeError, ValueError):
-        pass
-    return sidecar
-
-
 async def convert_file(
     src_path: Path,
     output_path: Path,
@@ -183,41 +127,33 @@ async def convert_file(
     txt_path.write_text(plain, encoding="utf-8")
     catalog = _write_image_files(images, images_root)
 
-    vlm_results: List[Dict[str, Any]] = []
-    for entry in catalog:
-        rel = str(entry.get("relpath") or "")
-        img_abs = images_root.parent / rel if rel else None
-        if not img_abs or not img_abs.is_file():
-            continue
-        sidecar = await _vlm_describe_image(
-            img_abs,
-            ctx,
-            page=int(entry.get("page") or 0),
-            category=str(entry.get("category") or "uncategorized"),
-        )
-        if sidecar:
-            sidecar_path = img_abs.with_suffix(img_abs.suffix + ".vlm.json")
-            sidecar_path.write_text(
-                json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            entry["vlm_sidecar"] = str(sidecar_path.relative_to(output_dir)).replace("\\", "/")
-            vlm_results.append({"id": entry.get("id"), "vlm": True})
-        else:
-            warnings.append(
-                f"图片 {entry.get('id')} 未获得 VLM 描述（ctx.call_llm 不可用或调用失败）"
-            )
+    # A model transport or a readable file is not permission to send its content.
+    # This local reader has no verified per-document egress grant, so preserve
+    # the original images without invoking an implicit model enrichment.
+    image_semantics = {
+        "status": "blocked" if catalog else "not_applicable",
+        "reason": "model_content_egress_not_authorized" if catalog else "no_embedded_images",
+    }
+    status = document_facts["status"]
+    if catalog:
+        if status == "complete":
+            status = "partial"
+        warnings.append("未取得文档内容外发授权，未生成图片语义描述；原始图片已保留。")
 
     images_index_path = output_dir / "images_index.json"
     images_index = {
         "images": catalog,
         "categories": list(_CATEGORY_DIRS),
-        "vlm_count": len(vlm_results),
+        "vlm_count": 0,
+        "image_semantics": image_semantics,
     }
     images_index_path.write_text(
         json.dumps(images_index, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     meta = {
+        "status": status,
+        "image_semantics": image_semantics,
         "plain_text": plain,
         "page_count": len(pages_meta),
         "char_count": len(plain),
@@ -236,6 +172,8 @@ async def convert_file(
         output_path.write_text(meta_path.read_text(encoding="utf-8"), encoding="utf-8")
 
     return {
+        "status": status,
+        "image_semantics": image_semantics,
         "output_path": str(txt_path),
         "meta_output_path": str(meta_path),
         "images_index_path": str(images_index_path),

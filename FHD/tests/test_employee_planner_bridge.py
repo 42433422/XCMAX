@@ -148,6 +148,10 @@ def test_employee_install_refreshes_one_registry_once(employee_mods_root, monkey
 def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatch, trusted_actor):
     from io import BytesIO
 
+    from app.application.agent_orchestrator.artifact_files import read_verified_run_file
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.application.elt.service import get_elt_service
     from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
     from app.infrastructure.tenant_scope import tenant_scope
@@ -177,11 +181,73 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
             "workspace_root": str(tmp_path),
         },
     }
+    step = AgentStep(node_id="read-csv", tool_id="employee", action="execute", params=params)
+    tool_call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        params=params,
+    )
+    run = AgentRun(
+        str(owner.user_id),
+        params["task"],
+        status="running",
+        steps=[step],
+        tool_calls=[tool_call],
+        metadata={"runtime_context": owner.context},
+    )
+    repository = SQLAlchemyAgentRunRepository(session_factory=owner.factory)
     with tenant_scope(owner.tenant_id):
-        allowed = _registered_router_employee("execute", params, owner.context, "normal", "")
-        denied = _registered_router_employee("execute", params, other.context, "normal", "")
+        repository.save(run)
+        stored = repository.get(run.run_id)
+        assert stored is not None
+        original_call = stored.tool_calls[0]
+        runtime_context = {
+            **stored.metadata["runtime_context"],
+            "run_id": stored.run_id,
+            "step_id": original_call.step_id,
+            "node_id": original_call.node_id,
+            "call_id": original_call.call_id,
+            "input_sha256": canonical_hash(original_call.params),
+        }
+        assert runtime_context["_actor_authorization"] == owner.context["_actor_authorization"]
+        allowed = _registered_router_employee("execute", params, runtime_context, "normal", "")
+        denied = _registered_router_employee(
+            "execute", params, {**runtime_context, **other.context}, "normal", ""
+        )
     assert allowed["success"], allowed
-    assert Path(allowed["data"]["file_path"]).is_file()
+    [receipt] = allowed["artifacts"]
+    assert (
+        allowed["data"]["file_path"]
+        == receipt["uri"]
+        == (f"/api/agent/runs/{stored.run_id}/artifacts/{receipt['artifact_id']}")
+    )
+    assert {
+        key: receipt["metadata"][key]
+        for key in (
+            "run_id",
+            "owner_user_id",
+            "tenant_id",
+            "step_id",
+            "node_id",
+            "call_id",
+            "params_sha256",
+        )
+    } == {
+        "run_id": stored.run_id,
+        "owner_user_id": str(owner.user_id),
+        "tenant_id": str(owner.tenant_id),
+        "step_id": original_call.step_id,
+        "node_id": original_call.node_id,
+        "call_id": original_call.call_id,
+        "params_sha256": canonical_hash(original_call.params),
+    }
+    assert json.loads(read_verified_run_file(stored.run_id, receipt)) == {
+        "columns": ["a", "b"],
+        "rows": [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}],
+        "row_count": 2,
+    }
     assert denied["data"]["error_code"] == "employee_file_access_denied"
     assert not target.exists()
     from app.application.employee_runtime import executor
@@ -221,7 +287,7 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
     target.write_text("private\nsecret\n")
     for action in ("execute", "context"):
         denied = call(
-            action, owner.context, invoke_mode="collaboration_context", file_path=str(target)
+            action, runtime_context, invoke_mode="collaboration_context", file_path=str(target)
         )
         assert denied["data"]["error_code"] == "employee_file_access_denied"
     assert target.read_text() == "private\nsecret\n"
@@ -232,12 +298,12 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
         "output_relpath",
         "workspace_root",
     ):
-        denied = call("context", owner.context, **{key: str(target)})
+        denied = call("context", runtime_context, **{key: str(target)})
         assert denied["data"]["error_code"] == "employee_file_access_denied"
     for flag in (False, True):
         denied = call(
             "execute",
-            {**owner.context, "employee_collaboration_run": flag},
+            {**runtime_context, "employee_collaboration_run": flag},
             invoke_mode="collaboration_context",
         )
         assert denied["data"]["error_code"] == "employee_file_access_denied"

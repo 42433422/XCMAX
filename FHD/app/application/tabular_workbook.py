@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections.abc import Iterator
@@ -20,7 +21,11 @@ from app.infrastructure.document_parsing.archive_safety import (
     inspect_office_archive,
 )
 from app.infrastructure.excel.workbook_facts import build_workbook_facts
-from app.infrastructure.excel.workbook_page_index import WorkbookPageIndex, project_workbook_page
+from app.infrastructure.excel.workbook_page_index import (
+    WorkbookPageIndex,
+    project_workbook_page,
+    validate_lookup,
+)
 from app.utils.performance.cache_manager import LRUTTLCache
 
 WORKBOOK_SNAPSHOT_LIMIT_BYTES = 40 * 1024 * 1024
@@ -28,7 +33,7 @@ WORKBOOK_SNAPSHOT_LIMIT_BYTES = 40 * 1024 * 1024
 # its separate budget; exceeding this limit is blocked, never truncated.
 WORKBOOK_MATERIALIZED_CELL_LIMIT = 500_000
 WORKBOOK_PAGE_CACHE_ENTRY_BYTES = 64 * 1024 * 1024
-_PAGE_READER_VERSION = "native-pages-v1"
+_PAGE_READER_VERSION = "native-pages-v2-exact-lookup"
 _PAGE_CACHE = LRUTTLCache(max_size=2, ttl_seconds=120, name="native_workbook_pages")
 _SNAPSHOT_SCOPE: ContextVar[tuple[Path, str] | None] = ContextVar(
     "authorized_workbook_snapshot", default=None
@@ -99,6 +104,37 @@ def read_workbook_facts(
     return document
 
 
+def _lookup_cursor(binding: str, offset: int) -> str:
+    body = json.dumps({"v": 1, "binding": binding, "offset": offset}, separators=(",", ":"))
+    return base64.urlsafe_b64encode(body.encode()).decode().rstrip("=")
+
+
+def _validate_lookup_cursor(cursor: str | None, binding: str, offset: int) -> None:
+    if cursor is None:
+        if offset:
+            raise ValueError("native_lookup_page_requires_cursor")
+        return
+    if not isinstance(cursor, str) or not 1 <= len(cursor) <= 512:
+        raise ValueError("invalid_native_lookup_cursor")
+    try:
+        value = json.loads(
+            base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
+        )
+    except (ValueError, UnicodeError) as exc:
+        raise ValueError("invalid_native_lookup_cursor") from exc
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"v", "binding", "offset"}
+        or type(value["v"]) is not int
+        or value["v"] != 1
+        or type(value["offset"]) is not int
+        or value["offset"] != offset
+    ):
+        raise ValueError("invalid_native_lookup_cursor")
+    if value["binding"] != binding:
+        raise ValueError("native_lookup_cursor_selection_changed")
+
+
 @serialize_workbook_io
 def read_workbook_page(
     path: Path,
@@ -109,6 +145,9 @@ def read_workbook_page(
     offset: int = 0,
     limit: int = 1000,
     expected_sha256: str | None = None,
+    value_match: dict[str, Any] | None = None,
+    style_id: str | None = None,
+    cursor: str | None = None,
 ) -> dict[str, Any]:
     """Revalidate snapshot bytes and reuse only scoped, bounded derived indexes.
 
@@ -118,6 +157,14 @@ def read_workbook_page(
     """
     if view not in {"cells", "sheets"}:
         raise ValueError("invalid_read_view")
+    value_key, style_id = validate_lookup(value_match, style_id)
+    lookup = value_key is not None or style_id is not None
+    if lookup and view != "cells":
+        raise ValueError("native_lookup_requires_cells_view")
+    if lookup and not expected_sha256:
+        raise ValueError("native_lookup_requires_source_sha256")
+    if cursor is not None and not lookup:
+        raise ValueError("native_lookup_cursor_requires_filter")
     if type(offset) is not int or offset < 0 or type(limit) is not int or limit < 1:
         raise ValueError("invalid_native_page_bounds")
     # The byte budget remains authoritative; no caller can allocate a position
@@ -159,6 +206,20 @@ def read_workbook_page(
         ],
         separators=(",", ":"),
     )
+    # A filtered offset counts matches, not all cells. Bind its continuation to
+    # the actual host scope, source/parser version and the exact selection.
+    # This cursor is reproducibility metadata, never file authorization.
+    lookup_binding = (
+        hashlib.sha256(
+            json.dumps(
+                [key, sheet_name, bounds, value_key, style_id], separators=(",", ":")
+            ).encode()
+        ).hexdigest()
+        if lookup
+        else ""
+    )
+    if lookup:
+        _validate_lookup_cursor(cursor, lookup_binding, offset)
     indexed = _PAGE_CACHE.get(key) if scope else None
     if indexed is None:
         document = read_workbook_facts(body, source_name=name, authorization_scope=scope)
@@ -170,10 +231,25 @@ def read_workbook_page(
         source = indexed if indexed is not None else document
     else:
         source = indexed
+    page = project_workbook_page(
+        source,
+        view=view,
+        sheet_name=sheet_name,
+        bounds=bounds,
+        offset=offset,
+        limit=limit,
+        value_key=value_key,
+        style_id=style_id,
+    )
+    if lookup:
+        page.update(
+            lookup_binding=lookup_binding,
+            next_cursor=_lookup_cursor(lookup_binding, page["next_offset"])
+            if page["next_offset"] is not None
+            else None,
+        )
     return {
-        **project_workbook_page(
-            source, view=view, sheet_name=sheet_name, bounds=bounds, offset=offset, limit=limit
-        ),
+        **page,
         "view": view,
         "sheet_name": sheet_name,
         "cell_range": cell_range,

@@ -13,7 +13,7 @@ EMPLOYEE_ID = "ppt-full-read-employee"
 EMPLOYEE_LABEL = "PPT 生成员"
 SYSTEM_PROMPT = "你是PPT 生成员。你必须按 direct_python 方式处理真实文件，读取 payload 中的 file_path/path/excel_path，必要时使用打包模板，成功条件是实际写出输出文件。任何输入缺失、模板缺失、转换模块异常都要返回明确错误，禁止编造已完成。"
 RULE_SPEC = {
-    "brief": "制作 PPT 全量读取员工包。上传 .pptx：解析大纲与每页正文写入 outputs/presentation_full.json；内嵌图片导出到 outputs/images/ 并通过 VLM（ctx.call_llm vision）生成 .vlm.json；按提示词「为这份PPT生成每页的演讲备注」生成 notes_generated 与 outputs/speaker_notes.md。使用 direct_python，handlers 仅 direct_python，禁止编造幻灯片正文。",
+    "brief": "PPT 全量读取：大纲、原生正文、表格和已有备注写入 outputs/presentation_full.json，内嵌图片本地导出至 outputs/images/，已有备注写入 outputs/speaker_notes.md。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义与备注生成标记 blocked。",
     "mode": "direct_python_file_transform",
     "accepted_extensions": [".pptx"],
     "default_action": "convert",
@@ -31,13 +31,16 @@ RULE_SPEC = {
         "images",
         "notes_generated",
         "source",
+        "status",
+        "image_semantics",
+        "notes_generation",
     ],
     "requirements": [
         'Use direct_python only; handlers must be ["direct_python"].',
         "Parse pptx with python-pptx; never use LLM for slide body text.",
         "Export embedded images to outputs/images/<category>/.",
-        "When ctx.call_llm supports vision, describe each image to .vlm.json sidecar.",
-        "Generate per-slide speaker notes via ctx.call_llm text with prompt: 为这份PPT生成每页的演讲备注",
+        "Preserve extracted images locally; no implicit VLM call without verified document-content egress authorization.",
+        "Preserve original speaker notes; leave notes_generated empty and report blocked without verified document-content egress authorization.",
         "Write presentation_full.json, presentation_meta.json, speaker_notes.md, images_index.json.",
         "Return {ok, summary, items, warnings, error, meta}.",
     ],

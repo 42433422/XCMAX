@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.application import excel_export_limits
 from app.application.agent_orchestrator.artifact_files import (
     RUN_FILE_MIME_TYPES,
+    _verify_bound_content,
     artifact_path,
     read_verified_run_file,
     store_run_file,
@@ -77,7 +78,16 @@ def _run_file(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | No
             if file_path in {str(path), f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"} or (
                 len(receipts) == 1 and isinstance(data, dict) and data.get("file_path") == file_path
             ):
-                if path.suffix in {".pdf", ".docx", ".pptx", ".png", ".json", ".txt"}:
+                if path.suffix in {
+                    ".pdf",
+                    ".docx",
+                    ".pptx",
+                    ".png",
+                    ".jpg",
+                    ".jpeg",
+                    ".json",
+                    ".txt",
+                }:
                     actor = _bound_actor(context)
                     metadata = receipt.get("metadata") or {}
                     if (
@@ -321,11 +331,36 @@ def publish_reader_output(employee_id: str, result: dict, context: dict, workspa
     from app.mod_sdk.employee_tool_registry import office_output_paths
 
     paths = office_output_paths(employee_id, result)
+    media_reader = employee_id in {
+        "pdf-full-read-employee",
+        "ppt-full-read-employee",
+        "word-full-read-employee",
+    }
+    if media_reader and len(paths) > 1:
+        return _publish_media_reader_output(employee_id, result, context, workspace)
     if len(paths) != 1:
         raise PermissionError("读取员工没有唯一实际产物")
     path = resolve_elt_path(paths[0], workspace_root=workspace)
     if not path.is_relative_to(Path(workspace).resolve()):
         raise PermissionError("读取产物不在当前员工工作区")
+    if media_reader and path.suffix.lower() == ".json":
+        # Keep the prior single-JSON handoff, but not a hidden group of local
+        # image references whose companion paths were omitted from the result.
+        with open_elt_input_file(path, workspace_root=workspace) as source:
+            content = source.read(excel_export_limits.MAX_EXPORT_FILE_BYTES + 1)
+        if len(content) > excel_export_limits.MAX_EXPORT_FILE_BYTES:
+            raise PermissionError("读取产物总字节超过预算")
+        parsed = json.loads(content)
+        slides = parsed.get("slides") if isinstance(parsed, dict) else None
+        if isinstance(parsed, dict) and (
+            parsed.get("images_index")
+            or parsed.get("images")
+            or (
+                isinstance(slides, list)
+                and any(isinstance(slide, dict) and slide.get("images") for slide in slides)
+            )
+        ):
+            return _publish_media_reader_output(employee_id, result, context, workspace)
     receipts = employee_output_receipts(employee_id, result, context, workspace)
     if len(receipts) != 1:
         raise PermissionError("读取员工未生成可验证的原文件回执")
@@ -345,6 +380,198 @@ def publish_reader_output(employee_id: str, result: dict, context: dict, workspa
                 expose(nested)
 
     expose(published["result"])
+    return published
+
+
+def _publish_media_reader_output(
+    employee_id: str, result: dict, context: dict, workspace: str
+) -> dict:
+    """Bind only the bundled readers' declared outputs, never paths in document text."""
+    published = copy.deepcopy(result)
+    actions = (published.get("result") or {}).get("outputs")
+    if not isinstance(actions, list) or len(actions) != 1:
+        raise PermissionError("读取员工没有唯一实际转换结果")
+    action = actions[0]
+    envelope = action.get("output") if isinstance(action, dict) else None
+    if not isinstance(envelope, dict):
+        raise PermissionError("读取员工产物合同无效")
+    items = envelope.get("items")
+    if (
+        not isinstance(items, list)
+        or len(items) != 1
+        or not isinstance(items[0], dict)
+        or action.get("handler") != "direct_python"
+        or action.get("ok") is not True
+        or envelope.get("ok") is not True
+    ):
+        raise PermissionError("读取员工产物合同无效")
+    converted = items[0]
+    root = Path(workspace).resolve()
+    files: dict[Path, bytes] = {}
+    documents: dict[Path, dict] = {}
+    references: dict[Path, list[tuple[dict, str, Path]]] = {}
+    total_bytes = 0
+
+    def collect(raw: Any, parent: Path, *, media: bool = False) -> Path:
+        nonlocal total_bytes
+        if not isinstance(raw, str) or not raw or "\\" in raw or ".." in Path(raw).parts:
+            raise PermissionError("读取产物路径无效")
+        path = Path(raw)
+        path = path if path.is_absolute() else parent / path
+        if not path.is_relative_to(parent) or path.resolve() != path:
+            raise PermissionError("读取产物不在当前员工工作区或包含符号链接")
+        if path in files:
+            return path
+        # One invocation owns a bounded group, not an unbounded artifact export.
+        if len(files) >= 256:
+            raise PermissionError("读取产物数量超过预算")
+        suffix = path.suffix.lower()
+        if media and suffix not in {".png", ".jpg", ".jpeg"}:
+            raise PermissionError(f"reader_media_format_unsupported: {suffix}")
+        if not media and suffix not in {".json", ".txt", ".md"}:
+            raise PermissionError("读取产物格式不受支持")
+        remaining = excel_export_limits.MAX_EXPORT_FILE_BYTES - total_bytes
+        with open_elt_input_file(path, workspace_root=workspace) as source:
+            content = source.read(remaining + 1)
+        if len(content) > remaining:
+            raise PermissionError("读取产物总字节超过预算")
+        try:
+            _verify_bound_content(content, ".txt" if suffix == ".md" else suffix)
+        except (ValueError, OSError) as exc:
+            raise PermissionError("读取产物内容与格式不一致") from exc
+        total_bytes += len(content)
+        files[path] = content
+        return path
+
+    def json_document(path: Path) -> dict:
+        value = json.loads(files[path])
+        if not isinstance(value, dict):
+            raise PermissionError("读取产物必须是 JSON 对象")
+        documents[path] = value
+        references[path] = []
+        return value
+
+    primary_key = "meta_output_path" if employee_id == "pdf-full-read-employee" else "output_path"
+    primary = collect(converted.get(primary_key), root)
+    if primary.suffix != ".json":
+        raise PermissionError("读取员工主产物必须是原生 JSON")
+    output_dir = primary.parent
+    document = json_document(primary)
+    output_keys = {
+        "pdf-full-read-employee": ("output_path", "meta_output_path", "images_index_path"),
+        "ppt-full-read-employee": (
+            "output_path",
+            "meta_output_path",
+            "notes_output_path",
+            "images_index_path",
+        ),
+        "word-full-read-employee": ("output_path", "text_output_path"),
+    }[employee_id]
+    outputs = {key: collect(converted.get(key), output_dir) for key in output_keys}
+    index_path = outputs.get("images_index_path")
+    index = json_document(index_path) if index_path else document
+    media_rows = index.get("images")
+    if not isinstance(media_rows, list) or len(media_rows) > 256:
+        raise PermissionError("读取员工图片目录无效或超过预算")
+    if converted.get("image_count") != len(media_rows):
+        raise PermissionError("读取员工图片目录与产物计数不一致")
+    media_field = "path" if employee_id == "word-full-read-employee" else "relpath"
+    media_paths: dict[str, Path] = {}
+    for row in media_rows:
+        if not isinstance(row, dict) or not isinstance(row.get(media_field), str):
+            raise PermissionError("读取员工图片引用无效")
+        media_path = collect(row[media_field], output_dir, media=True)
+        if not media_path.is_relative_to(output_dir / "images"):
+            raise PermissionError("图片不属于当前员工的图片目录")
+        media_paths[row[media_field]] = media_path
+        references[index_path or primary].append((row, media_field, media_path))
+        if row.get("vlm_sidecar"):
+            sidecar = collect(row["vlm_sidecar"], output_dir)
+            if sidecar != media_path.with_suffix(media_path.suffix + ".vlm.json"):
+                raise PermissionError("图片语义文件不属于当前图片")
+            references[index_path or primary].append((row, "vlm_sidecar", sidecar))
+    if index_path:
+        references[primary].append((document, "images_index", index_path))
+        if (
+            employee_id == "pdf-full-read-employee"
+            and (output_dir / str(document.get("images_index") or "")) != index_path
+        ):
+            raise PermissionError("PDF 图片目录引用与实际产物不一致")
+    if employee_id == "ppt-full-read-employee":
+        if index_path is None:
+            raise PermissionError("PPT 缺少原始图片目录")
+        slides = document.get("slides")
+        if not isinstance(slides, list):
+            raise PermissionError("PPT 页目录无效")
+        for slide in slides:
+            rows = slide.get("images") if isinstance(slide, dict) else None
+            if not isinstance(rows, list):
+                raise PermissionError("PPT 图片目录无效")
+            for row in rows:
+                if (
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("relpath"), str)
+                    or row["relpath"] not in media_paths
+                ):
+                    raise PermissionError("PPT 图片引用不在本次原始目录")
+                media_path = media_paths[row["relpath"]]
+                references[primary].append((row, "relpath", media_path))
+                if row.get("vlm_sidecar"):
+                    sidecar = media_path.with_suffix(media_path.suffix + ".vlm.json")
+                    if (
+                        row["vlm_sidecar"] != str(sidecar.relative_to(output_dir))
+                        or sidecar not in files
+                    ):
+                        raise PermissionError("PPT 图片语义文件不在本次目录")
+                    references[primary].append((row, "vlm_sidecar", sidecar))
+        meta_path = outputs["meta_output_path"]
+        meta = json_document(meta_path)
+        if output_dir / str(meta.get("images_index") or "") != index_path:
+            raise PermissionError("PPT 图片目录引用与实际产物不一致")
+        references[meta_path].append((meta, "images_index", index_path))
+
+    # Retain auxiliary text, notes and metadata through the same account-bound
+    # receipts. Do not infer paths by walking arbitrary paragraphs or cell values.
+    document["reader_outputs"] = {}
+    for key, path in outputs.items():
+        if path != primary:
+            references[primary].append((document["reader_outputs"], key, path))
+    receipts: dict[Path, dict] = {}
+
+    def publish(path: Path, content: bytes) -> None:
+        nonlocal total_bytes
+        total_bytes += len(content) - len(files[path])
+        if total_bytes > excel_export_limits.MAX_EXPORT_FILE_BYTES:
+            raise PermissionError("读取产物总字节超过预算")
+        name = path.with_suffix(".txt") if path.suffix.lower() == ".md" else path
+        receipt = store_employee_output(str(context["run_id"]), name, content, context)
+        receipt["metadata"]["original_name"] = path.name
+        if read_verified_run_file(str(context["run_id"]), receipt) != content:
+            raise PermissionError("读取产物发布后内容不一致")
+        receipts[path] = receipt
+
+    for path, content in files.items():
+        if path not in documents:
+            publish(path, content)
+    # Fixed dependency order: images/text -> index -> metadata -> primary JSON.
+    order = [
+        path
+        for path in (index_path, outputs.get("meta_output_path"), primary)
+        if path is not None and path in documents
+    ]
+    for path in dict.fromkeys(order):
+        for target, key, referenced in references[path]:
+            target[key] = receipts[referenced]["uri"]
+        publish(path, json.dumps(documents[path], ensure_ascii=False, indent=2).encode("utf-8"))
+    for key, path in outputs.items():
+        converted[key] = receipts[path]["uri"]
+    converted.pop("images_dir", None)
+    envelope["summary"] = json.dumps(converted, ensure_ascii=False, default=str)[:4000]
+    published["file_path"] = receipts[primary]["uri"]
+    published["artifacts"] = list(
+        {receipt["uri"]: receipt for receipt in [receipts[primary], *receipts.values()]}.values()
+    )
+    employee_output_receipts(employee_id, published, context, workspace)
     return published
 
 

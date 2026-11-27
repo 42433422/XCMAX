@@ -48,8 +48,11 @@ def _fake_pil_module() -> SimpleNamespace:
 
 
 def _fake_ocr_module(ocr_result=None, load_images=None) -> SimpleNamespace:
+    from app.application.shipment_excel_elt_ocr import temporary_ocr_workbook
+
     mod = SimpleNamespace()
     mod.ocr_source_to_workbook = MagicMock(return_value=ocr_result)
+    mod.temporary_ocr_workbook = temporary_ocr_workbook
     mod._load_image_arrays = MagicMock(return_value=load_images)
     return mod
 
@@ -373,7 +376,8 @@ class TestOcrPdfPlaintext:
         fake = _fake_ocr_module(
             ocr_result={
                 "success": True,
-                "workbook_path": "/tmp/out.xlsx",
+                "file_path": "/tmp/out.xlsx",
+                "source_sha256": "1" * 64,
                 "message": "ok",
             }
         )
@@ -390,10 +394,15 @@ class TestOcrPdfPlaintext:
         assert out["success"] is True
         assert "A\tB" in out["text"]
         assert "C\tD" in out["text"]
-        assert out["workbook_path"] == "/tmp/out.xlsx"
+        assert out["source_sha256"] == "1" * 64
+        assert "workbook_path" not in out and "file_path" not in out
+        openpyxl.load_workbook.assert_called_once_with(
+            "/tmp/out.xlsx", read_only=True, data_only=True
+        )
+        wb.close.assert_called_once_with()
 
     def test_ocr_workbook_read_failure(self, monkeypatch):
-        fake = _fake_ocr_module(ocr_result={"success": True, "workbook_path": "/tmp/out.xlsx"})
+        fake = _fake_ocr_module(ocr_result={"success": True, "file_path": "/tmp/out.xlsx"})
         _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
 
         def _boom(*a, **k):
@@ -622,7 +631,7 @@ class TestBuildPdfTemplateAnalysis:
             lambda fp: {
                 "success": True,
                 "text": "OCR 文本 {{field}}",
-                "workbook_path": "/w.xlsx",
+                "source_sha256": "1" * 64,
                 "char_count": 9,
             },
         )
@@ -630,7 +639,8 @@ class TestBuildPdfTemplateAnalysis:
         out = bridge.build_pdf_template_analysis("x.pdf")
         assert out["success"] is True
         assert out["preview_data"]["engine"] == "ocr"
-        assert out["preview_data"]["ocr"]["workbook_path"] == "/w.xlsx"
+        assert out["preview_data"]["ocr"]["source_sha256"] == "1" * 64
+        assert "workbook_path" not in out["preview_data"]["ocr"]
         assert out["preview_data"]["placeholders"] == ["field"]
 
     def test_ocr_fail_warns_no_vlm(self, monkeypatch):

@@ -163,44 +163,49 @@ def extract_pdf_document_text(file_path: str) -> dict[str, Any]:
 
 
 def _ocr_pdf_plaintext(file_path: str) -> dict[str, Any]:
-    from app.application.shipment_excel_elt_ocr import ocr_source_to_workbook
+    from app.application.shipment_excel_elt_ocr import (
+        ocr_source_to_workbook,
+        temporary_ocr_workbook,
+    )
 
-    result = ocr_source_to_workbook(file_path)
-    if not result.get("success"):
-        return {
-            "success": False,
-            "text": "",
-            "message": str(result.get("message") or "OCR 失败"),
-            "engine": "ocr",
-        }
-    # OCR 产出临时 xlsx；读回网格拼文本，供占位符/字段提取
-    grid_path = str(result.get("workbook_path") or "")
-    lines: list[str] = []
-    try:
-        from openpyxl import load_workbook
+    with temporary_ocr_workbook() as output_path:
+        result = ocr_source_to_workbook(file_path, output_path=output_path)
+        if not result.get("success"):
+            return {
+                "success": False,
+                "text": "",
+                "message": str(result.get("message") or "OCR 失败"),
+                "engine": "ocr",
+            }
+        # Consume the actual producer contract before releasing its owned workspace.
+        lines: list[str] = []
+        try:
+            from openpyxl import load_workbook
 
-        wb = load_workbook(grid_path, read_only=True, data_only=True)
-        ws = wb.active
-        assert ws is not None
-        for row in ws.iter_rows(values_only=True):
-            cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
-            if cells:
-                lines.append("\t".join(cells))
-        wb.close()
-    except RECOVERABLE_ERRORS as exc:
-        return {
-            "success": False,
-            "text": "",
-            "message": f"OCR 结果读取失败: {exc}",
-            "engine": "ocr",
-        }
+            wb = load_workbook(result["file_path"], read_only=True, data_only=True)
+            try:
+                ws = wb.active
+                assert ws is not None
+                for row in ws.iter_rows(values_only=True):
+                    cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
+                    if cells:
+                        lines.append("\t".join(cells))
+            finally:
+                wb.close()
+        except RECOVERABLE_ERRORS as exc:
+            return {
+                "success": False,
+                "text": "",
+                "message": f"OCR 结果读取失败: {exc}",
+                "engine": "ocr",
+            }
     text = "\n".join(lines)
     return {
         "success": True,
         "text": text,
         "engine": "ocr",
         "char_count": len(text),
-        "workbook_path": grid_path,
+        "source_sha256": result.get("source_sha256"),
         "message": "OCR 成功",
     }
 
@@ -354,7 +359,7 @@ def build_pdf_template_analysis(
             text = str(ocr["text"])
             engine = "ocr"
             ocr_meta = {
-                "workbook_path": ocr.get("workbook_path"),
+                "source_sha256": ocr.get("source_sha256"),
                 "char_count": ocr.get("char_count"),
             }
         else:

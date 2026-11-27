@@ -40,6 +40,102 @@ def excel_tool_specs() -> list[Payload]:
                     "type": "string",
                     "description": "Excel view=cells可选原生A1范围（如B2:Z100）；稀疏空隙不物化，显式空值/样式空白仍保留。非Excel使用page/table_id/fact_id定位。",
                 },
+                "value_match": {
+                    "type": "object",
+                    "required": ["value_type", "value_state", "value"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "value_type": {
+                            "enum": [
+                                "number",
+                                "duration_seconds",
+                                "boolean",
+                                "text",
+                                "rich_text",
+                                "formula",
+                                "error",
+                                "date",
+                                "datetime",
+                                "time",
+                                "null",
+                                "unknown",
+                            ]
+                        },
+                        "value_state": {"enum": ["present", "empty_string", "blank", "unknown"]},
+                        "value": {"type": ["string", "number", "boolean", "null"], "minLength": 0},
+                    },
+                    "oneOf": [
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["number", "duration_seconds"]},
+                                "value_state": {"enum": ["present"]},
+                                "value": {"type": "number"},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["boolean"]},
+                                "value_state": {"enum": ["present"]},
+                                "value": {"type": "boolean"},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {
+                                    "enum": [
+                                        "text",
+                                        "rich_text",
+                                        "formula",
+                                        "error",
+                                        "date",
+                                        "datetime",
+                                        "time",
+                                    ]
+                                },
+                                "value_state": {"enum": ["present"]},
+                                "value": {"type": "string", "minLength": 1, "maxLength": 16384},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {
+                                    "enum": [
+                                        "text",
+                                        "rich_text",
+                                        "formula",
+                                        "error",
+                                        "date",
+                                        "datetime",
+                                        "time",
+                                    ]
+                                },
+                                "value_state": {"enum": ["empty_string"]},
+                                "value": {"enum": [""]},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["null"]},
+                                "value_state": {"enum": ["blank"]},
+                                "value": {"enum": [None]},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["unknown", "formula"]},
+                                "value_state": {"enum": ["unknown"]},
+                                "value": {"enum": [None]},
+                            }
+                        },
+                    ],
+                    "description": "仅Excel read/view=cells：按原生value_type/value_state/value精确定位，必须同时指定sheet_name与expected_sha256；可与style_id及cell_range取交集。number的1和1.0相等，boolean与number严格区分；空字符串、显式blank和unknown不混合。formula匹配原公式，不能用缓存值代替。查询JSON最多16KiB，返回完整原单元格供精确回读。",
+                },
+                "style_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "仅Excel read/view=cells：精确匹配先前原单元格的style_id，必须绑定同一原件expected_sha256与sheet_name。样式ID只在该原件中解释；可与value_match及cell_range取交集。",
+                },
                 "expected_sha256": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$",
@@ -48,7 +144,7 @@ def excel_tool_specs() -> list[Payload]:
                 "cursor": {
                     "type": "string",
                     "maxLength": 512,
-                    "description": "非Excel续页必须原样携带data.next_cursor及expected_sha256；游标绑定解析版本、当前权限和筛选位置，不能跨账号或源版本复用。",
+                    "description": "非Excel续页，以及Excel值/样式过滤续页，必须原样携带data.next_cursor及expected_sha256；Excel过滤续页还须next_offset。游标绑定解析版本、当前权限和完整筛选条件，不能跨账号、源版本或过滤条件复用。",
                 },
                 "page": {
                     "type": "integer",

@@ -1143,14 +1143,14 @@
     },
     "FHD/app/application/tools/workflow_tools/excel_analysis.py": {
       "base_file": "FHD/app/application/tools/workflow_tools/excel_analysis.py",
-      "base_blob": "f2655bec21380b866fff70f5c1483d907864e966",
-      "head_blob": "9e377b6b3c2ef048704856f807c0e87c51237e11",
-      "before_lines": 600,
-      "after_lines": 821,
-      "reason": "沿现役excel_analysis提供原生cells/sheets回读。本轮按用户要求优化重复解析、分页、对象构造和序列化，将原分页实现收敛到应用层授权快照与基础设施压缩索引；该入口由896降至821行，相对main仍净增221行，保留精确增长评审请求。",
-      "boundary": "原工具仍负责合同与范围参数；实际读取复用现役账号/租户/Mod/会话授权、文件收据和SHA256检查。缓存只由宿主可信作用域绑定，工具参数不能授权，条数、字节和TTL有界；未绑定或超预算时回读完整事实。无新持久化事实库或执行器。",
-      "validation": "相关回归176 passed，1项需显式启用LibreOffice的重算资格测试skipped；其中真实注册入口43项包含逐页重验权限、撤权/过期/同长度篡改、会话和Mod隔离以及参数伪造负控。独立150组范围/游标对照一致；30万格与远坐标稀疏样本完整原生事实和JSON字节一致。Ruff、格式、结构和本地3.12补充类型检查通过；正式Python3.11及全量coverage以最终同HEAD CI为准。",
-      "follow_up": "由现有review_owner基于精确base/head/blob复核本轮职责迁移和缓存边界；完整CI、人工评审、main与部署读回分别核对。本记录只请求评审，不代表人工审批通过。",
+      "base_blob": "9e377b6b3c2ef048704856f807c0e87c51237e11",
+      "head_blob": "0da35e73407f6ca5fd78c073ce712580186aef64",
+      "before_lines": 821,
+      "after_lines": 828,
+      "reason": "本记录仅为本次准确变更的架构评审请求：用户要求完成 #3695 后续集成，现役 Excel 读取入口增加原生值/样式定位参数传递，不另建读取器。",
+      "boundary": "只在既有原生 cells 分支传递 value_match、style_id 与绑定筛选的续页游标；原账号、租户、文件快照、SHA256 和资源预算检查保持。",
+      "validation": "冻结 8e26aa84ea 的六模块回归 253 项通过，含真实上传注册入口、typed value、撤权及旧游标拒绝；300006 单元格实测只解析一次，倒排超限仍保留原分页缓存。最终集成同树及正式 CI 另行核验。",
+      "follow_up": "由 @42433422 结合准确 base/head blob 和最终 CI 审查这次薄接线；请求不是人工审批，不借此修改现有门禁或扩大格式支持。",
       "review_owner": "@42433422"
     }
   }

@@ -28,6 +28,7 @@ from app.application.elt.parser_table_structure import (
 )
 from app.application.elt.parser_target_match import (
     covers_required_target_fields,
+    row_target_field_coverage,
     target_header_hints,
 )
 from app.application.elt.parser_types import ParsedDataset, ParsedRow, ParsedRows
@@ -142,7 +143,9 @@ def _aligned_headers_by_sheet(
             if field_index in used_fields or header_index in used_headers:
                 continue
             canonical = canonical_by_field.setdefault(field_index, headers[header_index])
-            headers[header_index] = canonical
+            # An aligned alias must not overwrite another actual source column.
+            if canonical not in headers or headers[header_index] == canonical:
+                headers[header_index] = canonical
             used_fields.add(field_index)
             used_headers.add(header_index)
         result[worksheet.title] = headers
@@ -332,7 +335,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                             use_region = False
                     row_headers = headers
                     if use_region and table is not None:
-                        row_headers = list(table.headers)
+                        row_headers = [
+                            header_aliases.get(header, header) for header in table.headers
+                        ]
                         values = values[: len(row_headers)]
                     else:
                         # 一行 Excel 可能同时属于多个并排区块；回退整表时只取一次，
@@ -639,6 +644,27 @@ def parse_file(
                 "ELT_COMPATIBILITY_PRESET_TARGET_MISMATCH",
                 "兼容预设不适用于当前目标",
             )
+        if target_type == "customer_products" and not compatibility_preset_id:
+            # Explicit per-row customer/product columns outrank a buyer inferred
+            # from surrounding text such as a hierarchical "客户信息" heading.
+            # The existing mapping/approval stage still chooses field semantics.
+            try:
+                generic = _parse_workbook(source, max_rows, target_type)
+            except EltError:
+                raise
+            except RECOVERABLE_ERRORS:
+                generic = None
+            if generic is not None:
+                complete_rows, incomplete_rows = row_target_field_coverage(generic, target_type)
+                if complete_rows and not incomplete_rows:
+                    return generic
+                generic.close()
+                if complete_rows and incomplete_rows:
+                    raise EltError(
+                        "ELT_MIXED_SOURCE_MAPPING_REQUIRES_REVIEW",
+                        "不同表格的客户来源不同，请先按原表区域审阅映射；未自动丢弃或写入部分记录",
+                        status_code=409,
+                    )
         if target_type in {"customer_products", "shipment_records"} and not compatibility_preset_id:
             try:
                 from app.application.elt.parser_regions import (
@@ -705,19 +731,23 @@ def parse_file(
             "兼容预设仅适用于 XLSX/XLSM 文件；OCR 文件请使用自动识别",
         )
 
-    from app.application.shipment_excel_elt_ocr import ocr_source_to_workbook
+    from app.application.shipment_excel_elt_ocr import (
+        ocr_source_to_workbook,
+        temporary_ocr_workbook,
+    )
 
-    result = ocr_source_to_workbook(source)
-    if not result.get("success"):
-        raise EltError(
-            str(result.get("error_code") or "ELT_OCR_FAILED").upper(),
-            "OCR 无法可靠还原表格，请更换清晰文件后重试",
-        )
-    dataset = _parse_workbook(Path(str(result["file_path"])), max_rows, target_type)
-    enriched = None
-    try:
-        enriched = enrich_ocr_provenance(dataset, result, source_suffix=suffix)
-        return enriched
-    finally:
-        if enriched is None:
-            dataset.close()
+    with temporary_ocr_workbook() as output_path:
+        result = ocr_source_to_workbook(source, output_path=output_path)
+        if not result.get("success"):
+            raise EltError(
+                str(result.get("error_code") or "ELT_OCR_FAILED").upper(),
+                "OCR 无法可靠还原表格，请更换清晰文件后重试",
+            )
+        dataset = _parse_workbook(Path(str(result["file_path"])), max_rows, target_type)
+        enriched = None
+        try:
+            enriched = enrich_ocr_provenance(dataset, result, source_suffix=suffix)
+            return enriched
+        finally:
+            if enriched is None:
+                dataset.close()
