@@ -27,14 +27,14 @@
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
-      "base_blob": "b252e6ff3dc6721108a39f5c4785541702699d01",
-      "head_blob": "0ded2ed2e0133c366cb71093e5d3eff48b40ef2d",
-      "before_lines": 1310,
-      "after_lines": 1318,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保护原unknown与不可重试证据；仅原pending回执经独立核验后允许结算，迟到快照不能恢复已消耗的执行权。CI原事务回滚测试发现异常分类收紧后普通RuntimeError不再触发回滚；本轮合解复用contextlib.closing与ExitStack覆盖读写scope的失败清理，并按SQLAlchemy实际状态保留已提交或已回滚事实。",
-      "boundary": "保持原SQLAlchemy事务、租约及CAS。清理不依赖可恢复异常集合；退出时读取公开is_active状态，成功后移除回滚callback，不将普通RuntimeError重新纳入恢复集合。",
-      "validation": "原CI未改测试先复现rollback=0。本轮将peer三个scope原样装入独立进程，63项中6项失败：只读外部事务、提交后hook原异常保留及共享会话回滚；合解后两会话模块与完整run repository模块90项通过、零跳过。此前e14753a事务/DI/contexts/异常分类190项通过，包含SQLite外部事务、提交前后hook和flush约束失败。完整mutmut杀死率和PostgreSQL服务仍由最终正式CI验证，本地通过不替代这些门禁。 本轮合解公共975后，原事务/仓库/回执组合及完整Session模块118项通过、零跳过；原正式失败修复组44项在975合解树上再次通过。真实SQLAlchemy2.0.51的before_commit、after_commit、flush失败和外层事务参与均覆盖：已提交内容不宣称可撤销，原异常身份、连接释放及原回执字节保留。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "base_blob": "0ded2ed2e0133c366cb71093e5d3eff48b40ef2d",
+      "head_blob": "018c8c889e60316933f2194cdee7e80c1ccd113f",
+      "before_lines": 1318,
+      "after_lines": 1322,
+      "reason": "WG10故障回归发现迟到的整任务保存可能保住终态却丢失或替换取消控制指令。本次仅在现役preserve_run_evidence中增加四行，保留已终止原任务的control回执；登记绑定PR #3689与主线7911ad68的真实文件差异。",
+      "boundary": "复用现有SQLAlchemy保存、租约及CAS边界，仅在previous已终止且未授权safe retry时深拷贝原control。普通暂停的后续控制代际仍可更新；不增加运行时或放宽状态转换。",
+      "validation": "候选67c6cc282fb74a171dd84e7ea640ecba3cf145a0本地统一故障回归332项通过、零跳过。Performance Smoke run45955040391在该候选与7911ad68的合并树18d3e889上同样332项通过，faults_passed=true、wg10_accepted=false；包含取消后迟到保存与暂停后新控制代际测试。J10缺少原始真实模型报告，未宣称通过。",
+      "follow_up": "由 @42433422 结合本次不可变base/head/blob与最新提交CI进行架构评审；核对持久化控制、租约及重启恢复边界，继续沿现役模块收敛。此记录是评审请求，不代表人工审批或发布验收。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py": {
