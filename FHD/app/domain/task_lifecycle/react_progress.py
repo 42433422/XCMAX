@@ -7,7 +7,7 @@ this module owns neither execution, authorization, billing nor another scheduler
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -187,7 +187,7 @@ def ensure_control(metadata: dict[str, Any], max_calls: int) -> dict[str, Any]:
             },
         }
     ProgressCheckpoint.model_validate(metadata[CONTROL_KEY])
-    return metadata[CONTROL_KEY]
+    return cast(dict[str, Any], metadata[CONTROL_KEY])
 
 
 def bind_repair(run: Any, metadata: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
