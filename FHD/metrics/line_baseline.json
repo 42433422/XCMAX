@@ -1,5 +1,5 @@
 {
-  "lines": 2793715,
+  "lines": 2793958,
   "updated": "2026-11-27",
-  "note": "修复 #3680 合入后遗留的视觉采集基线假设：Flutter两侧严格检查多行输入，Market两侧统一确认弹窗；删除11行陈旧场景分支，新增CHANGELOG2行，本次净减9行。原像素比较器输出Flutter40/40、Market19/19全部一致。另以原扫描器精确重现并独立核验d33提交3项公开模型SHA256误报，新增仅该历史指纹的证据处置，沿用原证据目录排除口径。相对main d33整体维护净增334行，保留原规则与验收门槛。"
+  "note": "用户批准商业成熟度 P1（13 域 Java 支付服务）：补齐支付宝原路渠道退款闭环（AlipayService.refundOrder +59、RefundService 原路退款与兼容构造器 +74、Refund/V21 渠道元数据 +17、RefundController +9、RefundServiceTest 原路正负向单测 +83、CHANGELOG +1，共净增 +243 行）"
 }
