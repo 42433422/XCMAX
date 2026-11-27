@@ -74,7 +74,6 @@ def test_native_reader_relationship_targets_cannot_evade_budget(
         pytest.fail("formula extraction must not start over the allocation limit")
 
     monkeypatch.setattr(tabular_workbook, "WORKBOOK_MATERIALIZED_CELL_LIMIT", 1)
-    monkeypatch.setattr(tabular_workbook, "formula_facts", forbidden)
     with pytest.raises(OfficeArchiveError, match="tabular_native_materialization_budget_exceeded"):
         tabular_workbook.read_workbook_facts(body)
 

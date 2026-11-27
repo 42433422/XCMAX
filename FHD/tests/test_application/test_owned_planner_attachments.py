@@ -1,8 +1,10 @@
 """Owned attachment boundary with real sessions, database rows and pinned file IO."""
 
 import hashlib
+import io
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from starlette.requests import Request
@@ -104,9 +106,44 @@ def test_rejects_expired_session_and_byte_tampering(owned):
         resolve_attachment_inputs(context)
 
 
-def test_native_fact_next_page_rechecks_original_account_ownership(owned):
+@pytest.fixture
+def native_page_probes(monkeypatch):
+    from app.application import tabular_workbook
+    from app.application.tools import workflow_spreadsheet_scope
+    from app.utils.performance.cache_manager import LRUTTLCache
+
+    service = workflow_spreadsheet_scope.get_elt_service()
+    probes = SimpleNamespace(
+        build=Mock(wraps=tabular_workbook.build_workbook_facts),
+        actor=Mock(wraps=workflow_spreadsheet_scope._bound_actor),
+        upload=Mock(wraps=service._owned_upload),
+    )
+    monkeypatch.setattr(tabular_workbook, "_PAGE_CACHE", LRUTTLCache(max_size=2, ttl_seconds=120))
+    monkeypatch.setattr(tabular_workbook, "build_workbook_facts", probes.build)
+    monkeypatch.setattr(workflow_spreadsheet_scope, "_bound_actor", probes.actor)
+    monkeypatch.setattr(service, "_owned_upload", probes.upload)
+    return probes
+
+
+def _native_page_workbook(last="last"):
     from openpyxl import Workbook
 
+    workbook = Workbook()
+    workbook.active.append([0, False, last])
+    with io.BytesIO() as stream:
+        workbook.save(stream)
+        body = stream.getvalue()
+    workbook.close()
+    return body
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["owner", "tenant", "upload_expiry", "tampered_bytes", "replaced_snapshot", "session_expiry"],
+)
+def test_native_fact_next_page_rechecks_original_account_ownership(
+    owned, native_page_probes, change
+):
     from app.db.session import get_db
     from app.domain.shared_services.tools_workflow_excel_ocr import (
         _registered_router_excel_analysis,
@@ -114,10 +151,8 @@ def test_native_fact_next_page_rechecks_original_account_ownership(owned):
 
     context, csv_file = owned
     file = csv_file.with_suffix(".xlsx")
-    workbook = Workbook()
-    workbook.active.append([0, False, "last"])
-    workbook.save(file)
-    body = file.read_bytes()
+    body = _native_page_workbook()
+    file.write_bytes(body)
     tenant = int(context["tenant_id"])
     with tenant_scope(tenant), get_db() as db:
         upload = db.query(EltUpload).filter(EltUpload.id == "owned-file").one()
@@ -127,13 +162,145 @@ def test_native_fact_next_page_rechecks_original_account_ownership(owned):
     with tenant_scope(tenant):
         first = _registered_router_excel_analysis("read", args, context, "shared", "")
     assert first["success"] is True and first["cells"][0]["value"] == 0
-    args.update(offset=first["next_offset"], expected_sha256=first["source_sha256"])
-    with tenant_scope(tenant), get_db() as db:
-        db.query(EltUpload).filter(EltUpload.id == "owned-file").one().owner_user_id = 99
+    args.update(
+        offset=first["next_offset"],
+        expected_sha256=first["source_sha256"],
+        authorization_scope="forged-cache-scope",
+        tenant_id="99",
+        user_id="99",
+        mod_id="forged-mod",
+        _actor_authorization={"session_row_id": 99, "proof": "forged"},
+    )
+    with tenant_scope(tenant):
+        second = _registered_router_excel_analysis("read", args, context, "shared", "")
+    assert second["success"] is True and second["cells"][0]["value"] is False
+    assert second["document_id"] == first["document_id"]
+    assert second["source_ref"] == first["source_ref"]
+    assert first["source_ref"]["authorization_scope"].startswith("workflow:")
+    assert native_page_probes.build.call_count == 1
+    assert native_page_probes.actor.call_count == native_page_probes.upload.call_count == 2
+    assert all(call.args[0] is context for call in native_page_probes.actor.call_args_list)
+
+    args["offset"] = second["next_offset"]
+    if change == "session_expiry":
+        from app.db import HostSessionLocal
+        from app.db.models.user import Session as UserSession
+
+        with HostSessionLocal.begin() as db:
+            db.get(
+                UserSession, context["_actor_authorization"]["session_row_id"]
+            ).expires_at = datetime(2000, 1, 1)
+    elif change in {"tampered_bytes", "replaced_snapshot"}:
+        # Same-size changes must fail the receipt digest, not just its length check.
+        changed = (
+            body[:-1] + bytes([body[-1] ^ 1])
+            if change == "tampered_bytes"
+            else _native_page_workbook(last="replacement")
+        )
+        file.write_bytes(changed)
+        if change == "replaced_snapshot":
+            with tenant_scope(tenant), get_db() as db:
+                upload = db.query(EltUpload).filter(EltUpload.id == "owned-file").one()
+                upload.size_bytes, upload.sha256 = len(changed), hashlib.sha256(changed).hexdigest()
+    else:
+        field, value = {
+            "owner": ("owner_user_id", 99),
+            "tenant": ("tenant_id", 99),
+            "upload_expiry": ("expires_at", datetime(2000, 1, 1)),
+        }[change]
+        with tenant_scope(tenant), get_db() as db:
+            setattr(db.query(EltUpload).filter(EltUpload.id == "owned-file").one(), field, value)
     with tenant_scope(tenant):
         denied = _registered_router_excel_analysis("read", args, context, "shared", "")
     assert denied["success"] is False
-    assert denied["error_code"] == "spreadsheet_access_denied"
+    assert "cells" not in denied
+    assert native_page_probes.build.call_count == 1
+    assert native_page_probes.actor.call_count == 3
+    if change not in {"session_expiry", "replaced_snapshot"}:
+        assert denied["error_code"] == "spreadsheet_access_denied"
+    elif change == "session_expiry":
+        assert "登录会话已失效" in denied["message"]
+    else:
+        assert "SHA-256 mismatch" in denied["message"]
+    assert native_page_probes.upload.call_count == (
+        3 if change in {"tampered_bytes", "replaced_snapshot"} else 2
+    )
+
+
+@pytest.mark.parametrize("boundary", ["session", "mod"])
+def test_native_fact_page_cache_isolates_real_session_and_mod_scopes(
+    trusted_actor, native_page_probes, monkeypatch, tmp_path, boundary
+):
+    from app.application.elt.service_uploads import register_chat_upload
+    from app.db.models.user import Session as UserSession
+    from app.domain.shared_services.tools_workflow_excel_ocr import (
+        _registered_router_excel_analysis,
+    )
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
+    actor = trusted_actor(mod_id="test-private-mod" if boundary == "mod" else "")
+    if boundary == "session":
+        other_context = trusted_actor(user_id=actor.user_id).context
+    else:
+        # Same account AND session, with a separately authenticated shared-host scope.
+        request = Request(
+            {"type": "http", "headers": [(b"x-session-id", actor.session_id.encode())]}
+        )
+        other_context = authenticated_runtime_context(
+            {}, require_agent_principal(request, x_user_id=None)
+        )
+    with tenant_scope(actor.tenant_id):
+        receipt = register_chat_upload(
+            user=SimpleNamespace(id=actor.user_id, tenant_id=actor.tenant_id),
+            filename="facts.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            stream=io.BytesIO(_native_page_workbook()),
+        )
+    contexts = [
+        {**context, "attachment_upload_ids": [receipt["upload_id"]]}
+        for context in (actor.context, other_context)
+    ]
+    args = {
+        "file_path": receipt["upload_id"],
+        "view": "cells",
+        "sheet_name": "Sheet",
+        "max_rows": 1,
+    }
+    pages = []
+    for context in contexts:
+        with tenant_scope(actor.tenant_id):
+            pages.append(_registered_router_excel_analysis("read", args, context, "shared", ""))
+        assert pages[-1]["success"] is True, pages[-1]
+    assert pages[0]["source_sha256"] == pages[1]["source_sha256"]
+    assert pages[0]["document_id"] != pages[1]["document_id"]
+    assert (
+        pages[0]["source_ref"]["authorization_scope"]
+        != pages[1]["source_ref"]["authorization_scope"]
+    )
+    assert native_page_probes.build.call_count == 2
+    args.update(
+        offset=pages[0]["next_offset"],
+        expected_sha256=pages[0]["source_sha256"],
+        authorization_scope=pages[1]["source_ref"]["authorization_scope"],
+        _actor_authorization=other_context["_actor_authorization"],
+    )
+    with tenant_scope(actor.tenant_id):
+        next_page = _registered_router_excel_analysis("read", args, contexts[0], "shared", "")
+    assert next_page["success"] is True and next_page["cells"][0]["value"] is False
+    assert next_page["document_id"] == pages[0]["document_id"]
+    assert native_page_probes.build.call_count == 2
+    assert native_page_probes.actor.call_count == native_page_probes.upload.call_count == 3
+    if boundary == "mod":
+        with actor.factory.begin() as db:
+            db.get(UserSession, actor.session_row_id).entitled_mod_ids_json = "[]"
+        with tenant_scope(actor.tenant_id):
+            denied = _registered_router_excel_analysis("read", args, contexts[0], "shared", "")
+            shared = _registered_router_excel_analysis("read", args, contexts[1], "shared", "")
+        assert denied["success"] is False and "未开通该 Mod" in denied["message"]
+        assert shared["success"] is True and shared["document_id"] == pages[1]["document_id"]
+        assert native_page_probes.build.call_count == 2
+        assert native_page_probes.actor.call_count == 5
+        assert native_page_probes.upload.call_count == 4
 
 
 def test_legacy_paths_never_become_owned_artifacts():

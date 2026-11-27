@@ -344,11 +344,11 @@ def test_reader_serialization_failure_preserves_previous_artifact(tmp_path, monk
     target = tmp_path / "workbook.json"
     target.write_text('{"previous":"verified"}')
 
-    def failed_dump(payload, handle, **kwargs):
+    def failed_dump(handle, payload, encoder):
         handle.write('{"partial":')
         raise OSError("injected disk write failure")
 
-    monkeypatch.setattr(reader.json, "dump", failed_dump)
+    monkeypatch.setattr(reader, "_write_json", failed_dump)
     with pytest.raises(OSError, match="injected"):
         reader.convert_file(source, target, payload={}, ctx={}, rule_spec={})
     assert json.loads(target.read_text()) == {"previous": "verified"}
@@ -433,7 +433,137 @@ def test_native_materialization_budget_rejects_real_large_archive_before_load(
     def forbidden(*args, **kwargs):
         pytest.fail("native objects must not be loaded over the declared budget")
 
-    monkeypatch.setattr(tabular_workbook, "formula_facts", forbidden)
     monkeypatch.setattr(tabular_workbook, "build_workbook_facts", forbidden)
     with pytest.raises(OfficeArchiveError, match="tabular_native_materialization_budget_exceeded"):
         read_workbook_facts(source)
+
+
+@pytest.mark.parametrize("mac_epoch", [False, True])
+def test_formula_cache_decoding_reuses_native_nodes_and_one_workbook_load(monkeypatch, mac_epoch):
+    from datetime import date, time, timedelta
+
+    from openpyxl.utils.datetime import CALENDAR_MAC_1904
+
+    from app.domain.tabular_facts import location_id
+    from app.infrastructure.excel import workbook_facts
+    from app.infrastructure.excel.sparse_rows import iter_present_cells
+
+    book = Workbook()
+    if mac_epoch:
+        book.epoch = CALENDAR_MAC_1904
+    sheet = book.active
+    specifications = {
+        "A1": ("=1+2", "n", "3", "General"),
+        "A2": ("=1/2", "n", "0.5", "General"),
+        "A3": ("=DATE(2026,11,27)", "n", "46353", "yyyy-mm-dd"),
+        "A4": ("=1/24", "n", "0.04166666666666666", "[h]:mm:ss"),
+        "A5": ("=TRUE()", "b", "1", "General"),
+        "A6": ("=NA()", "e", "#N/A", "General"),
+        "A7": ('="汉字"', "str", "汉字", "General"),
+        "A8": ('=""', "str", "", "General"),
+        "A9": ("=0", "n", None, "General"),
+        "A10": ('="共享文本"', "s", "0", "General"),
+        "A11": ("=NOW()", "d", "2026-11-27T12:34:56", "General"),
+        "F1": ("=A1+1", "n", "4", "General"),
+        "F2": ("=A2+1", "n", "1.5", "General"),
+    }
+    for address, (formula, _, _, number_format) in specifications.items():
+        sheet[address] = formula
+        sheet[address].number_format = number_format
+    sheet["D1"] = "anchor"
+    sheet.merge_cells("D1:E1")
+    sheet["G1"] = ArrayFormula(ref="G1:G2", text="=A1:A2*2")
+
+    def caches(root):
+        for cell in root.iter(_NS + "c"):
+            address = cell.attrib["r"]
+            if address not in specifications:
+                continue
+            _, kind, value, _ = specifications[address]
+            cell.set("t", kind)
+            cell.find(_NS + "v").text = value
+            if address in {"F1", "F2"}:
+                formula = cell.find(_NS + "f")
+                formula.set("t", "shared")
+                formula.set("si", "0")
+                if address == "F1":
+                    formula.set("ref", "F1:F2")
+                else:
+                    formula.text = None
+        next(root.iter(_NS + "row")).append(
+            SafeET.fromstring(f'<c xmlns="{_NS[1:-1]}" r="E1"><f> 20+22 </f><v>42</v></c>')
+        )
+
+    edited = BytesIO()
+    with (
+        ZipFile(BytesIO(_rewrite_sheet(_body(book), caches))) as original,
+        ZipFile(edited, "w") as target,
+    ):
+        for item in original.infolist():
+            data = original.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                root = SafeET.fromstring(data)
+                root.append(
+                    SafeET.fromstring(
+                        '<Override xmlns="http://schemas.openxmlformats.org/package/2006/content-types" '
+                        'PartName="/xl/sharedStrings.xml" '
+                        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
+                    )
+                )
+                data = SafeET.tostring(root)
+            elif item.filename == "xl/_rels/workbook.xml.rels":
+                root = SafeET.fromstring(data)
+                root.append(
+                    SafeET.fromstring(
+                        '<Relationship xmlns="http://schemas.openxmlformats.org/package/2006/relationships" '
+                        'Id="rIdSharedStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
+                        'Target="sharedStrings.xml"/>'
+                    )
+                )
+                data = SafeET.tostring(root)
+            target.writestr(item, data)
+        target.writestr(
+            "xl/sharedStrings.xml", f'<sst xmlns="{_NS[1:-1]}"><si><t>共享文本</t></si></sst>'
+        )
+    body = edited.getvalue()
+    reference = load_workbook(BytesIO(body), read_only=True, data_only=True)
+    expected = {
+        cell.coordinate: (cell.value, cell.data_type)
+        for cell in iter_present_cells(reference.active)
+    }
+    reference.close()
+    reads = []
+    native_read = workbook_facts.ExcelReader.read
+
+    def counted_read(reader):
+        reads.append(reader.data_only)
+        return native_read(reader)
+
+    monkeypatch.setattr(workbook_facts.ExcelReader, "read", counted_read)
+    document = workbook_facts.build_workbook_facts(
+        body, source_name="cache.xlsx", authorization_scope="tenant-a"
+    )
+    facts = _facts(document)
+    for address in [*specifications, "E1"]:
+        value, data_type = expected[address]
+        if isinstance(value, (datetime, date, time)):
+            value = value.isoformat()
+        elif isinstance(value, timedelta):
+            value = value.total_seconds()
+        if address == "A8":
+            value = ""
+        assert facts[address]["cached_value"] == value
+        assert facts[address]["cached_data_type"] == data_type
+        assert facts[address]["cell_id"] == location_id(
+            document["document_id"], "cell", "Sheet", address
+        )
+    assert facts["A5"]["cached_value"] is True
+    assert facts["A8"]["cache_state"] == "present_validity_unknown"
+    assert facts["A9"]["cache_state"] == "missing"
+    assert facts["A10"]["cached_value"] == "共享文本"
+    assert (
+        facts["E1"]["formula"] == "=20+22" and facts["E1"]["normalization_state"] == "source_only"
+    )
+    assert facts["F2"]["formula"] == "=A2+1"
+    assert facts["G1"]["formula"] == "=A1:A2*2"
+    assert reads == [False]

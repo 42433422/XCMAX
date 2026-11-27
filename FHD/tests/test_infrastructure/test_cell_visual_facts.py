@@ -129,3 +129,28 @@ def test_sparse_gaps_and_blank_preview():
     assert len(facts["cells"]) == 2
     assert preview_layout(sheet, {}, str, 1, 2)["rows"][0]["cells"][0]["value"] == "False"
     assert set(sheet._cells) == {(1, 1), (1, 16384)}
+
+
+def test_geometry_only_preserves_styles_without_building_cell_records(monkeypatch):
+    from openpyxl.cell.cell import Cell
+
+    book = Workbook()
+    sheet = book.active
+    sheet["A1"] = "anchor"
+    sheet["B2"].border = Border(right=Side(style="thin"), bottom=Side(style="double"))
+    sheet.merge_cells("A1:B2")
+    sheet["XFD1048576"].font = Font(bold=True)
+    sheet.row_dimensions[7].font = Font(italic=True)
+    sheet.column_dimensions["D"].fill = PatternFill("solid", fgColor="FF102030")
+    full = worksheet_visual_facts(sheet, include_neighbors=False)
+    before = set(sheet._cells)
+
+    def forbidden_coordinate(cell):
+        raise AssertionError("geometry-only reading must not construct discarded cell addresses")
+
+    monkeypatch.setattr(Cell, "coordinate", property(forbidden_coordinate))
+    compact = worksheet_visual_facts(sheet, include_neighbors=False, include_cells=False)
+    assert compact == {**full, "cells": []}
+    assert set(sheet._cells) == before
+    assert compact["styles"] and compact["merges"] == ["A1:B2"]
+    assert compact["neighbor_candidates_status"] == "not_requested"

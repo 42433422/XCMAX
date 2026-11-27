@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import ItemsView, Iterator
 from datetime import date, datetime, time, timedelta
+from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List, Optional
@@ -114,18 +116,16 @@ def _cell_payload(cell: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _sheet_to_dict(sheet: Dict[str, Any], *, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Old workbook.json is a derived view; full native facts never inherit caps."""
+    """Project records lazily; full native facts never inherit legacy caps."""
     max_row, max_col = int(sheet.get("max_row", 0)), int(sheet.get("max_column", 0))
     cap_row = _apply_cap(max_row, _int_payload(payload, "max_row_cap", DEFAULT_MAX_ROW_CAP))
     cap_col = _apply_cap(max_col, _int_payload(payload, "max_col_cap", DEFAULT_MAX_COL_CAP))
     rows = {}
-    selected = []
     for cell in sheet["cells"]:
         if cell["row"] > cap_row or cell["column"] > cap_col:
             continue
         if cell["value_state"] == "blank" and not cell.get("formula"):
             continue
-        selected.append(cell)
         rows.setdefault(cell["row"], []).append(cell)
     header_row = _detect_header_row(rows, cap_row, cap_col, payload=payload)
     data_start_row = min(header_row + 1, cap_row + 1)
@@ -140,13 +140,13 @@ def _sheet_to_dict(sheet: Dict[str, Any], *, payload: Dict[str, Any]) -> Dict[st
     # Only the compatibility projection may become sparse. This avoids a wide
     # sheet multiplying 100k actual records by 16k absent cells in JSON.
     sparse = len(active_rows) * cap_col > 250_000
-    rows_out, row_records = [], []
-    for row in active_rows:
+
+    def row_values(row):
         flat = {} if sparse else dict.fromkeys(columns)
         for cell in rows[row]:
             flat[columns[cell["column"] - 1]] = _legacy_value(cell)
-        rows_out.append(flat)
-        row_records.append({"row_index": row, "cells": flat})
+        return flat
+
     return {
         "name": sheet["sheet"],
         "sheet_state": sheet["sheet_state"],
@@ -162,15 +162,38 @@ def _sheet_to_dict(sheet: Dict[str, Any], *, payload: Dict[str, Any]) -> Dict[st
             for cell in rows.get(header_row, ())
             if _display(_legacy_value(cell))
         ],
-        "rows": rows_out,
-        "row_records": row_records,
+        "rows": (row_values(row) for row in active_rows),
+        "row_records": ({"row_index": row, "cells": row_values(row)} for row in active_rows),
         "rows_representation": "sparse" if sparse else "dense_active_rows",
-        "cells": [_cell_payload(cell) for cell in selected],
-        "cell_count": len(selected),
-        "row_count": len(rows_out),
+        "cells": (_cell_payload(cell) for cell in chain.from_iterable(rows.values())),
+        "cell_count": sum(map(len, rows.values())),
+        "row_count": len(active_rows),
         "merged_ranges": sheet.get("merges", []),
         "facts_sheet_id": sheet["sheet_id"],
     }
+
+
+def _write_json(handle, value, encoder):
+    """Stream explicit container views; stdlib C encoding handles each record.
+
+    Only outer objects/arrays use views and iterators. Ordinary cell/row dicts
+    retain JSONEncoder's escaping, type handling and non-finite-value checks.
+    """
+    if isinstance(value, ItemsView):
+        handle.write("{")
+        for index, (key, item) in enumerate(value):
+            handle.write(("," if index else "") + encoder.encode(key) + ":")
+            _write_json(handle, item, encoder)
+        handle.write("}")
+    elif isinstance(value, Iterator):
+        handle.write("[")
+        for index, item in enumerate(value):
+            if index:
+                handle.write(",")
+            _write_json(handle, item, encoder)
+        handle.write("]")
+    else:
+        handle.write(encoder.encode(value))
 
 
 def convert_file(
@@ -199,13 +222,27 @@ def convert_file(
     scope_values = [str(ctx.get(key) or "") for key in ("tenant_id", "user_id", "mod_id")]
     scope = json.dumps(scope_values, separators=(",", ":")) if any(scope_values) else ""
     document = read_workbook_facts(src_path, authorization_scope=scope)
-    sheets = [_sheet_to_dict(sheet, payload=payload or {}) for sheet in document["sheets"]]
+    summaries = []
+
+    def legacy_sheets():
+        for source_sheet in document["sheets"]:
+            sheet = _sheet_to_dict(source_sheet, payload=payload or {})
+            summaries.append((sheet["cell_count"], sheet["truncated"]))
+            yield sheet.items()
+
+    native_sheets = (
+        {**sheet, "cells": iter(sheet["cells"])}.items() for sheet in document["sheets"]
+    )
 
     payload_data: Dict[str, Any] = {
         "source": src_path.name,
-        "document": document,
-        "sheet_count": len(sheets),
-        "sheets": sheets,
+        "document": {
+            **document,
+            "sheets": native_sheets,
+            "styles": document["styles"].items(),
+        }.items(),
+        "sheet_count": len(document["sheets"]),
+        "sheets": legacy_sheets(),
         "meta": {
             "source": src_path.name,
             "byte_size": document["byte_size"],
@@ -224,13 +261,12 @@ def convert_file(
         staged = Path(staging.name)
     try:
         with staged.open("w", encoding="utf-8") as handle:
-            json.dump(
-                payload_data,
+            _write_json(
                 handle,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                default=str,
-                allow_nan=False,
+                payload_data.items(),
+                json.JSONEncoder(
+                    ensure_ascii=False, separators=(",", ":"), default=str, allow_nan=False
+                ),
             )
             handle.flush()
             os.fsync(handle.fileno())
@@ -238,14 +274,13 @@ def convert_file(
     finally:
         staged.unlink(missing_ok=True)
 
-    total_cells = sum(int(s.get("cell_count") or 0) for s in sheets)
     return {
         "output_path": str(json_path),
-        "sheet_count": len(sheets),
-        "cell_count": total_cells,
+        "sheet_count": len(document["sheets"]),
+        "cell_count": sum(count for count, _ in summaries),
         "document_id": document["document_id"],
         "source_sha256": document["source_ref"]["source_sha256"],
         "facts_status": document["status"],
-        "legacy_projection_truncated": any(sheet["truncated"] for sheet in sheets),
+        "legacy_projection_truncated": any(truncated for _, truncated in summaries),
         "output_schema": list(rule_spec.get("output_schema") or []),
     }

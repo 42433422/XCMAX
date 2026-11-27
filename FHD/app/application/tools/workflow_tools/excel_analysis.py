@@ -528,94 +528,19 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _native_workbook_page(path: Path, args: Payload) -> Payload:
-    """Read exact native facts inside the caller's existing authorized file snapshot."""
-    from openpyxl.utils.cell import range_boundaries
+    """Read an exact page within the caller's current authorized snapshot."""
+    from app.application.tabular_workbook import read_workbook_page
 
-    from app.application.tabular_workbook import read_workbook_facts
-
-    if path.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
-        raise ValueError("native_facts_unsupported_format")
     offset, limit = page_budget(args)
-    expected = args.get("expected_sha256")
-    if offset and not expected:
-        raise ValueError("native_page_requires_source_sha256")
-    document = read_workbook_facts(path, expected_sha256=expected)
-    if document.get("status") in {"blocked", "unsupported"}:
-        raise ValueError("native_facts_blocked")
-    view = args["view"]
-    sheets = document["sheets"]
-    sheet_name = args.get("sheet_name")
-    if view == "sheets":
-        items = [
-            {
-                "sheet_id": sheet["sheet_id"],
-                "sheet": sheet["sheet"],
-                "sheet_state": sheet["sheet_state"],
-                "cell_count": len(sheet["cells"]),
-                "rows": sheet.get("max_row"),
-                "columns": sheet.get("max_column"),
-                "content_range": sheet.get("content_range"),
-                "status": sheet.get("status"),
-            }
-            for sheet in sheets
-        ]
-    else:
-        sheet = next((sheet for sheet in sheets if sheet["sheet"] == sheet_name), None)
-        if sheet is None:
-            raise ValueError("native_cells_require_existing_sheet_name")
-        if sheet.get("status") == "unsupported":
-            raise ValueError("native_sheet_unsupported")
-        items = sheet["cells"]
-        if area := args.get("cell_range"):
-            if not isinstance(area, str):
-                raise ValueError("invalid_native_cell_range")
-            left, top, right, bottom = range_boundaries(area)
-            if left is None or top is None or right is None or bottom is None:
-                raise ValueError("invalid_native_cell_range")
-            if not (
-                all(type(n) is int for n in (left, top, right, bottom))
-                and 1 <= left <= right <= 16384
-                and 1 <= top <= bottom <= 1048576
-            ):
-                raise ValueError("invalid_native_cell_range")
-            items = [
-                cell
-                for cell in items
-                if top <= cell["row"] <= bottom and left <= cell["column"] <= right
-            ]
-    page: list[dict[str, Any]] = []
-    page_bytes = 2
-    for item in items[offset : offset + limit]:
-        item_bytes = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode())
-        if page_bytes + item_bytes + bool(page) > 40000:
-            if not page:
-                raise ValueError("native_fact_exceeds_page_byte_budget")
-            break
-        page_bytes += item_bytes + bool(page)
-        page.append(item)
-    has_more = offset + len(page) < len(items)
-    source_ref = document["source_ref"]
-    data = {
-        "schema_version": document["schema_version"],
-        "document_id": document["document_id"],
-        "source_ref": source_ref,
-        "source_sha256": source_ref["source_sha256"],
-        "view": view,
-        "sheet_name": sheet_name,
-        "cell_range": args.get("cell_range"),
-        "source_status": document.get("status"),
-        "partial": document.get("status") != "complete",
-        "total_items": len(items),
-        "returned_items": len(page),
-        "page_byte_budget": 40000,
-        "page_bytes": page_bytes,
-        "offset": offset,
-        "has_more": has_more,
-        "truncated": has_more,
-        "next_offset": offset + len(page) if has_more else None,
-        view: page,
-        "warnings": document.get("warnings") or [],
-    }
+    data = read_workbook_page(
+        path,
+        view=args["view"],
+        sheet_name=args.get("sheet_name"),
+        cell_range=args.get("cell_range"),
+        offset=offset,
+        limit=limit,
+        expected_sha256=args.get("expected_sha256"),
+    )
     return {"success": True, "action": "read", "file_path": str(path), **data, "data": data}
 
 

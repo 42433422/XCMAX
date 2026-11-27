@@ -28,8 +28,14 @@ def _style_key(obj):
     return ":".join(map(str, obj._style or (0,) * 9))
 
 
-def _style(obj, styles):
-    key = _style_key(obj)
+def _style(obj, styles, style_keys=None):
+    if style_keys is None:
+        key = _style_key(obj)
+    else:
+        native = tuple(obj._style or (0,) * 9)
+        key = style_keys.get(native)
+        if key is None:
+            key = style_keys[native] = ":".join(map(str, native))
     if key not in styles:
         font, fill, border, alignment = obj.font, obj.fill, obj.border, obj.alignment
         styles[key] = {
@@ -71,13 +77,13 @@ def workbook_visual_context(workbook):
     }
 
 
-def _dimensions(sheet, styles):
+def _dimensions(sheet, styles, style_keys=None):
     def dimension(dim):
         return {
             "hidden": bool(dim.hidden),
             "outline_level": dim.outlineLevel,
             "collapsed": bool(dim.collapsed),
-            "style": _style(dim, styles),
+            "style": _style(dim, styles, style_keys),
         }
 
     fmt = sheet.sheet_format
@@ -134,23 +140,30 @@ def _neighbors(cells, styles):
                 }
 
 
-def worksheet_visual_facts(sheet, *, include_neighbors=True):
+def worksheet_visual_facts(
+    sheet, *, include_neighbors=True, include_cells=True, styles=None, style_keys=None
+):
     """Sparse native geometry and style facts; no rectangular iteration or cell creation."""
-    styles, cells = {}, []
-    for (row, column), cell in sorted(sheet._cells.items()):
+    styles = {} if styles is None else styles
+    style_keys = {} if style_keys is None else style_keys
+    cells = []
+    entries = sorted(sheet._cells.items()) if include_cells else sheet._cells.items()
+    for (row, column), cell in entries:
         if cell.value is None and not cell.has_style:
             continue
-        cells.append(
-            {
-                "row": row,
-                "column": column,
-                "address": cell.coordinate,
-                "style": _style(cell, styles),
-                "blank": cell.value is None,
-                "merge_placeholder": isinstance(cell, MergedCell),
-            }
-        )
-    dimensions = _dimensions(sheet, styles)
+        style = _style(cell, styles, style_keys)
+        if include_cells:
+            cells.append(
+                {
+                    "row": row,
+                    "column": column,
+                    "address": cell.coordinate,
+                    "style": style,
+                    "blank": cell.value is None,
+                    "merge_placeholder": isinstance(cell, MergedCell),
+                }
+            )
+    dimensions = _dimensions(sheet, styles, style_keys)
     conditional = []
     for scope in sheet.conditional_formatting:
         for rule in sheet.conditional_formatting[scope]:
@@ -177,7 +190,9 @@ def worksheet_visual_facts(sheet, *, include_neighbors=True):
         ],
         "conditional_formatting": conditional,
         "neighbor_candidates": list(_neighbors(cells, styles)) if include_neighbors else [],
-        "neighbor_candidates_status": "included" if include_neighbors else "not_requested",
+        "neighbor_candidates_status": "included"
+        if include_neighbors and include_cells
+        else "not_requested",
     }
 
 

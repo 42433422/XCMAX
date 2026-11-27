@@ -1,7 +1,7 @@
 """Sparse openpyxl facts plus original OOXML evidence, with no business inference.
 
-The application supplies formula evidence and validates archive resource limits
-before loading. XML is inspected only for native presence/raw-value distinctions
+The application validates archive resource limits before loading. XML is
+inspected only for native presence/raw-value distinctions
 which openpyxl normalizes (empty strings, formula caches and merged cell content).
 """
 
@@ -10,14 +10,16 @@ from __future__ import annotations
 import hashlib
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 from zipfile import ZipFile
 
 import openpyxl
 from defusedxml import ElementTree as SafeET
 from openpyxl.cell.cell import MergedCell
 from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.reader.excel import ExcelReader
 from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter
+from openpyxl.worksheet._reader import WorkSheetParser
 from openpyxl.xml.functions import tostring
 
 from app.domain.tabular_facts import location_id, make_source_ref, new_document
@@ -26,7 +28,6 @@ from app.infrastructure.excel.cell_visual_facts import (
     workbook_visual_context,
     worksheet_visual_facts,
 )
-from app.infrastructure.excel.sparse_rows import iter_present_cells
 from app.infrastructure.excel.workbook_parts import worksheet_parts
 
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -85,10 +86,11 @@ def _raw_cells(archive: ZipFile, path: str):
             node.clear()
 
 
-def _cell_fact(document_id, sheet, cached_cells, address, raw, formula_evidence, styles):
+def _cell_fact(
+    document_id, sheet, cache_parser, address, raw, formula_evidence, styles, style_keys
+):
     row, column = coordinate_to_tuple(address)
     cell = sheet._cells.get((row, column))
-    cached_value_raw, cached_data_type = cached_cells.get(address, (None, "n"))
     source = {"document_id": document_id, "sheet": sheet.title, "address": address}
     fact = formula_evidence.get((sheet.title, address), {})
     is_formula = raw["formula_attributes"] is not None or bool(fact)
@@ -98,7 +100,10 @@ def _cell_fact(document_id, sheet, cached_cells, address, raw, formula_evidence,
     formula = None
     if is_formula:
         candidate = original if isinstance(original, str) else getattr(original, "text", None)
-        candidate = candidate or fact.get("formula") or raw["formula_text"]
+        fallback = (raw["formula_text"] or "").strip()
+        if fallback.startswith("{=") and fallback.endswith("}"):
+            fallback = "=" + fallback[2:-1]
+        candidate = candidate or fact.get("formula") or fallback or raw["formula_text"]
         formula = str(candidate) if candidate else None
         if formula and not formula.startswith("="):
             formula = "=" + formula
@@ -114,7 +119,12 @@ def _cell_fact(document_id, sheet, cached_cells, address, raw, formula_evidence,
         if value_type == "unknown" or (is_formula and formula is None)
         else ("blank" if value is None else "empty_string" if value == "" else "present")
     )
-    cached_value, cached_type = _value(cached_value_raw)
+    # Reuse the pinned native decoder on this already-read OOXML node. Only
+    # formula cells need cached values; no second workbook or worksheet scan.
+    cached = cache_parser.parse_cell(raw["xml_node"]) if is_formula else None
+    cached_value, cached_type = (
+        _value(cached["value"]) if cached is not None else (None, "not_applicable")
+    )
     cache_present = raw["value_node_present"] and (
         raw["raw_value"] not in (None, "") or raw["data_type"] == "str"
     )
@@ -133,11 +143,11 @@ def _cell_fact(document_id, sheet, cached_cells, address, raw, formula_evidence,
         "formula_attributes": raw["formula_attributes"],
         "cached_value": cached_value if is_formula else None,
         "cached_value_type": cached_type if is_formula else "not_applicable",
-        "cached_data_type": cached_data_type if is_formula else None,
+        "cached_data_type": cached["data_type"] if cached is not None else None,
         "cache_state": ("present_validity_unknown" if cache_present else "missing")
         if is_formula
         else "not_applicable",
-        "style_id": _style(cell, styles) if cell is not None else "",
+        "style_id": _style(cell, styles, style_keys) if cell is not None else "",
         "number_format": getattr(cell, "number_format", None),
         "native_data_type": raw["data_type"],
         "native_value": raw["raw_value"],
@@ -191,22 +201,12 @@ def _native_objects(sheet) -> dict[str, Any]:
     }
 
 
-def _formula_cache_cells(cached, name, addresses):
-    if cached is None or not addresses:
-        return {}
-    return {
-        cell.coordinate: (cell.value, cell.data_type)
-        for cell in iter_present_cells(cached[name])
-        if getattr(cell, "coordinate", None) in addresses
-    }
-
-
 def build_workbook_facts(
     body: bytes,
     *,
     source_name: str,
     authorization_scope: str,
-    formula_evidence: dict[tuple[str, str], dict[str, Any]],
+    formula_evidence: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     document: dict[str, Any] = dict(
         new_document(
@@ -221,24 +221,14 @@ def build_workbook_facts(
     )
     document_id = document["document_id"]
     document["byte_size"] = len(body)
-    workbook = openpyxl.load_workbook(
-        BytesIO(body), data_only=False, keep_links=False, rich_text=True
-    )
-    cached = None
+    # ExcelReader is the implementation behind load_workbook in pinned
+    # openpyxl 3.1.5. Retain its decoded shared strings for native cache values.
+    reader = ExcelReader(BytesIO(body), data_only=False, keep_links=False, rich_text=True)
+    formula_evidence = formula_evidence or {}
+    style_keys: dict[tuple[int, ...], str] = {}
     try:
-        formula_addresses: dict[str, set[str]] = {}
-        for name, address in formula_evidence:
-            formula_addresses.setdefault(name, set()).add(address)
-        for sheet in workbook.worksheets:
-            for cell in sheet._cells.values():
-                if cell.data_type == "f":
-                    formula_addresses.setdefault(sheet.title, set()).add(cell.coordinate)
-        # No second materialized workbook. Read caches only when formulas exist,
-        # using the same pinned native parser without rectangular gap filling.
-        if formula_addresses:
-            cached = openpyxl.load_workbook(
-                BytesIO(body), read_only=True, data_only=True, keep_links=False, rich_text=True
-            )
+        reader.read()
+        workbook = reader.wb
         document["native_objects"] = {
             "defined_names": [
                 {"name": name.name, "xml": _xml(name)} for name in workbook.defined_names.values()
@@ -273,21 +263,33 @@ def build_workbook_facts(
                     continue
                 # Geometry/style facts are complete without eagerly retaining a
                 # second graph of inference candidates for every read-only page.
-                visual = worksheet_visual_facts(sheet, include_neighbors=False)
-                document["styles"].update(visual.pop("styles"))
+                visual = worksheet_visual_facts(
+                    sheet,
+                    include_neighbors=False,
+                    include_cells=False,
+                    styles=document["styles"],
+                    style_keys=style_keys,
+                )
+                visual.pop("styles")
                 visual.pop("cells")
-                cached_cells = _formula_cache_cells(
-                    cached, name, formula_addresses.get(name, set())
+                cache_parser = WorkSheetParser(
+                    BytesIO(),  # parse_cell consumes the existing node, not this stream.
+                    reader.shared_strings,
+                    data_only=True,
+                    epoch=workbook.epoch,
+                    date_formats=cast(Any, workbook)._date_formats,
+                    timedelta_formats=cast(Any, workbook)._timedelta_formats,
                 )
                 cells = [
                     _cell_fact(
                         document_id,
                         sheet,
-                        cached_cells,
+                        cache_parser,
                         address,
                         raw,
                         formula_evidence,
                         document["styles"],
+                        style_keys,
                     )
                     for address, raw in _raw_cells(archive, part)
                 ]
@@ -345,6 +347,4 @@ def build_workbook_facts(
         )
         return document
     finally:
-        workbook.close()
-        if cached is not None:
-            cached.close()
+        reader.archive.close()

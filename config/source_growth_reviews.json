@@ -1144,13 +1144,13 @@
     "FHD/app/application/tools/workflow_tools/excel_analysis.py": {
       "base_file": "FHD/app/application/tools/workflow_tools/excel_analysis.py",
       "base_blob": "f2655bec21380b866fff70f5c1483d907864e966",
-      "head_blob": "121dc3c0d735b9ed5644b03b8da99556863e1ed0",
+      "head_blob": "9e377b6b3c2ef048704856f807c0e87c51237e11",
       "before_lines": 600,
-      "after_lines": 896,
-      "reason": "扩展现有只读工具实现原生分页/范围回读，并适配3682的无表头读取、物理求和、表头需确认和导出格式合同。 交叉审阅复现默认pandas对6cell远坐标尝试128GiB矩形物化后，复用固定稀疏parser按实际行列先行限制50万矩形槽；原生cells路径保留，后缀内容识别与默认/共享入口均覆盖。",
-      "boundary": "每页沿用原workflow_file_snapshot身份与当前权限核验；不吸收3682桌面/父任务/写表范围，不扩通用host校验器。",
-      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。 默认读取同样在表头/pandas/openpyxl前完成归档审计；末轮106项通过（15.64s），五个注册动作恶意ZIP负控和合法CSV/XLS路由均覆盖。 正式CI三处类型错误已按原调用合同修复；Excel单目标mypy在共享Python3.12下通过，原物理求和注册入口4项回归通过，完整Python3.11类型门禁以新HEAD CI为准。 末轮21项真实稀疏/隐式坐标/伪尺寸/后缀绕过及CSV、BIFF、XLSX正控通过（2.27s），确认在header/pandas之前拒绝；独立同根因工作簿部件定位和公式缓存35项通过，完整上游复合键经SQLite链路20项通过。",
-      "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
+      "after_lines": 821,
+      "reason": "沿现役excel_analysis提供原生cells/sheets回读。本轮按用户要求优化重复解析、分页、对象构造和序列化，将原分页实现收敛到应用层授权快照与基础设施压缩索引；该入口由896降至821行，相对main仍净增221行，保留精确增长评审请求。",
+      "boundary": "原工具仍负责合同与范围参数；实际读取复用现役账号/租户/Mod/会话授权、文件收据和SHA256检查。缓存只由宿主可信作用域绑定，工具参数不能授权，条数、字节和TTL有界；未绑定或超预算时回读完整事实。无新持久化事实库或执行器。",
+      "validation": "相关回归176 passed，1项需显式启用LibreOffice的重算资格测试skipped；其中真实注册入口43项包含逐页重验权限、撤权/过期/同长度篡改、会话和Mod隔离以及参数伪造负控。独立150组范围/游标对照一致；30万格与远坐标稀疏样本完整原生事实和JSON字节一致。Ruff、格式、结构和本地3.12补充类型检查通过；正式Python3.11及全量coverage以最终同HEAD CI为准。",
+      "follow_up": "由现有review_owner基于精确base/head/blob复核本轮职责迁移和缓存边界；完整CI、人工评审、main与部署读回分别核对。本记录只请求评审，不代表人工审批通过。",
       "review_owner": "@42433422"
     }
   }
