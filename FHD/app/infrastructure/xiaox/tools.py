@@ -539,7 +539,19 @@ class XiaoxToolBridge:
             ):
                 context = self._child_context(binding, {"child_task_id": ""})
                 try:
-                    reviewed, changes = review_workbook_write(params, context)
+                    review_params = copy.deepcopy(params)
+                    source = review_params["input"]["template_path"]
+                    if source.startswith("conversation-upload:"):
+                        from app.application.agent_runtime.conversation_attachments import (
+                            bound_conversation_upload,
+                        )
+
+                        # Preflight has no registered child yet. Resolve only the
+                        # parent's frozen selection; dispatch still uses the original
+                        # reference and the SQL child/call authorization checks.
+                        upload = bound_conversation_upload(source, binding.run, binding.context)
+                        review_params["input"]["template_path"] = upload.upload_id
+                    reviewed, changes = review_workbook_write(review_params, context)
                 except WorkbookFormulaSyntaxError as exc:
                     return {
                         "success": False,

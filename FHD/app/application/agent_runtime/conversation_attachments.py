@@ -301,8 +301,17 @@ def resolve_conversation_upload(value: str, context: dict[str, Any]) -> Conversa
     if parent is None:
         raise PermissionError("该附件引用只在原会话中可用")
     _, binding, _ = parent
-    request = binding.run.metadata["runtime_goal_contract"]["request"]
+    return bound_conversation_upload(value, binding.run, binding.context)
+
+
+def bound_conversation_upload(
+    value: str, run: AgentRun, context: dict[str, Any]
+) -> ConversationUpload:
+    """Resolve a frozen parent reference before a child exists, without executing it."""
+    if validate_runtime_goal(run) != run.metadata.get("runtime_goal_digest"):
+        raise PermissionError("原任务目标绑定已变化")
+    request = run.metadata["runtime_goal_contract"]["request"]
     for item in recalled_conversation_uploads(request):
         if item["upload_id"] == value:
-            return _scoped_conversation_upload(binding.run, binding.context, item)
+            return _scoped_conversation_upload(run, context, item)
     raise PermissionError("本轮没有该附件引用，请在原会话重新选择附件")

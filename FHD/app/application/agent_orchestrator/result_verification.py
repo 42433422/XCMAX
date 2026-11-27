@@ -144,7 +144,9 @@ def freeze_verification_contract(
         )
 
         if is_workbook_write(step.params):
-            contract["workbook_template"] = capture_template(step.params, context)
+            contract["workbook_template"] = capture_template(
+                step.params, {**context, "run_id": run.run_id}
+            )
     if step.tool_id == "dataset_rag" and step.action in {
         "ingest_document",
         "rollback_version",

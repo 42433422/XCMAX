@@ -16,6 +16,7 @@ from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any, cast
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError as SchemaValidationError
 from pydantic import ValidationError
 
 from app.application.agent_runtime.goal_verification_task import (
@@ -790,15 +791,24 @@ def verify_runtime_goal(
                 decoded = _normalize_review_provenance(decoded, contract)
                 wire_review = copy.deepcopy(decoded)
                 if wire_validator is not None:
-                    if not wire_validator.is_valid(decoded):
-                        raise ValueError("Invalid goal review references")
+                    wire_validator.validate(decoded)
                     _resolve_file_citations(decoded, source_blocks, response_blocks)
                 review, errors = validate_goal_review(
                     decoded, contract, snapshot, output, file_evidence=file_evidence
                 )
-            except (ValueError, TypeError, ValidationError):
+            except (ValueError, TypeError, ValidationError, SchemaValidationError) as exc:
                 diagnostic["state"] = "invalid_format"
                 error = "JSON或字段格式无效，请严格按output_schema完整输出"
+                # Return contract locations, never raw file/model values. A bounded
+                # format repair must know which field failed, not blindly regenerate.
+                if isinstance(exc, SchemaValidationError):
+                    defect = {"path": list(exc.absolute_path), "rule": exc.validator}
+                    if exc.validator == "required" and isinstance(exc.instance, dict):
+                        defect["missing"] = [
+                            field for field in exc.validator_value if field not in exc.instance
+                        ]
+                    diagnostic["validation_error"] = defect
+                    error += "：" + json.dumps(defect, ensure_ascii=False)
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"

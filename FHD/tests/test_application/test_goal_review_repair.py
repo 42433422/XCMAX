@@ -28,6 +28,40 @@ def _complete_review():
     return review(goal(), goal("再查询second", goal_id="second"))
 
 
+def test_attachment_format_repair_reports_missing_contract_field_without_file_values(verifier):
+    verifier.run.message = "读取附件"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "note.csv",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "current-note", "sha256": "c" * 64},
+                "preview": {"text": "PRIVATE-FILE-BODY", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows = []
+    verifier.output = "尚未完成附件读取"
+    corrected = review(goal("读取附件", status="unmet", evidence_ids=[]))
+    corrected["goals"][0]["file_basis"] = "complete"
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][0].pop("file_basis")
+    verifier.replies = [response(rejected), response(corrected)]
+
+    report = verifier.verify()
+
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert len(verifier.requests) == 2
+    assert report["attempts"][0]["validation_error"] == {
+        "path": ["goals", 0],
+        "rule": "required",
+        "missing": ["file_basis"],
+    }
+    repair = json.loads(verifier.requests[1].content)["input"][-1]["content"]
+    assert "file_basis" in repair and "PRIVATE-FILE-BODY" not in repair
+
+
 @pytest.mark.parametrize("defect", ["duplicate_id", "unknown_source", "wrong_quote"])
 def test_provenance_repair_only_rechecks_the_same_candidate(verifier, defect):
     corrected = _complete_review()
