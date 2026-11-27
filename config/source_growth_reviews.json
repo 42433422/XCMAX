@@ -628,10 +628,10 @@
     "FHD/frontend/src/components/chat/ChatMessageList.vue": {
       "base_file": "FHD/frontend/src/components/chat/ChatMessageList.vue",
       "base_blob": "9e342a19bac7610f0358ae8a5cb1a29ba47ae3d8",
-      "head_blob": "1a7e63f98d18610bc6f691311c0e53c5bfe7eb83",
+      "head_blob": "f2d4c73bc888dd1fa96c555f6473db74cf4a84e4",
       "before_lines": 1057,
-      "after_lines": 1110,
-      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；保留既有桌面对话和WG08已绑定结果文件投影，文件入口按当前账号核对。 本登记不是人工架构批准。",
+      "after_lines": 1112,
+      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；保留既有桌面对话和WG08已绑定结果文件投影，文件入口按当前账号核对。 本次新增两行将既有showDiagnosticMetadata选项透传给执行轨迹和步骤链，默认隐藏内部诊断标识；不更改任务回执、状态核验或授权。 本登记不是人工架构批准。",
       "boundary": "仅消费原消息和任务数据，不能把过时缓存或未独立核验结果显示为成功。 合并流式 Markdown 批处理和 Xiaox 任务进度投影。 集成冲突以当前main与来源提交共同祖先三方核对，用户已追加授权纳入01/06，合并共享状态投影和原预算内独立核验。",
       "validation": "本轮 Vitest run：sanitizeHtml、chatBubbleDisplay、lightMarkdown及deep四个原测试模块58项通过，Kellai两模块11项通过；前者覆盖共享富文本边界，不替代ChatView/消息编排的完整frontend-test与构建，最终集成CI仍按新HEAD核对。",
       "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
