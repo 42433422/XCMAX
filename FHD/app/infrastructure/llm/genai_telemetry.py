@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 import time
 import uuid
@@ -17,7 +18,7 @@ from typing import Any
 
 from app.utils.deployment import env_flag as _env_flag
 from app.utils.deployment import env_float as _env_float
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 # 每千 token 美元费率（输入, 输出）；仅埋点估算，精细归因属批次 B
 _MODEL_RATES_USD_PER_1K: dict[str, tuple[float, float]] = {
@@ -27,6 +28,7 @@ _MODEL_RATES_USD_PER_1K: dict[str, tuple[float, float]] = {
 }
 
 _MAX_CAPTURED_CONTENT = 4096
+logger = logging.getLogger(__name__)
 
 
 def trace_enabled() -> bool:
@@ -71,7 +73,24 @@ class GenAISpan:
             return
         self._duration_ms = round(max(0, time.perf_counter_ns() - self._started_ns) / 1_000_000, 3)
         self.end_time = time.time()
+        if status == "ok" and (
+            self.attributes.get("guardrail.blocked")
+            or any(event["name"] == "gen_ai.provider.empty_result" for event in self.events)
+        ):
+            status = "error"
+            self.attributes.setdefault("error.code", "llm_response_unavailable")
         self.status = status
+        if self.name == "chat":
+            try:
+                from app.infrastructure.observability.metrics import observe_model_call
+
+                observe_model_call(
+                    source="provider",
+                    status="success" if status == "ok" else status,
+                    phases_ms={"total": self._duration_ms},
+                )
+            except BOUNDARY_ERRORS as exc:
+                logger.warning("model metric observation unavailable (%s)", type(exc).__name__)
 
     def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
         self.events.append({"name": name, "timestamp": time.time(), "attributes": attributes or {}})
@@ -213,3 +232,141 @@ def should_record(span: GenAISpan) -> bool:
     if span.attributes.get("guardrail.blocked"):
         return True
     return random.random() < sample_rate()
+
+
+class ModelRequestObservation:
+    """Observe the existing Responses request, without owning its execution state.
+
+    HTTPcore supplies transport intervals. Header/body waits include both network
+    and remote work; remote queue and inference remain explicitly unobserved.
+    No context token survives an await/yield or crosses the SSE response task.
+    """
+
+    _TRANSPORT_PHASES = {
+        "connect_tcp": "connect",
+        "start_tls": "connect",
+        "send_request_headers": "request_send",
+        "send_request_body": "request_send",
+        "receive_response_headers": "response_wait",
+        "receive_response_body": "response_read",
+    }
+
+    def __init__(
+        self,
+        *,
+        context: dict[str, str],
+        run_id: str,
+        provider_id: str,
+        model: str,
+        request_group: str,
+    ) -> None:
+        self.span = GenAISpan(
+            span_id=uuid.uuid4().hex[:16],
+            trace_id=context["trace_id"],
+            parent_span_id=context.get("span_id"),
+            name="responses",
+            start_time=time.time(),
+            trace_flags=context.get("trace_flags", "00"),
+            trace_state=context.get("trace_state", ""),
+            attributes={
+                "gen_ai.operation.name": "responses",
+                "gen_ai.system": provider_id,
+                "gen_ai.request.model": model,
+                "xcagi.run_id": run_id,
+                "xcagi.request_group": request_group,
+                "xcagi.source": "xiaox.model_gateway",
+                "xcagi.timing_scope": "gateway_request_including_retries",
+                "xcagi.remote_queue_timing": "unavailable",
+                "xcagi.inference_timing": "unavailable",
+            },
+        )
+        self.phases_ms: dict[str, float] = {}
+        self._started: dict[str, tuple[str, int]] = {}
+        self.outcome = "unknown"
+
+    def attempt(self, request_id: str, attempt: int) -> None:
+        self.outcome = "unknown"
+        self.span.add_event(
+            "gen_ai.request.attempt", {"request_id": request_id, "attempt": attempt}
+        )
+
+    def settle(self, *, usage: dict[str, int] | None, state: str) -> None:
+        self.outcome = (
+            "unknown" if usage is None else "success" if state == "completed" else "error"
+        )
+
+    def add_duration(self, phase: str, duration_ms: float) -> None:
+        self.phases_ms[phase] = self.phases_ms.get(phase, 0.0) + max(0.0, duration_ms)
+
+    async def transport_trace(self, event_name: str, _info: dict[str, Any]) -> None:
+        # Never capture the callback's headers, URL, exception text or stream.
+        parts = event_name.split(".")
+        if len(parts) != 3 or parts[1] not in self._TRANSPORT_PHASES:
+            return
+        key = ".".join(parts[:2])
+        if parts[2] == "started":
+            self._started[key] = (self._TRANSPORT_PHASES[parts[1]], time.perf_counter_ns())
+        elif parts[2] in {"complete", "failed"} and key in self._started:
+            phase, started = self._started.pop(key)
+            self.add_duration(phase, (time.perf_counter_ns() - started) / 1_000_000)
+
+    def headers(self) -> dict[str, str]:
+        span = self.span
+        headers = {"traceparent": f"00-{span.trace_id}-{span.span_id}-{span.trace_flags}"}
+        if span.trace_state:
+            headers["tracestate"] = span.trace_state
+        return headers
+
+    def snapshot(self) -> dict[str, Any]:
+        duration = self.span._duration_ms
+        if duration is None:
+            duration = max(0, time.perf_counter_ns() - self.span._started_ns) / 1_000_000
+        return {
+            "trace_id": self.span.trace_id,
+            "span_id": self.span.span_id,
+            "parent_span_id": self.span.parent_span_id,
+            "duration_ms": round(duration, 3),
+            "phases_ms": {**self.phases_ms, "total": round(duration, 3)},
+            "timing_scope": "gateway_request_including_retries",
+            "final": self.span.end_time is not None,
+            "group_outcome": self.outcome,
+            "remote_queue_ms": None,
+            "inference_ms": None,
+        }
+
+    def finish(self, error: BaseException | None = None) -> None:
+        if self.span.end_time is not None:
+            return
+        if error is not None:
+            self.outcome = (
+                "cancelled"
+                if type(error).__name__ in {"CancelledError", "GeneratorExit"}
+                else "error"
+            )
+            self.span.attributes["error.type"] = type(error).__name__
+        if self.outcome != "success":
+            self.span.attributes["error.code"] = "model_request_" + self.outcome
+        self.span.attributes["xcagi.outcome"] = self.outcome
+        self.span.finish(
+            "ok"
+            if self.outcome == "success"
+            else "cancelled"
+            if self.outcome == "cancelled"
+            else "error"
+        )
+        snapshot = self.snapshot()
+        for phase, duration in snapshot["phases_ms"].items():
+            self.span.attributes[f"xcagi.phase.{phase}_ms"] = duration
+        try:
+            from app.infrastructure.observability.metrics import observe_model_call
+
+            observe_model_call(source="xiaox", status=self.outcome, phases_ms=snapshot["phases_ms"])
+        except BOUNDARY_ERRORS as exc:
+            logger.warning("model metric observation unavailable (%s)", type(exc).__name__)
+        try:
+            if trace_enabled() and should_record(self.span):
+                from app.infrastructure.llm.trace_store import get_trace_store
+
+                get_trace_store().record(self.span.to_dict())
+        except BOUNDARY_ERRORS as exc:
+            logger.warning("model trace observation unavailable (%s)", type(exc).__name__)

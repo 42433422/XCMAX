@@ -59,3 +59,48 @@ def test_rolled_back_terminal_is_not_counted(tmp_path, monkeypatch):
     repo.save(run)
     assert seen == ["failed"]
     engine.dispose()
+
+
+@pytest.mark.parametrize("commit_savepoint", [False, True])
+def test_savepoint_keeps_only_metrics_that_reach_outer_commit(
+    tmp_path, monkeypatch, commit_savepoint
+):
+    seen = []
+    monkeypatch.setattr(metrics, "observe_run_terminal", lambda **kw: seen.append(kw["status"]))
+    engine = create_engine(f"sqlite:///{tmp_path}/savepoint.db")
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    outer = repo.save(AgentRun(user_id="u", message="outer"))
+    inner = repo.save(AgentRun(user_id="u", message="savepoint"))
+    with factory.begin() as db:
+        outer.status = "failed"
+        repo.save_in_session(db, outer)
+        savepoint = db.begin_nested()
+        inner.status = "cancelled"
+        repo.save_in_session(db, inner)
+        savepoint.commit() if commit_savepoint else savepoint.rollback()
+        assert seen == [], "savepoint release is not the business commit"
+    assert seen == (["failed", "cancelled"] if commit_savepoint else ["failed"])
+    assert repo.get(inner.run_id).status == ("cancelled" if commit_savepoint else "queued")
+    engine.dispose()
+
+
+@pytest.mark.parametrize("sql", [False, True])
+def test_metric_failure_cannot_turn_a_committed_task_into_execution_failure(
+    tmp_path, monkeypatch, caplog, sql
+):
+    def broken(**kwargs):
+        raise OSError("private metrics storage details")
+
+    monkeypatch.setattr(metrics, "observe_run_terminal", broken)
+    engine = create_engine(f"sqlite:///{tmp_path}/metric-error.db")
+    repo = (
+        SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+        if sql
+        else InMemoryAgentRunRepository()
+    )
+    run = repo.save(AgentRun(user_id="u", message="already committed", status="completed"))
+    assert repo.get(run.run_id).status == "completed"
+    assert "metric unavailable" in caplog.text
+    assert "private metrics storage details" not in caplog.text
+    engine.dispose()

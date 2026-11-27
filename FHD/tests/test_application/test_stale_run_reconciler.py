@@ -64,7 +64,13 @@ def _make_repo(tmp_path, name: str):
     return engine, factory, SQLAlchemyAgentRunRepository(session_factory=factory)
 
 
-def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
+def test_interrupted_running_run_and_task_are_converged(tmp_path, monkeypatch) -> None:
+    from app.application.agent_orchestrator import run_terminal_metrics
+
+    terminal = []
+    monkeypatch.setattr(
+        run_terminal_metrics, "observe_run_terminal", lambda **kw: terminal.append(kw)
+    )
     engine, factory, repo = _make_repo(tmp_path, "stale.db")
     try:
         set_agent_run_repository_for_tests(repo)
@@ -87,6 +93,18 @@ def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
         assert stored.status == "failed"
         assert stored.metadata["interrupted"]["error_code"] == "interrupted_by_restart"
         assert stored.metadata["interrupted"]["previous_status"] == "running"
+        transition = stored.events[-1]
+        assert transition.event_type == "run.state_changed"
+        assert (transition.data["from_status"], transition.data["to_status"]) == (
+            "running",
+            "failed",
+        )
+        assert transition.data["reason_code"] == "interrupted_by_restart"
+        assert transition.data["reason_event_id"] == stored.events[-2].event_id
+        assert stored.events[-2].event_type == "run.interrupted"
+        assert terminal == [{"status": "failed"}]
+        assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 0
+        assert terminal == [{"status": "failed"}]
         task = repo.get_task(user_id="u1", task_id="task-stale", tenant_id="")
         assert task is not None
         assert task.status == "failed"

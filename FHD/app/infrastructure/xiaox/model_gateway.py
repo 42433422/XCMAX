@@ -8,6 +8,7 @@ native remote tools and client-supplied provider changes are rejected.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import sys
@@ -27,6 +28,7 @@ from starlette.types import Receive, Scope, Send
 from app.infrastructure.xiaox.policy import ModelRoute
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 MODEL_PATH = "/api/agent-runtime/xiaox/responses"
 _ZERO_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -250,6 +252,7 @@ def _claim(
     *,
     request_group: str = "",
     attempt: int = 1,
+    observation: dict[str, Any] | None = None,
 ) -> tuple[Any, int]:
     from app.application.agent_orchestrator.budget import budget_exceeded_payload
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
@@ -287,6 +290,7 @@ def _claim(
                 "request_group": request_group or request_id,
                 "attempt": attempt,
                 "started_at": time.time(),
+                **({"observation": observation} if observation else {}),
             }
 
         try:
@@ -319,6 +323,7 @@ def _finish(
     state: str = "completed",
     market_route: ModelRoute | None = None,
     platform_receipt: Any = None,
+    observation: dict[str, Any] | None = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
@@ -343,6 +348,8 @@ def _finish(
 
     def finish(run: Any, metadata: dict[str, Any]) -> None:
         call = metadata["model_requests"][request_id]
+        if observation:
+            call["observation"] = observation
         terminal = call.get("state") in {"completed", "failed"}
         if not terminal:
             call.update(state=state if settled else "unknown", usage_key=usage_key)
@@ -439,9 +446,36 @@ async def forward_responses(request: Request):
     request_group = "request_" + uuid.uuid4().hex
     request_id = "model_" + uuid.uuid4().hex
     usage_key = f"xiaox:{binding.run_id}:{request_id}"
-    # One absolute clock for this request: header wait, retries and terminal
-    # body/settlement reads all spend it; none may reset it.
-    deadline = model_request_deadline(binding)
+    observation = None
+    try:
+        from app.application.agent_orchestrator.task_context import ensure_run_trace
+        from app.infrastructure.llm.genai_telemetry import ModelRequestObservation
+
+        observation = ModelRequestObservation(
+            context=ensure_run_trace(binding.run, live=False),
+            run_id=binding.run_id,
+            provider_id=route.provider_id,
+            model=route.model,
+            request_group=request_group,
+        )
+    except BOUNDARY_ERRORS as exc:
+        logger.warning("model trace initialization unavailable (%s)", type(exc).__name__)
+
+    def observe(method: str, *args: Any, **kwargs: Any) -> Any:
+        try:
+            if observation is not None:
+                return getattr(observation, method)(*args, **kwargs)
+        except BOUNDARY_ERRORS as exc:
+            logger.warning("model observation %s unavailable (%s)", method, type(exc).__name__)
+        return None
+
+    async def transport_trace(name: str, info: dict[str, Any]) -> None:
+        try:
+            if observation is not None:
+                await observation.transport_trace(name, info)
+        except BOUNDARY_ERRORS as exc:
+            logger.warning("model transport observation unavailable (%s)", type(exc).__name__)
+
     stack = ExitStack()
     client = None
     upstream = None
@@ -460,7 +494,9 @@ async def forward_responses(request: Request):
             **kwargs,
             market_route=route if route.gateway_kind == "market" else None,
             platform_receipt=platform_receipt,
+            observation=observe("snapshot"),
         )
+        observe("settle", usage=kwargs.get("usage"), state=kwargs.get("state", "completed"))
 
     def close_slot(error: BaseException | None = None) -> None:
         stack.__exit__(
@@ -497,12 +533,40 @@ async def forward_responses(request: Request):
             if isinstance(interrupted, anyio.get_cancelled_exc_class()):
                 raise interrupted
             raise
+        finally:
+            observe("finish", error or interrupted or sys.exception())
+            final_observation = observe("snapshot")
+            if claimed and final_observation:
+
+                def record_observation(_run: Any, metadata: dict[str, Any]) -> None:
+                    # Annotate only this request group; never change usage,
+                    # control, lease, receipt or task status during late cleanup.
+                    for call in metadata.get("model_requests", {}).values():
+                        if call.get("request_group") == request_group:
+                            call["observation"] = final_observation
+
+                try:
+                    with anyio.CancelScope(shield=True):
+                        await anyio.to_thread.run_sync(
+                            lambda: store.update(binding.run_id, record_observation)
+                        )
+                except BOUNDARY_ERRORS as exc:
+                    logger.warning(
+                        "model observation persistence unavailable (%s)", type(exc).__name__
+                    )
 
     try:
-        with model_rate_limit_scope(binding.context):
-            stack.enter_context(
-                model_call_slot(SimpleNamespace(provider_id=route.provider_id), profile="xiaox")
-            )
+        # One absolute clock: header wait, retries and terminal settlement all
+        # spend it. A rejected deadline also finishes its observational span.
+        deadline = model_request_deadline(binding)
+        admission_started = time.perf_counter()
+        try:
+            with model_rate_limit_scope(binding.context):
+                stack.enter_context(
+                    model_call_slot(SimpleNamespace(provider_id=route.provider_id), profile="xiaox")
+                )
+        finally:
+            observe("add_duration", "admission", (time.perf_counter() - admission_started) * 1000)
         from app.infrastructure.llm.retry_policy import (
             is_safe_transport_retry,
             model_failure_details,
@@ -594,6 +658,7 @@ async def forward_responses(request: Request):
             attempt_started = time.monotonic()
             request_id = "model_" + uuid.uuid4().hex
             usage_key = f"xiaox:{binding.run_id}:{request_id}"
+            observe("attempt", request_id, attempt)
             claimed = reserved = network_started = finished = False
             platform_receipt = None
             binding = await anyio.to_thread.run_sync(
@@ -602,7 +667,13 @@ async def forward_responses(request: Request):
             _remaining(binding)
             await anyio.to_thread.run_sync(
                 lambda: _claim(
-                    store, token, route, request_id, request_group=request_group, attempt=attempt
+                    store,
+                    token,
+                    route,
+                    request_id,
+                    request_group=request_group,
+                    attempt=attempt,
+                    observation=observe("snapshot"),
                 )
             )
             claimed = True
@@ -641,12 +712,14 @@ async def forward_responses(request: Request):
             client = client_factory(**client_options)
             headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
             headers.update(route.headers(request_id))
+            headers.update(observe("headers") or {})
             outbound = client.build_request(
                 "POST",
                 route.base_url + "/responses",
                 headers=headers,
                 json=body,
             )
+            outbound.extensions["trace"] = transport_trace
             network_started = True
             try:
                 with anyio.fail_after(request_remaining(deadline)):

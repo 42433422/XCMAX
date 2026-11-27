@@ -88,6 +88,41 @@ groups:
         annotations:
           summary: "外部客户 Mod 安装失败率 {{ $value | humanizePercentage }} 超过 1% (SLO-BIZ-05)"
 
+  - name: xcmax_agent_stability
+    rules:
+      - alert: XcmaxAgentProgressStalled
+        expr: >-
+          sum(xcagi_agent_diagnostic_findings{environment="production",service="fhd",kind=~"progress_stalled|queue_overdue|lease_expired|deadline_exceeded"}
+          and on(job,instance) (time() - xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds{environment="production",service="fhd"} < 300)) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent 最近完整扫描发现进度、队列、租约或期限异常"
+          description: "仅消费5分钟内完成的诊断快照。合法审批、子任务和质检等待不计为卡死；查看原任务与修复候选证据，不重放未知写入。"
+
+      - alert: XcmaxAgentUnknownOutcomePending
+        expr: >-
+          sum(xcagi_agent_diagnostic_findings{environment="production",service="fhd",kind=~"business_outcome_unknown|model_usage_unknown"}
+          and on(job,instance) (time() - xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds{environment="production",service="fhd"} < 300)) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent 仍存在待核对的业务结果或模型用量"
+          description: "未知结果不是成功或可安全重试。按原任务、调用及尝试身份读取回执并对账。"
+
+      - alert: XcmaxAgentDiagnosticScanStale
+        expr: >-
+          time() - xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds{environment="production",service="fhd"} > 300
+          or absent(xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds{environment="production",service="fhd"})
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent 完整诊断扫描缺失或已陈旧"
+          description: "尚无完整扫描或距离上次完整扫描超过5分钟。此告警表示观测缺口，不宣称任务卡死；检查扫描健康及有界游标进度。"
+
   - name: xcmax_alert_drill
     rules:
       - alert: XcmaxControlledAlertDrill

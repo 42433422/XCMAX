@@ -22,7 +22,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
     TaskExecutionRepository,
     get_task_execution_repository,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
@@ -94,6 +94,10 @@ class AgentTaskDispatcher:
         self._outcome_worker: threading.Thread | None = None
         self._last_outcome_recovery = float("-inf")
         self._xiaox_resume_cursor: dict[str, str] = {}
+        self._diagnostic_worker: threading.Thread | None = None
+        self._last_diagnostic_scan = float("-inf")
+        self._diagnostic_cursor: dict = {}
+        self._diagnostic_continue = False
 
     @property
     def instance_id(self) -> str:
@@ -126,6 +130,8 @@ class AgentTaskDispatcher:
             worker.join(timeout=remaining)
         if self._outcome_worker is not None:
             self._outcome_worker.join(timeout=max(0.0, deadline - time.monotonic()))
+        if self._diagnostic_worker is not None:
+            self._diagnostic_worker.join(timeout=max(0.0, deadline - time.monotonic()))
 
     def notify(self) -> None:
         self._wake.set()
@@ -164,6 +170,7 @@ class AgentTaskDispatcher:
     def _dispatch_available(self) -> None:
         self._prune_and_heartbeat()
         self._recover_outcomes()
+        self._diagnose_runs()
         while not self._stop.is_set() and self._active_count() < self._max_workers:
             owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
             execution = self._execution_repo.claim(
@@ -186,6 +193,56 @@ class AgentTaskDispatcher:
                     last_heartbeat=time.monotonic(),
                 )
             worker.start()
+
+    def _diagnose_runs(self) -> None:
+        """Observe independently; a slow support service cannot delay heartbeats or QC."""
+        now = time.monotonic()
+        if (
+            self._stop.is_set()
+            or (self._diagnostic_worker is not None and self._diagnostic_worker.is_alive())
+            or now - self._last_diagnostic_scan < (1.0 if self._diagnostic_continue else 30.0)
+        ):
+            return
+        self._last_diagnostic_scan = now
+        try:
+            from app.application.agent_orchestrator.run_diagnostics import scan_agent_diagnostics
+
+            def observe() -> None:
+                before = self._diagnostic_cursor.get("after")
+                progressed = False
+                try:
+                    scan_agent_diagnostics(
+                        repository=self._run_repo,
+                        cursor=self._diagnostic_cursor,
+                        stopped=self._stop.is_set,
+                    )
+                    progressed = bool(
+                        self._diagnostic_cursor and self._diagnostic_cursor.get("after") != before
+                    )
+                finally:
+                    # Continue a bounded unfinished sweep promptly. Idle/error
+                    # retries wait from completion, not from a slow scan's start.
+                    self._diagnostic_continue = progressed
+                    self._last_diagnostic_scan = time.monotonic()
+
+            self._diagnostic_worker = threading.Thread(
+                target=observe,
+                name=f"{self._instance_id}-diagnostics",
+                daemon=True,
+            )
+            self._diagnostic_worker.start()
+        except BOUNDARY_ERRORS as exc:
+            # Optional observer startup is an isolation boundary. In particular,
+            # thread exhaustion must not kill the business coordinator/leases.
+            self._diagnostic_worker = None
+            self._diagnostic_continue = False
+            logger.warning("agent diagnostic observer unavailable (%s)", type(exc).__name__)
+            try:
+                from app.infrastructure.observability.metrics import observe_diagnostic_scan
+
+                observe_diagnostic_scan(outcome="error")
+            except BOUNDARY_ERRORS:
+                logger.warning("agent diagnostic startup metric unavailable")
 
     def _recover_outcomes(self) -> None:
         """Reconcile evidence independently so readback cannot delay worker leases."""

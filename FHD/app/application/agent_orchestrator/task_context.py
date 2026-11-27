@@ -92,7 +92,13 @@ def observe_run_phase(run: AgentRun, phase: str) -> Iterator[None]:
             error_type = exception_type.__name__ if exception_type is not None else ""
             try:
                 if span is not None:
-                    failed = bool(error_type) or run.status in {"failed", "blocked", "rejected"}
+                    failed = bool(error_type) or run.status in {
+                        "failed",
+                        "blocked",
+                        "rejected",
+                        "unknown",
+                        "timed_out",
+                    }
                     cancelled = run.status == "cancelled" or error_type in {
                         "CancelledError",
                         "GeneratorExit",
@@ -116,6 +122,10 @@ def observe_run_phase(run: AgentRun, phase: str) -> Iterator[None]:
                     )
                     total = round(previous + duration, 3)
                     run.metadata["active_duration_ms"] = total
+                    from app.application.agent_orchestrator.run_terminal_metrics import (
+                        observed_source_sha,
+                    )
+
                     details: dict[str, Any] = {
                         "phase": phase,
                         "phase_duration_ms": duration,
@@ -123,6 +133,7 @@ def observe_run_phase(run: AgentRun, phase: str) -> Iterator[None]:
                         "duration_scope": "active",
                         "status": run.status,
                         "parent_span_id": span.parent_id or "",
+                        "source_sha": observed_source_sha(),
                     }
                     if cancelled:
                         details.update(error_code="agent_phase_cancelled", error_type=error_type)

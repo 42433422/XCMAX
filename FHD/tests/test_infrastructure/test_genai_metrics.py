@@ -32,6 +32,10 @@ def test_metrics_can_be_disabled(monkeypatch) -> None:
     metrics.observe_run_terminal(status="completed")
     metrics.observe_chat_ttft(50)
     metrics.observe_tool_call(tool="products", status="success", duration_ms=8)
+    metrics.observe_model_call(source="xiaox", status="success", phases_ms={"total": 10})
+    metrics.observe_diagnostic_scan(outcome="ok")
+    metrics.observe_diagnostic_fault(layer="runtime", kind="progress_stalled")
+    metrics.set_diagnostic_findings({("runtime", "progress_stalled"): 1}, observed_at=10)
 
     assert metrics.snapshot() == before
 
@@ -71,3 +75,61 @@ def test_render_is_prometheus_text(monkeypatch) -> None:
     body = metrics.render().decode("utf-8")
     assert "xcagi_chat_ttft_ms" in body
     assert "# TYPE" in body
+
+
+def test_slow_tools_are_distinct_and_untrusted_names_cannot_grow_labels(monkeypatch):
+    monkeypatch.setattr(metrics, "_host_tool_labels", lambda: frozenset({"products", "inventory"}))
+    before = metrics.snapshot()
+    metrics.observe_tool_call(tool="products", status="success", duration_ms=10)
+    metrics.observe_tool_call(tool="inventory", status="success", duration_ms=300)
+    for number in range(200):
+        metrics.observe_tool_call(tool=f"private-user-{number}", status="failure", duration_ms=1)
+        metrics.observe_tool_call(
+            tool=f"mcp__private-server-{number}", status="success", duration_ms=1
+        )
+    after = metrics.snapshot()
+    assert _delta(before, after, "xcagi_tool_duration_ms_sum{status=success,tool=products}") == 10
+    assert _delta(before, after, "xcagi_tool_duration_ms_sum{status=success,tool=inventory}") == 300
+    assert _delta(before, after, "xcagi_tool_duration_ms_count{status=failure,tool=other}") == 200
+    assert _delta(before, after, "xcagi_tool_duration_ms_count{status=success,tool=mcp}") == 200
+    assert "private-" not in str(after)
+
+
+def test_model_phases_never_invent_inference_or_queue_measurements():
+    before = metrics.snapshot()
+    metrics.observe_model_call(
+        source="xiaox",
+        status="error",
+        phases_ms={
+            "total": 100,
+            "connect": 2,
+            "inference": 98,
+            "secret-user": 1,
+            "response_read": float("nan"),
+        },
+    )
+    after = metrics.snapshot()
+    assert _delta(before, after, "xcagi_model_call_total{source=xiaox,status=error}") == 1
+    assert (
+        _delta(before, after, "xcagi_model_phase_duration_ms_count{phase=connect,source=xiaox}")
+        == 1
+    )
+    assert (
+        _delta(
+            before, after, "xcagi_model_phase_duration_ms_count{phase=response_read,source=xiaox}"
+        )
+        == 0
+    )
+    assert not any("phase=inference" in key or "secret-user" in key for key in after)
+
+
+def test_diagnostic_metrics_preserve_last_complete_scan_until_replaced():
+    metrics.set_diagnostic_findings({("runtime", "progress_stalled"): 3}, observed_at=100)
+    metrics.observe_diagnostic_scan(outcome="error")
+    current = metrics.snapshot()
+    assert current["xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds"] == 100
+    assert current["xcagi_agent_diagnostic_findings{kind=progress_stalled,layer=runtime}"] == 3
+    metrics.set_diagnostic_findings({}, observed_at=101)
+    current = metrics.snapshot()
+    assert current["xcagi_agent_diagnostic_findings{kind=progress_stalled,layer=runtime}"] == 0
+    assert current["xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds"] == 101

@@ -155,6 +155,63 @@ def setup_gateway(trusted_actor, tmp_path, monkeypatch):
     return state
 
 
+@pytest.mark.parametrize("status", ["queued", "paused"])
+def test_parent_insert_audits_initial_state_once_and_keeps_duplicate_identity(
+    setup_gateway, status
+):
+    repository = setup_gateway.repository
+    run = AgentRun(user_id=str(setup_gateway.actor.user_id), message="parent", status=status)
+    saved, created = gateway._insert_parent(repository, run)
+    transitions = [event for event in saved.events if event.event_type == "run.state_changed"]
+    assert created and len(transitions) == 1
+    assert transitions[0].data["from_status"] is None
+    assert transitions[0].data["to_status"] == status
+    assert transitions[0].data["sequence"] == 1
+    assert transitions[0].data["reason_code"] == "initial_persistence"
+    duplicate = AgentRun(user_id=run.user_id, message="duplicate", run_id=run.run_id, status=status)
+    replay, created = gateway._insert_parent(repository, duplicate)
+    assert not created and replay.to_dict() == saved.to_dict()
+    assert duplicate.events == []  # The unique-key rollback removes its uncommitted audit.
+
+
+def test_parent_queue_rollback_removes_audit_and_allows_same_object_retry(
+    setup_gateway, monkeypatch
+):
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+
+    repository = setup_gateway.repository
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=setup_gateway.actor.factory)
+    run = AgentRun(user_id=str(setup_gateway.actor.user_id), message="queued parent")
+    assert queue.get(run.run_id) is None  # Initialize the real queue schema before admission.
+    enqueue = queue.enqueue_in_session
+    rolled_back_ids = []
+
+    def interrupted_enqueue(db, candidate, **kwargs):
+        enqueue(db, candidate, **kwargs)
+        db.flush()
+        rolled_back_ids.extend(
+            event.event_id for event in candidate.events if event.event_type == "run.state_changed"
+        )
+        raise RuntimeError("queue transaction interrupted")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(queue, "enqueue_in_session", interrupted_enqueue)
+        with pytest.raises(RuntimeError, match="queue transaction interrupted"):
+            gateway._insert_parent(repository, run, queue=queue)
+    assert len(rolled_back_ids) == 1
+    assert repository.get(run.run_id) is None and queue.get(run.run_id) is None
+    assert run.events == []
+    saved, created = gateway._insert_parent(repository, run, queue=queue)
+    transitions = [event for event in saved.events if event.event_type == "run.state_changed"]
+    assert created and len(transitions) == 1
+    assert transitions[0].event_id not in rolled_back_ids
+    assert transitions[0].data["from_status"] is None
+    assert transitions[0].data["to_status"] == "queued"
+    assert queue.get(run.run_id).state == "queued"
+
+
 def test_creates_independent_parent_with_private_resume_contract(setup_gateway):
     state = setup_gateway
     state.context.update(ai_cost_budget_units=120, expected_operations=[{"forged": True}])

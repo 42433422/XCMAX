@@ -721,10 +721,16 @@ async def run_xiaox_agent(
                     result["thread_id"] = thread_id
 
                     def started(run: AgentRun, metadata: dict[str, Any]) -> None:
+                        from app.application.agent_orchestrator.run_terminal_metrics import (
+                            observed_source_sha,
+                        )
+
                         run.status = "running"
                         metadata["runtime_status"] = "running"
                         run.add_event(
-                            "runtime.xiaox.started", "Xiaox 执行已开始", {"thread_id": thread_id}
+                            "runtime.xiaox.started",
+                            "Xiaox 执行已开始",
+                            {"thread_id": thread_id, "source_sha": observed_source_sha()},
                         )
 
                     mutate(started)

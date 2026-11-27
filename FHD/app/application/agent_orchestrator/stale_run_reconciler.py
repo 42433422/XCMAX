@@ -136,6 +136,7 @@ def reconcile_stale_running_runs(
     """恢复可证明安全的原计划余步，其余中断任务保护停机；返回收敛条数。"""
     from app.application.agent_orchestrator.elt_checkpoint_recovery import checkpoint_step
     from app.application.agent_orchestrator.resume_transaction import unresolved_effects
+    from app.application.agent_orchestrator.run_events import RunEvent
     from app.application.agent_orchestrator.run_lifecycle import (
         prepare_safe_continuation,
         safe_continuation_error,
@@ -143,6 +144,10 @@ def reconcile_stale_running_runs(
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.application.agent_orchestrator.run_sql_repository import (
         SQLAlchemyAgentRunRepository,
+    )
+    from app.application.agent_orchestrator.run_terminal_metrics import (
+        record_state_transition,
+        record_terminal_transition,
     )
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
@@ -255,6 +260,7 @@ def reconcile_stale_running_runs(
                 queue.enqueue_in_session(db, interrupted, requested_by="startup")
                 reconciled += 1
                 continue
+            previous = agent_run_from_dict(payload)
             payload["updated_at"] = current
             metadata = payload.get("metadata")
             metadata = dict(metadata) if isinstance(metadata, dict) else {}
@@ -296,6 +302,19 @@ def reconcile_stale_running_runs(
                 if status == "unknown"
                 else INTERRUPTED_MESSAGE
             )
+            observed = agent_run_from_dict(payload)
+            observed.events.append(
+                RunEvent(
+                    run_id=observed.run_id,
+                    event_type="run.interrupted",
+                    data={"error_code": INTERRUPTED_ERROR_CODE},
+                    created_at=current,
+                )
+            )
+            record_state_transition(observed, previous, requested_status=status, session=db)
+            record_terminal_transition(observed, previous, session=db)
+            payload["events"] = [event.to_dict() for event in observed.events]
+            payload["metadata"] = observed.metadata
             record.status = status
             record.payload_json = json.dumps(payload, ensure_ascii=False, default=str)
             record.updated_at = current

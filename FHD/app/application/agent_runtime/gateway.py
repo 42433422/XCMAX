@@ -267,22 +267,23 @@ def _insert_parent(
     repository: SQLAlchemyAgentRunRepository, run: AgentRun, *, queue: Any = None
 ) -> tuple[AgentRun, bool]:
     """Insert the request identity once; use the existing transaction for Task projection."""
+    from app.application.agent_orchestrator.run_terminal_metrics import record_state_transition
     from app.db.models.agent import AgentRunRecord
 
     try:
         with repository.transaction() as db:
-            db.add(
-                AgentRunRecord(
-                    run_id=run.run_id,
-                    user_id=run.user_id,
-                    status=run.status,
-                    intent=run.intent,
-                    message=run.message,
-                    payload_json=json.dumps(run.to_dict(), ensure_ascii=False),
-                    created_at=run.created_at,
-                    updated_at=run.updated_at,
-                )
+            record = AgentRunRecord(
+                run_id=run.run_id,
+                user_id=run.user_id,
+                status=run.status,
+                intent=run.intent,
+                message=run.message,
+                created_at=run.created_at,
+                updated_at=run.updated_at,
             )
+            db.add(record)  # Begin the owning transaction before registering rollback cleanup.
+            record_state_transition(run, None, requested_status=run.status, session=db)
+            record.payload_json = json.dumps(run.to_dict(), ensure_ascii=False)
             db.flush()  # The database primary key fences workers in other processes.
             repository.save_in_session(db, run)
             if queue is not None:

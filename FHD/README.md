@@ -121,7 +121,13 @@ Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回�
 
 员工办公室遵循 `config/duty_roster.json` 的企业四部门和管理六部门，安装包显式 `enterprise_layer` 优先，部门 ID 与原成员关系保持一致。当前任务和多员工步骤由服务端投影身份、步骤状态及待核对回执；断流保留上次结果并标为过期，慢请求不覆盖较新事件，账号切换丢弃旧响应。派发、审批、暂停、恢复、取消和结果查看沿用原 API；托管开关只控制自动接单。完成数只统计当前可见服务端任务并按任务 ID 去重；地图动画不产生任务、交接或完成回执。
 
-执行链统一传递 `trace_id/span_id/parent_span_id`，保留独立 `request_id/task_id/run_id/call_id/attempt`。HTTP/SSE、后台恢复、工具子进程、结构化日志和模型 OTLP 使用原关联；历史回放不重新生成 ID。错误使用 `error_code/error_type`，业务失败回执也标记失败，重试恢复后保留各次尝试而不污染成功终态。`duration_ms` 使用单调时钟：HTTP 记录完整响应，`run.observed` 的 `duration_scope=active` 累计规划和执行段，审批等待不计入；工具累计与任务执行耗时分开，缺失测量不写零。流结束只表示传输结束。旧任务在观测增量中只派生稳定关联，不改原账本快照或放宽恢复 CAS。
+执行链统一传递 `trace_id/span_id/parent_span_id`，保留独立 `request_id/task_id/run_id/call_id/attempt`。HTTP/SSE、后台恢复、工具子进程、结构化日志和模型 OTLP 使用原关联；历史回放不重新生成 ID。Xiaox Responses 沿原绑定账本的父 Trace 输出真实 OTel span，并在原 `model_requests` 保存观测；`final=false` 为在途快照，`final=true` 标明同一请求组的最终观测，不改计费、控制或业务回执。复用锁定的 HTTPX `0.28.1` / HTTPcore trace 扩展测量准入、连接、发送、等待响应和读取；网络与服务端工作混合的等待不冒称纯推理，缺少供应商证据的 `remote_queue_ms/inference_ms` 保持 `null`。
+
+`duration_ms` 使用单调时钟，`run.observed` 的 `duration_scope=active` 累计规划和执行段，审批等待不计入。工具总耗时保留原指标，`xcagi_tool_duration_ms` 以宿主能力注册表内的工具名和结果分类；动态工具只在有权限的 Trace 查看精确身份，避免无限指标标签。正式 `/metrics` 聚合默认和既有 Agent registry；原 Grafana `fhd-performance` 面板单独选择 production/staging 抓取任务。成功率为已观测的 `completed/(completed+failed+cancelled+rejected)`，等待、blocked、unknown 单列，无样本保持未知。它是运行监控，不是全队列完成率或真实模型验收分数。
+
+`run.state_changed` 与原任务同事务保存 `from_status/to_status`、原因事件引用、序号和保存进程的来源 SHA；未提供原因的旧写入显式 `reason_not_recorded`，不从异常正文猜测。仓储并发保护和业务核验先决定实际状态，再记录转换；失败 CAS、回滚与重复保存不制造持久审计，保存点撤销不会吞掉外层已提交终态指标。执行事件、持久化事件和观察器各自记录观测到的构建/提交身份，不能相互追认历史版本，也不证明未提交工作树的内容。观测失败只留下安全告警，不触发业务重试。
+
+工作组09 的诊断观察随原 dispatcher 生命周期启停，以独立线程每30秒开始读取原 SQL 任务/队列；未完成且有进展的扫描每1秒继续有界批次，按现有期限、租约及结构化故障判断架构层；超时只表示疑似卡住，合法审批、子回执和核验等待单独处理。完整扫描结束才更新故障快照和新鲜度，未完成扫描不伪装实时数据。故障候选复用既有工单 SSOT 的持久去重与文件锁，在原不可变创建事件中保存脱敏引用及 `diagnostic_classification` 快照；校验协议与摘要后，可用原分类器复演当时结论，原任务后续变化不影响复演。快照不保存原始提示词、参数或业务输出，原 payload 摘要仅为引用；诊断复演不是业务重放，缺失历史来源保持未知。观察器不认领任务、不改业务状态、不重发动作、不直接外发 GitHub 修复。所有这些薄适配复用上述 OpenTelemetry、Prometheus、SQLAlchemy 和原工单协议；通用监控组件不能替代产品租户、回执和生命周期事实，未增加竞争性 Runtime。
 
 
 AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolActionSpecV2`，内置动作仍在 `risk_actions.registry.json` 定义，MCP 动态动作沿用现有注册器；重复身份直接拒绝。FastAPI OpenAPI 只提供非执行 HTTP 资源和字段元数据。目录检索复用已锁定依赖 [scikit-learn](https://github.com/scikit-learn/scikit-learn)（BSD-3-Clause）的 TF-IDF 向量化与余弦相似度，语义 overlay 由已有 PyYAML（MIT）读取，不改变契约授权。MCP 协议层沿用官方 Python SDK（`mcp==2.3.0`，MIT）同一生态的 JSON-RPC 约定，未替换现有传输实现。

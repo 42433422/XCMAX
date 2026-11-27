@@ -696,6 +696,7 @@ class SQLAlchemyAgentRunRepository:
             preserve_catalog_run_authority,
         )
 
+        requested_status = run.status
         catalog_fenced = preserve_catalog_run_authority(db, run, previous)
         preserve_run_evidence(
             run,
@@ -707,7 +708,15 @@ class SQLAlchemyAgentRunRepository:
             # A signed permanent dispatch fence supersedes a previous failure;
             # the generic terminal-state guard still retains its original receipt.
             run.status = "cancelled"
+        original_output = copy.deepcopy(run.final_output)
         ensure_terminal_business_result(run)
+        run_terminal_metrics.record_state_transition(
+            run,
+            previous,
+            requested_status=requested_status,
+            session=db,
+            original_output=original_output,
+        )
         run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
