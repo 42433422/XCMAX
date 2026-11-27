@@ -5,6 +5,7 @@ The audit MAC key must be held by an independent verifier outside the product
 runtime and outside the submitted evidence directory. A test MAC is never a
 production attestation. This verifier never initiates business actions.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -13,15 +14,49 @@ import hmac
 import json
 import os
 import re
+import stat
+import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SHA64 = re.compile(r"[0-9a-f]{64}\Z")
-ARTIFACTS = ("model", "business", "heartbeat", "faults", "goals", "ledger", "security", "improvement", "release")
-NEGATIVE = frozenset({"cross_tenant", "revoked_permission", "expired_authorization", "budget_exhausted", "self_approval", "duplicate_write", "stopped_runtime", "audit_disable"})
-FAULTS = frozenset({"process_crash", "network_loss", "timeout", "late_receipt", "duplicate_receipt", "permission_revoked", "budget_exhausted"})
+ARTIFACTS = (
+    "model",
+    "business",
+    "heartbeat",
+    "faults",
+    "goals",
+    "ledger",
+    "security",
+    "improvement",
+    "release",
+)
+STABILITY_CHECKS = tuple(f"K{i:02d}" for i in range(1, 11))
+NEGATIVE = frozenset(
+    {
+        "cross_tenant",
+        "revoked_permission",
+        "expired_authorization",
+        "budget_exhausted",
+        "self_approval",
+        "duplicate_write",
+        "stopped_runtime",
+        "audit_disable",
+    }
+)
+FAULTS = frozenset(
+    {
+        "process_crash",
+        "network_loss",
+        "timeout",
+        "late_receipt",
+        "duplicate_receipt",
+        "permission_revoked",
+        "budget_exhausted",
+    }
+)
 LEVELS = {
     "L1": ("L01", "L02_smoke", "L09"),
     "L2": ("L01", "L02", "L09"),
@@ -32,9 +67,23 @@ LEVELS = {
 }
 
 
+def _read_regular(path: Path, limit: int) -> bytes:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("evidence must be a regular non-symlinked file")
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    with os.fdopen(os.open(path, flags), "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("evidence must be a regular file")
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("evidence exceeds size limit")
+    return raw
+
+
 def _json(raw: bytes) -> dict:
     if len(raw) > 16_000_000:
         raise ValueError("artifact exceeds size limit")
+
     def no_dupes(pairs):
         result = {}
         for key, value in pairs:
@@ -42,7 +91,15 @@ def _json(raw: bytes) -> dict:
                 raise ValueError("duplicate JSON key")
             result[key] = value
         return result
-    value = json.loads(raw, object_pairs_hook=no_dupes, parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite JSON")))
+
+    try:
+        value = json.loads(
+            raw,
+            object_pairs_hook=no_dupes,
+            parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite JSON")),
+        )
+    except RecursionError as exc:
+        raise ValueError("JSON nesting exceeds limit") from exc
     if not isinstance(value, dict):
         raise ValueError("artifact must be an object")
     return value
@@ -51,7 +108,10 @@ def _json(raw: bytes) -> dict:
 def _stamp(value: str) -> datetime:
     if not isinstance(value, str):
         raise ValueError("missing timestamp")
-    result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("invalid evidence timestamp") from exc
     if result.tzinfo is None:
         raise ValueError("timestamp must have timezone")
     return result.astimezone(UTC)
@@ -221,39 +281,100 @@ def _stable_release(value: dict) -> None:
         raise ValueError("stable release lacks independently reviewed CI, signing, platform acceptance or rollback receipts")
 
 
-def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: datetime | None = None) -> dict:
+def evaluate(
+    root: Path,
+    source_sha: str,
+    trusted_key: bytes | None,
+    *,
+    now: datetime | None = None,
+    profile: str = "autonomy",
+    expected_ci_run_id: int | None = None,
+    expected_ci_run_attempt: int | None = None,
+) -> dict:
+    if profile not in {"autonomy", "agent-stability"}:
+        raise ValueError("unknown acceptance profile")
     now = now or datetime.now(UTC)
-    checks = dict.fromkeys(("L01", "L02_smoke", "L02", "L03", "L04", "L05", "L06", "L07_30d", "L07_90d", "L07", "L08", "L09", "L10"), "BLOCKED")
+    checks = dict.fromkeys(
+        (
+            "L01",
+            "L02_smoke",
+            "L02",
+            "L03",
+            "L04",
+            "L05",
+            "L06",
+            "L07_30d",
+            "L07_90d",
+            "L07",
+            "L08",
+            "L09",
+            "L10",
+        ),
+        "BLOCKED",
+    )
     reasons: dict[str, str] = {}
     payloads = {}
     provenance = {}
     try:
+        if (expected_ci_run_id is not None or expected_ci_run_attempt is not None) and any(
+            type(value) is not int or value <= 0
+            for value in (expected_ci_run_id, expected_ci_run_attempt)
+        ):
+            raise ValueError("CI run ID and attempt must be paired positive integers")
         if not SHA40.fullmatch(source_sha):
             raise ValueError("source SHA must be 40 lowercase hex")
         if not trusted_key or len(trusted_key) < 32:
             raise ValueError("missing independent audit signing key (minimum 32 bytes)")
-        raw = (root / "manifest.json").read_bytes()
-        signature = (root / "manifest.hmac").read_text(encoding="ascii").strip()
-        if not hmac.compare_digest(hmac.new(trusted_key, raw, hashlib.sha256).hexdigest(), signature):
+        if root.is_symlink() or any(
+            (root / name).is_symlink() for name in ("manifest.json", "manifest.hmac")
+        ):
+            raise ValueError("symlinked audit manifest or evidence root")
+        raw = _read_regular(root / "manifest.json", 16_000_000)
+        signature = _read_regular(root / "manifest.hmac", 128).decode("ascii").strip()
+        if not hmac.compare_digest(
+            hmac.new(trusted_key, raw, hashlib.sha256).hexdigest(), signature
+        ):
             raise ValueError("untrusted or tampered independent audit manifest")
         manifest = _json(raw)
-        if (manifest.get("schema_version") != 2 or manifest.get("source_sha") != source_sha
-                or not _digest(manifest.get("release_artifact_sha256"))
-                or not _digest(manifest.get("deployment_receipt_sha256"))
-                or manifest.get("auditor_source_sha") == source_sha
-                or not SHA40.fullmatch(str(manifest.get("auditor_source_sha", "")))
-                or manifest.get("auditor_id") in (None, "", "agent", "xiaoc")
-                or not manifest.get("run_id") or _stamp(manifest.get("captured_at")) > now + timedelta(minutes=2)):
+        if expected_ci_run_id is not None and any(
+            type(manifest.get(key)) is not int or manifest[key] != expected
+            for key, expected in (
+                ("ci_run_id", expected_ci_run_id),
+                ("ci_run_attempt", expected_ci_run_attempt),
+            )
+        ):
+            raise ValueError("signed manifest CI run/attempt differs from original collection run")
+        if (
+            manifest.get("schema_version") != 2
+            or manifest.get("source_sha") != source_sha
+            or not _digest(manifest.get("release_artifact_sha256"))
+            or not _digest(manifest.get("deployment_receipt_sha256"))
+            or manifest.get("auditor_source_sha") == source_sha
+            or not SHA40.fullmatch(str(manifest.get("auditor_source_sha", "")))
+            or manifest.get("auditor_id") in (None, "", "agent", "xiaoc")
+            or not manifest.get("run_id")
+            or _stamp(manifest.get("captured_at")) > now + timedelta(minutes=2)
+        ):
             raise ValueError("manifest source/auditor/clock provenance invalid")
         artifacts = manifest.get("artifacts")
-        if not isinstance(artifacts, dict) or not artifacts or not set(artifacts).issubset(ARTIFACTS):
+        if (
+            not isinstance(artifacts, dict)
+            or not artifacts
+            or not set(artifacts).issubset((*ARTIFACTS, "stability"))
+        ):
             raise ValueError("manifest artifact inventory empty or contains unknown kinds")
         used = set()
         for kind, item in artifacts.items():
             if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
                 raise ValueError(f"{kind}: malformed artifact identity")
             name = item["path"]
-            if not isinstance(name, str) or not name.endswith(".json") or Path(name).name != name or name in used or not _digest(item["sha256"]):
+            if (
+                not isinstance(name, str)
+                or not name.endswith(".json")
+                or Path(name).name != name
+                or name in used
+                or not _digest(item["sha256"])
+            ):
                 raise ValueError(f"{kind}: unsafe or duplicate artifact path")
             used.add(name)
             path = root / name
@@ -261,30 +382,58 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
                 raise ValueError(f"{kind}: artifact is absent or symlinked")
             if path.stat().st_size > 16_000_000:
                 raise ValueError(f"{kind}: artifact exceeds size limit")
-            content = path.read_bytes()
+            content = _read_regular(path, 16_000_000)
             if hashlib.sha256(content).hexdigest() != item["sha256"]:
                 raise ValueError(f"{kind}: raw artifact checksum mismatch")
             data = _json(content)
-            if (data.get("source_sha") != source_sha or data.get("environment") != "production"
-                    or data.get("release_artifact_sha256") != manifest["release_artifact_sha256"]
-                    or data.get("deployment_receipt_sha256") != manifest["deployment_receipt_sha256"]):
+            if (
+                data.get("source_sha") != source_sha
+                or data.get("environment") != "production"
+                or data.get("release_artifact_sha256") != manifest["release_artifact_sha256"]
+                or data.get("deployment_receipt_sha256") != manifest["deployment_receipt_sha256"]
+            ):
                 raise ValueError(f"{kind}: not exact-source, deployed-artifact production evidence")
             payloads[kind] = data
         checks["L01"] = "PASS"
-        provenance = {"run_id": manifest["run_id"], "auditor_id": manifest["auditor_id"], "auditor_source_sha": manifest["auditor_source_sha"], "manifest_sha256": hashlib.sha256(raw).hexdigest(),
-                      "release_artifact_sha256": manifest["release_artifact_sha256"],
-                      "deployment_receipt_sha256": manifest["deployment_receipt_sha256"],
-                      "artifacts": artifacts}
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        provenance = {
+            "run_id": manifest["run_id"],
+            "auditor_id": manifest["auditor_id"],
+            "auditor_source_sha": manifest["auditor_source_sha"],
+            "manifest_sha256": hashlib.sha256(raw).hexdigest(),
+            "captured_at": manifest["captured_at"],
+            "release_artifact_sha256": manifest["release_artifact_sha256"],
+            "deployment_receipt_sha256": manifest["deployment_receipt_sha256"],
+            "artifacts": artifacts,
+        }
+        if expected_ci_run_id is not None:
+            provenance.update(ci_run_id=expected_ci_run_id, ci_run_attempt=expected_ci_run_attempt)
+    except (OSError, ValueError, TypeError, KeyError, OverflowError, json.JSONDecodeError) as exc:
+        if profile == "agent-stability":
+            reason = "audit manifest unavailable" if isinstance(exc, OSError) else str(exc)
+            return stability_report(
+                source_sha,
+                dict.fromkeys(STABILITY_CHECKS, "BLOCKED"),
+                dict.fromkeys(STABILITY_CHECKS, f"provenance: {reason}"),
+                {},
+                {},
+            )
         reasons["L01"] = str(exc)
         return _report(source_sha, checks, reasons, provenance)
+
+    if profile == "agent-stability":
+        from scripts.dev.autonomy_stability_evidence import evaluate_stability
+
+        return evaluate_stability(root, source_sha, payloads.get("stability"), provenance, now)
 
     validators = {
         "L02_smoke": lambda: _real_model(payloads["model"], full=False),
         "L02": lambda: _real_model(payloads["model"], full=True),
         "L03": lambda: _business(payloads["business"]),
         "L04": lambda: _continuity(payloads["heartbeat"], 8 * 3600, now),
-        "L05": lambda: (_continuity(payloads["heartbeat"], 72 * 3600, now), _faults(payloads["faults"])),
+        "L05": lambda: (
+            _continuity(payloads["heartbeat"], 72 * 3600, now),
+            _faults(payloads["faults"]),
+        ),
         "L06": lambda: _goals(payloads["goals"], now),
         "L07_30d": lambda: _ledger(payloads["ledger"], 30, now),
         "L07_90d": lambda: _ledger(payloads["ledger"], 90, now),
@@ -318,20 +467,78 @@ def _report(sha: str, checks: dict, reasons: dict, provenance: dict) -> dict:
             "checks": checks, "blockers": reasons, "provenance": provenance}
 
 
+def stability_report(
+    sha: str, checks: dict, reasons: dict, metrics: dict, provenance: dict
+) -> dict:
+    safe_provenance = {
+        key: value
+        for key, value in provenance.items()
+        if key
+        in {
+            "auditor_source_sha",
+            "manifest_sha256",
+            "release_artifact_sha256",
+            "deployment_receipt_sha256",
+            "ci_run_id",
+            "ci_run_attempt",
+        }
+    }
+    return {
+        "schema_version": 2,
+        "profile": "agent-stability",
+        "source_sha": sha,
+        "status": "PASS" if all(checks.get(k) == "PASS" for k in STABILITY_CHECKS) else "BLOCKED",
+        "checks": checks,
+        "blockers": reasons,
+        "metrics": metrics,
+        "provenance": safe_provenance,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", required=True, type=Path)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--target-level", choices=tuple(LEVELS), default="L6")
+    parser.add_argument("--profile", choices=("autonomy", "agent-stability"), default="autonomy")
+    parser.add_argument("--ci-run-id", type=int)
+    parser.add_argument("--ci-run-attempt", type=int)
     parser.add_argument("--report", required=True, type=Path)
     args = parser.parse_args()
     key = os.environ.get("XCAGI_INDEPENDENT_AUDIT_HMAC_KEY", "").encode("utf-8")
-    report = evaluate(args.evidence_dir, args.source_sha, key)
+    report = evaluate(
+        args.evidence_dir,
+        args.source_sha,
+        key,
+        profile=args.profile,
+        expected_ci_run_id=args.ci_run_id,
+        expected_ci_run_attempt=args.ci_run_attempt,
+    )
     args.report.parent.mkdir(parents=True, exist_ok=True)
-    args.report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(json.dumps({"target": args.target_level, "levels": report["levels"], "blockers": report["blockers"]}, ensure_ascii=False))
+    args.report.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    if args.profile == "agent-stability":
+        print(
+            json.dumps(
+                {k: report[k] for k in ("profile", "status", "checks", "blockers", "metrics")},
+                ensure_ascii=False,
+            )
+        )
+        return 0 if report["status"] == "PASS" else 1
+    print(
+        json.dumps(
+            {
+                "target": args.target_level,
+                "levels": report["levels"],
+                "blockers": report["blockers"],
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0 if report["levels"][args.target_level] == "PASS" else 1
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     raise SystemExit(main())
