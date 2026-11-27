@@ -159,7 +159,7 @@ def test_native_paging_fields_are_discoverable_on_original_read_contract():
     )
 
     properties = workbook_input_schemas()[("excel_analysis", "read")]["properties"]
-    assert properties["view"]["enum"] == ["table", "sheets", "cells"]
+    assert properties["view"]["enum"] == ["table", "sheets", "cells", "pages", "regions", "tables"]
     assert {"expected_sha256", "cell_range", "offset", "max_rows"} <= properties.keys()
 
 
