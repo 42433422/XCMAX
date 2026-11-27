@@ -80,6 +80,8 @@ class GitHub:
             return 200, {"id": REPO_ID, "full_name": REPO}
         if path == f"/repos/{OLD}":
             return self.status, self.history
+        if path == "/repos/other/repo":
+            return 404, {"message": "Not Found"}
         if path == f"/repos/{REPO}/issues/3378/comments":
             return 200, []
         raise AssertionError(f"unexpected GitHub API path: {path}")
