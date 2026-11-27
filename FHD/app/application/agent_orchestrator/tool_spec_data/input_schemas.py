@@ -828,7 +828,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("excel_analysis", "export"): _object_schema(
         ["file_path", "rows"],
         {
-            "file_path": {"type": "string", "pattern": r"\.(?:[cC][sS][vV]|[xX][lL][sS][xX])$"},
+            "file_path": {
+                "type": "string",
+                "pattern": r"[\s\S]*\.(?:[cC][sS][vV]|[xX][lL][sS][xX])$",
+            },
             "rows": {
                 "type": "array",
                 "minItems": 1,

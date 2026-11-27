@@ -1132,6 +1132,47 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
 
 _SPECIAL_TOOL_CONTRACTS.update(
     {
+        ("excel_analysis", "read"): [
+            _sample(
+                "workbook_native_cells_page_contract",
+                {
+                    "file_path": "sample.xlsx",
+                    "view": "cells",
+                    "sheet_name": "Sheet1",
+                    "offset": 1,
+                    "max_rows": 1,
+                    "expected_sha256": "a" * 64,
+                },
+                _success(
+                    data={
+                        "view": "cells",
+                        "sheet_name": "Sheet1",
+                        "source_sha256": "a" * 64,
+                        "offset": 1,
+                        "cells": [{"address": "A2", "value": 7}],
+                        "has_more": False,
+                        "next_offset": None,
+                    }
+                ),
+            )
+        ],
+        ("excel_analysis", "export"): [
+            _sample(
+                f"workbook_export_{extension}_contract",
+                {
+                    "file_path": f"result.{extension}",
+                    "rows": [{"name": "item", "quantity": 1}],
+                },
+                _success(
+                    data={
+                        "file_path": f"/workspace/result.{extension}",
+                        "row_count": 1,
+                        "columns": ["name", "quantity"],
+                    }
+                ),
+            )
+            for extension in ("xlsx", "csv")
+        ],
         ("excel_analysis", "aggregate"): [
             {
                 "name": "workbook_aggregate_contract",

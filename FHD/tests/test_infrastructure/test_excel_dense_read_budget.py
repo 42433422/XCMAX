@@ -2,6 +2,7 @@
 
 import logging
 import struct
+import warnings
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock
@@ -229,7 +230,19 @@ def test_normal_csv_binary_xls_and_dense_xlsx_routes(tmp_path, suffix):
         path.write_bytes(_biff2())
     else:
         _dense(path)
-    result = _analysis().analyze({"file_path": str(path), "header_row": 1})
+    with warnings.catch_warnings():
+        warning_type = getattr(excel_analysis.pd.errors, "Pandas4Warning", None)
+        if suffix == ".xls" and warning_type is not None:
+            # pandas 3.1 deprecates xlrd; still exercise its real BIFF reader.
+            warnings.filterwarnings(
+                "always",
+                message=(
+                    r"^The xlrd engine is deprecated and will be removed in a future version\. "
+                    r"Use the calamine engine instead, by setting engine='calamine'\.$"
+                ),
+                category=warning_type,
+            )
+        result = _analysis().analyze({"file_path": str(path), "header_row": 1})
     assert result["success"] is True and result["records"] == [{"id": 1, "amount": 7}]
 
 

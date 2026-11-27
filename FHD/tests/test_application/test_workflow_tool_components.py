@@ -274,6 +274,7 @@ def test_excel_read_actions_use_registered_contract_and_real_owned_upload(
             "row_count": 4,
             "column_count": 2,
             "columns": ["item", "count"],
+            "sheet_names": [],
             "sample_rows": [
                 {"item": "paint", "count": 2},
                 {"item": "primer", "count": 1},
