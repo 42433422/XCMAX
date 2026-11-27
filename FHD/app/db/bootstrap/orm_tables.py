@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from logging import Logger
-from typing import Literal
+from sqlite3 import Connection as SQLiteConnection
+from typing import Literal, cast
 
-from sqlalchemy import MetaData, Table
+from sqlalchemy import MetaData, Table, text
 from sqlalchemy.engine import Connection, Engine
 
 from app.db.bootstrap.contracts import InspectorFactory
@@ -17,20 +18,53 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 @contextmanager
-def _serialized_schema_bind(engine: Engine) -> Iterator[Engine | Connection]:
-    """Serialize SQLite file schema creation before checking which tables exist.
+def _serialized_schema_bind(engine: Engine | Connection) -> Iterator[Engine | Connection]:
+    """Serialize schema creation before checking which tables exist.
 
     checkfirst=True is not a process lock: two instances can both see a missing
     table and attempt to create it. BEGIN IMMEDIATE reserves the writer before
-    inspection and keeps the reservation through the DDL. In-memory SQLite
-    retains its previous connection-pool behavior.
+    inspection and keeps the reservation through SQLite DDL. PostgreSQL uses a
+    transaction advisory lock; failures roll back the entire schema group.
     """
-    if engine.dialect.name != "sqlite" or engine.url.database in (None, ":memory:"):
+    borrowed = isinstance(engine, Connection)
+    dialect = engine.dialect.name
+    if dialect not in {"sqlite", "postgresql"} or (
+        dialect == "sqlite" and not borrowed and engine.engine.url.database in (None, ":memory:")
+    ):
         yield engine
         return
-    with engine.begin() as connection:
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    with ExitStack() as scope:
+        connection = (
+            engine if isinstance(engine, Connection) else scope.enter_context(engine.begin())
+        )
+        sqlite_connection = cast(SQLiteConnection, connection.connection.driver_connection)
+        if dialect == "sqlite" and not sqlite_connection.in_transaction:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        if borrowed:
+            # Own only the schema group, never commit the caller's transaction.
+            # An existing SQLite read snapshot may fail its write upgrade; that
+            # conflict belongs to the caller, not a hidden transaction replay.
+            scope.enter_context(connection.begin_nested())
+        if dialect == "postgresql":
+            previous_timeout = connection.exec_driver_sql("SHOW lock_timeout").scalar_one()
+            # Bound only this bootstrap wait and retain any stricter configured
+            # lock timeout. SET LOCAL is restored when this transaction ends.
+            connection.exec_driver_sql(
+                "SELECT set_config('lock_timeout', "
+                "(CASE WHEN setting::integer = 0 THEN 5000 "
+                "ELSE LEAST(setting::integer, 5000) END)::text, true) "
+                "FROM pg_settings WHERE name = 'lock_timeout'"
+            )
+            connection.exec_driver_sql(
+                "SELECT pg_advisory_xact_lock("
+                "hashtext('xcagi.schema.bootstrap'), hashtext(current_schema()))"
+            )
         yield connection
+        if borrowed and dialect == "postgresql":
+            connection.execute(
+                text("SELECT set_config('lock_timeout', :timeout, true)"),
+                {"timeout": previous_timeout},
+            )
 
 
 GroupName = Literal[

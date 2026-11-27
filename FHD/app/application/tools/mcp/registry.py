@@ -354,7 +354,43 @@ def call_mcp_tool(
             }
         if generations:
             options["expected_session_id"] = next(iter(generations))
-    return call_tool(config, str(action), arguments, **options)
+    result = call_tool(config, str(action), arguments, **options)
+    structured = result.get("structured_content", result.get("structuredContent"))
+    if action in RESOURCE_ACTIONS or not isinstance(structured, dict):
+        return result
+    from app.domain.task_lifecycle.results import (
+        execution_result_outcome_unknown,
+        execution_result_pending_state,
+        normalize_execution_result,
+    )
+
+    # MCP delivery is not business completion. Classify the explicit protocol
+    # envelope through the same contract as employee/Mod results; ``data`` keeps
+    # ordinary order/customer status fields from becoming task-control states.
+    envelope = {**result, "data": structured}
+    if execution_result_outcome_unknown(envelope, include_execution=True):
+        return {
+            **result,
+            "success": False,
+            "outcome": "unknown",
+            "reconciliation_required": True,
+            "retryable": False,
+        }
+    pending = execution_result_pending_state(envelope)
+    if pending and pending != "unknown":
+        return {**result, "success": False, "execution_state": pending, "retryable": False}
+    normalized = normalize_execution_result(envelope)
+    if normalized.get("success") is not False:
+        return result
+    return {
+        **result,
+        **{
+            key: normalized[key]
+            for key in ("success", "message", "outcome", "reconciliation_required")
+            if key in normalized
+        },
+        "retryable": False,
+    }
 
 
 def mcp_session_scope(context: dict[str, Any]) -> str:

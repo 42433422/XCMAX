@@ -14,7 +14,7 @@ from sqlalchemy import JSON, String, Table, and_, case, func, literal, or_
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.engine import CursorResult
+from sqlalchemy.engine import CursorResult, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1208,6 +1208,7 @@ class SQLAlchemyAgentRunRepository:
             return
         with self._schema_lock:
             with self._session_scope(read_only=True) as db:
+                from app.db.bootstrap.orm_tables import _serialized_schema_bind
                 from app.db.db_base import Base
                 from app.db.models.agent import (
                     AgentRunRecord,
@@ -1218,17 +1219,19 @@ class SQLAlchemyAgentRunRepository:
                 bind = db.get_bind()
                 if self._schema_ready and self._schema_bind is bind:
                     return
-                Base.metadata.create_all(
-                    bind=bind,
-                    tables=[
-                        cast(Table, AgentRunRecord.__table__),
-                        cast(Table, AgentTaskRecord.__table__),
-                        cast(Table, AgentTaskCommandRecord.__table__),
-                    ],
-                    checkfirst=True,
-                )
+                with _serialized_schema_bind(bind) as schema_bind:
+                    Base.metadata.create_all(
+                        bind=schema_bind,
+                        tables=[
+                            cast(Table, AgentRunRecord.__table__),
+                            cast(Table, AgentTaskRecord.__table__),
+                            cast(Table, AgentTaskCommandRecord.__table__),
+                        ],
+                        checkfirst=True,
+                    )
                 self._schema_bind = bind
-            self._schema_ready = True
+            # DDL on a caller-owned Connection can still be rolled back later.
+            self._schema_ready = isinstance(bind, Engine)
 
     @staticmethod
     def _run_task_id(run: AgentRun | None) -> str:

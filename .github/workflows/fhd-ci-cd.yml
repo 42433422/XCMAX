@@ -163,6 +163,8 @@ jobs:
         run: |
           test -n "$XCAGI_TEST_AGENT_POSTGRES_URL"
           uv run --no-sync pytest \
+            tests/test_db/test_agent_schema_concurrency.py \
+            tests/test_application/test_tool_cross_node_effects.py \
             tests/test_application/test_agent_task_admission.py \
             tests/test_application/test_task_execution_repository.py \
             tests/test_application/test_task_dispatcher.py \

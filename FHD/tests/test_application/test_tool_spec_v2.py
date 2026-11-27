@@ -648,7 +648,9 @@ def test_agent_tool_executor_enforces_registered_output_schema() -> None:
         "app.application.facades.tools_facade.execute_registered_workflow_tool",
         return_value={"success": True, "file_name": "contract.docx"},
     ) as execute:
-        result = AgentToolExecutor().execute(step, runtime_context={"run_id": "run_1"})
+        result = AgentToolExecutor().execute(
+            step, runtime_context={"run_id": "run_1", "idempotency_key": "output-schema-contract"}
+        )
 
     assert result["success"] is False
     assert result["error_code"] == "output_schema_validation_failed"
@@ -657,6 +659,67 @@ def test_agent_tool_executor_enforces_registered_output_schema() -> None:
     assert "download_url" in result["message"]
     assert result["output_keys"] == ["file_name", "success"]
     execute.assert_called_once()
+
+
+@pytest.mark.parametrize("key", [None, "", "   "])
+def test_non_idempotent_tool_requires_stable_identity_before_any_effect(key) -> None:
+    step = AgentStep(
+        node_id="write",
+        tool_id="generate_office_document",
+        action="execute",
+        params={"user_request": "Generate a contract", "output_format": "docx"},
+    )
+    context = {"run_id": "original-run", "idempotency_key": key}
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as dispatch:
+        result = AgentToolExecutor().execute(step, runtime_context=context)
+    dispatch.assert_not_called()
+    assert result["error_code"] == "task_identity_required"
+    assert result["execution_status"] == "not_started" and result["retryable"] is False
+    assert result["execution"] == {"outcome": "not_executed", "committed": False}
+
+
+@pytest.mark.parametrize("state", ["waiting_approval", "waiting_auth", "waiting_input", "paused"])
+@pytest.mark.parametrize("unknown", [False, "summary", "code"])
+def test_executor_retains_known_wait_across_process_memory_loss(
+    tmp_path, monkeypatch, state, unknown
+):
+    from app.application.agent_orchestrator import tool_permission as permissions
+
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
+    permissions.clear_idempotent_replay_for_tests()
+    receipt = {"success": False, "status": state, "request_id": "original-request"}
+    if unknown == "summary":
+        receipt.update(
+            success=True,
+            file_name="contract.docx",
+            download_url="/api/ai/kitten/document/pickup/fixture",
+            artifacts=[{"artifact_type": "office_document"}],
+        )
+        receipt["execution"] = {"outcome": "unknown", "committed": False}
+    elif unknown == "code":
+        receipt["error_code"] = "tool_timeout_unknown"
+    step = AgentStep(
+        node_id="write",
+        tool_id="generate_office_document",
+        action="execute",
+        params={"user_request": "Generate a contract", "output_format": "docx"},
+    )
+    context = {"tenant_id": "421", "run_id": "original-run", "idempotency_key": "known-wait"}
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value=receipt,
+    ) as dispatch:
+        first = AgentToolExecutor().execute(step, runtime_context=context)
+        permissions.drop_process_idempotency_memory()
+        replay = AgentToolExecutor().execute(step, runtime_context=context)
+    dispatch.assert_called_once()
+    assert first == replay
+    assert first["status"] == state and first["success"] is False and first["retryable"] is False
+    assert first["request_id"] == "original-request"
+    if unknown:
+        assert first["outcome"] == "unknown" and first["reconciliation_required"] is True
+    else:
+        assert first.get("outcome") != "unknown" and not first.get("reconciliation_required")
 
 
 def test_agent_tool_executor_rejects_non_object_tool_result(trusted_actor, monkeypatch) -> None:
@@ -695,6 +758,7 @@ def test_agent_tool_executor_rejects_non_object_tool_result(trusted_actor, monke
         (False, {"outcome_unknown": True}, False),
         (False, {"error_code": "upstream_outcome_unknown"}, False),
         (False, {"result": {"status": "accepted"}}, False),
+        (False, {"execution": {"outcome": "unknown", "committed": False}}, False),
         (False, {}, True),
         (True, {}, False),
     ],

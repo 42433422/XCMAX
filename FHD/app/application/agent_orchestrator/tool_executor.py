@@ -33,6 +33,7 @@ from app.application.tool_execution_deadline import (
 from app.domain.task_lifecycle.results import (
     execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
+    execution_result_wait_reason,
     normalize_execution_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -679,8 +680,22 @@ class AgentToolExecutor:
                     finish_idempotent_replay,
                 )
 
-                context_key = str(params["_runtime_context"].get("idempotency_key") or "")
-                client_key = str(params.get("idempotency_key") or "")
+                context_key = str(params["_runtime_context"].get("idempotency_key") or "").strip()
+                client_key = str(params.get("idempotency_key") or "").strip()
+                if (
+                    not (context_key or client_key)
+                    and validation.spec is not None
+                    and not validation.spec.is_read_only_call(params)
+                ):
+                    return _pre_dispatch_refusal(
+                        {
+                            "success": False,
+                            "error_code": "task_identity_required",
+                            "execution_status": "not_started",
+                            "retryable": False,
+                            "message": "写操作缺少稳定的业务调用标识，本次未执行。",
+                        }
+                    )
                 idem_key, replay = (
                     begin_idempotent_replay(
                         params["_runtime_context"], validation.tool_id, action, params
@@ -755,10 +770,25 @@ class AgentToolExecutor:
                                 "tool": validation.tool_id,
                                 "digest": digest,
                             }
+                            from app.application.agent_orchestrator.task_dispatcher import (
+                                note_open_effect,
+                            )
+
+                            note_open_effect(str(context.get("run_id") or ""), step.step_id)
                             result = execute_guarded_batch_delete(
                                 tool_id=validation.tool_id, action=action, params=params
                             )
                         else:
+                            if validation.spec is None or not validation.spec.is_read_only_call(
+                                params
+                            ):
+                                from app.application.agent_orchestrator.task_dispatcher import (
+                                    note_open_effect,
+                                )
+
+                                # An idempotent contract does not prove a different
+                                # worker can see this node's local tool receipt.
+                                note_open_effect(str(context.get("run_id") or ""), step.step_id)
                             result = (
                                 _dispatch_reviewed_query(step.tool_id, action, params)
                                 if reviewed_query
@@ -847,6 +877,7 @@ class AgentToolExecutor:
                 validation.spec is None
                 or not validation.spec.read_only
                 or invocation_requires_reconciliation()
+                or execution_result_outcome_unknown(result, include_execution=True)
                 or execution_result_requires_reconciliation(result)
                 or result.get("outcome_unknown") is True
                 or str(result.get("execution_status") or "").lower()
@@ -875,15 +906,25 @@ class AgentToolExecutor:
         from app.application.agent_orchestrator.result_verification import pending_execution_receipt
 
         admitted_child = verified_plan_admission(step, result, dict(runtime_context or {}))
-        acknowledged_pending = pending_execution_receipt(result)
-        if invocation_requires_reconciliation() or (
-            not admitted_child
-            and not acknowledged_pending
-            and (
-                execution_result_requires_reconciliation(result)
-                or (
-                    result.get("success") is not True
-                    and (validation.spec is None or not validation.spec.read_only)
+        result_unknown = (
+            execution_result_outcome_unknown(result, include_execution=True)
+            or "unknown" in str(result.get("error_code") or "").lower()
+        )
+        acknowledged_pending = not result_unknown and (
+            pending_execution_receipt(result) or bool(execution_result_wait_reason(result))
+        )
+        if (
+            invocation_requires_reconciliation()
+            or result_unknown
+            or (
+                not admitted_child
+                and not acknowledged_pending
+                and (
+                    execution_result_requires_reconciliation(result)
+                    or (
+                        result.get("success") is not True
+                        and (validation.spec is None or not validation.spec.read_only)
+                    )
                 )
             )
         ):
@@ -913,7 +954,10 @@ def _normalize_timely_tool_receipt(
     if (
         (step.tool_id, step.action) != ("enterprise_cognition", "plan")
         and not plan_admission_receipt(result)
-        and pending_execution_receipt(result, include_blocked=True)
+        and (
+            pending_execution_receipt(result, include_blocked=True)
+            or execution_result_wait_reason(result)
+        )
     ):
         normalized_result = {**result, "success": False, "retryable": False}
     else:
@@ -1035,7 +1079,11 @@ def execute_with_tool_deadline(
                         "outcome": "not_started",
                         "retryable": False,
                     }
-                if not step.idempotent:
+                spec = get_tool_action_spec(step.tool_id, step.action)
+                if not step.idempotent or (
+                    type(executor) is not AgentToolExecutor
+                    and (spec is None or not spec.is_read_only_call(step.params or {}))
+                ):
                     from app.application.agent_orchestrator.task_dispatcher import note_open_effect
 
                     note_open_effect(str(context.get("run_id") or ""), step.step_id)

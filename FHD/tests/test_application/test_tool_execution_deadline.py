@@ -463,6 +463,91 @@ def test_remote_write_failure_cannot_be_hidden_by_employee_success(monkeypatch, 
     ]
 
 
+def test_committed_http_write_with_invalid_encoded_receipt_remains_unknown(monkeypatch):
+    """A real HTTP POST may commit before httpx fails to decode its response."""
+    import asyncio
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import httpx
+
+    from app.application.tool_execution_deadline import build_http_helpers
+
+    writes, receipts = [], []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            writes.append(self.rfile.read(int(self.headers["Content-Length"])))
+            body = b"committed but not gzip"
+            self.send_response(200)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client_type(trust_env=False, **kw))
+
+    def execute(*_args, **_kwargs):
+        _, post = build_http_helpers()
+        receipts.append(asyncio.run(post(f"http://127.0.0.1:{server.server_port}", {"id": 7})))
+        return {"success": True}
+
+    try:
+        result = execute_with_tool_deadline(
+            SimpleNamespace(execute=execute), _step(), runtime_context={}, timeout_seconds=10
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)
+    assert len(writes) == len(receipts) == 1
+    assert result["success"] is False and result["outcome"] == "unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert receipts[0]["outcome"] == "unknown"
+    assert result["io_reconciliation"] == [{"kind": "http_response_error", "method": "POST"}]
+
+
+@pytest.mark.parametrize("dispatched", [False, True])
+def test_http_operational_error_retains_dispatch_boundary_without_private_details(dispatched):
+    import asyncio
+
+    from app.application.tool_execution_deadline import build_http_request, invocation_deadline
+
+    calls = []
+
+    class Client:
+        def __init__(self, **_kwargs):
+            if not dispatched:
+                raise ValueError("invalid proxy https://private:secret@fixture.invalid")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def request(self, method, url, **_kwargs):
+            calls.append(method)
+            raise ValueError("private response https://private:secret@fixture.invalid")
+
+    with invocation_deadline(time.monotonic() + 10) as budget:
+        result = asyncio.run(build_http_request(Client)("POST", "https://fixture.invalid"))
+    assert calls == (["POST"] if dispatched else [])
+    assert result["outcome"] == ("unknown" if dispatched else "not_started")
+    assert result["retryable"] is False
+    assert budget.uncertain == (
+        [{"kind": "http_response_error", "method": "POST"}] if dispatched else []
+    )
+    assert "private" not in repr(result) and "secret" not in repr(result)
+
+
 @pytest.mark.parametrize("entry", ["prepare_repair_or_retry"])
 @pytest.mark.parametrize(
     "output",

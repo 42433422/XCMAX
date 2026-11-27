@@ -32,14 +32,30 @@ _open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextva
 
 def note_open_effect(run_id: str, effect_id: str) -> None:
     """Record a side effect only while a worker is inside a real tool call."""
+    from app.application.agent_orchestrator.business_write_guard import capture_worker_claim
+
+    worker = capture_worker_claim()
     claim = _open_effect.get()
+    if claim is None and worker is not None:
+        from app.application.agent_orchestrator.task_execution_sql_repository import (
+            SQLAlchemyTaskExecutionRepository,
+        )
+
+        # Spawn restores only the server-captured HOST claim, never a caller's
+        # runtime fields or the independently routed Mod business database.
+        claim = (SQLAlchemyTaskExecutionRepository(auto_create=False), worker[0], worker[1])
     if claim is None:
         return
     repo, claimed_run_id, owner_id = claim
     marker = getattr(repo, "mark_open_effect", None)
     if marker is not None:
         effect = effect_id if run_id == claimed_run_id else f"child:{run_id}:{effect_id}"
-        if marker(claimed_run_id, effect, owner_id=owner_id) is False:
+        generation = (
+            {"execution_count": worker[2]}
+            if worker is not None and worker[:2] == (claimed_run_id, owner_id)
+            else {}
+        )
+        if marker(claimed_run_id, effect, owner_id=owner_id, **generation) is False:
             from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
             raise WorkerLeaseLost("worker lease expired before opening a side effect")

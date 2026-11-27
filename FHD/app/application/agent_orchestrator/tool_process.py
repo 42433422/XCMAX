@@ -843,7 +843,20 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
     catalog_profile = capture_catalog_worker_profile(step)
     catalog_claim = capture_worker_claim() if catalog_profile is not None else None
     elt_claim = capture_elt_worker_claim(step, context)
-    surface_claim = capture_worker_claim() if step.tool_id in {"browser", "aiopen"} else None
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    spec = get_tool_action_spec(step.tool_id, step.action)
+    surface_claim = (
+        capture_worker_claim()
+        if elt_claim is None
+        and catalog_claim is None
+        and (
+            step.tool_id in {"browser", "aiopen"}
+            or spec is None
+            or not spec.is_read_only_call(step.params or {})
+        )
+        else None
+    )
     memory_limit = (
         _limit_from_env("XCAGI_TOOL_MEMORY_MB", 2048) * 1024 * 1024
         if step.tool_id == "browser" and _sandbox_enabled()

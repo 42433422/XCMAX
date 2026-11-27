@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import Table, and_, or_
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -668,7 +669,12 @@ class SQLAlchemyTaskExecutionRepository:
         return self.get(run_id)
 
     def mark_open_effect(
-        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str = ""
+        self,
+        run_id: str,
+        effect_id: str = "dispatch",
+        *,
+        owner_id: str = "",
+        execution_count: int | None = None,
     ) -> bool:
         self._ensure_schema()
         with self._session_scope() as db:
@@ -685,6 +691,8 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.lease_owner == owner_id,
                     AgentTaskExecutionRecord.lease_expires_at > now,
                 )
+            if execution_count is not None:
+                query = query.filter(AgentTaskExecutionRecord.execution_count == execution_count)
             if (
                 query.update({AgentTaskExecutionRecord.updated_at: now}, synchronize_session=False)
                 != 1
@@ -816,6 +824,7 @@ class SQLAlchemyTaskExecutionRepository:
             return
         with self._schema_lock:
             with self._session_scope(read_only=True) as db:
+                from app.db.bootstrap.orm_tables import _serialized_schema_bind
                 from app.db.db_base import Base
                 from app.db.models.agent import AgentTaskExecutionRecord
                 from app.db.models.task_lifecycle import (
@@ -826,17 +835,19 @@ class SQLAlchemyTaskExecutionRepository:
                 bind = db.get_bind()
                 if self._schema_ready and self._schema_bind is bind:
                     return
-                Base.metadata.create_all(
-                    bind=bind,
-                    tables=[
-                        cast("Table", AgentTaskExecutionRecord.__table__),
-                        cast("Table", TaskLifecycleRecord.__table__),
-                        cast("Table", TaskLifecycleIdempotency.__table__),
-                    ],
-                    checkfirst=True,
-                )
+                with _serialized_schema_bind(bind) as schema_bind:
+                    Base.metadata.create_all(
+                        bind=schema_bind,
+                        tables=[
+                            cast("Table", AgentTaskExecutionRecord.__table__),
+                            cast("Table", TaskLifecycleRecord.__table__),
+                            cast("Table", TaskLifecycleIdempotency.__table__),
+                        ],
+                        checkfirst=True,
+                    )
                 self._schema_bind = bind
-            self._schema_ready = True
+            # DDL on a caller-owned Connection can still be rolled back later.
+            self._schema_ready = isinstance(bind, Engine)
 
     @staticmethod
     def _to_model(record) -> AgentTaskExecution:

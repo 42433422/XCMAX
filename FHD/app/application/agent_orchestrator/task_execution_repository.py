@@ -330,13 +330,20 @@ class InMemoryTaskExecutionRepository:
         return copy.deepcopy(row)
 
     def mark_open_effect(
-        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str = ""
+        self,
+        run_id: str,
+        effect_id: str = "dispatch",
+        *,
+        owner_id: str = "",
+        execution_count: int | None = None,
     ) -> bool:
         with self._lock:
             row = self._rows.get(str(run_id or ""))
             if row is None or row.state not in LEASED_STATES:
                 return False
             if owner_id and (row.lease_owner != owner_id or row.lease_expires_at <= utc_now_iso()):
+                return False
+            if execution_count is not None and row.execution_count != execution_count:
                 return False
             body = self._book.get("agent", row.tenant_id, row.run_id)
             effects = set(body.get("effects") or [])
