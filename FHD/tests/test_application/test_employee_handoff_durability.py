@@ -19,7 +19,7 @@ from .test_employee_handoff_e25 import _card, _start
 from .test_employee_handoff_e25 import customers_db as customers_db
 
 
-@pytest.mark.parametrize("drift", [None, "owner", "tenant", "mod"])
+@pytest.mark.parametrize("drift", [None, "owner", "tenant", "mod", "parent", "unbound", "self"])
 def test_child_attachment_requires_same_owner_tenant_and_mod(drift):
     from app.application.agent_orchestrator import AgentRun
     from app.application.agent_orchestrator.run_audit_scope import attach_child_result
@@ -29,7 +29,9 @@ def test_child_attachment_requires_same_owner_tenant_and_mod(drift):
         user_id="owner", message="parent", metadata={"runtime_context": copy.deepcopy(context)}
     )
     child = AgentRun(
-        user_id="owner", message="child", metadata={"runtime_context": copy.deepcopy(context)}
+        user_id="owner",
+        message="child",
+        metadata={"runtime_context": {**copy.deepcopy(context), "parent_run_id": parent.run_id}},
     )
     if drift == "owner":
         child.user_id = "other"
@@ -39,9 +41,51 @@ def test_child_attachment_requires_same_owner_tenant_and_mod(drift):
         child.metadata["runtime_context"].update(
             mod_id="mod-b", _mod_authorization={"mod_id": "mod-b"}
         )
+    elif drift == "parent":
+        child.metadata["runtime_context"]["parent_run_id"] = "different-parent"
+    elif drift == "unbound":
+        child.metadata["runtime_context"].pop("parent_run_id")
+    elif drift == "self":
+        child.run_id = parent.run_id
     assert attach_child_result(parent, child) is (drift is None)
     if drift:
         assert not parent.metadata.get("child_results")
+
+
+def test_child_attachment_snapshot_cannot_change_with_a_live_child_result():
+    from app.application.agent_orchestrator import AgentRun
+    from app.application.agent_orchestrator.run_audit_scope import attach_child_result
+
+    parent = AgentRun(
+        user_id="owner", message="parent", metadata={"runtime_context": {"tenant_id": "1"}}
+    )
+    child = AgentRun(
+        user_id="owner",
+        message="child",
+        metadata={"runtime_context": {"tenant_id": "1", "parent_run_id": parent.run_id}},
+        final_output={"nested": {"value": "original"}},
+    )
+    assert attach_child_result(parent, child)
+    child.final_output["nested"]["value"] = "later-mutation"
+    assert parent.metadata["child_results"][child.run_id]["final_output"] == {
+        "nested": {"value": "original"}
+    }
+
+
+@pytest.mark.parametrize("control", ["cancelled", "rejected", "paused"])
+def test_child_projection_keeps_latest_control_over_a_pending_response(control):
+    from app.application.agent_orchestrator import AgentRun
+    from app.application.agent_orchestrator.run_audit_scope import child_result_state
+
+    child = AgentRun(
+        user_id="owner",
+        message="child",
+        status=control,
+        final_output={"execution_state": "running", "success": False},
+    )
+    assert child_result_state(child) == control
+    child.final_output["reconciliation_required"] = True
+    assert child_result_state(child) == "unknown"
 
 
 @pytest.mark.parametrize(
@@ -201,6 +245,74 @@ def test_distinct_operations_with_equal_arguments_have_independent_receipts(hand
     assert set(parent.metadata["child_results"]) == {first["child_run_id"], second["child_run_id"]}
 
 
+@pytest.mark.parametrize("failed_employee", [None, "employee-c"])
+def test_parallel_employees_retain_each_original_result_and_isolate_failure(
+    handoff_env, monkeypatch, failed_employee
+):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlalchemy import create_engine
+
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+
+    first = _commit(handoff_env)
+    assert first["success"], first
+    engine = create_engine(str(handoff_env.factory.kw["bind"].url))
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(
+        "app.application.employee_runtime.handoff_commit.get_agent_run_repository",
+        lambda: SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False),
+    )
+    original_handoff = AgentOrchestrator.start_employee_handoff
+    original_execute = AgentToolExecutor.execute
+    barrier = threading.Barrier(2)
+    calls = []
+
+    def start_together(self, *args, **kwargs):
+        barrier.wait(timeout=10)
+        return original_handoff(self, *args, **kwargs)
+
+    def execute(self, step, *, runtime_context):
+        employee = runtime_context["employee_id"]
+        calls.append(employee)
+        if employee == failed_employee:
+            return {
+                "success": False,
+                "message": "independent child read failed",
+                "retryable": False,
+            }
+        return original_execute(self, step, runtime_context=runtime_context)
+
+    monkeypatch.setattr(AgentOrchestrator, "start_employee_handoff", start_together)
+    monkeypatch.setattr(AgentToolExecutor, "execute", execute)
+    bodies = [
+        {**handoff_env.body, "idempotency_key": target, "target": target}
+        for target in ("employee-b", "employee-c")
+    ]
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda body: _commit(handoff_env, body=body), bodies))
+        assert sorted(calls) == ["employee-b", "employee-c"]
+        assert results[0]["success"] is True, results
+        assert results[1]["success"] is (failed_employee is None), results
+        if failed_employee:
+            assert results[1]["error_code"] == "handoff_child_failed", results
+        repository = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+        parent = repository.get(first["parent_run_id"])
+        assert set(parent.metadata["child_results"]) == {
+            first["child_run_id"],
+            *(item["child_run_id"] for item in results),
+        }
+        assert parent.metadata["child_results"][first["child_run_id"]]["status"] == "completed"
+        assert parent.status == "running"
+        for body, receipt in zip(bodies, results, strict=True):
+            assert _commit(handoff_env, body=body) == receipt
+        assert sorted(calls) == ["employee-b", "employee-c"]
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -325,6 +437,178 @@ def test_known_failed_child_remains_failed_without_another_dispatch(handoff_env,
     drop_process_idempotency_memory()
     assert _commit(handoff_env) == first
     assert len(calls) == 1
+
+
+def test_inflight_handoff_reads_original_child_then_accepts_its_late_receipt(
+    handoff_env, monkeypatch
+):
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+
+    original = AgentOrchestrator.start_run_from_plan
+
+    def defer(self, **kwargs):
+        return original(self, **{**kwargs, "auto_execute": False})
+
+    monkeypatch.setattr(AgentOrchestrator, "start_run_from_plan", defer)
+    first = _commit(handoff_env)
+    assert first["success"] is False
+    assert first["execution_state"] == "running"
+    assert not first.get("reconciliation_required")
+    assert first["retryable"] is False
+    drop_process_idempotency_memory()
+    assert _commit(handoff_env) == first
+    repository = handoff_env.repository()
+    original_parent = repository.get(first["parent_run_id"])
+    child = repository.get(first["child_run_id"])
+    assert not child.tool_calls
+    AgentOrchestrator(repository=repository).execute_dispatched_run(child.run_id)
+    completed = repository.get(child.run_id)
+    assert completed.status == "completed", completed.error
+
+    monkeypatch.setattr(
+        AgentOrchestrator,
+        "start_employee_handoff",
+        lambda *_args, **_kwargs: pytest.fail("readback dispatched a new child"),
+    )
+    monkeypatch.setattr(
+        AgentToolExecutor,
+        "execute",
+        lambda *_args, **_kwargs: pytest.fail("readback repeated the original tool"),
+    )
+    result = _commit(handoff_env)
+    assert result["success"] is True, result
+    assert result["child_run_id"] == child.run_id
+    assert repository.get(first["parent_run_id"]).to_dict() == original_parent.to_dict()
+    assert len(repository.list_task_runs(user_id="11", task_id=handoff_env.context["task_id"])) == 2
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        {"status": "unknown", "final_output": {}},
+        {"status": "blocked", "final_output": {"reconciliation_required": True}},
+    ],
+)
+def test_handoff_readback_cannot_clear_an_unknown_parent_snapshot(handoff_env, snapshot):
+    from app.application.employee_runtime.handoff_commit import _child_receipt
+
+    first = _commit(handoff_env)
+    assert first["success"], first
+    repository = handoff_env.repository()
+    parent = repository.get(first["parent_run_id"])
+    child = repository.get(first["child_run_id"])
+    parent.metadata["child_results"][child.run_id].update(snapshot)
+    result = _child_receipt(
+        parent,
+        child,
+        task_id=handoff_env.context["task_id"],
+        tenant_id="11",
+        user_id="11",
+        target=handoff_env.body["target"],
+        delegated=handoff_env.body["permissions"],
+        tool_id=handoff_env.body["delegated_tool"],
+        action=handoff_env.body["delegated_action"],
+        params=handoff_env.body["delegated_params"],
+    )
+    assert result["success"] is False
+    assert result["reconciliation_required"] is True
+
+
+@pytest.mark.parametrize("outcome", ["running", "waiting_approval", "unknown"])
+def test_continuity_preserves_original_handoff_receipt_and_waiting_state(
+    handoff_env, monkeypatch, outcome
+):
+    from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.task_continuity import load_employee_task_ledger
+
+    receipt = {
+        "success": False,
+        "parent_run_id": "original-parent",
+        "child_run_id": "original-child",
+        "execution_state": outcome,
+        "retryable": False,
+        "reconciliation_required": outcome == "unknown",
+        "pending_approval": outcome == "waiting_approval",
+        "error_code": "handoff_pending"
+        if outcome != "unknown"
+        else "handoff_reconciliation_required",
+        "error_message": "原子任务待回执",
+    }
+    monkeypatch.setattr(
+        "app.application.employee_runtime.handoff_commit.commit_registered_handoff",
+        lambda *_args, **_kwargs: copy.deepcopy(receipt),
+    )
+    result = execute_employee_task_local(
+        "employee-a",
+        "交给员工乙",
+        {
+            "continuity_action": "handoff",
+            "task_id": handoff_env.context["task_id"],
+            "target_employee": "employee-b",
+            "permissions": handoff_env.body["permissions"],
+            "delegated_tool": handoff_env.body["delegated_tool"],
+            "delegated_action": handoff_env.body["delegated_action"],
+            "delegated_params": handoff_env.body["delegated_params"],
+        },
+        user_id=11,
+        workspace_root=str(handoff_env.workspace),
+        runtime_context=handoff_env.context,
+    )
+    ledger = load_employee_task_ledger(handoff_env.workspace)
+    handoff = ledger["handoffs"][result["handoff"]["handoff_id"]]
+    assert handoff["result_payload"] == {
+        **receipt,
+        "ok": False,
+        **({"outcome_unknown": True} if outcome == "unknown" else {}),
+    }
+    assert handoff["status"] == outcome
+    assert result["task"]["status"] == ("recovering" if outcome == "unknown" else outcome)
+    assert result["business_success"] is False
+    assert not ledger["side_effects"]
+
+
+@pytest.mark.parametrize("unknown", [{"outcome": "unknown"}, {"reconciliation_required": True}])
+def test_generic_handoff_step_preserves_unknown_and_cannot_retry(handoff_env, monkeypatch, unknown):
+    from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.task_continuity import load_employee_task_ledger
+
+    calls = []
+
+    def unknown_handoff(*_args, **_kwargs):
+        calls.append(True)
+        return {
+            "success": False,
+            "parent_run_id": "original-parent",
+            "child_run_id": "original-child",
+            **unknown,
+        }
+
+    monkeypatch.setattr(
+        "app.application.employee_runtime.handoff_commit.commit_registered_handoff", unknown_handoff
+    )
+
+    def dispatch(action, **payload):
+        return execute_employee_task_local(
+            "employee-a",
+            "原交接",
+            {"continuity_action": action, **payload},
+            user_id=11,
+            workspace_root=str(handoff_env.workspace),
+            runtime_context=handoff_env.context,
+        )
+
+    first = dispatch("start", steps=[{"tool": "handoff_commit", "params": {}}], execute_limit=1)
+    task_id = first["task_id"]
+    assert first["task"]["status"] == "recovering"
+    ledger = load_employee_task_ledger(handoff_env.workspace)
+    step = ledger["tasks"][task_id]["steps"][0]
+    assert step["status"] == "recovering"
+    assert step["result_payload"]["child_run_id"] == "original-child"
+    assert step["result_payload"]["outcome_unknown"] is True
+    retried = dispatch("retry_step", task_id=task_id, step_id=step["step_id"])
+    assert retried["error_code"] == "retry_not_failed"
+    dispatch("run_tools", task_id=task_id)
+    assert calls == [True]
 
 
 def test_inflight_duplicate_never_dispatches_a_second_child(handoff_env, monkeypatch):

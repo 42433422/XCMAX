@@ -16,7 +16,12 @@ from app.application.workflow.workflow_types import (
 from app.domain.task_lifecycle.control import RETRYABLE_CODES
 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_error,
+    execution_result_pending_state,
+    execution_result_proven_not_executed,
     execution_result_requires_reconciliation,
+    execution_result_states,
     normalize_execution_result,
 )
 from app.infrastructure.workflow.langgraph_runtime import (
@@ -34,6 +39,17 @@ _DEFERRED_RETRY_CODES = frozenset(
         "tool_rate_limit_backend_unavailable",
         "tool_concurrency_limited",
         "tool_circuit_open",
+    }
+)
+_LOCAL_FAILURE_CODES = (
+    RETRYABLE_CODES
+    | _DEFERRED_RETRY_CODES
+    | {
+        "invalid_params",
+        "business_rule",
+        "tool_bad_request",
+        "tool_not_found",
+        "tool_unavailable",
     }
 )
 
@@ -62,6 +78,53 @@ class LangGraphExecutionMixin:
 
         @staticmethod
         def _recursion_limit(plan: PlanGraph) -> int: ...
+
+    @staticmethod
+    def _failure_is_local(node: WorkflowNode, result: NodeExecutionResult) -> bool:
+        """Only ordinary settled failures may release an independent branch.
+
+        New/unclassified host errors retain the stop boundary. In particular,
+        permission, budget, verification and control failures never become a
+        local business rejection merely because the requested action was a read.
+        """
+        output = result.output
+        if output.get("success") is not False or execution_result_pending_state(output):
+            return False
+        for row in execution_result_envelopes(output, include_execution=True):
+            error_code = row.get("error_code")
+            if (
+                execution_result_states(row) - {"failed", "not_started", "not_executed"}
+                or any(
+                    execution_result_error({key: row[key]})
+                    for key in ("verification", "artifact_postcondition")
+                    if key in row
+                )
+                or any(
+                    row.get(key)
+                    for key in (
+                        "requires_confirmation",
+                        "requires_approval",
+                        "requires_user_decision",
+                    )
+                )
+                or (
+                    error_code is not None
+                    and (
+                        not isinstance(error_code, str)
+                        or bool(error_code and error_code not in _LOCAL_FAILURE_CODES)
+                    )
+                )
+            ):
+                return False
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+        spec = get_tool_action_spec(node.tool_id, node.action)
+        return bool(
+            spec is not None
+            and (
+                spec.is_read_only_call(node.params) or execution_result_proven_not_executed(output)
+            )
+        )
 
     def _execute_node(
         self, node: WorkflowNode, state: dict[str, Any], max_retries: int
@@ -318,11 +381,26 @@ class LangGraphExecutionMixin:
         node_results = [NodeExecutionResult(**dict(r)) for r in (state.get("results") or [])]
         failure = state.get("failure")
         if failure:
+            latest = {result.node_id: result for result in node_results}
+            completed = sorted(
+                node_id
+                for node_id, result in latest.items()
+                if result.success
+                and not execution_result_pending_state(result.output)
+                and not result.output.get("requires_confirmation")
+                and not result.output.get("requires_approval")
+            )
             state["workflow_status"] = {
                 "state": "failed",
                 "failed_node_id": failure.get("node_id"),
                 "message": failure.get("error"),
                 "recovery_hint": failure.get("recovery_hint"),
+                "partial_completion": bool(completed),
+                "completed_nodes": completed,
+                "failed_nodes": sorted(
+                    node_id for node_id, result in latest.items() if not result.success
+                ),
+                "remaining_nodes": sorted({node.node_id for node in plan.nodes} - set(completed)),
             }
             return WorkflowRunResult(
                 plan_id=plan.plan_id,

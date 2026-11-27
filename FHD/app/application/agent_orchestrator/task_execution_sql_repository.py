@@ -535,7 +535,8 @@ class SQLAlchemyTaskExecutionRepository:
             if not run_repository.save_if_unchanged_in_session(db, projected, previous):
                 return None
             if projected.status != result["execution_state"] and not (
-                projected.status == "blocked" and result["execution_state"] == "unknown"
+                projected.status == "blocked"
+                and result["execution_state"] in {"unknown", "partial"}
             ):
                 raise XiaoxBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
             if execution is not None:

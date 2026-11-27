@@ -104,6 +104,16 @@ def receipt_verified(row: dict[str, Any]) -> bool:
     )
 
 
+def receipt_settled_failure(row: dict[str, Any]) -> bool:
+    """A failed child may release its parent only with a settled original effect."""
+    receipt = row.get("receipt") or {}
+    return (
+        receipt_state(row) in {"failed", "not_started", "not_executed"}
+        and receipt.get("success") is False
+        and (row.get("read_only") is True or execution_result_proven_not_executed(receipt))
+    )
+
+
 def model_unsettled(metadata: dict[str, Any]) -> bool:
     return bool(metadata.get("model_reconciliation_required")) or any(
         isinstance(request, dict) and request.get("state") in {"reserved", "unknown"}
@@ -261,6 +271,10 @@ def classify_runtime_result(
         if receipt_state(row) in {"cancelled", "rejected"}
         or (receipt_state(row) == "failed" and row.get("read_only") is not True)
     ]
+    result["verified_operations"] = bool(verified_rows) and all(
+        (row.get("receipt") or {}).get("success") is not True or row in verified_rows
+        for row in rows
+    )
 
     if (
         any(row.get("read_only") is not True for row in verified_rows)
@@ -274,21 +288,22 @@ def classify_runtime_result(
             )
         )
     ):
+        settled = all(receipt_settled_failure(row) for row in terminal_failures)
         result.update(
             exit_status="partial",
             execution_state="partial",
-            reconciliation_required=True,
-            retryable=False,
+            reconciliation_required=not settled,
+            retryable=settled,
             runtime_status=runtime_status,
             runtime_completed=False,
-            error="部分业务写入已确认，后续操作未完成，须核对原任务回执",
-            output="部分业务写入已确认，后续操作未完成；请核对原任务回执，勿重复提交。",
+            error="部分业务写入已确认，后续操作未完成",
+            output=(
+                "部分业务已核验，失败子任务已确认未执行；成功结果已保留，剩余目标尚未完成。"
+                if settled
+                else "部分业务写入已确认，后续操作未完成；请核对原任务回执，勿重复提交。"
+            ),
         )
         return "blocked"
-    result["verified_operations"] = bool(verified_rows) and all(
-        (row.get("receipt") or {}).get("success") is not True or row in verified_rows
-        for row in rows
-    )
     mode = str(coverage["mode"])
     if runtime_status != "completed" and (
         not coverage["completed"] or mode == "reply" or runtime_status in {"cancelled", "paused"}

@@ -283,6 +283,7 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
     seen: set[str] = set()
     exact = run.plan_id == plan.plan_id and len(run.steps) == len(expected)
     node_results = []
+    completed_outputs = {}
     outputs = (run.final_output or {}).get("node_outputs")
     outputs = outputs if isinstance(outputs, dict) else {}
     for step in run.steps:
@@ -317,6 +318,8 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
             and not execution_result_error(published)
             and not execution_result_pending_state(published)
         )
+        if completed:
+            completed_outputs[step.node_id] = published
         node_results.append(
             {
                 "node_id": step.node_id,
@@ -334,6 +337,11 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
         and node_results
         and all(row["success"] for row in node_results)
     )
+    # Retain only individually matching receipts under the complete original
+    # plan/roster. A partial projection is never permission to release dependents.
+    if not exact or set(expected) != seen or set(outputs) - set(expected):
+        completed_outputs = {}
+    completed_ids = sorted(completed_outputs)
     result = {
         "skipped": False,
         "employee_id": employee_id,
@@ -350,8 +358,11 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
             if success
             else "协作节点未全部完成或回执不一致，未放行下游"
         ),
-        "node_outputs": outputs if success else {},
+        "node_outputs": completed_outputs,
         "node_results": node_results,
+        "partial_completion": bool(completed_outputs) and not success,
+        "completed_node_ids": completed_ids,
+        "remaining_node_ids": sorted(set(expected) - set(completed_ids)),
     }
     if not success:
         result["error_code"] = "employee_collaboration_incomplete"

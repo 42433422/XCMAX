@@ -29,7 +29,9 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     classify_runtime_result,
     failure_diagnostics,
     model_unsettled,
+    receipt_settled_failure,
     receipt_state,
+    receipt_verified,
 )
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
 from app.infrastructure.xiaox.receipts import project_child_calls, resume_error
@@ -53,24 +55,8 @@ def projection_allowed(run: AgentRun) -> bool:
 
 
 def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
-    """Resume new approved evidence; settled failed exploration is not a new effect."""
-    completed = []
-    for row in rows:
-        receipt = row.get("receipt") or {}
-        state = receipt_state(row)
-        if (
-            state == "completed"
-            and receipt.get("verified") is True
-            and receipt.get("success") is True
-        ):
-            completed.append(row)
-        elif not (
-            state in {"failed", "not_started", "not_executed"}
-            and row.get("read_only") is True
-            and receipt.get("success") is False
-        ):
-            return False
-    if not completed:
+    """Resume once on new settled child evidence; never replay the child itself."""
+    if not rows or not all(receipt_verified(row) or receipt_settled_failure(row) for row in rows):
         return False
     previous = run.final_output.get("xiaox_result") or {}
     if previous.get("exit_status") == "continuation_pending":
@@ -78,7 +64,7 @@ def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
     prior = {str(row.get("call_id")): row for row in previous.get("business_receipts") or []}
     return any(
         receipt_state(prior[str(row["call_id"])]) in WAITING_STATES | ACTIVE_STATES
-        for row in completed
+        for row in rows
         if str(row.get("call_id")) in prior
     )
 
@@ -116,7 +102,10 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
         str(run.metadata.get("runtime_completion_mode") or "auto"),
         str(metadata.get("runtime_status") or "interrupted"),
     )
-    if result.get("exit_status") == "goal_verification_required" and _continuation_ready(run, rows):
+    if result.get("exit_status") in {
+        "goal_verification_required",
+        "partial",
+    } and _continuation_ready(run, rows):
         # A completed child is new evidence for the same runtime, never proof
         # that every original goal is complete. The dispatcher owns continuation.
         status = "running"
@@ -124,6 +113,7 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
             execution_state="running",
             exit_status="continuation_pending",
             resume_required=True,
+            reconciliation_required=False,
             output="已核对原业务回执，正在继续完成和核验原任务。",
             error="",
         )

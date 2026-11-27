@@ -16,6 +16,7 @@ from app.application.employee_runtime.task_continuity import (
     ledger_path,
 )
 from app.domain.employee.collaboration_graph import CollaborationGraph
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.test_application.test_task_continuity_acceptance import _effects, _install, _run
 
 
@@ -107,7 +108,13 @@ def test_completed_group_status_does_not_override_original_node_receipts(fault):
         outputs["foreign"] = {"success": True}
     result = _project_collaboration_result("lead", plan, run)
     assert result["success"] is False
-    assert not result["node_outputs"]
+    if fault in {"failed", "pending", "changed", "wrong_employee_receipt"}:
+        assert result["partial_completion"] is True
+        assert set(result["node_outputs"]) == {
+            row["node_id"] for row in result["node_results"] if row["success"]
+        }
+    else:
+        assert not result["node_outputs"]
     assert result["independent_verified"] is False
 
 
@@ -120,6 +127,95 @@ def test_tenant_mismatch_blocks_before_execution():
         )
     assert result["error_code"] == "employee_tenant_scope_invalid"
     assert not result["node_outputs"]
+
+
+def test_failed_child_preserves_completed_collaboration_receipts():
+    plan = EmployeeOrchestrator(_graph()).build_plan("lead", "review", include_root=False)
+    assert plan is not None
+    run = _completed_run(plan)
+    run.status = "failed"
+    failed = run.steps[1]
+    failed.status = "failed"
+    failed.output = {"success": False, "employee_id": failed.node_id, "error": "read failed"}
+    run.final_output["node_outputs"][failed.node_id] = dict(failed.output)
+
+    result = _project_collaboration_result("lead", plan, run)
+
+    assert result["success"] is False and result["independent_verified"] is False
+    assert result["status"] == "failed"
+    assert result["partial_completion"] is True
+    assert result["completed_node_ids"] == ["finance", "warehouse"]
+    assert result["remaining_node_ids"] == ["sales"]
+    assert result["node_outputs"] == {
+        step.node_id: step.output for step in run.steps if step.status == "completed"
+    }
+
+
+@pytest.mark.parametrize("parallel", ["0", "1"])
+def test_employee_collaboration_sql_runtime_retains_success_after_sibling_failure(
+    trusted_actor, local_tools, monkeypatch, parallel
+):
+    from app.application.agent_orchestrator.run_repository import (
+        get_agent_run_repository,
+        set_agent_run_repository_for_tests,
+    )
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor = trusted_actor(role="admin")
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    previous = get_agent_run_repository()
+    set_agent_run_repository_for_tests(repository)
+    monkeypatch.setenv("XCAGI_PLAN_PARALLEL", parallel)
+    calls = []
+
+    def dispatch(tool, action, params):
+        assert (tool, action) == ("employee", "context")
+        employee = params["employee_id"]
+        calls.append(employee)
+        return {
+            "success": employee != "warehouse",
+            "employee_id": employee,
+            "message": "read failed" if employee == "warehouse" else "read complete",
+            "data": {"employee_id": employee},
+        }
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    try:
+        with tenant_scope(actor.tenant_id):
+            result = EmployeeOrchestrator(_graph()).run_upstream(
+                "lead",
+                "review",
+                runtime_context={**actor.context, "session_id": actor.session_id},
+            )
+        reopened = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+        stored = reopened.get(result["agent_run_id"])
+    finally:
+        set_agent_run_repository_for_tests(previous)
+
+    assert set(calls) == {"warehouse", "finance"}, [
+        (step.node_id, step.status, step.output, step.error) for step in stored.steps
+    ]
+    assert len(calls) == 2
+    assert stored is not None and stored.status == "failed"
+    assert {step.node_id: step.status for step in stored.steps} == {
+        "warehouse": "failed",
+        "sales": "pending",
+        "finance": "completed",
+    }, [(step.node_id, step.output, step.error) for step in stored.steps]
+    assert result["success"] is False and result["partial_completion"] is True
+    assert result["completed_node_ids"] == ["finance"]
+    assert result["remaining_node_ids"] == ["sales", "warehouse"]
+    assert result["node_outputs"] == {
+        "finance": {
+            "success": True,
+            "employee_id": "finance",
+            "message": "read complete",
+            "data": {"employee_id": "finance"},
+        }
+    }
 
 
 def _specs():

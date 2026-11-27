@@ -12,7 +12,11 @@ from app.application.agent_orchestrator import run_lifecycle
 from app.application.agent_orchestrator.run_models import AgentRun, tool_call_from_dict
 from app.application.agent_orchestrator.task_models import mod_id_of_run, tenant_id_of_run
 from app.application.agent_orchestrator.tool_permission import redact
-from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
+from app.domain.task_lifecycle.agent_runtime_results import (
+    ACTIVE_STATES,
+    model_unsettled,
+    receipt_state,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_error,
@@ -91,6 +95,27 @@ def resume_error(
         child_id = str(row.get("child_run_id") or "")
         child = store.repository.get(child_id) if child_id else None
         if child is not None and child.status in {"failed", "blocked"}:
+            original = binding.metadata.get("calls", {}).get(str(row.get("call_id")))
+            no_effect = (
+                _failed_execution_receipt(child, child.steps[0], child.tool_calls[0])
+                if len(child.steps) == len(child.tool_calls) == 1
+                else None
+            )
+            if (
+                no_effect is not None
+                and not run_lifecycle.requires_retry_reconciliation(child)
+                and receipt_state(row) == "failed"
+                and row["receipt"].get("execution") == no_effect
+                and isinstance(original, dict)
+                and all(
+                    original.get(key) == row.get(key)
+                    for key in ("fingerprint", "tool_id", "action", "params", "child_task_id")
+                )
+                and read_call_receipt(store, binding, original) == row["receipt"]
+            ):
+                # The original rejection proves no write happened. Continuing
+                # the parent can plan remaining work without replaying this child.
+                continue
             # We never retry a child here; nevertheless enforce the existing
             # continuation guard before allowing a model to propose more work.
             if error := run_lifecycle.safe_continuation_error(child):
@@ -303,14 +328,21 @@ def read_call_receipt(
         for record in child.tool_calls
         if _pending_step(child, steps.get(record.step_id), record)
     }
-    unverified_effect = not verification["accepted"] and any(
-        (record.metadata.get("verification_contract") or {}).get("read_only") is not True
-        and record.call_id not in pending_calls
-        and (
-            record.output.get("success") is True
-            or (child.status in {"blocked", "failed"} and execution is None)
+    # The executor commits its raw receipt before independent QC. The original
+    # active child still owns that verification; an actual unknown outcome below
+    # remains blocking, and abandoned workers are settled by lease/restart recovery.
+    unverified_effect = (
+        child.status not in ACTIVE_STATES
+        and not verification["accepted"]
+        and any(
+            (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+            and record.call_id not in pending_calls
+            and (
+                record.output.get("success") is True
+                or (child.status in {"blocked", "failed"} and execution is None)
+            )
+            for record in child.tool_calls
         )
-        for record in child.tool_calls
     )
     unknown = (
         bool(child.metadata.get("non_retryable"))

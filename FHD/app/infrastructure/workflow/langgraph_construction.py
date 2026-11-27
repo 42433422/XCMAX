@@ -40,6 +40,8 @@ class LangGraphConstructionMixin:
         def _execute_node(
             self, node: WorkflowNode, state: dict[str, Any], max_retries: int
         ) -> NodeExecutionResult: ...
+        @staticmethod
+        def _failure_is_local(node: WorkflowNode, result: NodeExecutionResult) -> bool: ...
         def _resolve_successor(self, node: WorkflowNode, output: dict[str, Any]) -> str | None: ...
         @staticmethod
         def _trace_entry(result: NodeExecutionResult) -> dict[str, Any]: ...
@@ -107,6 +109,7 @@ class LangGraphConstructionMixin:
                     gate,
                     effective,
                     block_unselected=parallel and not serial_scheduler,
+                    dependent_node_ids=self._dependent_nodes(plan, node.node_id),
                 ),
             )
         if serial_scheduler:
@@ -476,6 +479,8 @@ class LangGraphConstructionMixin:
         node_ids = {node.node_id for node in nodes}
 
         def schedule(state: dict[str, Any]) -> dict[str, Any]:
+            if self._failure_halts_graph(state):
+                return {"next_node": "__end__"}
             executed = set(state.get("executed") or [])
             blocked = set(state.get("blocked") or [])
             outputs = state.get("node_outputs") or {}
@@ -573,17 +578,40 @@ class LangGraphConstructionMixin:
             out.append(node.next)
         return out
 
+    @classmethod
+    def _dependent_nodes(cls, plan: PlanGraph, failed_node_id: str) -> list[str]:
+        """Include dependency and routed descendants, leaving unrelated branches runnable."""
+        blocked = {failed_node_id}
+        while True:
+            previous = set(blocked)
+            for node in plan.nodes:
+                if node.node_id in blocked:
+                    blocked.update(cls._candidates(node))
+                elif any(dependency in blocked for dependency in node.depends_on):
+                    blocked.add(node.node_id)
+            if blocked == previous:
+                return sorted(blocked - {failed_node_id})
+
+    @staticmethod
+    def _failure_halts_graph(state: dict[str, Any]) -> bool:
+        failure = state.get("failure") or {}
+        # halt is only ever written True, so a parallel local failure cannot
+        # overwrite an earlier control/unknown-effect stop in the dict reducer.
+        return bool(failure and (failure.get("halt") or not failure.get("isolated")))
+
     def _make_route_fn(self, node: WorkflowNode, successors: list[str]) -> Any:
         nid = node.node_id
         candidates = set(self._candidates(node))
 
         def route(state: dict[str, Any]) -> Any:
-            if state.get("failure"):
+            if self._failure_halts_graph(state) or nid in (state.get("blocked") or []):
                 return "__end__"
             # Clarification and approval are durable interaction checkpoints. The
             # graph must stop at them; following a normal edge could execute a
             # dependent write before the user has answered or approved it.
             output = (state.get("node_outputs") or {}).get(nid, {})
+            if isinstance(output, dict) and output.get("success") is False:
+                return "__end__"
             if isinstance(output, dict) and (
                 output.get("requires_confirmation") or output.get("requires_approval")
             ):
@@ -603,6 +631,7 @@ class LangGraphConstructionMixin:
         gate: _ReadersWriterGate,
         effective_schema: StateSchema | None = None,
         block_unselected: bool = True,
+        dependent_node_ids: list[str] | None = None,
     ) -> Any:
         nid = node.node_id
         candidates = set(self._candidates(node))
@@ -635,14 +664,16 @@ class LangGraphConstructionMixin:
                     apply_state_schema({}, effective_schema, writes={key: value})
                     update[key] = self._contribute(sf, value)
             else:
-                # Legacy abort semantics: a failure stops all further scheduling.
+                isolated = self._failure_is_local(node, result)
                 done = set(state.get("executed") or [])
                 done.add(nid)
-                update["blocked"] = [p for p in plan_node_ids if p not in done]
+                affected = dependent_node_ids if isolated else plan_node_ids
+                update["blocked"] = [p for p in (affected or []) if p not in done]
                 update["failure"] = {
                     "node_id": nid,
                     "error": result.error,
                     "recovery_hint": result.recovery_hint,
+                    **({"isolated": True} if isolated else {"halt": True}),
                 }
                 update["workflow_status"] = {
                     "state": "failed",
