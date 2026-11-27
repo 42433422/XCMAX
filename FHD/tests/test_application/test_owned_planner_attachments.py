@@ -648,14 +648,22 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
     document.add_paragraph("对账单示例")
     document.add_table(rows=1, cols=2).rows[0].cells[1].text = "120.50"
     raw = _docx_bytes(document)
-    form = {"file": ("对账单.docx", raw, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    form = {
+        "file": (
+            "对账单.docx",
+            raw,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    }
     path = "/api/platform-shell/chat-office-file-upload?attachment_only=true"
     app = FastAPI()
     app.include_router(router)
     with TestClient(app) as anonymous:
         assert anonymous.post(path, files=form).status_code == 401
     with TestClient(app, headers=owner.headers) as authenticated:
-        assert authenticated.post(path, files={"file": ("arbitrary.txt", b"data")}).status_code == 400
+        assert (
+            authenticated.post(path, files={"file": ("arbitrary.txt", b"data")}).status_code == 400
+        )
         response = authenticated.post(path, files=form)
         assert response.status_code == 200, response.text
         unused = authenticated.post(path, files=form).json()["data"]["upload_id"]
@@ -679,12 +687,20 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
     book_chat, unrelated_chat = "book-chat", "unrelated-chat"
     with tenant_scope(owner.tenant_id):
         for session in (book_chat, unrelated_chat):
-            conversations.save_message(session_id=session, user_id=owner.user_id, role="user", content="test")
+            conversations.save_message(
+                session_id=session, user_id=owner.user_id, role="user", content="test"
+            )
 
     def chat_context(session, turn_id):
-        return {**owner.context, "_conversation_revision": 0, "session_id": session,
-                "conversation_id": session, "local_user_id": owner.user_id,
-                "turn_id": turn_id, "execution_autonomy_level": 1}
+        return {
+            **owner.context,
+            "_conversation_revision": 0,
+            "session_id": session,
+            "conversation_id": session,
+            "local_user_id": owner.user_id,
+            "turn_id": turn_id,
+            "execution_autonomy_level": 1,
+        }
 
     parent = AgentRun(str(owner.user_id), "读取附件", status="running")
     parent.metadata.update(
@@ -696,9 +712,11 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
     store = XiaoxBindingStore(repository)
     grant = store.create(parent.run_id)
     bridge = XiaoxToolBridge(
-        store, AgentOrchestrator(
-            repository=repository, tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute)
-        )
+        store,
+        AgentOrchestrator(
+            repository=repository,
+            tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute),
+        ),
     )
     set_agent_run_repository_for_tests(repository)
     try:
@@ -708,10 +726,16 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
         spec = bridge.invoke(grant.mcp_token, "capability_describe", selection)["capability"]
         assert spec["read_only"] is True
         for requested in (receipt["upload_id"], unused):
-            found = bridge.invoke(grant.mcp_token, "execute_action", {
-                **selection, "params": {"upload_id": requested}, "call_id": requested,
-                "schema_digest": spec["schema_digest"],
-            })
+            found = bridge.invoke(
+                grant.mcp_token,
+                "execute_action",
+                {
+                    **selection,
+                    "params": {"upload_id": requested},
+                    "call_id": requested,
+                    "schema_digest": spec["schema_digest"],
+                },
+            )
             if requested == unused:
                 assert found["status"] == "failed" and not found["verified"]
                 assert "120.50" not in str(found)
@@ -725,11 +749,15 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
 
         def next_turn(session, fresh=False):
             current = AgentRun(str(owner.user_id), "查询另一个表格单元", status="running")
-            current.metadata.update(runtime_type="xiaox", runtime_context=chat_context(session, current.run_id))
+            current.metadata.update(
+                runtime_type="xiaox", runtime_context=chat_context(session, current.run_id)
+            )
             if fresh:
                 current.metadata["_xiaox_input_data"] = attachments
             frozen = goal_admission.prepare_runtime_goal(XiaoxBinding(current)).contract
-            current.metadata.update(runtime_goal_contract=frozen, runtime_goal_digest=frozen["digest"])
+            current.metadata.update(
+                runtime_goal_contract=frozen, runtime_goal_digest=frozen["digest"]
+            )
             repository.save(current)
             return current, store.create(current.run_id).mcp_token, frozen["request"]
 
@@ -740,7 +768,9 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
         assert catalogue["source"] == EVIDENCE_SOURCE and entry["source_run_id"] == parent.run_id
         reference = entry["upload_id"]
         assert catalogue["verified_read"] == {
-            **entry, "sha256": artifact["metadata"]["sha256"], **artifact["preview"],
+            **entry,
+            "sha256": artifact["metadata"]["sha256"],
+            **artifact["preview"],
         }
 
         conversation_context = continuation.metadata["runtime_context"]
@@ -751,24 +781,52 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
         assert "120.50" in _input_text(
             continuation.message, [], None, goal=bound, recalled_attachment=recalled_view
         )
-        assert recalled_attachment_view(continuation, chat_context(unrelated_chat, "cross-chat")) is None
-        assert recalled_attachment_view(continuation, {
-            **conversation_context, **other_tenant.context,
-        }) is None
+        assert (
+            recalled_attachment_view(continuation, chat_context(unrelated_chat, "cross-chat"))
+            is None
+        )
+        assert (
+            recalled_attachment_view(
+                continuation,
+                {
+                    **conversation_context,
+                    **other_tenant.context,
+                },
+            )
+            is None
+        )
 
         def read(token, value, call_id):
-            return bridge.invoke(token, "execute_action", {
-                **selection, "params": {"upload_id": value}, "call_id": call_id,
-                "schema_digest": spec["schema_digest"],
-            })
+            return bridge.invoke(
+                token,
+                "execute_action",
+                {
+                    **selection,
+                    "params": {"upload_id": value},
+                    "call_id": call_id,
+                    "schema_digest": spec["schema_digest"],
+                },
+            )
 
         recalled = read(token, reference, "recall-verified")
         assert recalled["status"] == "completed" and recalled["verified"], recalled
         assert recalled["tool_calls"][0]["output"]["data"]["text"] == verified["text"]
         assert read(token, receipt["upload_id"], "bare-id")["status"] == "failed"
 
-        binding = {"run_id": parent.run_id, "turn_id": "original-turn", "recall_bound": True, "conversation_id": book_chat}
-        page = {"messages": [{"role": "user", "metadata": json.dumps({"business_harness": binding, "summary": binding})}]}
+        binding = {
+            "run_id": parent.run_id,
+            "turn_id": "original-turn",
+            "recall_bound": True,
+            "conversation_id": book_chat,
+        }
+        page = {
+            "messages": [
+                {
+                    "role": "user",
+                    "metadata": json.dumps({"business_harness": binding, "summary": binding}),
+                }
+            ]
+        }
         restore_runtime_history_files(page, {**parent.metadata["runtime_context"], "mod_id": ""})
         files = json.loads(page["messages"][0]["metadata"])["ui"]["inputAttachments"]
         assert files == [{"name": receipt["filename"], "reference": reference}]
@@ -783,10 +841,17 @@ def test_chat_word_upload_binds_the_original_table_to_the_authenticated_turn(
 
         # A second real selection leaves the catalogue available without guessing a file.
         alternate = AgentRun(str(owner.user_id), "另一个附件", status="running")
-        alternate.metadata.update(runtime_type="xiaox", runtime_context=chat_context(book_chat, "second-turn"))
-        _, artifacts = resolve_attachment_context({**owner.context, "attachment_upload_ids": [unused]})
+        alternate.metadata.update(
+            runtime_type="xiaox", runtime_context=chat_context(book_chat, "second-turn")
+        )
+        _, artifacts = resolve_attachment_context(
+            {**owner.context, "attachment_upload_ids": [unused]}
+        )
         alternate_contract = build_goal_contract(alternate, attachments=artifacts)
-        alternate.metadata.update(runtime_goal_contract=alternate_contract, runtime_goal_digest=alternate_contract["digest"])
+        alternate.metadata.update(
+            runtime_goal_contract=alternate_contract,
+            runtime_goal_digest=alternate_contract["digest"],
+        )
         repository.save(alternate)
         _, _, ambiguous = next_turn(book_chat)
         [ambiguous_catalogue] = ambiguous["context_evidence"]
@@ -896,7 +961,8 @@ def test_inline_docx_distinguishes_footnote_reference_from_package_template():
     document = Document()
     paragraph = document.add_paragraph("Relevant body")
     footnotes = Part(
-        PackURI("/word/footnotes.xml"), CONTENT_TYPE.WML_FOOTNOTES,
+        PackURI("/word/footnotes.xml"),
+        CONTENT_TYPE.WML_FOOTNOTES,
         b'<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
         document.part.package,
     )

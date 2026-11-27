@@ -17,7 +17,11 @@ def strip_client_recall_binding(metadata: str) -> str:
     ui = payload.get("ui") if isinstance(payload, dict) else None
     employee_memory = is_employee_memory(payload)
     recall_bound = isinstance(binding, dict) and "recall_bound" in binding
-    file_fields = {"outputArtifacts", "inputAttachments", "fileSources"}.intersection(ui) if isinstance(ui, dict) else set()
+    file_fields = (
+        {"outputArtifacts", "inputAttachments", "fileSources"}.intersection(ui)
+        if isinstance(ui, dict)
+        else set()
+    )
     if not employee_memory and not recall_bound and not file_fields:
         return metadata
     if recall_bound:

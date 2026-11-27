@@ -353,7 +353,9 @@ def test_summary_is_cleared_when_transcript_is_too_short(memory_dir: Path) -> No
 
 
 @pytest.mark.parametrize("error_number", [errno.EIO, errno.ENOSPC])
-def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monkeypatch, error_number):
+def test_failed_transcript_write_does_not_leave_turn_in_flight(
+    memory_dir, monkeypatch, error_number
+):
     from app.application.ai_chat import dialogue_memory as memory
 
     context = _context("write-failure", "first")
@@ -370,7 +372,9 @@ def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monke
         patch.setattr(Path, "write_bytes", fail_snapshot)
         if error_number == errno.ENOSPC:
             result = prepare_chat_turn("private message", context)
-            assert result["error_code"] == "chat_storage_full" and result["execution_started"] is False
+            assert (
+                result["error_code"] == "chat_storage_full" and result["execution_started"] is False
+            )
             assert "/private" not in result["response"]
         else:
             with pytest.raises(OSError):

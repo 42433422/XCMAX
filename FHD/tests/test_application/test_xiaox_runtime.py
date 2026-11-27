@@ -293,7 +293,9 @@ def test_native_history_requires_frozen_sql_snapshot(setup_runtime, history_revi
         },
     )
     contract = build_goal_contract(store.run)
-    store.run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
+    store.run.metadata.update(
+        runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
+    )
     transport = Transport(store)
     result = asyncio.run(invoke(store, transport, completion_mode="reply"))
     assert result["ok"] is True
@@ -609,12 +611,14 @@ def test_denied_proposal_returns_error_and_real_write_capabilities(setup_runtime
             feedback="需要实际写入。",
         )
     ] * 3
+
     class DenialBridge(Bridge):
         def invoke(self, token, name, arguments):
             result = super().invoke(token, name, arguments)
             if name == "execute_action":
                 return {
-                    "status": "not_started", "error_code": "schema_validation_failed",
+                    "status": "not_started",
+                    "error_code": "schema_validation_failed",
                     "schema_violation": schema_violation,
                 }
             return result
@@ -632,7 +636,10 @@ def test_denied_proposal_returns_error_and_real_write_capabilities(setup_runtime
     else:
         assert methods == {"capability_search"}
     assert transport.inputs[1] == "需要实际写入。"
-    assert json.loads(transport.inputs[2]) == {"feedback": "需要实际写入。", "proposal_error": error}
+    assert json.loads(transport.inputs[2]) == {
+        "feedback": "需要实际写入。",
+        "proposal_error": error,
+    }
     capabilities = transport.schemas[2]["properties"]["capability"]["enum"]
     assert "employee.execute" in capabilities and "excel_analysis.structure" not in capabilities
     # 被拒绝的提案不得被当作已提交，也不得据此发布“已完成”。
@@ -680,7 +687,10 @@ def test_proposal_repair_uses_only_the_selected_catalog_contract():
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
     assert (spec := get_tool_action_spec("employee", "execute")) is not None
-    options = {"employee.execute": ("employee", "execute"), "products.create": ("products", "create")}
+    options = {
+        "employee.execute": ("employee", "execute"),
+        "products.create": ("products", "create"),
+    }
     calls = []
 
     def invoke(token, method, params):
@@ -759,16 +769,37 @@ def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime):
     row = receipt()
     digest = "a" * 64
     file = {
-        "artifact_id": "workbook", "artifact_type": "file", "name": "明细.xlsx",
-        "uri": "/api/agent/runs/run-child/artifacts/workbook", "metadata": {"sha256": digest},
+        "artifact_id": "workbook",
+        "artifact_type": "file",
+        "name": "明细.xlsx",
+        "uri": "/api/agent/runs/run-child/artifacts/workbook",
+        "metadata": {"sha256": digest},
     }
     row["receipt"].update(
-        artifacts=[file, {**file, "artifact_id": "unverified"}, {**file, "artifact_type": "file_analysis"},
-                   {**file, "metadata": {"sha256": "b" * 64}}],
-        verification={"accepted": True, "steps": [{"checks": [{
-            "source": "run_artifact", "status": "passed",
-            "evidence": {"run_id": "run-child", "artifact_id": "workbook", "sha256": digest},
-        }]}]},
+        artifacts=[
+            file,
+            {**file, "artifact_id": "unverified"},
+            {**file, "artifact_type": "file_analysis"},
+            {**file, "metadata": {"sha256": "b" * 64}},
+        ],
+        verification={
+            "accepted": True,
+            "steps": [
+                {
+                    "checks": [
+                        {
+                            "source": "run_artifact",
+                            "status": "passed",
+                            "evidence": {
+                                "run_id": "run-child",
+                                "artifact_id": "workbook",
+                                "sha256": digest,
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
     )
     store = Store(rows=[row, {**copy.deepcopy(row), "call_id": "duplicate-model-call"}])
     result = asyncio.run(invoke(store, Transport(store)))
@@ -985,7 +1016,9 @@ def test_only_persisted_host_skills_become_developer_guidance(setup_runtime):
 
 
 @pytest.mark.asyncio
-async def test_new_plan_delivers_host_rendered_steps_from_first_sdk_turn(setup_runtime, monkeypatch):
+async def test_new_plan_delivers_host_rendered_steps_from_first_sdk_turn(
+    setup_runtime, monkeypatch
+):
     from app.infrastructure.xiaox.tools import XiaoxToolBridge
 
     monkeypatch.setattr(XiaoxToolBridge, "visible_actions", lambda *_: iter(()))
@@ -993,13 +1026,21 @@ async def test_new_plan_delivers_host_rendered_steps_from_first_sdk_turn(setup_r
     store = Store()
     store.run.message = "给出库区清单核对方案"
     store.run.metadata.update(
-        runtime_requested_deliverable="action_plan", runtime_execution_mode="plan",
+        runtime_requested_deliverable="action_plan",
+        runtime_execution_mode="plan",
         plan_delivery_version=1,
     )
-    frozen = build_goal_contract(store.run, context_evidence=[{
-        "source": "desktop_navigation",
-        "entries": [{"id": "inventory", "label": "清单", "breadcrumb": ["库区"], "kind": "page"}],
-    }])
+    frozen = build_goal_contract(
+        store.run,
+        context_evidence=[
+            {
+                "source": "desktop_navigation",
+                "entries": [
+                    {"id": "inventory", "label": "清单", "breadcrumb": ["库区"], "kind": "page"}
+                ],
+            }
+        ],
+    )
     store.run.metadata.update(runtime_goal_contract=frozen, runtime_goal_digest=frozen["digest"])
     raw = '{"plan":{"kind":"steps","steps":[{"kind":"navigation","navigation_id":"inventory","inputs":{}}]}}'
     transport = Transport(store, completed(raw))
@@ -1013,26 +1054,33 @@ async def test_new_plan_delivers_host_rendered_steps_from_first_sdk_turn(setup_r
 
 @pytest.mark.asyncio
 async def test_unavailable_plan_delivers_safe_observation_without_model_review(
-    setup_runtime, monkeypatch,
+    setup_runtime,
+    monkeypatch,
 ):
     from app.application.agent_runtime.goal_verifier import verify_runtime_goal
     from app.infrastructure.xiaox.tools import XiaoxToolBridge
 
     # Restore the real early verdict, which must never call a second model on this branch.
     from tests.test_application.test_xiaox_goal_verifier import verify_runtime_goal as actual_review
+
     assert verify_runtime_goal is not actual_review
-    monkeypatch.setattr("app.application.agent_runtime.goal_verifier.verify_runtime_goal", actual_review)
+    monkeypatch.setattr(
+        "app.application.agent_runtime.goal_verifier.verify_runtime_goal", actual_review
+    )
     monkeypatch.setattr(XiaoxToolBridge, "visible_actions", lambda *_: iter(()))
     invoke, _ = setup_runtime
     store = Store()
     store.run.message = "给出核对方案"
     store.run.metadata.update(
-        runtime_requested_deliverable="action_plan", runtime_execution_mode="plan",
+        runtime_requested_deliverable="action_plan",
+        runtime_execution_mode="plan",
         plan_delivery_version=1,
     )
     frozen = build_goal_contract(store.run)
     store.run.metadata.update(runtime_goal_contract=frozen, runtime_goal_digest=frozen["digest"])
-    transport = Transport(store, completed('{"plan":{"kind":"unavailable","reason":"missing_input"}}'))
+    transport = Transport(
+        store, completed('{"plan":{"kind":"unavailable","reason":"missing_input"}}')
+    )
     result = await invoke(store, transport)
     assert result["execution_state"] == "blocked" and not result["ok"]
     assert "现有资料不足" in result["output"] and not result["tool_calls"]

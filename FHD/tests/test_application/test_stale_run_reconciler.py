@@ -240,7 +240,8 @@ def test_desktop_restart_preserves_xiaox_parent_parked_on_child_receipt(
         set_agent_run_repository_for_tests(repo)
         parent = AgentRun(user_id="u1", message="读取已批准的工作簿副本", status="running")
         parent.metadata.update(
-            runtime_type="xiaox", task_context={"task_id": "task-xiaox-parked"},
+            runtime_type="xiaox",
+            task_context={"task_id": "task-xiaox-parked"},
         )
         repo.save(parent)
         queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)

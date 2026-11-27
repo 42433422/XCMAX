@@ -41,34 +41,60 @@ def test_employee_mcp_action_uses_live_nested_schema_only_when_visible():
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.infrastructure.xiaox.tools import mcp_tool_definitions
 
-    generic = next(tool for tool in mcp_tool_definitions([("customers", "query")])
-                   if tool.name == "execute_action")
+    generic = next(
+        tool
+        for tool in mcp_tool_definitions([("customers", "query")])
+        if tool.name == "execute_action"
+    )
     assert "allOf" not in generic.input_schema
     tool = next(
-        tool for tool in mcp_tool_definitions([("employee", "execute")])
+        tool
+        for tool in mcp_tool_definitions([("employee", "execute")])
         if tool.name == "execute_action"
     )
     spec = get_tool_action_spec("employee", "execute")
     assert tool.input_schema["allOf"][0]["then"]["properties"]["params"] == spec.input_schema
     validator = Draft202012Validator(tool.input_schema)
-    base = {"tool_id": "employee", "action": "execute", "call_id": "one",
-            "schema_digest": "a" * 64}
-    assert any(error.validator == "type" for error in validator.iter_errors({
-        **base, "params": {"employee_id": "excel-template-write-employee",
-                           "task": "写入工作簿", "input": "{\"plan\":{}}"},
-    }))
-    assert not list(validator.iter_errors({
-        **base, "params": {"employee_id": "quote-agent", "task": "Prepare a quote",
-                           "input": {"customer": "Acme Trading"}},
-    }))
+    base = {"tool_id": "employee", "action": "execute", "call_id": "one", "schema_digest": "a" * 64}
+    assert any(
+        error.validator == "type"
+        for error in validator.iter_errors(
+            {
+                **base,
+                "params": {
+                    "employee_id": "excel-template-write-employee",
+                    "task": "写入工作簿",
+                    "input": '{"plan":{}}',
+                },
+            }
+        )
+    )
+    assert not list(
+        validator.iter_errors(
+            {
+                **base,
+                "params": {
+                    "employee_id": "quote-agent",
+                    "task": "Prepare a quote",
+                    "input": {"customer": "Acme Trading"},
+                },
+            }
+        )
+    )
     reader = {
         "employee_id": "excel-full-read-employee",
-        "task": "读取工作簿", "input": {"user_request": "读取原卷"},
+        "task": "读取工作簿",
+        "input": {"user_request": "读取原卷"},
     }
     assert list(validator.iter_errors({**base, "params": reader}))
-    assert not list(validator.iter_errors({
-        **base, "params": {**reader, "input": {"upload_id": "owned-upload-id"}},
-    }))
+    assert not list(
+        validator.iter_errors(
+            {
+                **base,
+                "params": {**reader, "input": {"upload_id": "owned-upload-id"}},
+            }
+        )
+    )
 
 
 def test_direct_workbook_reader_exposes_required_source_to_model():
@@ -79,9 +105,10 @@ def test_direct_workbook_reader_exposes_required_source_to_model():
 
     tools = mcp_tool_definitions([("excel_analysis", "read")])
     reader = next(tool for tool in tools if tool.name == "execute_excel_read")
-    assert reader.input_schema["properties"]["file_path"] == get_tool_action_spec(
-        "excel_analysis", "read"
-    ).input_schema["properties"]["file_path"]
+    assert (
+        reader.input_schema["properties"]["file_path"]
+        == get_tool_action_spec("excel_analysis", "read").input_schema["properties"]["file_path"]
+    )
     validator = Draft202012Validator(reader.input_schema)
     base = {"call_id": "read-once", "schema_digest": "a" * 64}
     assert any(error.validator == "required" for error in validator.iter_errors(base))
@@ -91,7 +118,9 @@ def test_direct_workbook_reader_exposes_required_source_to_model():
     generic_validator = Draft202012Validator(generic.input_schema)
     envelope = {"tool_id": "excel_analysis", "action": "read", **base}
     assert list(generic_validator.iter_errors({**envelope, "params": {}}))
-    assert not list(generic_validator.iter_errors({**envelope, "params": {"file_path": "owned-upload-id"}}))
+    assert not list(
+        generic_validator.iter_errors({**envelope, "params": {"file_path": "owned-upload-id"}})
+    )
 
 
 @pytest.fixture
@@ -806,7 +835,8 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
         )
         assert response.status_code == 200, response.text
         assert {tool["name"] for tool in response.json()["result"]["tools"]} == (
-            set(XIAOX_TOOL_NAMES) - {"execute_employee", "execute_excel_read", "execute_excel_structure"}
+            set(XIAOX_TOOL_NAMES)
+            - {"execute_employee", "execute_excel_read", "execute_excel_structure"}
         )
         # MCP SDK v2 removed automatic lowlevel tool-schema validation.
         # Extra model-supplied authority fields must fail before the business bridge.
@@ -838,13 +868,19 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
             "status": "not_started",
             "error_code": "invalid_arguments",
             "message": "工具参数不满足已发布的能力契约",
-            "schema_violation": {"path": "$", "validator": "required", "missing": ["schema_digest"]},
+            "schema_violation": {
+                "path": "$",
+                "validator": "required",
+                "missing": ["schema_digest"],
+            },
         }
         assert json.loads(tool_error["content"][0]["text"]) == tool_error["structuredContent"]
         assert "fixture" not in malformed.text and "tampered" not in malformed.text
         assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
         action = {"tool_id": "customers", "action": "create"}
-        spec = setup.bridge.invoke(setup.grant.mcp_token, "capability_describe", action)["capability"]
+        spec = setup.bridge.invoke(setup.grant.mcp_token, "capability_describe", action)[
+            "capability"
+        ]
         repaired = client.post(
             MCP_PATH,
             headers=headers,
@@ -903,6 +939,7 @@ def test_mcp_advertises_only_live_run_actions_and_uniform_discovery(bridge_setup
         "Accept": "application/json, text/event-stream",
     }
     with TestClient(app) as client:
+
         def rpc(method, params=None):
             body = {"jsonrpc": "2.0", "id": 1, "method": method}
             if params is not None:
@@ -918,7 +955,9 @@ def test_mcp_advertises_only_live_run_actions_and_uniform_discovery(bridge_setup
         for schema in visible.values():
             Draft202012Validator.check_schema(schema)
         found = call("capability_search", limit=1)
-        assert [f"{row['tool_id']}.{row['action']}" for row in found["capabilities"]] == allowed_actions
+        assert [
+            f"{row['tool_id']}.{row['action']}" for row in found["capabilities"]
+        ] == allowed_actions
         assert found["next_offset"] is None
         if allowed_actions:
             for name in ("capability_describe", "execute_action"):

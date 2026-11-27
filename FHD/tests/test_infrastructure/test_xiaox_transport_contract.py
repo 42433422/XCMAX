@@ -258,12 +258,24 @@ def test_pinned_sdk_stream_resume_and_denied_approval(config, fake_runtime, monk
     assert len([m for m in messages if m.get("method") == "thread/start"]) == 1
     methods = [row.get("method") for row in messages]
     (inject,) = (row for row in messages if row.get("method") == "thread/inject_items")
-    assert methods.index("thread/start") < methods.index("thread/inject_items") < methods.index("turn/start")
+    assert (
+        methods.index("thread/start")
+        < methods.index("thread/inject_items")
+        < methods.index("turn/start")
+    )
     assert inject["params"] == {
         "threadId": "thread-1",
         "items": [
-            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "prior user preference"}]},
-            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "previous published reply"}]},
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "prior user preference"}],
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "previous published reply"}],
+            },
         ],
     }
     assert all(
@@ -309,7 +321,10 @@ def test_first_turn_and_feedback_carry_host_output_schema(config, fake_runtime):
     async def scenario():
         async with XiaoxTransport(replace(config, codex_bin=str(binary))) as runtime:
             await runtime.start_thread()
-            _ = [event async for event in runtime.stream_turn("Plan the inventory", output_schema=schema)]
+            _ = [
+                event
+                async for event in runtime.stream_turn("Plan the inventory", output_schema=schema)
+            ]
             _ = [
                 event
                 async for event in runtime.stream_turn(

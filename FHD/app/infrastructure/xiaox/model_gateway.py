@@ -470,8 +470,11 @@ class _ModelSettlementStorageError(RuntimeError):
             if type(code) is int and 0 < code <= 0x7FFFFFFF:
                 self.diagnostic["sqlite_error_code"] = code
             if (
-                isinstance(name, str) and len(name) <= 64 and name.startswith("SQLITE_")
-                and name.isascii() and name.isidentifier()
+                isinstance(name, str)
+                and len(name) <= 64
+                and name.startswith("SQLITE_")
+                and name.isascii()
+                and name.isidentifier()
             ):
                 self.diagnostic["sqlite_error_name"] = name
 
@@ -840,7 +843,8 @@ async def forward_responses(request: Request):
             if upstream.status_code == 429 and attempt < 3:
                 # Missing retry hints use the SDK's bounded exponential jitter.
                 delay = (
-                    max(0.25, retry_after) if retry_after is not None
+                    max(0.25, retry_after)
+                    if retry_after is not None
                     else 0.5 * 2 ** (attempt - 1) * uniform(0.75, 1)
                 )
                 if request_remaining(deadline) > delay:
@@ -859,7 +863,9 @@ async def forward_responses(request: Request):
                     }
                 },
                 status_code=upstream.status_code if definite else 502,
-                headers={"Retry-After": str(math.ceil(retry_after))} if retry_after is not None else None,
+                headers={"Retry-After": str(math.ceil(retry_after))}
+                if retry_after is not None
+                else None,
             )
         assert upstream is not None and client is not None
         slot_failure = None

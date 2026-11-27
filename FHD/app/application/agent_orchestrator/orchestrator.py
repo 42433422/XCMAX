@@ -1263,7 +1263,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             server_risk = "high" if step.node_id in approval_ids else contract_risk
             server_idempotent = bool(validation.spec.idempotent)
             if (tool_id, action) == ("employee", "execute") and step.node_id not in approval_ids:
-                from app.application.agent_orchestrator.verification_workbook import trusted_workbook_reader
+                from app.application.agent_orchestrator.verification_workbook import (
+                    trusted_workbook_reader,
+                )
 
                 if trusted_workbook_reader(step.params):
                     server_risk, server_idempotent = "low", True

@@ -57,9 +57,7 @@ def plan(verifier, monkeypatch):
 
 def test_cannot_promote_reply_to_new_action_plan(plan):
     plan.output = "**方案** 调用 `lookup_tool.check_item`"
-    fake = response(
-        review(goal(plan.run.message, kind="reply", evidence_ids=["response"]))
-    )
+    fake = response(review(goal(plan.run.message, kind="reply", evidence_ids=["response"])))
     plan.replies = [fake]
     delivery = render_action_plan(plan.binding, plan.output)
     report = plan.verify_plan(delivery)
@@ -74,9 +72,7 @@ def test_existing_legacy_plan_keeps_its_original_contract(plan):
     plan.run.metadata["runtime_goal_contract"] = build_goal_contract(plan.run)
     plan.output = "逐项确认库区、货架、托盘和标签。"
     plan.replies = [
-        response(
-            review(goal(plan.run.message, kind="reply", evidence_ids=["response"]))
-        )
+        response(review(goal(plan.run.message, kind="reply", evidence_ids=["response"])))
     ]
     report = plan.verify()
     assert plan.classify(report)[0] == "completed"
@@ -86,9 +82,7 @@ def test_existing_legacy_plan_keeps_its_original_contract(plan):
 @pytest.mark.parametrize("kind", ["steps", "narrative"])
 def test_valid_plan_uses_current_navigation_and_has_no_execution_receipt(plan, kind):
     if kind == "steps":
-        steps = [
-            {"kind": "navigation", "navigation_id": "inventory-checklist", "inputs": {}}
-        ]
+        steps = [{"kind": "navigation", "navigation_id": "inventory-checklist", "inputs": {}}]
     else:
         steps = ["按仓位列清单", "逐件核对实存"]
     raw = json.dumps({"plan": {"kind": kind, "steps": steps}}, ensure_ascii=False)
@@ -98,16 +92,12 @@ def test_valid_plan_uses_current_navigation_and_has_no_execution_receipt(plan, k
     assert delivery.proof["kind"] == kind
     assert delivery.proof["response_digest"] == canonical_digest(delivery.output)
     plan.replies = [
-        response(
-            review(goal(plan.run.message, kind="reply", evidence_ids=["response"]))
-        )
+        response(review(goal(plan.run.message, kind="reply", evidence_ids=["response"])))
     ]
     plan.replies = [
         response(
             {
-                **review(
-                    goal(plan.run.message, kind="reply", evidence_ids=["response"])
-                ),
+                **review(goal(plan.run.message, kind="reply", evidence_ids=["response"])),
                 "plan_content": kind,
             }
         )
@@ -123,21 +113,17 @@ def test_valid_plan_uses_current_navigation_and_has_no_execution_receipt(plan, k
     assert body["tools"] == []
     assert (
         "read"
-        not in prompt["output_schema"]["$defs"]["GoalAssessment"]["properties"]["kind"][
-            "enum"
-        ]
+        not in prompt["output_schema"]["$defs"]["GoalAssessment"]["properties"]["kind"]["enum"]
     )
     if kind == "steps":
         assert "仓储 → 库存清单" in delivery.output
         schema = plan_delivery_schema(plan.binding)
-        assert schema["$defs"]["NavigationStep"]["properties"]["navigation_id"][
-            "enum"
-        ] == ["inventory-checklist"]
+        assert schema["$defs"]["NavigationStep"]["properties"]["navigation_id"]["enum"] == [
+            "inventory-checklist"
+        ]
         assert report["plan_delivery"]["navigation"] == ["inventory-checklist"]
     old = {
-        key: value
-        for key, value in report.items()
-        if key not in {"report_digest", "plan_delivery"}
+        key: value for key, value in report.items() if key not in {"report_digest", "plan_delivery"}
     }
     old["report_digest"] = canonical_digest(old)
     assert plan.classify(old)[0] == "blocked"
@@ -151,9 +137,7 @@ def test_fabricated_navigation_and_unavailable_branch_do_not_start_work(plan):
     raw = '{"plan":{"kind":"unavailable","reason":"missing_input"}}'
     delivery = render_action_plan(plan.binding, raw)
     report = plan.verify_plan(delivery)
-    assert (
-        report["error_code"] == "plan_delivery_unavailable" and not report["accepted"]
-    )
+    assert report["error_code"] == "plan_delivery_unavailable" and not report["accepted"]
     assert delivery.unavailable and not plan.requests
 
 
@@ -206,17 +190,13 @@ def test_tool_step_uses_real_action_contract_without_running_it(
     ],
 )
 def test_prose_cannot_pose_as_a_verified_tool(plan, step, reported_kind, accepted):
-    raw = json.dumps(
-        {"plan": {"kind": "narrative", "steps": [step]}}, ensure_ascii=False
-    )
+    raw = json.dumps({"plan": {"kind": "narrative", "steps": [step]}}, ensure_ascii=False)
     delivery = render_action_plan(plan.binding, raw)
     plan.output = delivery.output
     plan.replies = [
         response(
             {
-                **review(
-                    goal(plan.run.message, kind="reply", evidence_ids=["response"])
-                ),
+                **review(goal(plan.run.message, kind="reply", evidence_ids=["response"])),
                 "plan_content": reported_kind,
             }
         )
@@ -323,9 +303,5 @@ def test_wire_omits_impossible_step_variants_without_removing_plain_plans(plan):
     assert "ActionSteps" not in schema["$defs"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
-    assert validator.is_valid(
-        {"plan": {"kind": "narrative", "steps": ["Write a checklist."]}}
-    )
-    assert validator.is_valid(
-        {"plan": {"kind": "unavailable", "reason": "missing_input"}}
-    )
+    assert validator.is_valid({"plan": {"kind": "narrative", "steps": ["Write a checklist."]}})
+    assert validator.is_valid({"plan": {"kind": "unavailable", "reason": "missing_input"}})

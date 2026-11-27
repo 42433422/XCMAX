@@ -119,40 +119,59 @@ def _review_evidence_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         verification = receipt.get("verification") or {}
         calls = []
         for call in receipt.get("tool_calls") or []:
-            item = {key: call.get(key) for key in ("tool_id", "action", "status", "output", "error")}
+            item = {
+                key: call.get(key) for key in ("tool_id", "action", "status", "output", "error")
+            }
             if call.get("params") != row.get("params"):
                 item["params"] = call.get("params")
             calls.append(item)
-        view.append({
-            "evidence_id": row["evidence_id"],
-            "tool_id": row["tool_id"],
-            "action": row["action"],
-            "params": row["params"],
-            "read_only": row["read_only"],
-            "state": row["state"],
-            "receipt": {
-                key: receipt.get(key) for key in (
-                    "success", "verified", "status", "message", "pending_approval",
-                    "needs_user_input", "reconciliation_required",
-                )
-            } | {
-                "verification": {
-                    "status": verification.get("status"),
-                    "accepted": verification.get("accepted"),
-                    "steps": [
-                        {key: step.get(key) for key in ("status", "accepted", "code", "checks")}
-                        for step in verification.get("steps") or []
+        view.append(
+            {
+                "evidence_id": row["evidence_id"],
+                "tool_id": row["tool_id"],
+                "action": row["action"],
+                "params": row["params"],
+                "read_only": row["read_only"],
+                "state": row["state"],
+                "receipt": {
+                    key: receipt.get(key)
+                    for key in (
+                        "success",
+                        "verified",
+                        "status",
+                        "message",
+                        "pending_approval",
+                        "needs_user_input",
+                        "reconciliation_required",
+                    )
+                }
+                | {
+                    "verification": {
+                        "status": verification.get("status"),
+                        "accepted": verification.get("accepted"),
+                        "steps": [
+                            {key: step.get(key) for key in ("status", "accepted", "code", "checks")}
+                            for step in verification.get("steps") or []
+                        ],
+                    },
+                    "tool_calls": calls,
+                    "artifacts": [
+                        {
+                            key: artifact.get(key)
+                            for key in (
+                                "artifact_id",
+                                "artifact_type",
+                                "name",
+                                "uri",
+                                "mime_type",
+                            )
+                        }
+                        | {"sha256": (artifact.get("metadata") or {}).get("sha256")}
+                        for artifact in receipt.get("artifacts") or []
                     ],
                 },
-                "tool_calls": calls,
-                "artifacts": [
-                    {key: artifact.get(key) for key in (
-                        "artifact_id", "artifact_type", "name", "uri", "mime_type",
-                    )} | {"sha256": (artifact.get("metadata") or {}).get("sha256")}
-                    for artifact in receipt.get("artifacts") or []
-                ],
-            },
-        })
+            }
+        )
     return view
 
 
@@ -201,15 +220,18 @@ def _verbatim_blocks(text: str) -> list[str]:
     stride = max(1, math.ceil(len(lines) / 128))
     blocks = []
     for start in range(0, len(lines), stride):
-        block = "".join(lines[start:start + stride]).strip()
+        block = "".join(lines[start : start + stride]).strip()
         for offset in range(0, len(block), 4000):
-            if bounded := block[offset:offset + 4000].strip():
+            if bounded := block[offset : offset + 4000].strip():
                 blocks.append(bounded)
     return blocks
 
 
-def _file_citation_catalogue(file_evidence: dict[str, dict[str, Any]]) -> tuple[
-    dict[str, dict[str, Any]], dict[str, tuple[str, str]],
+def _file_citation_catalogue(
+    file_evidence: dict[str, dict[str, Any]],
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, tuple[str, str]],
 ]:
     documents = {}
     sources = {}
@@ -225,14 +247,17 @@ def _file_citation_catalogue(file_evidence: dict[str, dict[str, Any]]) -> tuple[
 
 
 def _resolve_file_citations(
-    review: dict[str, Any], sources: dict[str, tuple[str, str]], responses: dict[str, str],
+    review: dict[str, Any],
+    sources: dict[str, tuple[str, str]],
+    responses: dict[str, str],
 ) -> None:
     for goal in review["goals"]:
         if "file_citations" in goal:
             for cite in goal["file_citations"]:
                 identity, source = sources[cite.pop("source_block_id")]
                 cite.update(
-                    evidence_id=identity, source_excerpt=source,
+                    evidence_id=identity,
+                    source_excerpt=source,
                     response_excerpt=responses[cite.pop("response_block_id")],
                 )
 
@@ -256,10 +281,14 @@ def _verify_plan_capabilities(
     if len(calls) > 64:
         return [], "单次方案最多核对 64 项动作，请保留未核对项目"
     nodes = [
-        WorkflowNode(**{key: call[key] for key in ("node_id", "tool_id", "action", "params", "depends_on")})
+        WorkflowNode(
+            **{key: call[key] for key in ("node_id", "tool_id", "action", "params", "depends_on")}
+        )
         for call in calls
     ]
-    if error := validate_plan_graph(PlanGraph(binding.run.run_id, binding.run.message, nodes=nodes)):
+    if error := validate_plan_graph(
+        PlanGraph(binding.run.run_id, binding.run.message, nodes=nodes)
+    ):
         return [], error
     proofs: list[dict[str, str]] = []
     for node, call in zip(nodes, calls, strict=True):
@@ -276,10 +305,17 @@ def _verify_plan_capabilities(
         if (
             require_documented_params
             and isinstance(properties, dict)
-            and schema.keys().isdisjoint({
-                "additionalProperties", "patternProperties", "unevaluatedProperties",
-                "allOf", "anyOf", "oneOf", "$ref",
-            })
+            and schema.keys().isdisjoint(
+                {
+                    "additionalProperties",
+                    "patternProperties",
+                    "unevaluatedProperties",
+                    "allOf",
+                    "anyOf",
+                    "oneOf",
+                    "$ref",
+                }
+            )
             and params.keys() - properties.keys()
         ):
             return [], f"方案动作 {identity} 包含契约中未登记的参数"
@@ -288,11 +324,17 @@ def _verify_plan_capabilities(
         if error := validate_plan_references(host_params, dependencies):
             return [], f"方案动作 {identity}：{error}"
         validation = validate_tool_call(
-            node.tool_id, node.action, params, allow_references_from=dependencies, resolved_spec=spec
+            node.tool_id,
+            node.action,
+            params,
+            allow_references_from=dependencies,
+            resolved_spec=spec,
         )
         if not validation.ok:
             return [], f"方案动作 {identity}：{validation.message}"
-        if not unresolved_placeholders(host_params) and (violation := action_schema_violation(spec, params)):
+        if not unresolved_placeholders(host_params) and (
+            violation := action_schema_violation(spec, params)
+        ):
             return [], f"方案动作 {identity} 参数不符合当前契约，字段路径 {violation['path']}"
         if call["approval_required"] != spec.approval_required:
             return [], f"方案动作 {identity} 的审批说明与当前契约不符"
@@ -364,7 +406,9 @@ def verify_runtime_goal(
             report.update(
                 status="unavailable" if unavailable else "needs_work",
                 error_code="plan_delivery_unavailable" if unavailable else "plan_delivery_invalid",
-                feedback=(plan_delivery.error or output) if plan_delivery else "方案缺少可核对的交付。",
+                feedback=(plan_delivery.error or output)
+                if plan_delivery
+                else "方案缺少可核对的交付。",
             )
             return _finish_report(report)
         report["plan_delivery"] = plan_delivery.proof
@@ -453,13 +497,18 @@ def verify_runtime_goal(
         for spec in XiaoxToolBridge.visible_actions(binding, []):
             action_catalog.setdefault(spec.tool_id, []).append(spec.action)
     documents, source_blocks = _file_citation_catalogue(file_evidence or {})
-    response_blocks = {
-        f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)
-    } if source_blocks else {}
+    response_blocks = (
+        {f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)}
+        if source_blocks
+        else {}
+    )
     schema = review_schema(
-        contract, action_catalog=action_catalog, file_evidence=file_evidence,
+        contract,
+        action_catalog=action_catalog,
+        file_evidence=file_evidence,
         receipt_ids=tuple(row["evidence_id"] for row in snapshot["evidence"]),
-        source_block_ids=tuple(source_blocks), response_block_ids=tuple(response_blocks),
+        source_block_ids=tuple(source_blocks),
+        response_block_ids=tuple(response_blocks),
     )
     wire_validator = Draft202012Validator(schema) if file_evidence is not None else None
     payload = {
@@ -467,8 +516,11 @@ def verify_runtime_goal(
         "rules": list(_RULES),
         "original_request": request_view,
         "host_constraints": contract["scope"].get("constraints") or {},
-        **({"requested_deliverable": contract["scope"]["requested_deliverable"]}
-           if "requested_deliverable" in contract["scope"] else {}),
+        **(
+            {"requested_deliverable": contract["scope"]["requested_deliverable"]}
+            if "requested_deliverable" in contract["scope"]
+            else {}
+        ),
         "answers": answers,
         "evidence": _review_evidence_view(snapshot["evidence"]),
         "response": output,
@@ -483,7 +535,9 @@ def verify_runtime_goal(
     if plan_delivery and plan_delivery.proof:
         payload["verified_plan_delivery"] = plan_delivery.proof
         # This branch reviews the system-rendered plan, not whether its steps were executed.
-        payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["status"]["description"] = (
+        payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["status"][
+            "description"
+        ] = (
             "按已由宿主绑定并渲染的方案覆盖原始要求来判定。方案步骤无需已执行，"
             "实际执行回执不属于本次交付条件。"
         )
@@ -637,8 +691,10 @@ def verify_runtime_goal(
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"
-            if plan_delivery and plan_delivery.proof and (
-                review["plan_content"] != plan_delivery.proof["kind"]
+            if (
+                plan_delivery
+                and plan_delivery.proof
+                and (review["plan_content"] != plan_delivery.proof["kind"])
             ):
                 errors.append("方案的能力声明未通过与交付类型一致的核对。")
             calls = planned_tool_calls(review)

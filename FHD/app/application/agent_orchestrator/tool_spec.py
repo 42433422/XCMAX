@@ -82,7 +82,9 @@ class ToolActionSpecV2:
         if (self.tool_id, self.action) == ("employee", "execute") and _validate_schema_payload(
             self.input_schema, params, subject="工具参数"
         )[0]:
-            from app.application.agent_orchestrator.verification_workbook import trusted_workbook_reader
+            from app.application.agent_orchestrator.verification_workbook import (
+                trusted_workbook_reader,
+            )
 
             if trusted_workbook_reader(params):
                 return True

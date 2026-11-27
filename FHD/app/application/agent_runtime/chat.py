@@ -68,9 +68,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         or queued
         or bool(result.get("run_id"))
         and (
-            state in {"running", "paused"}
-            or state == "blocked"
-            and result.get("retryable") is True
+            state in {"running", "paused"} or state == "blocked" and result.get("retryable") is True
         )
     )
     text = str(result.get("output") or result.get("error") or "本轮执行未完成")
@@ -108,10 +106,16 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
     ]
     card = next((item for item in cards if isinstance(item, dict) and item.get("run_id")), None)
     output_files = runtime_chat_files(result)
-    sources = result.get("file_sources") if (
-        state == "completed" and result.get("ok") is True and not reconciling
-        and text == result.get("output")
-    ) else None
+    sources = (
+        result.get("file_sources")
+        if (
+            state == "completed"
+            and result.get("ok") is True
+            and not reconciling
+            and text == result.get("output")
+        )
+        else None
+    )
     return {
         "success": bool(result.get("ok")),
         "response": text,

@@ -260,7 +260,9 @@ def test_rate_limited_model_retries_respect_budget_disconnect_and_billing(
         sleeps.append(delay)
         return connected
 
-    monkeypatch.setattr("app.infrastructure.xiaox.model_gateway._wait_for_model_retry", wait_for_retry)
+    monkeypatch.setattr(
+        "app.infrastructure.xiaox.model_gateway._wait_for_model_retry", wait_for_retry
+    )
     monkeypatch.setattr("app.infrastructure.xiaox.model_gateway.uniform", lambda low, high: low)
 
     def handler(request):

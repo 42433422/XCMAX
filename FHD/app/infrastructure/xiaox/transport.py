@@ -463,7 +463,9 @@ class XiaoxTransport:
             await self._call(
                 self._client.request,
                 "thread/inject_items",
-                ThreadInjectItemsParams(thread_id=result.thread.id, items=items).model_dump(by_alias=True),
+                ThreadInjectItemsParams(thread_id=result.thread.id, items=items).model_dump(
+                    by_alias=True
+                ),
                 response_model=ThreadInjectItemsResponse,
             )
         self.thread_id = result.thread.id
@@ -511,12 +513,18 @@ class XiaoxTransport:
                     from openai_codex.generated.v2_all import TurnStartParams
 
                     params = (
-                        TurnStartParams(thread_id=self.thread_id, input=[], output_schema=output_schema)
-                        if output_schema else None
+                        TurnStartParams(
+                            thread_id=self.thread_id, input=[], output_schema=output_schema
+                        )
+                        if output_schema
+                        else None
                     )
                     result = await self._call(
-                        client.turn_start, self.thread_id, text,
-                        **({"params": params} if params else {}), outcome_unknown=True
+                        client.turn_start,
+                        self.thread_id,
+                        text,
+                        **({"params": params} if params else {}),
+                        outcome_unknown=True,
                     )
                 else:
                     from openai_codex.generated.v2_all import (

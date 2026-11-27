@@ -86,7 +86,8 @@ def _input_text(
                     "constraints": (goal.get("scope") or {}).get("constraints") or {},
                     **(
                         {"requested_deliverable": goal["scope"]["requested_deliverable"]}
-                        if (goal.get("scope") or {}).get("requested_deliverable") else {}
+                        if (goal.get("scope") or {}).get("requested_deliverable")
+                        else {}
                     ),
                 },
                 ensure_ascii=False,
@@ -101,7 +102,11 @@ def _input_text(
                 + json.dumps(request["attachments"], ensure_ascii=False, allow_nan=False)
             )
         reference_evidence = [
-            {key: value for key, value in item.items() if key not in {"verified_read", "verified_reads"}}
+            {
+                key: value
+                for key, value in item.items()
+                if key not in {"verified_read", "verified_reads"}
+            }
             for item in request.get("context_evidence") or []
             if item.get("source") != "host_skill"
         ]
@@ -110,7 +115,11 @@ def _input_text(
 
             for item in reference_evidence:
                 if item["source"] == EVIDENCE_SOURCE:
-                    key = "verified_reads" if isinstance(recalled_attachment, list) else "verified_read"
+                    key = (
+                        "verified_reads"
+                        if isinstance(recalled_attachment, list)
+                        else "verified_read"
+                    )
                     item[key] = recalled_attachment
         if reference_evidence:
             sections.append(
@@ -242,14 +251,19 @@ def _dispatch_action_proposal(
     pair = options.get(payload["capability"])
     if pair is None:
         return {
-            "dispatched": False, "status": "not_started", "error_code": "proposal_capability_unavailable"
+            "dispatched": False,
+            "status": "not_started",
+            "error_code": "proposal_capability_unavailable",
         }
     tool_id, action = pair
     selected = {"tool_id": tool_id, "action": action}
     params = payload.get("params")
     if payload.keys() != {"capability", "params"} or not isinstance(params, dict):
         return {
-            "dispatched": False, **selected, "status": "not_started", "error_code": "proposal_shape_invalid"
+            "dispatched": False,
+            **selected,
+            "status": "not_started",
+            "error_code": "proposal_shape_invalid",
         }
     try:
         described = bridge.invoke(token, "capability_describe", selected)
@@ -346,7 +360,10 @@ def _proposal_contract(
         except RECOVERABLE_ERRORS:
             return schema
         params = (response.get("capability") or {}).get("input_schema")
-        if isinstance(params, dict) and len(json.dumps(params, ensure_ascii=False).encode()) <= 16384:
+        if (
+            isinstance(params, dict)
+            and len(json.dumps(params, ensure_ascii=False).encode()) <= 16384
+        ):
             schema["if"] = {"properties": {"capability": {"const": selected}}}
             schema["then"] = {"properties": {"params": params}}
     return schema
@@ -567,7 +584,9 @@ async def run_xiaox_agent(
                     )
                 run.error = str(result.get("error") or run.error or "")
                 output_files = released_runtime_artifacts(result)
-                result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts] + output_files
+                result["artifacts"] = [
+                    artifact.to_dict() for artifact in run.artifacts
+                ] + output_files
                 if output_files:
                     result["output_artifacts"] = output_files
                 from app.application.agent_runtime.chat_file_sources import (
@@ -827,7 +846,9 @@ async def run_xiaox_agent(
                     goal_feedback = None
                     action_schema = None
                     structured_plan = (
-                        binding.run.metadata["runtime_goal_contract"]["scope"].get("plan_delivery_version")
+                        binding.run.metadata["runtime_goal_contract"]["scope"].get(
+                            "plan_delivery_version"
+                        )
                         == 1
                     )
                     if structured_plan:
@@ -846,7 +867,8 @@ async def run_xiaox_agent(
                         runtime_status = "running"
                         stream = (
                             active.stream_turn(
-                                text, **({"output_schema": action_schema} if structured_plan else {})
+                                text,
+                                **({"output_schema": action_schema} if structured_plan else {}),
                             )
                             if goal_feedback is None
                             else active.stream_turn(
@@ -1121,7 +1143,10 @@ async def run_xiaox_agent(
         )
         if isinstance(exc, ImportError):
             logger.error("Xiaox component import failed: %s", exc.name or type(exc).__name__)
-            result.update(error_code="runtime_component_unavailable", error="运行组件加载失败，请核对当前桌面服务版本")
+            result.update(
+                error_code="runtime_component_unavailable",
+                error="运行组件加载失败，请核对当前桌面服务版本",
+            )
         runtime_status = "interrupted" if isinstance(exc, TimeoutError) else "failed"
         if isinstance(exc, XiaoxBindingError) and exc.code in {"cancelled", "paused"}:
             runtime_status = exc.code

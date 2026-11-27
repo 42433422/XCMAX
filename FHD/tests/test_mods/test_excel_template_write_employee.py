@@ -235,7 +235,12 @@ def test_range_number_format_preserves_values_and_types(native_workbook):
     sheet["A2"] = "0007"
     with_template.save(template)
     with_template.close()
-    phase = {"phase": "cell_styles", "sheet": sheet.title, "range": "A2:E2", "number_format": "0000"}
+    phase = {
+        "phase": "cell_styles",
+        "sheet": sheet.title,
+        "range": "A2:E2",
+        "number_format": "0000",
+    }
     out, _ = run([phase])
     original, result = load_workbook(template), load_workbook(out)
     try:
@@ -307,8 +312,7 @@ def test_writer_relocates_native_table_and_workbook_references(native_workbook):
         ref="A1:D3",
         autoFilter=AutoFilter(ref="A1:D3"),
         tableColumns=[
-            TableColumn(id=index, name=cell.value)
-            for index, cell in enumerate(data[1], start=1)
+            TableColumn(id=index, name=cell.value) for index, cell in enumerate(data[1], start=1)
         ],
     )
     table.autoFilter.add_sort_condition("B2:B3")
@@ -326,14 +330,17 @@ def test_writer_relocates_native_table_and_workbook_references(native_workbook):
     source.save(template)
     source.close()
 
-    out, plan = run([
-        {
-            "phase": "formula_writes",
-            "writes": [{"sheet": summary_name, "ref": "D4", "formula": f"='{data_name}'!$B$3"}],
-        },
-        {"phase": "insert_rows", "sheet": data_name, "row": 1, "count": 1},
-        {"phase": "insert_rows", "sheet": data_name, "row": 4, "count": 1},
-    ], [f"{summary_name}!D2:D3"])
+    out, plan = run(
+        [
+            {
+                "phase": "formula_writes",
+                "writes": [{"sheet": summary_name, "ref": "D4", "formula": f"='{data_name}'!$B$3"}],
+            },
+            {"phase": "insert_rows", "sheet": data_name, "row": 1, "count": 1},
+            {"phase": "insert_rows", "sheet": data_name, "row": 4, "count": 1},
+        ],
+        [f"{summary_name}!D2:D3"],
+    )
     with out.open("rb") as stream:
         saved = load_workbook(stream)
     try:
@@ -393,13 +400,24 @@ def test_writer_sets_column_width_without_changing_group_neighbors(native_workbo
     book.save(template)
     book.close()
 
-    out, plan = run([{
-        "phase": "set_column_width", "sheet": "销售明细", "column": "C", "width": 20,
-    }])
+    out, plan = run(
+        [
+            {
+                "phase": "set_column_width",
+                "sheet": "销售明细",
+                "column": "C",
+                "width": 20,
+            }
+        ]
+    )
     book = load_workbook(out)
     columns = book["销售明细"].column_dimensions
-    assert [(columns[col].width, columns[col].outlineLevel, columns[col].hidden) for col in "BCD"] == [
-        (16, 1, True), (20, 1, True), (16, 1, True),
+    assert [
+        (columns[col].width, columns[col].outlineLevel, columns[col].hidden) for col in "BCD"
+    ] == [
+        (16, 1, True),
+        (20, 1, True),
+        (16, 1, True),
     ]
     assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
     columns["C"].width = 19
@@ -514,7 +532,9 @@ def test_native_table_without_total_preserves_the_next_row(native_workbook, calc
 
 
 @pytest.mark.parametrize("calculated", [False, True])
-def test_native_table_can_sum_existing_data_without_assigning_its_calculation(native_workbook, calculated):
+def test_native_table_can_sum_existing_data_without_assigning_its_calculation(
+    native_workbook, calculated
+):
     run, template, qc, _ = native_workbook
     phase = _sales_table_phase()
     phase.pop("calculated_formula")
@@ -534,9 +554,7 @@ def test_native_table_can_sum_existing_data_without_assigning_its_calculation(na
     assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
 
 
-@pytest.mark.parametrize(
-    "fields", [{"calculated_column": "金额"}, {"calculated_formula": "=1"}]
-)
+@pytest.mark.parametrize("fields", [{"calculated_column": "金额"}, {"calculated_formula": "=1"}])
 def test_native_table_schema_requires_complete_calculation_pairs(native_workbook, fields):
     from jsonschema import ValidationError
 
@@ -552,7 +570,10 @@ def test_native_table_schema_requires_complete_calculation_pairs(native_workbook
 @pytest.mark.parametrize(
     ("field", "value", "error"),
     [
-        *(("name", name, "非法 Excel 表格名称") for name in ("a01", "XFD1048576", "R1C1", "RC", "r", "1合計", "税 目", r"Bad\Name")),
+        *(
+            ("name", name, "非法 Excel 表格名称")
+            for name in ("a01", "XFD1048576", "R1C1", "RC", "r", "1合計", "税 目", r"Bad\Name")
+        ),
         ("range", "A1:XFE2", "有限范围"),
     ],
 )
@@ -566,7 +587,9 @@ def test_plain_table_keeps_native_name_and_range_guards(native_workbook, field, 
 
 
 @pytest.mark.parametrize("table_last", [True, False])
-def test_native_qc_checks_last_formula_when_table_and_explicit_writes_overlap(native_workbook, table_last):
+def test_native_qc_checks_last_formula_when_table_and_explicit_writes_overlap(
+    native_workbook, table_last
+):
     run, template, qc, _ = native_workbook
     table = _sales_table_phase()
     formula = "=B2*C2"
@@ -585,17 +608,27 @@ def test_native_qc_checks_last_formula_when_table_and_explicit_writes_overlap(na
     book.close()
     report = qc.run_qc(out, plan, template_path=template)
     assert report["verdict"] == "FAIL"
-    assert [(issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]] == [(2, 4)]
+    assert [
+        (issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]
+    ] == [(2, 4)]
 
 
 def test_qc_checks_visible_styles_on_merged_and_unmerged_cells(native_workbook):
     run, template, qc, _ = native_workbook
     sheet = "产品汇总"
-    out, plan = run([
-        {"phase": "merge_cells", "sheet": sheet, "range": "A5:C5"},
-        {"phase": "cell_styles", "sheet": sheet, "range": "A5:D5",
-         "bold": True, "horizontal": "center", "font_size": 16},
-    ])
+    out, plan = run(
+        [
+            {"phase": "merge_cells", "sheet": sheet, "range": "A5:C5"},
+            {
+                "phase": "cell_styles",
+                "sheet": sheet,
+                "range": "A5:D5",
+                "bold": True,
+                "horizontal": "center",
+                "font_size": 16,
+            },
+        ]
+    )
     section = qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]
     assert section["status"] == "pass" and section["stats"]["style_cells_checked"] == 2
     book = load_workbook(out)
@@ -611,12 +644,17 @@ def test_qc_checks_visible_styles_on_merged_and_unmerged_cells(native_workbook):
 def test_native_qc_tracks_a_clear_and_prior_formula_through_row_insertion(native_workbook):
     run, template, qc, _ = native_workbook
     sheet = "销售明细"
-    out, plan = run([
-        {"phase": "cell_writes", "writes": [{"sheet": sheet, "ref": "A2", "value": "临时值"}]},
-        {"phase": "clear_ranges", "ranges": [f"{sheet}!A2"]},
-        {"phase": "formula_writes", "writes": [{"sheet": sheet, "ref": "D2", "formula": "=B2*C2"}]},
-        {"phase": "insert_rows", "sheet": sheet, "row": 2, "count": 1},
-    ])
+    out, plan = run(
+        [
+            {"phase": "cell_writes", "writes": [{"sheet": sheet, "ref": "A2", "value": "临时值"}]},
+            {"phase": "clear_ranges", "ranges": [f"{sheet}!A2"]},
+            {
+                "phase": "formula_writes",
+                "writes": [{"sheet": sheet, "ref": "D2", "formula": "=B2*C2"}],
+            },
+            {"phase": "insert_rows", "sheet": sheet, "row": 2, "count": 1},
+        ]
+    )
     assert qc.run_qc(out, plan, template_path=template)["verdict"] == "PASS"
     book = load_workbook(out)
     assert book[sheet]["A3"].value is None
@@ -624,7 +662,9 @@ def test_native_qc_tracks_a_clear_and_prior_formula_through_row_insertion(native
     book[sheet]["A3"] = "非法残值"
     book.save(out)
     book.close()
-    assert qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]["status"] == "fail"
+    assert (
+        qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]["status"] == "fail"
+    )
 
 
 @pytest.mark.parametrize("range_last", [True, False])
@@ -646,7 +686,9 @@ def test_native_qc_checks_last_range_or_formula_number_format(native_workbook, r
     book.close()
     report = qc.run_qc(out, plan, template_path=template)
     assert report["verdict"] != "PASS"
-    assert [(issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]] == [(2, 4)]
+    assert [
+        (issue["row"], issue["col"]) for issue in report["sections"]["conformance"]["issues"]
+    ] == [(2, 4)]
 
 
 def test_writer_creates_native_dual_axis_chart(native_workbook):

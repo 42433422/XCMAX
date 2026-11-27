@@ -170,9 +170,14 @@ def schema_violation(error: ValidationError) -> dict[str, str | int | float | li
             ),
             "unknown",
         )
-    if (
-        error.validator == "pattern" and len(error.validator_value) <= 256
-    ) or error.validator in {"maximum", "minimum", "maxLength", "minLength", "maxItems", "minItems"}:
+    if (error.validator == "pattern" and len(error.validator_value) <= 256) or error.validator in {
+        "maximum",
+        "minimum",
+        "maxLength",
+        "minLength",
+        "maxItems",
+        "minItems",
+    }:
         violation["expected"] = error.validator_value
     if error.validator == "additionalProperties" and not error.schema.get("patternProperties"):
         properties = error.schema.get("properties", {})
@@ -262,8 +267,7 @@ class XiaoxToolBridge:
             goal = binding.run.metadata.get("runtime_goal_contract") or {}
             request = goal.get("request") or {}
             if not any(
-                item.get("source") == "owned_elt_upload"
-                for item in request.get("attachments", [])
+                item.get("source") == "owned_elt_upload" for item in request.get("attachments", [])
             ) and not recalled_conversation_uploads(request):
                 return False
         if spec.tool_id == "aiopen":
@@ -284,9 +288,7 @@ class XiaoxToolBridge:
             yield binding
 
     @classmethod
-    def visible_actions(
-        cls, binding: XiaoxBinding, words: list[str]
-    ) -> Iterator[ToolActionSpecV2]:
+    def visible_actions(cls, binding: XiaoxBinding, words: list[str]) -> Iterator[ToolActionSpecV2]:
         from app.application.capability_catalog import authorized_tool_specs
 
         allowed_actions = binding.metadata.get("allowed_actions")
@@ -296,7 +298,8 @@ class XiaoxToolBridge:
 
             allowed = set(allowed_actions)
             candidates = {
-                key: spec for key, spec in build_tool_specs_v2().items()
+                key: spec
+                for key, spec in build_tool_specs_v2().items()
                 if f"{key[0]}.{key[1]}" in allowed
             }
             if not candidates:
@@ -338,11 +341,17 @@ class XiaoxToolBridge:
                     for spec in self.visible_actions(binding, words)
                 ]
                 if words:
-                    matches.sort(key=lambda row: (
-                        -sum(word in f"{row['tool_id']}.{row['action']} {row['description']}".casefold()
-                             for word in words),
-                        row["tool_id"], row["action"],
-                    ))
+                    matches.sort(
+                        key=lambda row: (
+                            -sum(
+                                word
+                                in f"{row['tool_id']}.{row['action']} {row['description']}".casefold()
+                                for word in words
+                            ),
+                            row["tool_id"],
+                            row["action"],
+                        )
+                    )
                 end = offset + limit
                 # These are display-only rows from this run's renderer. Describe and
                 # _execute resolve exclusive authority from the server tool catalog.
@@ -420,15 +429,18 @@ class XiaoxToolBridge:
                 with budget:
                     if name == "execute_employee" or name in DIRECT_ACTION_TOOLS:
                         tool_id, action = (
-                            ("employee", "execute") if name == "execute_employee"
+                            ("employee", "execute")
+                            if name == "execute_employee"
                             else DIRECT_ACTION_TOOLS[name]
                         )
                         arguments = {
-                            "tool_id": tool_id, "action": action,
+                            "tool_id": tool_id,
+                            "action": action,
                             "call_id": arguments.get("call_id"),
                             "schema_digest": arguments.get("schema_digest"),
                             "params": {
-                                key: value for key, value in arguments.items()
+                                key: value
+                                for key, value in arguments.items()
                                 if key not in {"call_id", "schema_digest"}
                             },
                         }
@@ -570,19 +582,26 @@ class XiaoxToolBridge:
                     reviewed, changes = review_workbook_write(params, context)
                 except WorkbookFormulaSyntaxError as exc:
                     return {
-                        "success": False, "verified": False, "status": "not_started",
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
                         "error_code": "workbook_formula_syntax_invalid",
                         "field_path": exc.field_path,
                         "message": "工作簿公式未通过语法校验；请修正指定写入项后重试。",
                     }
                 except WorkbookPlanError as exc:
                     return {
-                        "success": False, "verified": False, "status": "not_started",
-                        "error_code": "workbook_plan_invalid", "message": str(exc),
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
+                        "error_code": "workbook_plan_invalid",
+                        "message": str(exc),
                     }
                 except (OSError, ValueError):
                     return {
-                        "success": False, "verified": False, "status": "not_started",
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
                         "error_code": "workbook_plan_review_failed",
                         "message": "无法在原工作簿中核验这份计划。请检查附件和相应工作表范围。",
                     }
@@ -590,7 +609,9 @@ class XiaoxToolBridge:
                 isolated_artifact = True
                 if changes and str(context.get("chat_approval_mode") or "").strip() == "auto":
                     return {
-                        "success": False, "verified": False, "status": "not_started",
+                        "success": False,
+                        "verified": False,
+                        "status": "not_started",
                         "error_code": "workbook_manual_approval_required",
                         "message": "计划会修改原始数据。请保留这些原值，或由用户切换到手动审批后核对变更。",
                         "required_approval": "manual",
@@ -826,32 +847,40 @@ def mcp_tool_definitions(
         employee = get_tool_action_spec("employee", "execute")
         if employee is not None:
             action = next(tool for tool in tools if tool.name == "execute_action")
-            action.input_schema["allOf"] = [{
-                "if": {
-                    "required": ["tool_id", "action"],
-                    "properties": {
-                        "tool_id": {"const": "employee"},
-                        "action": {"const": "execute"},
+            action.input_schema["allOf"] = [
+                {
+                    "if": {
+                        "required": ["tool_id", "action"],
+                        "properties": {
+                            "tool_id": {"const": "employee"},
+                            "action": {"const": "execute"},
+                        },
                     },
-                },
-                "then": {"properties": {"params": employee.input_schema}},
-            }]
-            direct_schema = copy.deepcopy(employee.input_schema)
-            direct_schema["properties"].update({
-                "call_id": {"type": "string", "minLength": 1, "maxLength": 160},
-                "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-            })
-            direct_schema["required"] = [
-                *direct_schema.get("required", []), "call_id", "schema_digest",
+                    "then": {"properties": {"params": employee.input_schema}},
+                }
             ]
-            tools.append(Tool(
-                name="execute_employee",
-                description=(
-                    "直接执行已授权 AI 员工。参数使用 employee.execute 的原生对象契约；"
-                    "先从 capability_describe 读取 schema_digest。写入仍走原审批与独立质检。"
-                ),
-                inputSchema=direct_schema,
-            ))
+            direct_schema = copy.deepcopy(employee.input_schema)
+            direct_schema["properties"].update(
+                {
+                    "call_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                    "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                }
+            )
+            direct_schema["required"] = [
+                *direct_schema.get("required", []),
+                "call_id",
+                "schema_digest",
+            ]
+            tools.append(
+                Tool(
+                    name="execute_employee",
+                    description=(
+                        "直接执行已授权 AI 员工。参数使用 employee.execute 的原生对象契约；"
+                        "先从 capability_describe 读取 schema_digest。写入仍走原审批与独立质检。"
+                    ),
+                    inputSchema=direct_schema,
+                )
+            )
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
     for name, (tool_id, action_name) in DIRECT_ACTION_TOOLS.items():
@@ -861,24 +890,32 @@ def mcp_tool_definitions(
         if spec is None:
             continue
         generic = next(tool for tool in tools if tool.name == "execute_action")
-        generic.input_schema.setdefault("allOf", []).append({
-            "if": {
-                "required": ["tool_id", "action"],
-                "properties": {"tool_id": {"const": tool_id}, "action": {"const": action_name}},
-            },
-            "then": {"properties": {"params": spec.input_schema}},
-        })
+        generic.input_schema.setdefault("allOf", []).append(
+            {
+                "if": {
+                    "required": ["tool_id", "action"],
+                    "properties": {"tool_id": {"const": tool_id}, "action": {"const": action_name}},
+                },
+                "then": {"properties": {"params": spec.input_schema}},
+            }
+        )
         direct_schema = copy.deepcopy(spec.input_schema)
-        direct_schema["properties"].update({
-            "call_id": {"type": "string", "minLength": 1, "maxLength": 160},
-            "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        })
+        direct_schema["properties"].update(
+            {
+                "call_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            }
+        )
         direct_schema["required"] = [
-            *direct_schema.get("required", []), "call_id", "schema_digest",
+            *direct_schema.get("required", []),
+            "call_id",
+            "schema_digest",
         ]
-        tools.append(Tool(
-            name=name,
-            description=f"执行已授权的 {tool_id}.{action_name}；参数直接使用原能力契约，先读取 schema_digest。",
-            inputSchema=direct_schema,
-        ))
+        tools.append(
+            Tool(
+                name=name,
+                description=f"执行已授权的 {tool_id}.{action_name}；参数直接使用原能力契约，先读取 schema_digest。",
+                inputSchema=direct_schema,
+            )
+        )
     return tools

@@ -339,7 +339,8 @@ def workbook_writer_input(payload: dict[str, Any], context: dict[str, Any]) -> I
                 raise PermissionError("原工作簿或执行计划与写入预检不一致")
             approval = context.get("_tool_approval_scope") or {}
             if review.get("requires_manual_approval") and (
-                approval.get("tool_id"), approval.get("action")
+                approval.get("tool_id"),
+                approval.get("action"),
             ) != ("employee", "execute"):
                 raise PermissionError("原始数据改动缺少当前操作的人工审批")
         suffix = template.suffix.lower()
@@ -456,7 +457,10 @@ def store_employee_output(
 
 
 def _attach_workbook_readback(
-    employee_id: str, result: dict[str, Any], receipts: list[dict[str, Any]], run_id: str,
+    employee_id: str,
+    result: dict[str, Any],
+    receipts: list[dict[str, Any]],
+    run_id: str,
 ) -> None:
     """Carry checked reader bytes into the same durable employee receipt."""
     from app.domain.workbook_write_contract import WORKBOOK_READER
@@ -480,16 +484,21 @@ def _attach_workbook_readback(
         cells = sheet["cells"]
         if any(not isinstance(cell, dict) for cell in cells):
             return
-        projected.append({
-            "name": sheet.get("name"),
-            "max_row": sheet.get("max_row"),
-            "max_column": sheet.get("max_column"),
-            "cells": [
-                {"ref": f"{cell.get('letter')}{cell.get('row')}",
-                 "value": cell.get("value"), "formula": cell.get("formula")}
-                for cell in cells
-            ],
-        })
+        projected.append(
+            {
+                "name": sheet.get("name"),
+                "max_row": sheet.get("max_row"),
+                "max_column": sheet.get("max_column"),
+                "cells": [
+                    {
+                        "ref": f"{cell.get('letter')}{cell.get('row')}",
+                        "value": cell.get("value"),
+                        "formula": cell.get("formula"),
+                    }
+                    for cell in cells
+                ],
+            }
+        )
     text = json.dumps({"sheets": projected}, ensure_ascii=False, separators=(",", ":"))
     if len(text.encode("utf-8")) > 128_000:
         return

@@ -379,7 +379,8 @@ def test_idempotency_payload_encodes_decimal_prices():
     [("invalid_result", "result_encoding"), ("raised_error", "tool_execution")],
 )
 def test_real_adapter_transports_database_scalars_and_reports_unsupported_result(
-    failure_action, failure_stage,
+    failure_action,
+    failure_stage,
 ):
     executor = FixtureExecutor()
     result = execute_with_tool_deadline(
@@ -567,7 +568,8 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
 
 
 @pytest.mark.parametrize(
-    ("action", "stage"), [("raised_error", "tool_execution"), ("invalid_result", "result_encoding")],
+    ("action", "stage"),
+    [("raised_error", "tool_execution"), ("invalid_result", "result_encoding")],
 )
 def test_worker_failure_report_distinguishes_execute_from_encode(tmp_path, action, stage):
     from unittest.mock import Mock
@@ -576,14 +578,25 @@ def test_worker_failure_report_distinguishes_execute_from_encode(tmp_path, actio
 
     control = Mock()
     payload = json.dumps({"step": _step(action).to_dict(), "context": {}})
-    _worker(FixtureExecutor, payload, str(tmp_path), control, Mock(), time.monotonic() + 5,
-            initialize=False)
+    _worker(
+        FixtureExecutor,
+        payload,
+        str(tmp_path),
+        control,
+        Mock(),
+        time.monotonic() + 5,
+        initialize=False,
+    )
     encoded = (tmp_path / "result").read_text()
     control.send_bytes.assert_called_with(b"d")
     assert "do-not-export-this-secret" not in encoded
     assert json.loads(encoded)["output"] == {
-        "success": False, "outcome": "unknown", "error_code": "tool_result_transport_failed",
-        "failure_stage": stage, "exception_type": "TypeError", "retryable": False,
+        "success": False,
+        "outcome": "unknown",
+        "error_code": "tool_result_transport_failed",
+        "failure_stage": stage,
+        "exception_type": "TypeError",
+        "retryable": False,
         "reconciliation_required": True,
     }
 

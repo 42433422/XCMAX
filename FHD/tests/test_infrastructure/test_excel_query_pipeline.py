@@ -336,9 +336,12 @@ def test_mixed_cell_types_use_the_existing_query_plan_repair(operation, repair_s
     def translate(_question, _frame, *, error_feedback=None):
         attempts.append(error_feedback)
         if error_feedback and repair_succeeds:
-            return json.dumps({
-                **initial, "conversions": [{"column": "value", "kind": "number"}],
-            })
+            return json.dumps(
+                {
+                    **initial,
+                    "conversions": [{"column": "value", "kind": "number"}],
+                }
+            )
         return json.dumps(initial)
 
     result = natural_language_query(frame, "Operate on the numbers", translate, _execute)
@@ -346,11 +349,14 @@ def test_mixed_cell_types_use_the_existing_query_plan_repair(operation, repair_s
     assert result["success"] is repair_succeeds
     assert result.get("error") == (None if repair_succeeds else "invalid_pandas_query")
     if repair_succeeds:
-        assert result["records"] == {
-            "filter": [{"value": 8}, {"value": 4}],
-            "aggregate": [{"value_sum": 12}],
-            "sort": [{"value": 4}, {"value": 8}, {"value": None}, {"value": None}],
-        }[operation]
+        assert (
+            result["records"]
+            == {
+                "filter": [{"value": 8}, {"value": 4}],
+                "aggregate": [{"value_sum": 12}],
+                "sort": [{"value": 4}, {"value": 8}, {"value": None}, {"value": None}],
+            }[operation]
+        )
     assert frame["value"].tolist() == ["heading", 8, 4, None]
     assert json.dumps(result, allow_nan=False)
 
@@ -520,7 +526,9 @@ def registered_workbook(tmp_path, registered_excel):
     ("decision", "error"),
     [("failure", "header_detection_failed"), ("unknown", "header_confirmation_required")],
 )
-def test_configured_model_failure_does_not_succeed_with_first_row(registered_workbook, decision, error):
+def test_configured_model_failure_does_not_succeed_with_first_row(
+    registered_workbook, decision, error
+):
     from app.infrastructure.llm.structured_output import StructuredOutputError
 
     with (
@@ -580,17 +588,22 @@ def test_registered_headerless_workbook_preserves_physical_rows_and_columns(
         )
 
     for action in ("structure", "read", "query", "aggregate"):
-        assert get_tool_action_spec("excel_analysis", action).input_schema["properties"][
-            "header_row"
-        ]["minimum"] == 0
+        assert (
+            get_tool_action_spec("excel_analysis", action).input_schema["properties"]["header_row"][
+                "minimum"
+            ]
+            == 0
+        )
     assert structure["header_row"] == read["header_row"] == result["header_row"] == 0
     assert structure["columns"] == read["columns"] == ["A", "B", "C", "D"]
     assert [row["A"] for row in read["records"]] == (
         (["Sample activity"] if title else []) + ["First", None, "Second"]
     )
-    assert read["source_rows"]["row_ranges"] == result["source_rows"]["row_ranges"] == [
-        [1, 4 if title else 3]
-    ]
+    assert (
+        read["source_rows"]["row_ranges"]
+        == result["source_rows"]["row_ranges"]
+        == [[1, 4 if title else 3]]
+    )
     assert result["records"] == [{"D_sum": 11.0}]
     assert path.read_bytes() == original
 

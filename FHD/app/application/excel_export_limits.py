@@ -76,7 +76,10 @@ def export_input_error(args: dict[str, Any]) -> dict[str, Any] | None:
             "message": "没有可写入的行",
         }
     file_path = args.get("file_path")
-    if not isinstance(file_path, str) or Path(file_path.strip()).suffix.lower() not in {".csv", ".xlsx"}:
+    if not isinstance(file_path, str) or Path(file_path.strip()).suffix.lower() not in {
+        ".csv",
+        ".xlsx",
+    }:
         return {
             "success": False,
             "error_code": "invalid_excel_path",

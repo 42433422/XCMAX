@@ -37,9 +37,7 @@ class _InlineReadBudget:
     text_bytes: int = _CONTEXT_TEXT_BYTES
 
 
-def _docx_preview(
-    raw: bytes, coverage: dict[str, Any], *, budget: _InlineReadBudget | None
-) -> str:
+def _docx_preview(raw: bytes, coverage: dict[str, Any], *, budget: _InlineReadBudget | None) -> str:
     from docx import Document
     from docx.opc.constants import RELATIONSHIP_TYPE
     from docx.oxml.exceptions import InvalidXmlError
@@ -83,13 +81,16 @@ def _docx_preview(
         document = Document(package)
         # Inline recall requires complete body data. A footnotes part often
         # contains just template separators, so inspect actual body references.
-        if budget is not None and (document.element.xpath(
-            ".//w:sdt | .//w:ins | .//w:del | .//w:moveFrom | .//w:moveTo | .//w:drawing | "
-            ".//w:pict | .//w:object | .//w:altChunk | .//w:footnoteReference | .//w:endnoteReference"
-        ) or any(
-            rel.reltype in {RELATIONSHIP_TYPE.HEADER, RELATIONSHIP_TYPE.FOOTER}
-            for rel in document.part.rels.values()
-        )):
+        if budget is not None and (
+            document.element.xpath(
+                ".//w:sdt | .//w:ins | .//w:del | .//w:moveFrom | .//w:moveTo | .//w:drawing | "
+                ".//w:pict | .//w:object | .//w:altChunk | .//w:footnoteReference | .//w:endnoteReference"
+            )
+            or any(
+                rel.reltype in {RELATIONSHIP_TYPE.HEADER, RELATIONSHIP_TYPE.FOOTER}
+                for rel in document.part.rels.values()
+            )
+        ):
             coverage["truncated"] = True
         table_index = 0
         for block in document.element.body:
@@ -141,7 +142,10 @@ def _docx_preview(
 
 
 def _decode(
-    raw: bytes, suffix: str, *, inline_context: bool = False,
+    raw: bytes,
+    suffix: str,
+    *,
+    inline_context: bool = False,
     budget: _InlineReadBudget | None = None,
 ) -> tuple[str, dict[str, Any]]:
     coverage: dict[str, Any] = {"truncated": False, "max_text_chars": MAX_TEXT}
@@ -182,8 +186,10 @@ def _decode(
                 column_count = min(sheet.max_column or 40, 40)
                 last_column = get_column_letter(column_count)
                 rows = sheet.iter_rows(
-                    min_row=1, min_col=1,
-                    max_row=min(sheet.max_row or 200, 200), max_col=column_count,
+                    min_row=1,
+                    min_col=1,
+                    max_row=min(sheet.max_row or 200, 200),
+                    max_col=column_count,
                     values_only=True,
                 )
                 # Read-only openpyxl yields missing rows and cells at their original positions.
@@ -227,9 +233,13 @@ def _decode(
     if suffix == ".csv":
         return finish(raw.decode("utf-8-sig"))
     if suffix == ".docx":
-        return finish(_docx_preview(
-            raw, coverage, budget=budget or (_InlineReadBudget() if inline_context else None),
-        ))
+        return finish(
+            _docx_preview(
+                raw,
+                coverage,
+                budget=budget or (_InlineReadBudget() if inline_context else None),
+            )
+        )
     raise AttachmentInputError("附件格式暂不支持，请重新上传 PDF、图片、CSV 或 XLSX")
 
 
@@ -338,7 +348,9 @@ def read_bound_chat_attachment(upload_id: str, context: dict[str, Any]) -> dict[
     from app.application.agent_runtime.conversation_attachments import resolve_conversation_upload
     from app.infrastructure.xiaox.receipts import action_parent
 
-    reference = resolve_conversation_upload(upload_id, context) if isinstance(upload_id, str) else None
+    reference = (
+        resolve_conversation_upload(upload_id, context) if isinstance(upload_id, str) else None
+    )
     if reference:
         selected, expected = reference.upload_id, reference.sha256
     else:
@@ -347,13 +359,17 @@ def read_bound_chat_attachment(upload_id: str, context: dict[str, Any]) -> dict[
             raise AttachmentInputError("附件读取需要原对话任务")
         _, binding, _ = parent
         request = binding.run.metadata["runtime_goal_contract"]["request"]
-        selected, expected = upload_id, next(
-            (
-                item["metadata"]["sha256"]
-                for item in request["attachments"]
-                if item.get("source") == "owned_elt_upload" and item["metadata"]["upload_id"] == upload_id
+        selected, expected = (
+            upload_id,
+            next(
+                (
+                    item["metadata"]["sha256"]
+                    for item in request["attachments"]
+                    if item.get("source") == "owned_elt_upload"
+                    and item["metadata"]["upload_id"] == upload_id
+                ),
+                None,
             ),
-            None,
         )
     if not expected:
         raise AttachmentInputError("附件未绑定到当前对话任务")

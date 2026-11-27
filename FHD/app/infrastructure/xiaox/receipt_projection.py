@@ -92,8 +92,10 @@ def project_receipt_state(
     """Build a projection; the SQL queue boundary independently verifies its inputs."""
     if not projection_allowed(run):
         return None
-    if requires_retry_reconciliation(run) and not verified_child_recovery and not any(
-        receipt_state(row) == "unknown" for row in rows
+    if (
+        requires_retry_reconciliation(run)
+        and not verified_child_recovery
+        and not any(receipt_state(row) == "unknown" for row in rows)
     ):
         return None  # Later receipts cannot silently clear an earlier unknown outcome.
     metadata = run.metadata["xiaox_runtime"]

@@ -9,11 +9,11 @@ from zipfile import ZipFile
 import pytest
 from docx import Document
 
+from app.application.agent_orchestrator import attachment_inputs as inputs
 from app.application.agent_orchestrator import (
     get_agent_run_repository,
     set_agent_run_repository_for_tests,
 )
-from app.application.agent_orchestrator import attachment_inputs as inputs
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_sql_repository import (
     SQLAlchemyAgentRunRepository,
@@ -71,9 +71,7 @@ def selection(trusted_actor, tmp_path, monkeypatch):
         return receipt["upload_id"]
 
     def current(turn, **extra):
-        run = AgentRun(
-            str(actor.user_id), f"synthetic question {turn}", status="completed"
-        )
+        run = AgentRun(str(actor.user_id), f"synthetic question {turn}", status="completed")
         run.metadata.update(
             runtime_type="xiaox", runtime_context={**context, "turn_id": turn, **extra}
         )
@@ -81,9 +79,7 @@ def selection(trusted_actor, tmp_path, monkeypatch):
 
     def freeze(run, **source):
         goal = build_goal_contract(run, **source)
-        run.metadata.update(
-            runtime_goal_contract=goal, runtime_goal_digest=goal["digest"]
-        )
+        run.metadata.update(runtime_goal_contract=goal, runtime_goal_digest=goal["digest"])
         repository.save(run)
 
     def record(run):
@@ -103,9 +99,7 @@ def selection(trusted_actor, tmp_path, monkeypatch):
 
     def next_turn():
         with tenant_scope(actor.tenant_id):
-            history = _prepare_history(
-                store, context, context["session_id"], actor.user_id
-            )
+            history = _prepare_history(store, context, context["session_id"], actor.user_id)
         return current("follow-up", **history)
 
     try:
@@ -134,9 +128,7 @@ def test_explicit_previous_sql_selection_is_reopened_and_exposed_as_one_group(
         upload("second.csv", b"label,value\nBETA-VERIFIED-BODY,4\n"),
     ]
     original = current("original")
-    artifacts = inputs.resolve_attachment_inputs(
-        {**context, "attachment_upload_ids": ids}
-    )
+    artifacts = inputs.resolve_attachment_inputs({**context, "attachment_upload_ids": ids})
     freeze(original, attachments=artifacts)
     record(original)
     run = next_turn()
@@ -185,19 +177,12 @@ def test_explicit_previous_sql_selection_is_reopened_and_exposed_as_one_group(
     )
 
     ordinary_context = _input_text(run.message, [], None, goal=goal)
-    verified_context = _input_text(
-        run.message, [], None, goal=goal, recalled_attachment=group
-    )
+    verified_context = _input_text(run.message, [], None, goal=goal, recalled_attachment=group)
     assert all(
-        marker not in ordinary_context
-        for marker in ("ALPHA-VERIFIED-BODY", "BETA-VERIFIED-BODY")
+        marker not in ordinary_context for marker in ("ALPHA-VERIFIED-BODY", "BETA-VERIFIED-BODY")
     )
-    assert all(
-        marker in verified_context for marker in ("ALPHA-TABLE", "BETA-VERIFIED-BODY")
-    )
-    projected = runtime_file_evidence(
-        goal, goal_evidence_snapshot(goal, [], "response")
-    )
+    assert all(marker in verified_context for marker in ("ALPHA-TABLE", "BETA-VERIFIED-BODY"))
+    projected = runtime_file_evidence(goal, goal_evidence_snapshot(goal, [], "response"))
     assert set(projected) == {file["upload_id"] for file in group}
     assert [projected[file["upload_id"]]["sha256"] for file in group] == [
         artifact["metadata"]["sha256"] for artifact in artifacts
@@ -211,9 +196,7 @@ def test_explicit_previous_sql_selection_is_reopened_and_exposed_as_one_group(
         else:
             member.expires_at = datetime(2000, 1, 1)
     assert recalled_attachment_view(run, run.metadata["runtime_context"]) is None
-    ordinary_context = _input_text(
-        run.message, [], None, goal=goal, recalled_attachment=None
-    )
+    ordinary_context = _input_text(run.message, [], None, goal=goal, recalled_attachment=None)
     assert "ALPHA-VERIFIED-BODY" not in ordinary_context
     assert "BETA-VERIFIED-BODY" not in ordinary_context
     retried = goal_admission.prepare_runtime_goal(XiaoxBinding(next_turn())).contract
@@ -224,47 +207,38 @@ def test_explicit_previous_sql_selection_is_reopened_and_exposed_as_one_group(
 
 def test_older_group_and_multiple_origins_stay_as_directory_only(selection):
     _, context, upload, current, freeze, record, next_turn = selection
-    ids = [
-        upload(name, b"key,value\nvalue,5\n")
-        for name in ("one.csv", "two.csv", "three.csv")
-    ]
+    ids = [upload(name, b"key,value\nvalue,5\n") for name in ("one.csv", "two.csv", "three.csv")]
     older = current("original")
     freeze(
         older,
-        attachments=inputs.resolve_attachment_inputs(
-            {**context, "attachment_upload_ids": ids[:2]}
-        ),
+        attachments=inputs.resolve_attachment_inputs({**context, "attachment_upload_ids": ids[:2]}),
     )
     record(older)
     unrelated = current("unrelated")
     freeze(unrelated)
     record(unrelated)
     run = next_turn()
-    [directory] = goal_admission.prepare_runtime_goal(XiaoxBinding(run)).contract[
-        "request"
-    ]["context_evidence"]
+    [directory] = goal_admission.prepare_runtime_goal(XiaoxBinding(run)).contract["request"][
+        "context_evidence"
+    ]
     assert len(directory["entries"]) == 2 and "verified_reads" not in directory
 
     fresh = current("fresh")
     freeze(
         fresh,
-        attachments=inputs.resolve_attachment_inputs(
-            {**context, "attachment_upload_ids": ids[2:]}
-        ),
+        attachments=inputs.resolve_attachment_inputs({**context, "attachment_upload_ids": ids[2:]}),
     )
     record(fresh)
     run = next_turn()
-    [directory] = goal_admission.prepare_runtime_goal(XiaoxBinding(run)).contract[
-        "request"
-    ]["context_evidence"]
+    [directory] = goal_admission.prepare_runtime_goal(XiaoxBinding(run)).contract["request"][
+        "context_evidence"
+    ]
     assert len(directory["entries"]) == 3
     assert not {"verified_read", "verified_reads"} & directory.keys()
 
 
 @pytest.mark.parametrize("metric", ["file_bytes", "package_bytes", "text_bytes"])
-def test_total_inline_budget_applies_to_the_entire_selection(
-    selection, monkeypatch, metric
-):
+def test_total_inline_budget_applies_to_the_entire_selection(selection, monkeypatch, metric):
     _, context, upload, *_ = selection
     document = _sample_document()
     ids = [upload(name, document) for name in ("first.docx", "second.docx")]
@@ -304,9 +278,7 @@ def test_active_explicit_selection_uses_creation_order_even_if_old_run_is_update
 ):
     _, context, upload, current, freeze, record, next_turn = selection
     ids = [upload(name, b"name,count\nfixture,2\n") for name in ("one.csv", "two.csv")]
-    artifacts = inputs.resolve_attachment_inputs(
-        {**context, "attachment_upload_ids": ids}
-    )
+    artifacts = inputs.resolve_attachment_inputs({**context, "attachment_upload_ids": ids})
     earlier = current("earlier")
     freeze(earlier, attachments=artifacts)
     record(earlier)
@@ -316,9 +288,9 @@ def test_active_explicit_selection_uses_creation_order_even_if_old_run_is_update
     earlier.updated_at = "2099-01-01T00:00:00"
     freeze(earlier, attachments=artifacts)
     source = next_turn()
-    [directory] = goal_admission.prepare_runtime_goal(XiaoxBinding(source)).contract[
-        "request"
-    ]["context_evidence"]
+    [directory] = goal_admission.prepare_runtime_goal(XiaoxBinding(source)).contract["request"][
+        "context_evidence"
+    ]
     assert [view["source_run_id"] for view in directory["verified_reads"]] == [
         active.run_id,
         active.run_id,

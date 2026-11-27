@@ -15,14 +15,14 @@
     },
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
-      "base_blob": "c8b4f8e6cd4eadd432b83ad8639aff49c954da85",
-      "head_blob": "ad36049cb6070a5c88344a37c401fabd1c337252",
-      "before_lines": 1790,
-      "after_lines": 1808,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。 本轮还修复已授权屏幕动作在执行前和持久恢复审核中被默认目录遗漏的问题，显式使用同一能力目录的屏幕动作投影。 显式工作台审批同样核对持久原run、step及完整plan摘要，不再因动态计划缺少静态节点列表而跳过证明。 本轮按业务、Runtime、交付顺序合解后，将同一 LangGraph 与 checkpoint 的构造统一委托既有 registry，保留原 dispatch 与持久审批读回，较上一集成删除6行。 本轮b7ab成熟度修复：仅在原任务归档边界使用既有BOUNDARY_ERRORS，确保未知任务异常也保留失败事件及持久状态。",
-      "boundary": "仍使用原LangGraph、持久计划和现有审批；独立核验只证明子任务已受理时，父计划保持阻塞，不能派发依赖步骤或宣称业务完成。未知结果不重放，不增加第二执行入口。 普通目录仍不含 AIOPEN；执行审核仅纳入现有 supports_aiopen_step 支持的屏幕动作，继续排除 chat/API 递归入口，账号、租户及原签名审批校验保持。",
-      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。 CI 原三个屏幕失败场景已在本地定向运行中通过；目录撤权、工作台恢复及最终 CI 仍分别核对实际结果。 本轮完整动态屏幕原场景和ELT checkpoint两支共11项通过；缺失工作台凭据不签发原审批回执。 新组合继续核验真实销售审批与文件对账、原目标完成、摘要覆盖和产品路由合同；独立分支通过不代替组合 head 的 required checks。 原engine与orchestrator完整99用例在最终共享verification_integrity源码上通过，原RuntimeError负向断言保留。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "base_blob": "4be3a62e3b900f6358b65a597eafa1b7be7a4328",
+      "head_blob": "db8a3661ee27d25ce7e571aff4e04f1410c381a3",
+      "before_lines": 1813,
+      "after_lines": 1815,
+      "reason": "工作组05集成验收阻塞收口：当前d76基线在原CI的Ruff格式门禁失败，使用锁定Ruff0.15.21整理本文件的既有导入及排版；没有新增业务分支或改变执行语义。",
+      "boundary": "仅格式化和排序现有导入，不迁移职责，不改审批、核验、任务状态或模型调用；已逐文件比较去除导入节点后的AST完全一致，全部原测试断言保留。",
+      "validation": "本地全app/tests的4300个文件Ruff lint与format通过；集成业务选择集1119项零失败零跳过，原6c71365预览的真实MCP99项及PostgreSQL696项已通过；最后格式/SDK接线提交的CI仍独立复核，不把历史绿灯当当前验收。",
+      "follow_up": "由@42433422核对精确base/head blob及格式化范围；本条是为既有集成质量门禁提交的评审请求，不代表人工批准，也不用于掩盖独立工作簿核验仍有的功能失败。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -33,7 +33,7 @@
       "after_lines": 1321,
       "reason": "工作组05评审请求：首次建表检查与DDL复用现有串行化事务，修复两个Worker同时初始化及中途失败留下部分表的问题；借用Connection不缓存未提交的schema完成状态。 本次还按锁定Ruff格式化原有表达式和调用，格式化前后AST相同。",
       "boundary": "仅修改原任务仓储的schema初始化，锁与事务统一委托现有orm_tables辅助函数；运行状态、事件及审批账本仍是原唯一来源。",
-      "validation": "原源候选51d29ec在main合并预览08eedbe6的67项CI检查终态且零失败，包含真实PostgreSQL、MCP和完整后端门禁；原883专项和190兼容回归通过。集成d76cf1e3后新增条件只读与路径边界回归，当前35个变更Python文件在锁定Ruff0.15.21下全部通过。新组合的1119项双库分组回归与对应CI须独立记录在本PR，旧证据不能替代新基线；人工架构评审仍待完成。",
+      "validation": "集成业务选择集1119项在38个隔离模块进程通过，0失败0错误0跳过，SQLite/PostgreSQL17.12均真实执行；源6c71365的实际d76合并预览上MCP99项、PostgreSQL696项通过，WG05新增42项双库场景零跳过。后续格式化不改业务AST；最终提交的全量CI与人工架构评审继续独立记录在本PR。",
       "follow_up": "由@42433422复核原仓储事务与借用Connection边界；功能净增3行、原有代码格式化净增8行，不为文件长度搬移同一职责，后续schema变更继续复用原事务辅助函数。",
       "review_owner": "@42433422"
     },
@@ -45,7 +45,7 @@
       "after_lines": 936,
       "reason": "工作组05评审请求：原队列初始化复用有界schema事务，登记写副作用时在同一SQL条件更新中核对execution_count，阻止旧代Worker为新租约写入执行标记。 同文件已有导入及链式调用按锁定Ruff格式化，格式化前后AST相同，另净增10行。",
       "boundary": "仍由原Worker租约和SessionBook承担任务所有权及未知副作用；只增加原mark_open_effect的可选代际条件，不新增任务状态或第二份队列。",
-      "validation": "原源候选51d29ec在main合并预览08eedbe6的67项CI检查终态且零失败，包含真实PostgreSQL、MCP和完整后端门禁；原883专项和190兼容回归通过。集成d76cf1e3后新增条件只读与路径边界回归，当前35个变更Python文件在锁定Ruff0.15.21下全部通过。新组合的1119项双库分组回归与对应CI须独立记录在本PR，旧证据不能替代新基线；人工架构评审仍待完成。",
+      "validation": "集成业务选择集1119项在38个隔离模块进程通过，0失败0错误0跳过，SQLite/PostgreSQL17.12均真实执行；源6c71365的实际d76合并预览上MCP99项、PostgreSQL696项通过，WG05新增42项双库场景零跳过。后续格式化不改业务AST；最终提交的全量CI与人工架构评审继续独立记录在本PR。",
       "follow_up": "由@42433422审查owner、lease和generation在同一事务的CAS；保持现有队列存储边界，不用拆分或新状态源规避增长审查。",
       "review_owner": "@42433422"
     },
@@ -57,7 +57,7 @@
       "after_lines": 1174,
       "reason": "工作组05评审请求：实际复现无稳定身份和更换client key导致重复付款，以及写入后失回执被接管重放；补齐派发前身份/共享SQL副作用与Schema失败中的unknown保留。 集成后统一沿用参数级call_read_only，并保留显式及嵌套unknown优先于known wait的同一结果协议。",
       "boundary": "仍使用原统一执行入口、权限/审批、幂等claim和结果分类器；共享副作用记录置于预检与缓存判断之后，未知不能释放，前置拒绝不伪装成已派发。",
-      "validation": "原源候选51d29ec在main合并预览08eedbe6的67项CI检查终态且零失败，包含真实PostgreSQL、MCP和完整后端门禁；原883专项和190兼容回归通过。集成d76cf1e3后新增条件只读与路径边界回归，当前35个变更Python文件在锁定Ruff0.15.21下全部通过。新组合的1119项双库分组回归与对应CI须独立记录在本PR，旧证据不能替代新基线；人工架构评审仍待完成。",
+      "validation": "集成业务选择集1119项在38个隔离模块进程通过，0失败0错误0跳过，SQLite/PostgreSQL17.12均真实执行；源6c71365的实际d76合并预览上MCP99项、PostgreSQL696项通过，WG05新增42项双库场景零跳过。后续格式化不改业务AST；最终提交的全量CI与人工架构评审继续独立记录在本PR。",
       "follow_up": "由@42433422复核预检、claim、dispatch、独立核验的既有顺序；只增加同一入口所需保护，后续整理应按这些现役边界收敛而非添加平行executor。",
       "review_owner": "@42433422"
     },
@@ -69,7 +69,7 @@
       "after_lines": 1560,
       "reason": "工作组05评审请求：同一server意图更改client键曾真实重复付款；在原SQLite工具账本中原子绑定原receipt地址，补齐未知优先、只读对账及可信业务身份不可被对话覆盖。",
       "boundary": "身份索引与原claim在同一事务中，不新增执行状态机；保留原actor/tenant/Mod指纹、owner CAS、client键跨run回放和有证据的旧schema兼容，不猜测缺失历史关联。",
-      "validation": "原源候选51d29ec在main合并预览08eedbe6的67项CI检查终态且零失败，包含真实PostgreSQL、MCP和完整后端门禁；原883专项和190兼容回归通过。集成d76cf1e3后新增条件只读与路径边界回归，当前35个变更Python文件在锁定Ruff0.15.21下全部通过。新组合的1119项双库分组回归与对应CI须独立记录在本PR，旧证据不能替代新基线；人工架构评审仍待完成。",
+      "validation": "集成业务选择集1119项在38个隔离模块进程通过，0失败0错误0跳过，SQLite/PostgreSQL17.12均真实执行；源6c71365的实际d76合并预览上MCP99项、PostgreSQL696项通过，WG05新增42项双库场景零跳过。后续格式化不改业务AST；最终提交的全量CI与人工架构评审继续独立记录在本PR。",
       "follow_up": "由@42433422复核不可变身份索引与未知结果保留；后续若接入其他持久后端，沿既有仓储边界迁移，保持原键与回执可核对，不按相同参数猜测合并历史意图。",
       "review_owner": "@42433422"
     },
@@ -81,20 +81,20 @@
       "after_lines": 1020,
       "reason": "工作组05评审请求：spawn不继承父进程ContextVar，原通用幂等写缺少可信Worker claim；扩展已有capture/restore接线以支持派发前共享SQL副作用登记。",
       "boundary": "仍复用原spawn和HOST租约；不从runtime参数取得授权，不混用Mod业务库。ELT和catalog专用claim优先，避免通用恢复覆盖ELT检查点标志。",
-      "validation": "原源候选51d29ec在main合并预览08eedbe6的67项CI检查终态且零失败，包含真实PostgreSQL、MCP和完整后端门禁；原883专项和190兼容回归通过。集成d76cf1e3后新增条件只读与路径边界回归，当前35个变更Python文件在锁定Ruff0.15.21下全部通过。新组合的1119项双库分组回归与对应CI须独立记录在本PR，旧证据不能替代新基线；人工架构评审仍待完成。",
+      "validation": "集成业务选择集1119项在38个隔离模块进程通过，0失败0错误0跳过，SQLite/PostgreSQL17.12均真实执行；源6c71365的实际d76合并预览上MCP99项、PostgreSQL696项通过，WG05新增42项双库场景零跳过。后续格式化不改业务AST；最终提交的全量CI与人工架构评审继续独立记录在本PR。",
       "follow_up": "由@42433422审查可信claim的序列化和专用恢复优先级；保持单一进程边界，不为本次13行接线另建worker框架或机械拆分文件。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec.py",
-      "base_blob": "cc057c6dfcfeb9a9a1e272797ca084e36f170e37",
-      "head_blob": "73fb0833b11067b46a4000504169ee1cb8952db7",
-      "before_lines": 940,
-      "after_lines": 951,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。从唯一风险目录生成统一能力契约，保留新增动作、条件只读、输入schema、输出核验和当前主线ELT/工作簿约束。",
-      "boundary": "ToolSpec只投影现役目录；发货创建在领域验证后将采购单位别名归一为目录所需的单位名称，不降低必填校验。删除旧ImportExecutor入口，不引入并行目录或新的任意代码入口。",
-      "validation": "ToolSpec与目录权限、跨模块字段投影和注册表一致性专项已运行；最终SSOT及CI继续核验。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "base_blob": "392c5c4c1c78e789f3d3c2d8a90bc5802fe0ce77",
+      "head_blob": "ec22a82d77b7009e4abf9568c1d0b031a22d0b37",
+      "before_lines": 965,
+      "after_lines": 967,
+      "reason": "工作组05集成验收阻塞收口：当前d76基线在原CI的Ruff格式门禁失败，使用锁定Ruff0.15.21整理本文件的既有导入及排版；没有新增业务分支或改变执行语义。",
+      "boundary": "仅格式化和排序现有导入，不迁移职责，不改审批、核验、任务状态或模型调用；已逐文件比较去除导入节点后的AST完全一致，全部原测试断言保留。",
+      "validation": "本地全app/tests的4300个文件Ruff lint与format通过；集成业务选择集1119项零失败零跳过，原6c71365预览的真实MCP99项及PostgreSQL696项已通过；最后格式/SDK接线提交的CI仍独立复核，不把历史绿灯当当前验收。",
+      "follow_up": "由@42433422核对精确base/head blob及格式化范围；本条是为既有集成质量门禁提交的评审请求，不代表人工批准，也不用于掩盖独立工作簿核验仍有的功能失败。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
@@ -105,7 +105,7 @@
       "after_lines": 1204,
       "reason": "工作组05集成兼容评审请求：真实复现export后缀pattern与原fullmatch校验冲突，合法CSV/XLSX路径被拒而裸扩展名被接受；修正原动作完整路径约束，并格式化同文件现有导入。",
       "boundary": "仅修改现役excel_analysis.export输入合同及既有导入排版，不改通用Schema验证器，不放开其他扩展名、文件归属、权限或审批；实际导出器仍执行原内容和资源限制。",
-      "validation": "先复现合法路径误拒与裸扩展名误接受；全注册表加9个路径边界通过，工具合同与真实导出模块136项通过。锁定Ruff0.15.21检查通过；新组合1119项双库分组回归及对应CI须独立记录在本PR，人工架构评审仍待完成。",
+      "validation": "集成业务选择集1119项在38个隔离模块进程通过，0失败0错误0跳过，SQLite/PostgreSQL17.12均真实执行；源6c71365的实际d76合并预览上MCP99项、PostgreSQL696项通过，WG05新增42项双库场景零跳过。后续格式化不改业务AST；最终提交的全量CI与人工架构评审继续独立记录在本PR。",
       "follow_up": "由@42433422核对完整路径规则与实际export_input_error一致性；本文件净增7行均为既有导入与声明排版所需，格式化前后AST相同，不另建校验器或拆分同一Schema职责。",
       "review_owner": "@42433422"
     },
@@ -170,15 +170,15 @@
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_runtime/xiaox_runtime.py": {
-      "base_file": "FHD/app/application/agent_runtime/codex_runtime.py",
-      "base_blob": "6fd71bbcbfa89f05158df7f6752cf36983835a2f",
-      "head_blob": "4d0e3f73ec626e0b5f2403d49dbe8d6e3af86f94",
-      "before_lines": 715,
-      "after_lines": 1024,
-      "reason": "区分本轮时限结束与外部取消，并将结构化提案交给宿主契约校验",
-      "boundary": "外部取消仍沿原链路传播。到期回收租约并保留已有回执，未经验证的提案不会派发。",
-      "validation": "通过目标复核超时、取消、故障清理、待审批和回执复验。",
-      "follow_up": "请架构评审者核对增长必要性，并在合入前确认测试原始回执。",
+      "base_file": "FHD/app/application/agent_runtime/xiaox_runtime.py",
+      "base_blob": "41c0440aba691d5ea757b25d63d8f6c01038abae",
+      "head_blob": "8d0ef8e7dc6f0b3206f0ed48e7c29c6f0746ea84",
+      "before_lines": 1146,
+      "after_lines": 1171,
+      "reason": "工作组05集成验收阻塞收口：当前d76基线在原CI的Ruff格式门禁失败，使用锁定Ruff0.15.21整理本文件的既有导入及排版；没有新增业务分支或改变执行语义。",
+      "boundary": "仅格式化和排序现有导入，不迁移职责，不改审批、核验、任务状态或模型调用；已逐文件比较去除导入节点后的AST完全一致，全部原测试断言保留。",
+      "validation": "本地全app/tests的4300个文件Ruff lint与format通过；集成业务选择集1119项零失败零跳过，原6c71365预览的真实MCP99项及PostgreSQL696项已通过；最后格式/SDK接线提交的CI仍独立复核，不把历史绿灯当当前验收。",
+      "follow_up": "由@42433422核对精确base/head blob及格式化范围；本条是为既有集成质量门禁提交的评审请求，不代表人工批准，也不用于掩盖独立工作簿核验仍有的功能失败。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_tool_lifecycle.py": {
@@ -602,15 +602,15 @@
       "review_owner": "@42433422"
     },
     "FHD/app/infrastructure/xiaox/model_gateway.py": {
-      "base_file": "FHD/app/infrastructure/codex/model_gateway.py",
-      "base_blob": "5145d9050f80e18898194c23b494c1086de34f8a",
-      "head_blob": "714d3544d2cdb90bab43740f756908946beb2b62",
-      "before_lines": 872,
-      "after_lines": 1003,
-      "reason": "让 MiMo 在其支持的 JSON 对象模式下完成原有结构化提案",
-      "boundary": "沿用已限定路由、原 JSON Schema、实际模型身份和宿主校验。原调用不重试或切换模型。",
-      "validation": "通过请求编解码和网关结算定向回归，等待同一 MiMo 路由的完整留出集。",
-      "follow_up": "请架构评审者核对增长必要性，并在合入前确认测试原始回执。",
+      "base_file": "FHD/app/infrastructure/xiaox/model_gateway.py",
+      "base_blob": "421733a488f3a0b823b3a2e354c892452d04fa6f",
+      "head_blob": "d89d8a387678f0e41049487225061785c591e420",
+      "before_lines": 1116,
+      "after_lines": 1122,
+      "reason": "工作组05集成验收阻塞收口：当前d76基线在原CI的Ruff格式门禁失败，使用锁定Ruff0.15.21整理本文件的既有导入及排版；没有新增业务分支或改变执行语义。",
+      "boundary": "仅格式化和排序现有导入，不迁移职责，不改审批、核验、任务状态或模型调用；已逐文件比较去除导入节点后的AST完全一致，全部原测试断言保留。",
+      "validation": "本地全app/tests的4300个文件Ruff lint与format通过；集成业务选择集1119项零失败零跳过，原6c71365预览的真实MCP99项及PostgreSQL696项已通过；最后格式/SDK接线提交的CI仍独立复核，不把历史绿灯当当前验收。",
+      "follow_up": "由@42433422核对精确base/head blob及格式化范围；本条是为既有集成质量门禁提交的评审请求，不代表人工批准，也不用于掩盖独立工作簿核验仍有的功能失败。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/components/TopQuickNav.vue": {
@@ -1151,6 +1151,30 @@
       "boundary": "后台扫描与Host到Mod锁保护已提取到queued_chat_delivery，现有history仅负责原回执到原assistant行的投影；复用Xiaox和SQL账本，不增加执行入口、状态表或业务重试，保留owner、tenant、Mod及conversation revision约束。",
       "validation": "最终15文件后端组合379项通过、零跳过，覆盖实际SQLite重开、双库并发锁顺序、原行补送、等待续跑及取消后的迟到回执。外部模型I/O由fixture替换；真实模型、PostgreSQL服务与四端实机尚未验收。",
       "follow_up": "请原责任人@42433422按本记录精确base/head blob复核投影与事务边界；这是架构评审请求，不代表人工审批，正式CI及主线集成仍待完成。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/domain/task_lifecycle/agent_runtime_contract.py": {
+      "base_file": "FHD/app/domain/task_lifecycle/agent_runtime_contract.py",
+      "base_blob": "99293f71c3c1c7570dab6240dd88a0abbeeab364",
+      "head_blob": "b7ebec055b180ab0f4030524cabe5cf79254cb96",
+      "before_lines": 839,
+      "after_lines": 879,
+      "reason": "工作组05集成验收阻塞收口：当前d76基线在原CI的Ruff格式门禁失败，使用锁定Ruff0.15.21整理本文件的既有导入及排版；没有新增业务分支或改变执行语义。",
+      "boundary": "仅格式化和排序现有导入，不迁移职责，不改审批、核验、任务状态或模型调用；已逐文件比较去除导入节点后的AST完全一致，全部原测试断言保留。",
+      "validation": "本地全app/tests的4300个文件Ruff lint与format通过；集成业务选择集1119项零失败零跳过，原6c71365预览的真实MCP99项及PostgreSQL696项已通过；最后格式/SDK接线提交的CI仍独立复核，不把历史绿灯当当前验收。",
+      "follow_up": "由@42433422核对精确base/head blob及格式化范围；本条是为既有集成质量门禁提交的评审请求，不代表人工批准，也不用于掩盖独立工作簿核验仍有的功能失败。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/infrastructure/xiaox/tools.py": {
+      "base_file": "FHD/app/infrastructure/xiaox/tools.py",
+      "base_blob": "fc501a8c300008e33e5c5452673a72356a05faf6",
+      "head_blob": "a454f903fabe507296e8fe0886abf2b8e797ebd6",
+      "before_lines": 884,
+      "after_lines": 921,
+      "reason": "工作组05集成验收阻塞收口：当前d76基线在原CI的Ruff格式门禁失败，使用锁定Ruff0.15.21整理本文件的既有导入及排版；没有新增业务分支或改变执行语义。",
+      "boundary": "仅格式化和排序现有导入，不迁移职责，不改审批、核验、任务状态或模型调用；已逐文件比较去除导入节点后的AST完全一致，全部原测试断言保留。",
+      "validation": "本地全app/tests的4300个文件Ruff lint与format通过；集成业务选择集1119项零失败零跳过，原6c71365预览的真实MCP99项及PostgreSQL696项已通过；最后格式/SDK接线提交的CI仍独立复核，不把历史绿灯当当前验收。",
+      "follow_up": "由@42433422核对精确base/head blob及格式化范围；本条是为既有集成质量门禁提交的评审请求，不代表人工批准，也不用于掩盖独立工作簿核验仍有的功能失败。",
       "review_owner": "@42433422"
     }
   }

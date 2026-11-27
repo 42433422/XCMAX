@@ -18,7 +18,7 @@ from openpyxl.cell.cell import MergedCell, get_time_format
 from openpyxl.styles.numbers import is_date_format
 from openpyxl.utils.cell import column_index_from_string, range_boundaries
 
-from app.domain.workbook_write_contract import (
+from app.mod_sdk.workbook_controls import (
     WORKBOOK_BANDED_TABLE_STYLE,
     WORKBOOK_STRUCTURAL_PHASES,
 )
@@ -610,8 +610,11 @@ def _check_final_cells(
 def _check_conformance(
     wb, plan: Dict[str, Any], write_report: Optional[Dict[str, Any]], template_wb=None
 ) -> _Finding:
-    from app.domain.workbook_write_contract import WORKBOOK_CONTROL_PHASES, WORKBOOK_NATIVE_PHASES
-    from app.mod_sdk.workbook_controls import control_matches
+    from app.mod_sdk.workbook_controls import (
+        WORKBOOK_CONTROL_PHASES,
+        WORKBOOK_NATIVE_PHASES,
+        control_matches,
+    )
 
     f = _Finding("conformance")
     # Sheet operations can replace a value without replacing its number format.

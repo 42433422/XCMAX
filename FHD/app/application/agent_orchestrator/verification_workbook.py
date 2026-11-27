@@ -7,8 +7,8 @@ import importlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
-import sys
 import json
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -179,6 +179,8 @@ def _qc_package(pack: Path):
             if loaded == name or loaded.startswith(name + "."):
                 sys.modules.pop(loaded, None)
         sys.meta_path.remove(finder)
+
+
 def review_workbook_write(params: dict, context: dict) -> tuple[dict, list[dict]]:
     from openpyxl.utils.exceptions import InvalidFileException
 

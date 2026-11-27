@@ -303,12 +303,20 @@ def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
         raise ValueError("invalid_group_by")
     try:
         if not group_by:
-            return pd.DataFrame([
-                {f"{column}_{op}": df[column].agg(op) for column, ops in operations.items() for op in ops}
-            ])
+            return pd.DataFrame(
+                [
+                    {
+                        f"{column}_{op}": df[column].agg(op)
+                        for column, ops in operations.items()
+                        for op in ops
+                    }
+                ]
+            )
         result = df.groupby(group_by, dropna=False).agg(operations)
     except TypeError as exc:
-        raise ValueError("aggregation requires compatible column types; use an explicit conversion") from exc
+        raise ValueError(
+            "aggregation requires compatible column types; use an explicit conversion"
+        ) from exc
     result = result.reset_index()
     result.columns = [
         "_".join(str(part) for part in column if str(part)).strip("_")
@@ -337,9 +345,12 @@ def physical_range_sum(
         return invalid
     column = metric.get("column")
     if (
-        metric.get("op") != "sum" or not all((left, start, right, stop))
-        or left != right or not 1 <= start <= stop <= len(frame)
-        or not isinstance(column, str) or column not in frame.columns
+        metric.get("op") != "sum"
+        or not all((left, start, right, stop))
+        or left != right
+        or not 1 <= start <= stop <= len(frame)
+        or not isinstance(column, str)
+        or column not in frame.columns
         or get_column_letter(left) != column
     ):
         return invalid
@@ -349,18 +360,28 @@ def physical_range_sum(
     ignored: list[int] = []
     try:
         with (
-            closing(load_workbook(path, read_only=True, data_only=True, keep_links=False)) as values,
+            closing(
+                load_workbook(path, read_only=True, data_only=True, keep_links=False)
+            ) as values,
             closing(load_workbook(path, read_only=True, keep_links=False)) as formulas,
         ):
-            cells = zip(values[sheet].iter_rows(**bounds), formulas[sheet].iter_rows(**bounds), strict=True)
+            cells = zip(
+                values[sheet].iter_rows(**bounds), formulas[sheet].iter_rows(**bounds), strict=True
+            )
             for row, ((value,), (formula,)) in enumerate(cells, start):
                 if value.data_type == "e" or (formula.data_type == "f" and value.value is None):
                     error = (
-                        "sum_cell_error" if value.data_type == "e" else "sum_formula_value_unavailable"
+                        "sum_cell_error"
+                        if value.data_type == "e"
+                        else "sum_formula_value_unavailable"
                     )
                     return {"success": False, "error": error, "cell": f"{column}{row}"}
                 if value.data_type == "d":
-                    return {"success": False, "error": "sum_range_date_cell", "cell": f"{column}{row}"}
+                    return {
+                        "success": False,
+                        "error": "sum_range_date_cell",
+                        "cell": f"{column}{row}",
+                    }
                 if type(value.value) in (int, float):
                     numbers.append(value.value)
                 elif value.value is not None:
@@ -421,7 +442,9 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
         try:
             result = result.sort_values(plan["sort_by"], ascending=plan.get("ascending", True))
         except TypeError as exc:
-            raise ValueError("query sort requires comparable column values; use an explicit conversion") from exc
+            raise ValueError(
+                "query sort requires comparable column values; use an explicit conversion"
+            ) from exc
     if plan.get("columns"):
         result = result.loc[:, plan["columns"]]
     if "limit" in plan:

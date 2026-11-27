@@ -132,21 +132,30 @@ def verified_receipt_artifacts(rows: list[dict[str, Any]]) -> list[dict[str, Any
             for step in verification.get("steps") or []
             if isinstance(step, dict)
             for check in step.get("checks") or []
-            if isinstance(check, dict) and check.get("source") == "run_artifact" and check.get("status") == "passed"
+            if isinstance(check, dict)
+            and check.get("source") == "run_artifact"
+            and check.get("status") == "passed"
             and isinstance(evidence := check.get("evidence"), dict)
             and evidence.get("run_id") == run_id
-            and isinstance(evidence.get("artifact_id"), str) and isinstance(evidence.get("sha256"), str)
+            and isinstance(evidence.get("artifact_id"), str)
+            and isinstance(evidence.get("sha256"), str)
         }
         for artifact in receipt.get("artifacts") or []:
-            if not isinstance(artifact, dict) or artifact.get("artifact_type") not in {"file", "office_document"}:
+            if not isinstance(artifact, dict) or artifact.get("artifact_type") not in {
+                "file",
+                "office_document",
+            }:
                 continue
             artifact_id, name = artifact.get("artifact_id"), artifact.get("name")
             metadata = artifact.get("metadata") or {}
             digest = metadata.get("sha256") if isinstance(metadata, dict) else None
             if (
-                not isinstance(artifact_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id)
-                or not isinstance(name, str) or not name.strip()
-                or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                not isinstance(artifact_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id)
+                or not isinstance(name, str)
+                or not name.strip()
+                or not isinstance(digest, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", digest)
                 or (artifact_id, digest) not in checked
             ):
                 continue
@@ -154,8 +163,12 @@ def verified_receipt_artifacts(rows: list[dict[str, Any]]) -> list[dict[str, Any
             if artifact.get("uri") != uri:
                 continue
             files[(run_id, artifact_id)] = {
-                "run_id": run_id, "artifact_id": artifact_id, "name": name, "uri": uri,
-                "artifact_type": artifact["artifact_type"], "metadata": {"sha256": digest},
+                "run_id": run_id,
+                "artifact_id": artifact_id,
+                "name": name,
+                "uri": uri,
+                "artifact_type": artifact["artifact_type"],
+                "metadata": {"sha256": digest},
             }
     return list(files.values())
 
