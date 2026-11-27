@@ -200,6 +200,71 @@ def _queued_history_rows(page, context, *, include_legacy=False):
             yield row, binding[0], binding[1], metadata["summary"].get("status"), marked is not None
 
 
+def _refresh_queued_turn(context: dict[str, Any], view: dict[str, Any]) -> dict[str, Any] | None:
+    """Refresh the unfinished original request without replacing its committed reply."""
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+    from app.application.agent_orchestrator.run_models import RunContextScope
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+    run = get_agent_run_repository().get(view["run_id"])
+    if (
+        run is None
+        or run.run_id != view["run_id"]
+        or run.user_id != str(context["local_user_id"])
+        or run.metadata.get("runtime_type") != "xiaox"
+        or not RunContextScope(
+            context["tenant_id"],
+            context["mod_id"],
+            context["session_id"],
+            context["_conversation_revision"],
+        ).matches(run)
+    ):
+        return None
+    key = canonical_digest({"turn_id": view["turn_id"], "owner": run.user_id})
+    receipt = (run.metadata.get("runtime_requests") or {}).get(key)
+    if not isinstance(receipt, dict) or receipt.get("turn_id") != view["turn_id"]:
+        return None
+    result = receipt.get("result")
+    if receipt.get("state") == "returned" and (
+        not isinstance(result, dict) or result.get("run_id") != run.run_id
+    ):
+        return None
+    pending = run.metadata.get("_xiaox_queued_request") or {}
+    if view["status"] in {
+        "completed",
+        "failed",
+        "cancelled",
+        "rejected",
+        "interrupted",
+        "unknown",
+    } or (
+        pending.get("request_key") != key
+        and not (
+            pending.get("task") == run.message
+            and pending.get("input_data") == run.metadata.get("_xiaox_input_data")
+            and pending.get("answer_to_waiting_input") is False
+        )
+    ):
+        return view
+    if run.status not in {"completed", "waiting_user"}:
+        status = "unknown" if requires_retry_reconciliation(run) else run.status
+        view.update(
+            status=status,
+            requires_reconciliation=status == "unknown",
+            retryable=False,
+            message={
+                "paused": "原任务已暂停。",
+                "cancelled": "原任务已取消。",
+                "rejected": "原任务已被拒绝。",
+                "failed": "原任务执行失败，请查看任务回执。",
+                "blocked": "原任务已阻断，请核对任务状态。",
+                "unknown": "原任务已停止，已有调用的结果仍待核对，请勿重复提交。",
+            }.get(status, "原任务尚未完成，请继续查看回执。"),
+        )
+    return view
+
+
 class TaskConversationStore:
     """Persist task chat turns without allowing cross-user session access."""
 
@@ -441,16 +506,19 @@ class TaskConversationStore:
         if turn_id and type(revision) is int:
             for row, queued_turn, run_id, status, _ in _queued_history_rows(page, context):
                 if queued_turn == turn_id and status != "queued":
-                    selected_turn = {
-                        "turn_id": turn_id,
-                        "run_id": run_id,
-                        "status": status,
-                        "receipt_kind": "run",
-                        "durable": True,
-                        "message_id": row["id"],
-                        "message": row["content"],
-                        "requires_reconciliation": status == "unknown",
-                    }
+                    selected_turn = _refresh_queued_turn(
+                        context,
+                        {
+                            "turn_id": turn_id,
+                            "run_id": run_id,
+                            "status": status,
+                            "receipt_kind": "run",
+                            "durable": True,
+                            "message_id": row["id"],
+                            "message": row["content"],
+                            "requires_reconciliation": status == "unknown",
+                        },
+                    )
                     break
             else:
                 selected_turn = _stored_turn_view(context, turn_id)

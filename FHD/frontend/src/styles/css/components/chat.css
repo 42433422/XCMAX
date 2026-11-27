@@ -1213,6 +1213,12 @@
   background: var(--xc-color-surface-3);
 }
 
+.chat-composer .composer-control:focus-visible {
+  outline: 2px solid var(--xc-token-colors-neutral-light-n00, #ffffff);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--xc-token-colors-neutral-light-n900, #141619);
+}
+
 .chat-composer .composer-control:enabled:hover,
 .chat-composer .composer-control[aria-expanded='true'],
 .chat-composer [data-cds='ModelSwitcher'] button[popovertarget]:hover {

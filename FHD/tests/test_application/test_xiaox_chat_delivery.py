@@ -176,6 +176,16 @@ def test_same_input_resume_updates_original_waiting_reply(
     pending = state.repository.get(queued["run_id"]).metadata["_xiaox_queued_request"]
     assert pending["task"] == waiting.message and pending["answer_to_waiting_input"] is False
     assert pending["input_data"] == waiting.metadata["_xiaox_input_data"]
+    with tenant_scope(state.actor.tenant_id):
+        resumed_history = TaskConversationStore().get_history(
+            session_id=context["conversation_id"],
+            user_id=state.actor.user_id,
+            mod_id=context.get("mod_id", ""),
+            turn_id=context["turn_id"],
+        )
+    assert resumed_history["active_turn"]["status"] == "queued"
+    assert resumed_history["active_turn"]["run_id"] == waiting.run_id
+    assert resumed_history["active_turn"]["turn_id"] == context["turn_id"]
     completed = state.drain(queued["run_id"])
     assert completed.status == "completed"
     assert completed.metadata["runtime_requests"][original_key] == original_receipt
@@ -251,6 +261,220 @@ def test_delivery_cannot_publish_snapshot_cancelled_after_scan(
         assert (row.content, row.conversation_metadata) == original_message
         assert db.query(AIConversation).count() == 2
     assert len(state.calls) == 1 and state.queue.get(observed.run_id).execution_count == 1
+
+
+@pytest.mark.parametrize("action", ["cancel", "pause"])
+@pytest.mark.parametrize("uncertain", [False, True])
+def test_history_refreshes_delivered_wait_after_run_control(
+    runtime_entry, monkeypatch, action, uncertain
+):
+    from app.application.task_conversation_store import TaskConversationStore
+    from app.db.models import AIConversation
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    state = runtime_entry
+    context, queued, ack = queue_chat(state, monkeypatch)
+    runtime_waiting(state, monkeypatch, "waiting_user")
+    waiting = state.drain(queued["run_id"])
+    key = waiting.metadata["_xiaox_queued_request"]["request_key"]
+    original_receipt = waiting.metadata["runtime_requests"][key]
+    if uncertain:
+        waiting.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+        state.repository.save(waiting)
+    with state.actor.factory() as db:
+        row = db.get(AIConversation, ack["message_ids"][1])
+        original_message = (row.content, row.conversation_metadata)
+        assert json.loads(row.conversation_metadata)["summary"]["status"] == "waiting_user"
+
+    response = state.client.post(f"/api/agent/runs/{waiting.run_id}/{action}")
+    assert response.status_code == 200, response.text
+    controlled = state.repository.get(waiting.run_id)
+    assert controlled.status == ("cancelled" if action == "cancel" else "paused")
+    expected = "unknown" if uncertain else controlled.status
+    assert controlled.metadata["xiaox_runtime"]["revoked"] is True
+    execution = state.queue.get(waiting.run_id)
+    command = state.repository.latest_task_control(waiting.run_id)
+    for _ in range(2):
+        with tenant_scope(state.actor.tenant_id):
+            history = TaskConversationStore().get_history(
+                session_id=context["conversation_id"],
+                user_id=state.actor.user_id,
+                mod_id=context.get("mod_id", ""),
+                turn_id=context["turn_id"],
+            )
+        terminal = action == "cancel" or uncertain
+        receipt = history["turn_receipt" if terminal else "active_turn"]
+        assert receipt["status"] == expected
+        assert receipt["requires_reconciliation"] is uncertain
+        assert receipt["retryable"] is False
+        assert receipt["run_id"] == waiting.run_id
+        assert receipt["turn_id"] == context["turn_id"]
+        assert receipt["message_id"] == ack["message_ids"][1]
+        assert ("active_turn" if terminal else "turn_receipt") not in history
+    with state.actor.factory() as db:
+        row = db.get(AIConversation, ack["message_ids"][1])
+        assert (row.content, row.conversation_metadata) == original_message
+        assert db.query(AIConversation).count() == 2
+    assert state.repository.get(waiting.run_id).to_dict() == controlled.to_dict()
+    assert controlled.metadata["runtime_requests"][key] == original_receipt
+    assert state.repository.latest_task_control(waiting.run_id) == command
+    assert state.queue.get(waiting.run_id) == execution
+    assert execution.execution_count == 1 and len(state.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "changed", ["owner", "tenant", "mod", "session", "revision", "turn", "run"]
+)
+def test_history_control_refresh_requires_original_turn_scope(runtime_entry, monkeypatch, changed):
+    from app.application.task_conversation_store import TaskConversationStore
+    from app.db.models import AIConversationSession
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    state = runtime_entry
+    context, queued, ack = queue_chat(state, monkeypatch)
+    runtime_waiting(state, monkeypatch, "waiting_user")
+    waiting = state.drain(queued["run_id"])
+    response = state.client.post(f"/api/agent/runs/{waiting.run_id}/cancel")
+    assert response.status_code == 200, response.text
+    controlled = state.repository.get(waiting.run_id)
+    key = controlled.metadata["_xiaox_queued_request"]["request_key"]
+    saved_context = controlled.metadata["runtime_context"]
+    if changed == "mod":
+        saved_context["mod_id"] = "other-scope"
+    elif changed == "session":
+        saved_context.update(session_id="other-session", conversation_id="other-session")
+    elif changed == "revision":
+        with state.actor.factory.begin() as db:
+            db.query(AIConversationSession).filter_by(
+                session_id=context["conversation_id"]
+            ).one().revision += 1
+    elif changed == "turn":
+        controlled.metadata["runtime_requests"][key]["turn_id"] = "other-turn"
+    elif changed == "run":
+        controlled.metadata["runtime_requests"][key]["result"]["run_id"] = "other-run"
+    state.repository.save(controlled)
+    execution = state.queue.get(waiting.run_id)
+    with tenant_scope(999 if changed == "tenant" else state.actor.tenant_id):
+        history = TaskConversationStore().get_history(
+            session_id=context["conversation_id"],
+            user_id=state.actor.user_id + 1 if changed == "owner" else state.actor.user_id,
+            mod_id=context.get("mod_id", ""),
+            turn_id=context["turn_id"],
+        )
+    assert "active_turn" not in history and "turn_receipt" not in history
+    assert [row["id"] for row in history["messages"]] == (
+        [] if changed == "owner" else ack["message_ids"]
+    )
+    assert state.repository.get(waiting.run_id).to_dict() == controlled.to_dict()
+    assert state.queue.get(waiting.run_id) == execution
+    assert execution.execution_count == 1 and len(state.calls) == 1
+
+
+@pytest.mark.parametrize("resumed_status", ["running", "failed"])
+def test_history_observes_same_input_resume_without_replacing_wait_receipt(
+    runtime_entry, monkeypatch, resumed_status
+):
+    from app.application.task_conversation_store import TaskConversationStore
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    state = runtime_entry
+    context, queued, ack = queue_chat(state, monkeypatch)
+    runtime_waiting(state, monkeypatch, "waiting_user")
+    waiting = state.drain(queued["run_id"])
+    key = waiting.metadata["_xiaox_queued_request"]["request_key"]
+    receipt = waiting.metadata["runtime_requests"][key]
+    response = state.client.post(
+        f"/api/agent/runs/{waiting.run_id}/resume", json={"request_id": "same-input-outcome"}
+    )
+    assert response.status_code == 202, response.text
+    runtime_waiting(state, monkeypatch, resumed_status)
+    resumed = state.drain(waiting.run_id)
+    assert resumed.status == resumed_status
+    with tenant_scope(state.actor.tenant_id):
+        history = TaskConversationStore().get_history(
+            session_id=context["conversation_id"],
+            user_id=state.actor.user_id,
+            mod_id=context.get("mod_id", ""),
+            turn_id=context["turn_id"],
+        )
+    projected = history["turn_receipt" if resumed_status == "failed" else "active_turn"]
+    assert projected["status"] == resumed_status
+    assert projected["run_id"] == waiting.run_id and projected["turn_id"] == context["turn_id"]
+    assert projected["message_id"] == ack["message_ids"][1]
+    assert json.loads(history["messages"][1]["metadata"])["summary"]["status"] == "waiting_user"
+    assert state.repository.get(waiting.run_id).to_dict() == resumed.to_dict()
+    assert resumed.metadata["runtime_requests"][key] == receipt
+    assert state.queue.get(waiting.run_id).execution_count == 2 and len(state.calls) == 2
+
+
+@pytest.mark.parametrize("changed", ["message", "input_data", "answer_to_waiting_input"])
+def test_history_does_not_apply_later_input_control_to_original_wait(
+    runtime_entry, monkeypatch, changed
+):
+    from app.application.task_conversation_store import TaskConversationStore
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    state = runtime_entry
+    context, queued, ack = queue_chat(state, monkeypatch)
+    runtime_waiting(state, monkeypatch, "waiting_user")
+    waiting = state.drain(queued["run_id"])
+    response = state.client.post(
+        f"/api/agent/runs/{waiting.run_id}/resume",
+        json={
+            "request_id": "different-input",
+            **({"message": "补充的是另一条输入"} if changed == "message" else {}),
+        },
+    )
+    assert response.status_code == 202, response.text
+    if changed != "message":
+        resumed = state.repository.get(waiting.run_id)
+        resumed.metadata["_xiaox_queued_request"][changed] = (
+            {"source": "different"} if changed == "input_data" else True
+        )
+        state.repository.save(resumed)
+    response = state.client.post(f"/api/agent/runs/{waiting.run_id}/cancel")
+    assert response.status_code == 200, response.text
+    cancelled = state.repository.get(waiting.run_id)
+    with tenant_scope(state.actor.tenant_id):
+        history = TaskConversationStore().get_history(
+            session_id=context["conversation_id"],
+            user_id=state.actor.user_id,
+            mod_id=context.get("mod_id", ""),
+            turn_id=context["turn_id"],
+        )
+    assert history["active_turn"]["status"] == "waiting_user"
+    assert history["active_turn"]["message_id"] == ack["message_ids"][1]
+    assert "turn_receipt" not in history
+    assert state.repository.get(waiting.run_id).to_dict() == cancelled.to_dict()
+    assert state.queue.get(waiting.run_id).execution_count == 1 and len(state.calls) == 1
+
+
+@pytest.mark.parametrize("original_status", ["completed", "failed"])
+def test_history_does_not_relabel_terminal_turn_from_later_run_control(
+    runtime_entry, monkeypatch, original_status
+):
+    from app.application.task_conversation_store import TaskConversationStore
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    state = runtime_entry
+    context, queued, ack = queue_chat(state, monkeypatch)
+    if original_status == "failed":
+        runtime_waiting(state, monkeypatch, original_status)
+    original = state.drain(queued["run_id"])
+    original.status = "cancelled"
+    state.repository.save(original)
+    with tenant_scope(state.actor.tenant_id):
+        history = TaskConversationStore().get_history(
+            session_id=context["conversation_id"],
+            user_id=state.actor.user_id,
+            mod_id=context.get("mod_id", ""),
+            turn_id=context["turn_id"],
+        )
+    assert history["turn_receipt"]["status"] == original_status
+    assert history["turn_receipt"]["message_id"] == ack["message_ids"][1]
+    assert "active_turn" not in history
+    assert state.repository.get(original.run_id).to_dict() == original.to_dict()
+    assert state.queue.get(original.run_id).execution_count == 1 and len(state.calls) == 1
 
 
 def test_delivery_prioritizes_recent_receipts_and_advances_bounded_history(

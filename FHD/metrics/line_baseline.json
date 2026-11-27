@@ -1,5 +1,5 @@
 {
-  "lines": 2836126,
+  "lines": 2836372,
   "updated": "2026-11-27",
-  "note": "用户已明确授权继续完成#3682并纳入WG01至WG11；保留最新main fe7580b统一表格事实、原生稀疏读取、分页权限、原写入QC与独立核验。本轮正式CI修复会话归属、持久核对回执、键盘焦点、客来来单一源码导出及合法测试夹具隔离，并同步严格路由/状态契约；不降低安全或资源限制。当前维护行数2836126，相对最新main已登记且实际一致的2801287净增34839：生产适配12077、测试20973、开发验收脚本1286、CI源150、文档123、配置230；其中本轮CI修复净增211。新增内容属于授权集成及永久回归，继续复用现役Codex、LangGraph、SQL和Office组件，不删除无关逻辑凑数。18项静态架构检查通过，G11仍为186且重复源码为0；19项源码增长精确blob仅登记评审请求，不替代批准。最终远端CI、原卷、真实模型/公式引擎及长时生产验收分别核验，尚不宣称全部通过。"
+  "note": "PR #3682 follow-up fixes verified stale cached waiting states after cancel/pause and same-input resume; preserves original receipts and completed turns, adds 18 ownership/control regression cases, restores existing two-tone Tab focus and checks the real focused control, and replaces obsolete visual approvals with 12 independently reviewed exact pixel pairs. Four Tab pairs remain unapproved until fresh CI capture; no size gate or acceptance claim is relaxed."
 }
