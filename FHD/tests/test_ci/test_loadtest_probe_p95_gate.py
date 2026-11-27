@@ -53,6 +53,7 @@ def test_probe_regular_pages_passes_under_500ms_p95_budget_and_writes_json(tmp_p
     server = _start_server()
     try:
         out = tmp_path / "p95-report.json"
+        monkeypatch.delenv("GITHUB_SHA", raising=False)
         monkeypatch.setenv("SOURCE_SHA", "b" * 40)
         rc = probe.main(
             [
