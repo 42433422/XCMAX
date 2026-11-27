@@ -1195,9 +1195,9 @@
       "follow_up": "请@42433422按精确blob复核工具计数、合法等待、核验预留和自治级别的组合；保持原模块生命周期职责，不将记录完整性视为人工架构批准。",
       "review_owner": "@42433422",
       "base_file": "FHD/app/infrastructure/xiaox/binding.py",
-      "base_blob": "e87421762088b227d563710cd49080f3c95b0f31",
+      "base_blob": "7ff9a0afdb953e25454f0fe90e198cf3fcaa52a2",
       "head_blob": "daa22986405b1b8532327e70c3740876851d6d64",
-      "before_lines": 634,
+      "before_lines": 811,
       "after_lines": 837,
       "validation": "相邻组合251项通过，其中两项真实工具子进程在允许本机进程的环境单独复验；全 app mypy 2303源文件通过。原桌面真实模型闭环待当前提交验收，不能将模拟测试作为交付。"
     },
