@@ -290,6 +290,8 @@ class AutoIngestService:
         detection = detect_elt_target(
             path, suffix=path.suffix.lower(), owner_user_id=owned_upload_user_id
         )
+        if detection.get("decision_source") in {"model", "ai_schema"}:
+            return detection
         label_blob = " ".join(labels or [])
         if any(tok in label_blob for tok in ("出货", "送货", "发货", "shipment")):
             detection = {

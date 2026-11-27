@@ -1,7 +1,8 @@
-"""Bounded LLM assistance for deterministic ETL field mappings."""
+"""AI-first field mapping over existing parsed source facts and target fields."""
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from app.application.elt.llm_assist import advise_field_mappings
@@ -14,8 +15,8 @@ def enhance_mappings_with_llm(
     adapter: TargetAdapter,
     deterministic: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Fill only weak or unmapped pairs from a bounded structured suggestion."""
-    if adapter.allow_dynamic_fields or not dataset.rows:
+    """Suggest mappings without changing raw rows or bypassing preview approval."""
+    if adapter.allow_dynamic_fields or adapter.type in {"knowledge", "abnormal"} or not dataset.rows:
         return deterministic, {
             "used_llm": False,
             "advisory_only": True,
@@ -50,40 +51,64 @@ def enhance_mappings_with_llm(
             for field in adapter.fields
         ],
     )
-    enhanced = [dict(mapping) for mapping in deterministic]
-    by_target = {str(mapping.get("target") or ""): mapping for mapping in enhanced}
-    used_sources = {
-        str(mapping.get("source") or "")
-        for mapping in enhanced
-        if mapping.get("source") and float(mapping.get("confidence") or 0.0) >= 0.9
+    if not result.used_llm or result.degraded:
+        return deterministic, {
+            **result.public_metadata(),
+            "decision_source": "rule_fallback",
+        }
+
+    # A model result is a proposal, not an approved mapping. Missing or
+    # conflicting suggestions stay unmapped rather than being silently filled.
+    sources = set(dataset.headers)
+    targets = {field.key for field in adapter.fields}
+    suggestions = [
+        item
+        for item in result.data.get("mappings") or []
+        if isinstance(item, dict)
+        and item.get("source") in sources
+        and item.get("target") in targets
+        and 0.85 <= float(item.get("confidence") or 0.0) <= 1.0
+        and item.get("transform", "") in {"", "trim", "number", "date"}
+    ]
+    source_counts = Counter(item["source"] for item in suggestions)
+    target_counts = Counter(item["target"] for item in suggestions)
+    accepted = {
+        item["target"]: item
+        for item in suggestions
+        if source_counts[item["source"]] == target_counts[item["target"]] == 1
     }
-    applied = 0
-    for suggestion in list(result.data.get("mappings") or []):
-        target = str(suggestion.get("target") or "")
-        source = str(suggestion.get("source") or "")
-        mapping = by_target.get(target)
-        if mapping is None or source in used_sources:
-            continue
-        current_confidence = float(mapping.get("confidence") or 0.0)
-        llm_confidence = float(suggestion.get("confidence") or 0.0)
-        if current_confidence >= 0.9 or llm_confidence < 0.85:
+    enhanced = []
+    for rule in deterministic:
+        target = str(rule.get("target") or "")
+        suggestion = accepted.get(target)
+        if suggestion is None:
+            enhanced.append({
+                **rule,
+                "source": "",
+                "confidence": 0.0,
+                "transforms": [],
+                "suggested_by": "llm_unresolved",
+                "reason": "model_mapping_missing_or_ambiguous",
+            })
             continue
         transform = str(suggestion.get("transform") or "")
-        mapping.update(
-            {
-                "source": source,
-                "confidence": llm_confidence,
-                "transforms": [{"op": transform}] if transform else [],
-                "suggested_by": "llm",
-                "reason": str(suggestion.get("reason") or "")[:300],
-            }
-        )
-        used_sources.add(source)
-        applied += 1
+        enhanced.append({
+            **rule,
+            "source": suggestion["source"],
+            "confidence": float(suggestion["confidence"]),
+            "transforms": [{"op": transform}] if transform else [],
+            "suggested_by": "llm",
+            "reason": str(suggestion.get("reason") or "")[:300],
+        })
+    mapped_sources = {item["source"] for item in enhanced if item.get("source")}
     return enhanced, {
         **result.public_metadata(),
-        "suggestion_count": len(list(result.data.get("mappings") or [])),
-        "applied_count": applied,
+        "decision_source": "model",
+        "suggestion_count": len(result.data.get("mappings") or []),
+        "applied_count": len(accepted),
+        "unmapped_targets": [item["target"] for item in enhanced if not item.get("source")],
+        "unmapped_sources": [header for header in dataset.headers if header not in mapped_sources],
+        "rule_candidates": deterministic,
     }
 
 

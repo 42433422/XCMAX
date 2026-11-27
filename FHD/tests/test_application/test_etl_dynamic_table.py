@@ -227,3 +227,87 @@ def _upload(owner_user_id: int):
         storage_path="/tmp/产量.csv",
         expires_at=datetime.now(UTC),
     )
+
+
+def test_target_model_precedes_high_confidence_rule(monkeypatch):
+    from app.application.elt import target_detection as detection
+
+    rule = {
+        "target_type": "products",
+        "confidence": 0.95,
+        "reason": "product_headers",
+        "sheet_name": "rule-sheet",
+    }
+    monkeypatch.setattr(
+        detection, "_llm_classification",
+        lambda _lines: {"target_type": "customers", "confidence": 0.9},
+    )
+    result = detection._escalate(rule, ["source"])
+    assert result["target_type"] == "customers"
+    assert result["decision_source"] == "model"
+    assert result["rule_candidate"]["sheet_name"] == "rule-sheet"
+    assert "sheet_name" not in result
+    monkeypatch.setattr(detection, "_llm_classification", lambda _lines: None)
+    fallback = detection._escalate(rule, ["source"])
+    assert fallback["target_type"] == "products"
+    assert fallback["decision_source"] == "rule_fallback"
+
+
+def test_uncertain_model_does_not_reactivate_rule(monkeypatch):
+    from app.application.elt import target_detection as detection
+
+    monkeypatch.setattr(
+        detection, "_llm_classification",
+        lambda _lines: {"target_type": "abnormal", "confidence": 0.4},
+    )
+    monkeypatch.setattr(detection, "_infer_dynamic_schema", lambda _rows: None)
+    result = detection._escalate(
+        {"target_type": "products", "confidence": 0.98}, ["source"],
+    )
+    assert result["target_type"] == "abnormal"
+    assert result["needs_review"] is True
+    assert result["confirmed"] is False
+
+
+def test_model_mapping_can_replace_rule_and_exposes_unresolved(monkeypatch):
+    from app.application.elt import mapping_assist
+    from app.application.elt.parser_types import ParsedDataset, ParsedRow
+
+    dataset = ParsedDataset(
+        headers=["A", "B"],
+        rows=[ParsedRow("Sheet1", 2, {"A": "one", "B": "two"})],
+        source_features={},
+    )
+    adapter = get_adapter("customers")
+    targets = [field.key for field in adapter.fields]
+    rule = [
+        {"target": targets[0], "source": "A", "confidence": 1.0, "transforms": []},
+        {"target": targets[1], "source": "B", "confidence": 1.0, "transforms": []},
+    ]
+    monkeypatch.setattr(
+        mapping_assist,
+        "advise_field_mappings",
+        lambda **_kwargs: _result({
+            "mappings": [{
+                "source": "B", "target": targets[0], "confidence": 0.95, "transform": "trim",
+            }],
+        }),
+    )
+    mapped, meta = mapping_assist.enhance_mappings_with_llm(dataset, adapter, rule)
+    assert mapped[0]["source"] == "B"
+    assert mapped[1]["source"] == ""
+    assert meta["unmapped_targets"] == [targets[1]]
+    assert meta["unmapped_sources"] == ["A"]
+    assert dataset.rows[0].values == {"A": "one", "B": "two"}
+    assert rule[0]["source"] == "A"
+
+
+def test_dynamic_dedupe_requires_complete_unique_composite():
+    from app.application.elt.targets.dynamic import _usable_dedupe_keys
+
+    rows = [{"customer": "A", "line": 1}, {"customer": "A", "line": 2}]
+    headers = ["customer", "line"]
+    assert _usable_dedupe_keys(["customer"], headers, rows) == []
+    assert _usable_dedupe_keys(["customer", "line"], headers, rows) == headers
+    assert _usable_dedupe_keys(["line"], headers, [{"line": 1}, {}]) == []
+    assert _usable_dedupe_keys(["line", "missing"], headers, rows) == []

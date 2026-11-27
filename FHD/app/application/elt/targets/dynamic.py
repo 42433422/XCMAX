@@ -95,23 +95,14 @@ def _group_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 def _usable_dedupe_keys(
     dedupe_keys: list[str], headers: list[str], rows: list[dict[str, Any]]
 ) -> list[str]:
-    """只保留在本分片里有区分度的去重键。
-
-    模型常把「备注」「已付款」这类列当成主键；照它去重会把几千行正常数据
-    折叠成几十行。区分度不足一半的键一律不参与去重，退回按来源坐标去重。
-    """
-    present = set(headers)
-    usable: list[str] = []
-    total = len(rows)
-    for key in dedupe_keys:
-        if key not in present:
-            continue
-        distinct = len(
-            {json.dumps(json_safe(row.get(key)), ensure_ascii=False, default=str) for row in rows}
-        )
-        if total and distinct / total >= 0.5:
-            usable.append(key)
-    return usable
+    """Reject incomplete or non-unique proposed keys; do not collapse source rows."""
+    if not rows or not dedupe_keys or any(key not in headers for key in dedupe_keys):
+        return []
+    if len(set(dedupe_keys)) != len(dedupe_keys):
+        return []
+    if any(row.get(key) in (None, "") for row in rows for key in dedupe_keys):
+        return []
+    return dedupe_keys if len({_row_hash(row, dedupe_keys) for row in rows}) == len(rows) else []
 
 
 def _partition_columns(schema_columns: list[Any], headers: list[str]) -> list[dict[str, Any]]:
