@@ -4,12 +4,13 @@
  * 单次：npm run test:smoke
  * 热重跑（改测试或 src/stores/mods 即重跑）：npm run test:smoke:watch
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 /** initialize 末尾会 dynamic import 真 router + 注册 Mod 路由；单测里避免 import.meta.glob 与 replace 等副作用拖死用例 */
 vi.mock('@/router/registerModRoutes', () => ({
   registerModRoutes: vi.fn(() => Promise.resolve()),
   registerAllModRoutesFromGlob: vi.fn(() => Promise.resolve()),
+  retireStaleRuntimeRoutes: vi.fn(),
 }))
 vi.mock('@/stores/hostConfig', async (importOriginal) => {
   const actual = await importOriginal()
@@ -35,9 +36,21 @@ const TEST_SCOPE = 'tenant:1'
 describe('mods store smoke', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.spyOn(console, 'warn')
     vi.stubGlobal('fetch', vi.fn())
     setTenantStorageScopeCache(TEST_SCOPE)
     writeActiveExtensionModIdToStorage('', TEST_SCOPE)
+  })
+
+  afterEach(() => {
+    const warnings = vi.mocked(console.warn).mock.calls.filter(([message]) =>
+      typeof message === 'string' && (
+        message.startsWith('[mods] registerModRoutes after initialize failed:') ||
+        message.startsWith('[mods] revoke runtime routes after server disable failed:')
+      ),
+    )
+    vi.mocked(console.warn).mockRestore()
+    expect(warnings).toEqual([])
   })
 
   it('initialize 成功后写入 mods 并标记 isLoaded', async () => {

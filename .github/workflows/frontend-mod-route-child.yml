@@ -10,9 +10,13 @@ on:
       - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
       - 'FHD/frontend/src/main.ts'
       - 'FHD/frontend/src/stores/mods.ts'
+      - 'FHD/frontend/src/stores/mods*.test.ts'
+      - 'FHD/frontend/tests/smoke/mods-store.smoke.test.js'
       - '.github/workflows/frontend-mod-route-child.yml'
+  workflow_dispatch:
   push:
     branches:
+      - main
       - fix/frontend-mod-route-isolation-20261125
       - integration/frontend-desktop-mobile-20261125
     paths:
@@ -20,6 +24,8 @@ on:
       - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
       - 'FHD/frontend/src/main.ts'
       - 'FHD/frontend/src/stores/mods.ts'
+      - 'FHD/frontend/src/stores/mods*.test.ts'
+      - 'FHD/frontend/tests/smoke/mods-store.smoke.test.js'
       - '.github/workflows/frontend-mod-route-child.yml'
 
 permissions:
@@ -55,4 +61,4 @@ jobs:
       - name: Type-check Vue source
         run: npm run type-check
       - name: Test MOD routing and auth-session fencing
-        run: npm test -- src/router/registerModRoutes.runtime.test.ts src/utils/modRoutesSharedFetch.test.ts src/stores/mods.phase2.test.ts
+        run: npm test -- src/router/registerModRoutes.runtime.test.ts src/utils/modRoutesSharedFetch.test.ts src/stores/mods.phase2.test.ts src/stores/mods.coverage.test.ts tests/smoke/mods-store.smoke.test.js

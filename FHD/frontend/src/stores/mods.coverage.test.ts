@@ -3,7 +3,7 @@
  * 重点覆盖：mod facade 探针、loading-status 重试、菜单函数、权益匹配、
  * ensureActiveModSelection、resolveModsAccountUsername 等
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
 // ── 可配置的 mock 函数（hoisted-safe，以 mock 开头）─────────
@@ -187,6 +187,7 @@ vi.mock('@/stores/industry', () => ({
 vi.mock('@/router/registerModRoutes', () => ({
   registerAllModRoutesFromGlob: vi.fn(async () => {}),
   registerModRoutes: vi.fn(async () => {}),
+  retireStaleRuntimeRoutes: vi.fn(),
 }))
 
 vi.mock('@/router', () => ({
@@ -399,6 +400,7 @@ describe('mods store – coverage 补齐', () => {
 
     // 重置所有 mock
     vi.clearAllMocks()
+    vi.spyOn(console, 'warn')
 
     // 设置默认实现
     mockApiFetch.mockImplementation(async () => makeResponse({ success: true, data: [] }))
@@ -432,6 +434,17 @@ describe('mods store – coverage 补齐', () => {
       isAdminAccount: false,
       isEnterprise: false,
     })
+  })
+
+  afterEach(() => {
+    const warnings = vi.mocked(console.warn).mock.calls.filter(([message]) =>
+      typeof message === 'string' && (
+        message.startsWith('[mods] registerModRoutes after initialize failed:') ||
+        message.startsWith('[mods] revoke runtime routes after server disable failed:')
+      ),
+    )
+    vi.mocked(console.warn).mockRestore()
+    expect(warnings).toEqual([])
   })
 
   // ═══════════════════════════════════════════════════════════

@@ -12,6 +12,7 @@ import { useModsStore, CLIENT_MODS_UI_OFF_KEY, readEntitledModIdsFromAuthPayload
 const mockApiFetch = vi.fn()
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+  getAppBase: () => '',
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
   MOD_PROBE_API_TIMEOUT_MS: 8_000,
   isApiFetchTimeoutError: (e: unknown) => e instanceof DOMException && e.name === 'AbortError' && e.message.includes('apiFetch timeout'),
@@ -169,9 +170,17 @@ vi.mock('@/router/registerModRoutes', () => ({
   retireStaleRuntimeRoutes: vi.fn(),
 }))
 
-vi.mock('@/router', () => ({
-  default: { addRoute: vi.fn(), getRoutes: () => [] },
-}))
+vi.mock('@/constants/modRouteGlob', () => ({ modRouteGlob: {} }))
+
+vi.mock('@/router', async () => {
+  const { createMemoryHistory, createRouter } = await import('vue-router')
+  return {
+    default: createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', name: 'host-home', component: { template: '<div />' } }],
+    }),
+  }
+})
 
 // ── helpers ────────────────────────────────────────────────
 function makeModsResponse(modsData: unknown[], extra: Record<string, unknown> = {}) {
@@ -694,16 +703,89 @@ describe('mods store – fetchModRoutes', () => {
 
   it('does not revoke runtime routes after an unconfirmed network failure', async () => {
     const { fetchModRoutesPayloadShared } = await import('@/utils/modRoutesSharedFetch')
-    const { registerModRoutes } = await import('@/router/registerModRoutes')
+    const { registerModRoutes, retireStaleRuntimeRoutes } = await import('@/router/registerModRoutes')
     const mockFetch = vi.mocked(fetchModRoutesPayloadShared)
     const register = vi.mocked(registerModRoutes)
+    const retire = vi.mocked(retireStaleRuntimeRoutes)
     register.mockClear()
+    retire.mockClear()
     mockApiFetch.mockReset()
     mockFetch.mockResolvedValueOnce(null)
     mockApiFetch.mockResolvedValueOnce(makeModsResponse(sampleMods))
     const store = useModsStore()
     await store.initialize()
     expect(register).not.toHaveBeenCalled()
+    expect(retire).toHaveBeenCalledWith(expect.anything())
+  })
+
+  it('initializes real runtime routes, preserves on network loss, and retires on session change or revoke', async () => {
+    const { default: router } = await import('@/router')
+    const { invalidateEnterpriseSessionCache } = await import('@/utils/authSessionCache')
+    const { fetchModRoutesPayloadShared } = await import('@/utils/modRoutesSharedFetch')
+    const { registerModRoutes, retireStaleRuntimeRoutes } = await import('@/router/registerModRoutes')
+    const actual = await vi.importActual<typeof import('@/router/registerModRoutes')>('@/router/registerModRoutes')
+    const fetchRoutes = vi.mocked(fetchModRoutesPayloadShared)
+    const register = vi.mocked(registerModRoutes)
+    const retire = vi.mocked(retireStaleRuntimeRoutes)
+    const entry = {
+      mod_id: 'init-proof',
+      routes_path: '',
+      runtime: {
+        mod_id: 'init-proof',
+        package_version: '1.0.0',
+        package_sha256: 'a'.repeat(64),
+        owner_scope: 'tenant:1',
+        sdk_version: 1,
+        entry_url: '/verified.js',
+        routes: [{ path: '/mod/init-proof/home', name: 'runtime-init-proof-0', title: 'Test MOD' }],
+        requires_restart: false,
+        runtime_status: 'running',
+      },
+    } satisfies import('@/router/registerModRoutes').ModRouteApiEntry
+    const warn = vi.spyOn(console, 'warn')
+    const routeName = 'runtime-init-proof-0'
+    try {
+      await router.push('/')
+      mockApiFetch.mockReset()
+      mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods))
+      fetchRoutes.mockReset()
+      fetchRoutes.mockResolvedValueOnce([entry])
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce([{ ...entry, runtime: { ...entry.runtime, owner_scope: 'tenant:2' } }])
+        .mockResolvedValueOnce([])
+      register.mockImplementation(actual.registerModRoutes)
+      retire.mockImplementation(actual.retireStaleRuntimeRoutes)
+
+      const store = useModsStore()
+      await store.initialize(true)
+      expect(router.resolve('/mod/init-proof/home').name).toBe(routeName)
+      await store.initialize(true)
+      expect(router.hasRoute(routeName)).toBe(true)
+
+      invalidateEnterpriseSessionCache()
+      await store.initialize(true)
+      expect(router.hasRoute(routeName)).toBe(false)
+      expect(router.resolve('/mod/init-proof/home').matched).toHaveLength(0)
+
+      await store.initialize(true)
+      expect(router.hasRoute(routeName)).toBe(true)
+      await store.initialize(true)
+      expect(router.hasRoute(routeName)).toBe(false)
+      expect(router.hasRoute('host-home')).toBe(true)
+
+      expect(warn.mock.calls.filter(([message]) =>
+        typeof message === 'string' && message.startsWith('[mods] registerModRoutes after initialize failed:'),
+      )).toEqual([])
+    } finally {
+      invalidateEnterpriseSessionCache()
+      actual.retireStaleRuntimeRoutes(router)
+      fetchRoutes.mockReset().mockResolvedValue([])
+      register.mockReset().mockImplementation(async () => {})
+      retire.mockReset().mockImplementation(() => {})
+      mockApiFetch.mockReset()
+      warn.mockRestore()
+    }
   })
 })
 
