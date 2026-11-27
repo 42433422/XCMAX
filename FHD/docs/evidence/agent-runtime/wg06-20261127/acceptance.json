@@ -1,0 +1,228 @@
+{
+  "schema": "xcagi.wg06.acceptance.v1",
+  "observed_at_utc": "2026-11-27T08:14:51.104893+00:00",
+  "workgroup": "06",
+  "overall_acceptance": "blocked",
+  "implementation_commit": "88f2156fb41e7568fff39146f39390d2b1cf6031",
+  "parent_integration_commit": "4109dbfd802bd7b5395b535bfe10cc6ad0a1fd0b",
+  "main_observed": "7911ad68ab403183e840bd48488475708b13b54e",
+  "source_sha256": {
+    "FHD/CHANGELOG.md": "62775639cd424a259c1ff1fdeec7b42bebf78368be376966685844b772c7c3c6",
+    "FHD/README.md": "c0639519d24a9c6cb6c5a398ae21f3f5cbcb773686de19d7b215cd43ee6b6396",
+    "FHD/app/application/agent_orchestrator/resume_transaction.py": "93c491e64976dbbba1b92f2aaa7249b121f0eaa0353865cc92fa64256a0fdb4a",
+    "FHD/app/application/agent_orchestrator/stale_run_reconciler.py": "c832e8fe08b416a889736110f52f855d0ff4eb6169ccc291d8c3c1a1aa93b161",
+    "FHD/app/application/agent_orchestrator/task_dispatcher.py": "a8b09d13d0c66f5125c8e43f4a6e71856807d8d2e039289a19e7fbcb5cdfca55",
+    "FHD/app/application/agent_orchestrator/verification_workbook.py": "2fa4b71d1e0ccbf5db72f88a08ac849d93f51150dbfee1ad38e0f0f762337f4c",
+    "FHD/app/application/agent_orchestrator/workbook_recalculation.py": "5da64923fddd31c4c9ed7c35abd6eb0f11264949a889fd31fefb1f7f180efc68",
+    "FHD/app/application/agent_runtime/gateway.py": "ffa410489dfbe5ae6dbe388ad3634ef66d365ade72aba65ffe6525f9a81c7613",
+    "FHD/app/application/agent_runtime/goal_verification_task.py": "180dbe6ec19ae8ec8ddac7faa4d789031f45f41ca8a618be6329a887b0651557",
+    "FHD/app/application/agent_runtime/goal_verifier.py": "5e5f625a3e085ebd925c5eac96c7daf4848078d0bcf65b4329c947d570ab83c1",
+    "FHD/app/application/agent_runtime/verification_budget.py": "48da3e3b1e6cd5564e148391ad2198d8ea20d175a64545675f7c2625297f2265",
+    "FHD/app/application/agent_runtime/xiaox_runtime.py": "394c3a1bde5b728157b09107aa9241e7f416533f1d0a9d2f45d0935a1e9e0153",
+    "FHD/app/application/employee_runtime/continuity_tool_wait.py": "66f65b91c9e613c0d5991d0ef3682982bd797f620aaee3ef59888ed49a5ebdb7",
+    "FHD/app/domain/task_lifecycle/agent_runtime_contract.py": "169906786cff56251f37bf2efc1f950b8372d1aa2c18beac594090c74aa4070f",
+    "FHD/app/domain/task_lifecycle/agent_runtime_results.py": "3e34d1e9753e2f845d130ec0bb306e6fdaacf3e145b8a87f435e60f46a635c6d",
+    "FHD/app/domain/workbook_write_contract.py": "847bd5601638c1f640d4e8d282ab0783051a20a49a15d91f8235fa4d0fc7f454",
+    "FHD/app/infrastructure/xiaox/binding.py": "74da5950d08d56884fc3e0b31612676fc4bdb9c2298393cd7e010ebee89a0784",
+    "FHD/app/infrastructure/xiaox/model_gateway.py": "3e24c0d99e85757bfacfc8d8fab45589e996c968884607e30909914004e329ac",
+    "FHD/app/infrastructure/xiaox/queued_runtime.py": "6ea1374ecc058808ad5c34a70c4360bbbb7fb322a2886494d4f84865c1cc2437",
+    "FHD/tests/test_application/test_goal_verification_budget.py": "548a4d185e7cba72ddacd6836e455fda5986ed7566bf3e21c3fc52e2d8a31c3a",
+    "FHD/tests/test_application/test_goal_verification_task.py": "44d2ef957231a42a88364837f5fbb858a5270327b0c6d271b5f038ae9f8bd036",
+    "FHD/tests/test_application/test_workbook_recalculation.py": "e0067c141f4524f7c44f4d67f52eee21cf8b9b8570ec96508855fc1f33f175ff",
+    "FHD/tests/test_application/test_xiaox_gateway_integration.py": "fefd55449957bf60272bb2fa97966fdf6e514ea90a1b30ae3bfd0847c97205bf",
+    "FHD/tests/test_application/test_xiaox_goal_gateway_integration.py": "16f095274c00717ea0c800ec1a63db9889acf3132d78ea15ac9ff4c6b9c61c9f",
+    "FHD/tests/test_application/test_xiaox_goal_verifier.py": "ebb0c0351b40b67d85393ec2a68f81869936376299fc555d40cef45e77f22846",
+    "FHD/tests/test_application/test_xiaox_model_gateway_settlement.py": "38bfb6f7288555622b9e131f2bd5ed0fc78d4d4271f3e606a4184de9f689bb98",
+    "FHD/tests/test_application/test_xiaox_runtime.py": "039740908a37d0351f41f0cf02ef0e36c4a0434982e16dcc0ca181ec804a9099",
+    "FHD/tests/test_application/test_xiaox_runtime_recovery.py": "032c0d5cde387c6502262da37d5e39ecdc61811924d41c43e6a888d2994ebc5f",
+    "FHD/tests/test_application/test_xiaox_workbook_write.py": "1bd9f88bac30650ef95f2558952620dfb121a583e6482a397e8ba404b570d94a",
+    "FHD/tests/test_domain/test_agent_runtime_contract.py": "be5b8ca265a9fe8eaf1e0402bb4fe33b555e3a8db5eeb1a708d33b997d264c77",
+    "FHD/tests/test_routes/test_xiaox_receipt_projection.py": "7fcd45452b7b5309ef4db7a0dcf0216ea23b26e9e733f13c50242eab6eada06e"
+  },
+  "runtime_reuse": [
+    "Codex SDK 0.171.0",
+    "existing vendored LangGraph checkpoints",
+    "original SQL run/model/wallet ledgers",
+    "original durable queue and worker leases"
+  ],
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "packages": {
+      "pytest": "9.1.1",
+      "pytest-asyncio": "1.4.0",
+      "pytest-cov": "7.1.0",
+      "ruff": "0.15.21",
+      "SQLAlchemy": "2.0.51",
+      "httpx": "0.28.1",
+      "openai": "2.45.0",
+      "tenacity": "9.1.4",
+      "openai-codex": "0.171.0",
+      "openai-codex-cli-bin": "0.171.0",
+      "mcp": "2.3.0",
+      "openpyxl": "3.1.5",
+      "defusedxml": "0.7.1"
+    },
+    "langgraph": "repository packages selected by PYTHONPATH"
+  },
+  "regressions": {
+    "effective_passed": 867,
+    "effective_failed": 0,
+    "skipped": 0,
+    "real_calc_cases_excluded_from_unified_run": 4,
+    "qualification": "Local regression evidence; model responses are controlled fixtures. Real SQL writes/readbacks and native pinned SDK/CLI are exercised, but this is not real-upstream-model, live-worker-SIGKILL, PostgreSQL production, or deployment acceptance.",
+    "unified": {
+      "head_at_execution": "df69326ef7eb7f4daea004392aed41e88e50e551",
+      "selection": "22 test files, pytest -q --no-cov --tb=short -k \"not real_calc\"",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "1",
+          "skipped": "0",
+          "tests": "867",
+          "time": "218.731",
+          "timestamp": "2026-11-27T17:05:45.627146+09:00",
+          "hostname": "82950c60b49a"
+        }
+      ],
+      "sha256": "0cb671c273a7ccb71daccb8357740b0e4a26826b4272d5e84f881c23b91829a7",
+      "path": "unified.junit.xml.gz",
+      "uncompressed_sha256": "6eeb4e60ba291d8bcfacb531bc552791974579594a0b50d9e1bc871a93004ab8"
+    },
+    "projection_corrected": {
+      "head_during_run": "df69326ef7eb7f4daea004392aed41e88e50e551",
+      "identical_source_committed_as": "88f2156fb41e7568fff39146f39390d2b1cf6031",
+      "only_modified_file": "FHD/tests/test_routes/test_xiaox_receipt_projection.py",
+      "selection": "pytest -q --no-cov --tb=short tests/test_routes/test_xiaox_receipt_projection.py",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "18",
+          "time": "25.536",
+          "timestamp": "2026-11-27T17:10:40.901926+09:00",
+          "hostname": "82950c60b49a"
+        }
+      ],
+      "sha256": "266472ff321166ddee22a6fa762d9378cd3a718c9d13d45b41ffe7d15416ad9e",
+      "reason": "The original fixture relabeled a completed write as unmet and lost successful-write coverage. The corrected scenario freezes a separate reply obligation before admission, keeps the write satisfied, and verifies a new reply without another write. All approval, privacy, deduplication, same-thread, generation, cumulative-budget and single-effect assertions remain.",
+      "path": "projection-corrected.junit.xml.gz",
+      "uncompressed_sha256": "a9627ed79e45c7e338b9eaaa06b930a1ff05e9cada7295f28c4d8cc79f407d9a"
+    },
+    "native_cli_integration_cases": 3,
+    "persistent_verification_sql_cases": 45,
+    "cases_manifest_sha256": "82706988074bd1e248d3de8150b5bbe93403f27de45241a8d66e7ae449ad948f"
+  },
+  "formula_engine": {
+    "acceptance": "blocked",
+    "distinct_real_cases": 4,
+    "source_files_unchanged_from_commit": "dff6a763a1ccb89f1fb696f894930b3ec653ece1",
+    "source_sha256": {
+      "FHD/app/application/agent_orchestrator/verification_workbook.py": "2fa4b71d1e0ccbf5db72f88a08ac849d93f51150dbfee1ad38e0f0f762337f4c",
+      "FHD/app/application/agent_orchestrator/workbook_recalculation.py": "5da64923fddd31c4c9ed7c35abd6eb0f11264949a889fd31fefb1f7f180efc68",
+      "FHD/app/application/employee_runtime/continuity_tool_wait.py": "66f65b91c9e613c0d5991d0ef3682982bd797f620aaee3ef59888ed49a5ebdb7",
+      "FHD/app/domain/workbook_write_contract.py": "847bd5601638c1f640d4e8d282ab0783051a20a49a15d91f8235fa4d0fc7f454",
+      "FHD/tests/test_application/test_workbook_recalculation.py": "e0067c141f4524f7c44f4d67f52eee21cf8b9b8570ec96508855fc1f33f175ff",
+      "FHD/tests/test_application/test_xiaox_workbook_write.py": "1bd9f88bac30650ef95f2558952620dfb121a583e6482a397e8ba404b570d94a"
+    },
+    "development": {
+      "version": "LibreOfficeDev 26.8.0.0.alpha0 2c87e51eeaa2b413ff4ae097b2705eea1995d8e5",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "4",
+          "skipped": "0",
+          "tests": "4",
+          "time": "30.644",
+          "timestamp": "2026-11-27T16:51:22.666663+09:00",
+          "hostname": "82950c60b49a"
+        }
+      ],
+      "exit_codes": [
+        137,
+        137,
+        137,
+        137
+      ],
+      "observation": "System oom_kill increased during every failed conversion (24 to 29 overall). No per-cgroup victim record is available; the evidence establishes correlated OOM events, not a specific victim attribution. Calls returned before their 44-second remaining budgets and did not use the adapter timeout kill path.",
+      "prior_success": "An earlier approved-writer/QC suite passed 40 cases including real Calc. That earlier observation is not substituted for the four current failures."
+    },
+    "stable": {
+      "package": "4:25.2.3-2+deb13u12",
+      "version": "LibreOffice 25.2.3.2 520(Build:2)",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "4",
+          "skipped": "0",
+          "tests": "4",
+          "time": "5.617",
+          "timestamp": "2026-11-27T16:37:43.853927+09:00",
+          "hostname": "82950c60b49a"
+        }
+      ],
+      "exit_codes": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "observation": "Private trusted Debian packages were hash-checked and --version succeeded. Conversion startup failed; an ordinary AF_UNIX socket bind probe returned EPERM. The official desktop startup path treats IPC pipe failure as a bootstrap error; this is the supported explanation for the environment incompatibility, not a successful conversion.",
+      "startup_source": "https://docs.libreoffice.org/desktop/html/app_8cxx_source.html",
+      "permission_escalation": "The standard exec escalation attempt was rejected by granular sandbox_approval:false/request_permissions:false. No alternate bypass was used."
+    },
+    "failure_behavior": {
+      "status": "inconclusive",
+      "code": "formula_recalculation_engine_failed",
+      "formula_recalculation_verified": false,
+      "source_unchanged": true,
+      "delivered_artifact_replaced": false
+    },
+    "process_evidence_sha256": {
+      "calc-development-processes.jsonl": "d8044a191e161015ba838f79046774831e03468b7755dd6a0874f2a09047bb98",
+      "calc-stable-processes.jsonl": "ca0a7f969eccd3ad19610181b194466b1e0e95877d2defc8879612658161dd77"
+    }
+  },
+  "original_exam_input": {
+    "name": "2.xlsx",
+    "sha256": "5c7c6b75d8bab97ffccca593b80318a5997a3256a91d49d47d1a8160e6adfeb4",
+    "worksheets": 3,
+    "stored_cells": 84,
+    "formulas": 0,
+    "adapter_result": "not_required / formula_recalculation_no_formulas",
+    "full_exam_accepted": false,
+    "note": "This is the input workbook, not the completed answer. The input was not added to the repository."
+  },
+  "static_gates": {
+    "changed_python_files": 29,
+    "changed_ruff_check": "passed",
+    "changed_ruff_format": "passed",
+    "architecture_fitness": "passed, no new violations; 48 existing baseline violations suppressed",
+    "full_ruff": {
+      "accepted": false,
+      "diagnostics": 13,
+      "codes": {
+        "I001": 8,
+        "F401": 1,
+        "F811": 4
+      },
+      "affected_files": 9,
+      "all_affected_files_identical_to_parent": true
+    },
+    "full_format": {
+      "accepted": false,
+      "unformatted_files": 38,
+      "all_affected_files_identical_to_parent": true
+    },
+    "capability_center": "passed without any generated page, generator, catalog, or historic evidence changes; shallow ancestry was restored"
+  },
+  "remaining_acceptance": [
+    "Run the same four real Calc cases on a permitted host with a fixed stable engine and sufficient resources.",
+    "Run the original goal and answered workbook through the approved real model route; retain numerical and semantic verification receipts.",
+    "Integrate through existing PR #3682, resolve current-main conflicts and required CI gates, then verify a release built from the exact protected-main commit."
+  ]
+}

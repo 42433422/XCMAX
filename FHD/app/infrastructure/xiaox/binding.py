@@ -332,6 +332,8 @@ class XiaoxBindingStore:
     def _validate_current(
         self, run: AgentRun, metadata: dict[str, Any], generation: int | None
     ) -> None:
+        from app.application.agent_runtime.verification_budget import phase_deadline
+
         self._validate_control(run)
         if metadata.get("revoked"):
             code = str(metadata.get("close_reason") or "token_invalid")
@@ -339,7 +341,7 @@ class XiaoxBindingStore:
         if float(metadata.get("expires_at", 0)) <= time.time():
             raise XiaoxBindingError("token_expired", "运行授权已过期")
         if metadata.get("active_started_at") is not None and (
-            float(metadata.get("deadline_at", 0)) <= time.time()
+            phase_deadline(run, metadata) <= time.time()
         ):
             raise XiaoxBindingError("runtime_budget_exhausted", "原任务运行时长预算已耗尽")
         if generation is not None and metadata.get("generation") != generation:
@@ -357,6 +359,8 @@ class XiaoxBindingStore:
         actual = hashlib.sha256(token.encode()).hexdigest()
         if not expected or not hmac.compare_digest(expected, actual):
             raise XiaoxBindingError("token_invalid", "运行凭据不属于此调用通道")
+        if audience == "mcp" and binding.metadata.get("active_phase") == "verification":
+            raise XiaoxBindingError("verification_only", "独立核验阶段不能调用业务执行通道")
         return self.check_current(run_id, generation=binding.metadata.get("generation"))
 
     @contextmanager
@@ -445,6 +449,8 @@ class XiaoxBindingStore:
         def claim(run: AgentRun, metadata: dict[str, Any]) -> None:
             nonlocal created
             created = False
+            if metadata.get("active_phase") == "verification":
+                raise XiaoxBindingError("verification_only", "独立核验阶段不能派发业务工具")
             if metadata.get("waiting_input"):
                 raise XiaoxBindingError("waiting_user", "请先补充原任务所需信息")
             if not run.metadata.get("runtime_goal_contract"):
@@ -514,8 +520,13 @@ class XiaoxBindingStore:
             ):
                 raise XiaoxBindingError("call_in_progress", "原业务任务尚未结束，请先读取其回执")
             reserved = int(run.metadata.get("reserved_cost_units") or 0)
+            from app.application.agent_runtime.verification_budget import verification_reserve
+
+            _, verification_cost = verification_reserve(metadata)
             if budget_exceeded_payload(
-                run, additional_cost_units=reserved + cost_units, scope="xiaox_child"
+                run,
+                additional_cost_units=reserved + cost_units + verification_cost,
+                scope="xiaox_child",
             ):
                 raise XiaoxBindingError("budget_exceeded", "父任务剩余预算不足，未创建业务任务")
             budget = run.metadata.get("ai_cost_budget_units")
@@ -523,11 +534,15 @@ class XiaoxBindingStore:
                 None
                 if budget is None
                 else max(
-                    int(budget) - int(run.metadata.get("ai_cost_units_total") or 0) - reserved, 0
+                    int(budget)
+                    - int(run.metadata.get("ai_cost_units_total") or 0)
+                    - reserved
+                    - verification_cost,
+                    0,
                 )
             )
-            # Give the only active child its entire remaining envelope. Its
-            # nested model/tool calls cannot race the parent model for that money.
+            # The active child receives only the execution envelope. Independent
+            # final review keeps its earmark in the same original task budget.
             reservation = cost_units if capacity is None else capacity
             run.metadata["reserved_cost_units"] = reserved + reservation
             calls[call_id] = {

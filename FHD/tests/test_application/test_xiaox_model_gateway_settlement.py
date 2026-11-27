@@ -349,7 +349,9 @@ def test_model_request_deadline_is_one_clock_for_headers_retries_and_reads(monke
     monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180")
     now = [1_000.0]
     monkeypatch.setattr("app.infrastructure.xiaox.model_gateway.time.monotonic", lambda: now[0])
-    binding = SimpleNamespace(metadata={"deadline_at": time.time() + 90})
+    binding = SimpleNamespace(
+        run=SimpleNamespace(metadata={}), metadata={"deadline_at": time.time() + 90}
+    )
     deadline = model_request_deadline(binding)
     assert deadline == pytest.approx(1_090.0)
     now[0] = 1_089.0
@@ -361,7 +363,9 @@ def test_model_request_deadline_is_one_clock_for_headers_retries_and_reads(monke
 
 def test_model_request_deadline_requires_a_live_task_deadline(monkeypatch):
     monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180")
-    binding = SimpleNamespace(metadata={"deadline_at": time.time() - 1})
+    binding = SimpleNamespace(
+        run=SimpleNamespace(metadata={}), metadata={"deadline_at": time.time() - 1}
+    )
     with pytest.raises(HTTPException) as caught:
         model_request_deadline(binding)
     assert caught.value.status_code == 408

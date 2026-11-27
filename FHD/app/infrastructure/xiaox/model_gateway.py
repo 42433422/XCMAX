@@ -29,6 +29,13 @@ from httpx_sse import EventSource
 from sqlalchemy.exc import DBAPIError
 from starlette.types import Receive, Scope, Send
 
+from app.application.agent_runtime.verification_budget import (
+    JOB_HEADER,
+    JOB_KEY,
+    active_verification_job_id,
+    phase_deadline,
+    verification_reserve,
+)
 from app.infrastructure.xiaox.policy import ModelRoute
 
 router = APIRouter()
@@ -288,8 +295,8 @@ class _ModelCallLimitReached(Exception):
 
 
 def _remaining(binding: Any) -> float:
-    value = binding.metadata.get("deadline_at")
-    if not isinstance(value, (int, float)) or not math.isfinite(value):
+    value = phase_deadline(binding.run, binding.metadata)
+    if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
         raise HTTPException(409, "Task model deadline is missing")
     remaining = float(value) - time.time()
     if remaining <= 0:
@@ -305,6 +312,7 @@ def _claim(
     *,
     request_group: str = "",
     attempt: int = 1,
+    verification_job: str = "",
 ) -> tuple[Any, int]:
     from app.application.agent_orchestrator.budget import budget_exceeded_payload
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
@@ -319,6 +327,11 @@ def _claim(
         admit_model_call(None, profile="xiaox", kwargs={"model": route.model})
 
         def claim(run: Any, metadata: dict[str, Any]) -> None:
+            expected_job = active_verification_job_id(run, metadata)
+            if (verification_job or metadata.get("active_phase") == "verification") and (
+                not verification_job or verification_job != expected_job
+            ):
+                raise HTTPException(403, "Model request is not bound to the host verification task")
             if metadata.get("model_reconciliation_required"):
                 raise HTTPException(409, "Previous model usage requires reconciliation")
             calls = metadata.setdefault("model_requests", {})
@@ -326,9 +339,19 @@ def _claim(
                 raise HTTPException(409, "A model request is still in progress or unconfirmed")
             if len(calls) >= route.max_model_calls:
                 raise _ModelCallLimitReached(route.max_model_calls, len(calls))
+            reserved_calls, reserved_cost = verification_reserve(metadata)
+            if verification_job:
+                if metadata.get("verification_budget") and reserved_calls <= 0:
+                    raise HTTPException(429, "Independent verification call budget is exhausted")
+            elif len(calls) + reserved_calls >= route.max_model_calls:
+                raise HTTPException(
+                    429, "Remaining model calls are reserved for independent verification"
+                )
             held = int(run.metadata.get("reserved_cost_units") or 0)
             if budget_exceeded_payload(
-                run, additional_cost_units=held + reserve, scope="xiaox_model"
+                run,
+                additional_cost_units=held + reserve + (0 if verification_job else reserved_cost),
+                scope="xiaox_model",
             ):
                 raise HTTPException(402, "Task model budget is insufficient")
             run.metadata["reserved_cost_units"] = held + reserve
@@ -342,6 +365,18 @@ def _claim(
                 "request_group": request_group or request_id,
                 "attempt": attempt,
                 "started_at": time.time(),
+                "purpose": "verification" if verification_job else "execution",
+                **(
+                    {
+                        "verification_job_id": verification_job,
+                        "verification_input_digest": (run.metadata.get(JOB_KEY) or {}).get(
+                            "input_digest"
+                        ),
+                        "verification_version": (run.metadata.get(JOB_KEY) or {}).get("version"),
+                    }
+                    if verification_job
+                    else {}
+                ),
             }
 
         try:
@@ -374,6 +409,7 @@ def _finish(
     state: str = "completed",
     market_route: ModelRoute | None = None,
     platform_receipt: Any = None,
+    verification_response: dict[str, Any] | None = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
@@ -414,6 +450,26 @@ def _finish(
             item.get("state") in {"reserved", "unknown"}
             for item in metadata["model_requests"].values()
         )
+        if (
+            verification_response is not None
+            and call.get("purpose") == "verification"
+            and call.get("state") == state == "completed"
+        ):
+            from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+            # Keep a settled read-only response before publishing to the caller.
+            # Losing that connection never requires a second metered request.
+            digest = canonical_digest(verification_response)
+            if "verification_response" in call and (
+                call.get("verification_response_digest") != digest
+                or canonical_digest(call["verification_response"]) != digest
+            ):
+                raise ModelGatewayContractError(
+                    "verification_response_conflict",
+                    "A settled verification response cannot change",
+                )
+            call.setdefault("verification_response", verification_response)
+            call.setdefault("verification_response_digest", digest)
         if terminal:
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
@@ -470,8 +526,11 @@ class _ModelSettlementStorageError(RuntimeError):
             if type(code) is int and 0 < code <= 0x7FFFFFFF:
                 self.diagnostic["sqlite_error_code"] = code
             if (
-                isinstance(name, str) and len(name) <= 64 and name.startswith("SQLITE_")
-                and name.isascii() and name.isidentifier()
+                isinstance(name, str)
+                and len(name) <= 64
+                and name.startswith("SQLITE_")
+                and name.isascii()
+                and name.isidentifier()
             ):
                 self.diagnostic["sqlite_error_name"] = name
 
@@ -525,6 +584,16 @@ async def forward_responses(request: Request):
         body = _prepare_body(json.loads(raw), route)
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
+    verification_job = request.headers.get(JOB_HEADER, "")
+    if verification_job or binding.metadata.get("active_phase") == "verification":
+        if not verification_job or verification_job != active_verification_job_id(
+            binding.run, binding.metadata
+        ):
+            raise HTTPException(403, "Model request is not bound to the host verification task")
+        if body.get("tools") or body.get("stream"):
+            raise HTTPException(
+                400, "Independent verification must be a non-streaming tool-free request"
+            )
     route.token()  # Validate the account credential without persisting it.
     request_group = "request_" + uuid.uuid4().hex
     request_id = "model_" + uuid.uuid4().hex
@@ -706,7 +775,13 @@ async def forward_responses(request: Request):
             _remaining(binding)
             await anyio.to_thread.run_sync(
                 lambda: _claim(
-                    store, token, route, request_id, request_group=request_group, attempt=attempt
+                    store,
+                    token,
+                    route,
+                    request_id,
+                    request_group=request_group,
+                    attempt=attempt,
+                    verification_job=verification_job,
                 )
             )
             claimed = True
@@ -840,7 +915,8 @@ async def forward_responses(request: Request):
             if upstream.status_code == 429 and attempt < 3:
                 # Missing retry hints use the SDK's bounded exponential jitter.
                 delay = (
-                    max(0.25, retry_after) if retry_after is not None
+                    max(0.25, retry_after)
+                    if retry_after is not None
                     else 0.5 * 2 ** (attempt - 1) * uniform(0.75, 1)
                 )
                 if request_remaining(deadline) > delay:
@@ -859,7 +935,9 @@ async def forward_responses(request: Request):
                     }
                 },
                 status_code=upstream.status_code if definite else 502,
-                headers={"Retry-After": str(math.ceil(retry_after))} if retry_after is not None else None,
+                headers={"Retry-After": str(math.ceil(retry_after))}
+                if retry_after is not None
+                else None,
             )
         assert upstream is not None and client is not None
         slot_failure = None
@@ -882,6 +960,7 @@ async def forward_responses(request: Request):
                     usage=usage,
                     usage_key=usage_key,
                     state="completed" if status == "completed" else "failed",
+                    verification_response=response if verification_job else None,
                 )
             )
             finished = True

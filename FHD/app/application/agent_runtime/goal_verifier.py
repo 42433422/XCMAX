@@ -12,6 +12,7 @@ import math
 import re
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any, cast
 
 from jsonschema import Draft202012Validator
@@ -27,6 +28,7 @@ from app.domain.task_lifecycle.agent_runtime_contract import (
     planned_tool_calls,
     review_schema,
     runtime_file_evidence,
+    valid_compensation_review,
     validate_goal_review,
     validate_runtime_goal,
 )
@@ -41,6 +43,7 @@ _RULES = (
     "每项 source 必须为 source_id 对应原文的连续片段。request 是本轮原始请求，answer:事件ID 是宿主持久补答；历史仅解释指代，不能新增授权。宿主 objective 是必须核对的经营目标。",
     'kind 由用户要求决定，不由是否已有工具调用决定。查询实时业务为 read，创建修改发送等为 write；解释、写作、代码示例等纯回复为 reply，不强迫调用工具。只有用户明确要求把结果落到工作区文件、文档、表格或系统（如写入、保存到、生成 xlsx、修改某文档、运行并交付产物）才是 write；仅要求编写、实现、写一个程序、函数、脚本或算法，且未要求落盘、运行或改动现有文件时，属于 reply，代码块本身就是交付，evidence_ids 为 ["response"]，不得因未生成文件、未调用工具而判 unmet。',
     "每项业务目标必须关联真实 evidence_ids，只有 completed 且 success=true、verified=true 的宿主原任务回执能证明完成。模型自述、旧聊天工具文字、成功领取任务、待审批、预演和局部成功都不是整个目标完成。",
+    "公式写入、缓存值或无语法错误不证明数值已重算。原要求包含计算或数值验证时，需要与该制品摘要绑定的 formula_recalculation.status=verified 证据；缺引擎、未支持或未知结果均不能满足该数值目标。重算未报错也不独立证明业务公式选用或全部原始目标正确。",
     "产品档案的存在与库存数量分别核对。仅询问某型号是否存在时，只核对档案存在性；只有明确询问库存、现货、仓库或数量时才核对库存。空库存不足以证明型号未建档。",
     "写入目标不能用查询结果代替。一个写入回执不得重复充当不同操作；同一次已核验批量动作作为一个整体目标核对完整项目，不能省略文件、记录或范围。已完成写入不可重做。",
     "未触发的条件操作可为 not_applicable，但必须引用证明前提的已核验只读回执，不能因缺少结果而认定无需执行。顺序与结果引用须有实际回执事实支持。",
@@ -119,40 +122,59 @@ def _review_evidence_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         verification = receipt.get("verification") or {}
         calls = []
         for call in receipt.get("tool_calls") or []:
-            item = {key: call.get(key) for key in ("tool_id", "action", "status", "output", "error")}
+            item = {
+                key: call.get(key) for key in ("tool_id", "action", "status", "output", "error")
+            }
             if call.get("params") != row.get("params"):
                 item["params"] = call.get("params")
             calls.append(item)
-        view.append({
-            "evidence_id": row["evidence_id"],
-            "tool_id": row["tool_id"],
-            "action": row["action"],
-            "params": row["params"],
-            "read_only": row["read_only"],
-            "state": row["state"],
-            "receipt": {
-                key: receipt.get(key) for key in (
-                    "success", "verified", "status", "message", "pending_approval",
-                    "needs_user_input", "reconciliation_required",
-                )
-            } | {
-                "verification": {
-                    "status": verification.get("status"),
-                    "accepted": verification.get("accepted"),
-                    "steps": [
-                        {key: step.get(key) for key in ("status", "accepted", "code", "checks")}
-                        for step in verification.get("steps") or []
+        view.append(
+            {
+                "evidence_id": row["evidence_id"],
+                "tool_id": row["tool_id"],
+                "action": row["action"],
+                "params": row["params"],
+                "read_only": row["read_only"],
+                "state": row["state"],
+                "receipt": {
+                    key: receipt.get(key)
+                    for key in (
+                        "success",
+                        "verified",
+                        "status",
+                        "message",
+                        "pending_approval",
+                        "needs_user_input",
+                        "reconciliation_required",
+                    )
+                }
+                | {
+                    "verification": {
+                        "status": verification.get("status"),
+                        "accepted": verification.get("accepted"),
+                        "steps": [
+                            {key: step.get(key) for key in ("status", "accepted", "code", "checks")}
+                            for step in verification.get("steps") or []
+                        ],
+                    },
+                    "tool_calls": calls,
+                    "artifacts": [
+                        {
+                            key: artifact.get(key)
+                            for key in (
+                                "artifact_id",
+                                "artifact_type",
+                                "name",
+                                "uri",
+                                "mime_type",
+                            )
+                        }
+                        | {"sha256": (artifact.get("metadata") or {}).get("sha256")}
+                        for artifact in receipt.get("artifacts") or []
                     ],
                 },
-                "tool_calls": calls,
-                "artifacts": [
-                    {key: artifact.get(key) for key in (
-                        "artifact_id", "artifact_type", "name", "uri", "mime_type",
-                    )} | {"sha256": (artifact.get("metadata") or {}).get("sha256")}
-                    for artifact in receipt.get("artifacts") or []
-                ],
-            },
-        })
+            }
+        )
     return view
 
 
@@ -201,15 +223,18 @@ def _verbatim_blocks(text: str) -> list[str]:
     stride = max(1, math.ceil(len(lines) / 128))
     blocks = []
     for start in range(0, len(lines), stride):
-        block = "".join(lines[start:start + stride]).strip()
+        block = "".join(lines[start : start + stride]).strip()
         for offset in range(0, len(block), 4000):
-            if bounded := block[offset:offset + 4000].strip():
+            if bounded := block[offset : offset + 4000].strip():
                 blocks.append(bounded)
     return blocks
 
 
-def _file_citation_catalogue(file_evidence: dict[str, dict[str, Any]]) -> tuple[
-    dict[str, dict[str, Any]], dict[str, tuple[str, str]],
+def _file_citation_catalogue(
+    file_evidence: dict[str, dict[str, Any]],
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, tuple[str, str]],
 ]:
     documents = {}
     sources = {}
@@ -225,14 +250,17 @@ def _file_citation_catalogue(file_evidence: dict[str, dict[str, Any]]) -> tuple[
 
 
 def _resolve_file_citations(
-    review: dict[str, Any], sources: dict[str, tuple[str, str]], responses: dict[str, str],
+    review: dict[str, Any],
+    sources: dict[str, tuple[str, str]],
+    responses: dict[str, str],
 ) -> None:
     for goal in review["goals"]:
         if "file_citations" in goal:
             for cite in goal["file_citations"]:
                 identity, source = sources[cite.pop("source_block_id")]
                 cite.update(
-                    evidence_id=identity, source_excerpt=source,
+                    evidence_id=identity,
+                    source_excerpt=source,
                     response_excerpt=responses[cite.pop("response_block_id")],
                 )
 
@@ -256,10 +284,14 @@ def _verify_plan_capabilities(
     if len(calls) > 64:
         return [], "单次方案最多核对 64 项动作，请保留未核对项目"
     nodes = [
-        WorkflowNode(**{key: call[key] for key in ("node_id", "tool_id", "action", "params", "depends_on")})
+        WorkflowNode(
+            **{key: call[key] for key in ("node_id", "tool_id", "action", "params", "depends_on")}
+        )
         for call in calls
     ]
-    if error := validate_plan_graph(PlanGraph(binding.run.run_id, binding.run.message, nodes=nodes)):
+    if error := validate_plan_graph(
+        PlanGraph(binding.run.run_id, binding.run.message, nodes=nodes)
+    ):
         return [], error
     proofs: list[dict[str, str]] = []
     for node, call in zip(nodes, calls, strict=True):
@@ -276,10 +308,17 @@ def _verify_plan_capabilities(
         if (
             require_documented_params
             and isinstance(properties, dict)
-            and schema.keys().isdisjoint({
-                "additionalProperties", "patternProperties", "unevaluatedProperties",
-                "allOf", "anyOf", "oneOf", "$ref",
-            })
+            and schema.keys().isdisjoint(
+                {
+                    "additionalProperties",
+                    "patternProperties",
+                    "unevaluatedProperties",
+                    "allOf",
+                    "anyOf",
+                    "oneOf",
+                    "$ref",
+                }
+            )
             and params.keys() - properties.keys()
         ):
             return [], f"方案动作 {identity} 包含契约中未登记的参数"
@@ -288,11 +327,17 @@ def _verify_plan_capabilities(
         if error := validate_plan_references(host_params, dependencies):
             return [], f"方案动作 {identity}：{error}"
         validation = validate_tool_call(
-            node.tool_id, node.action, params, allow_references_from=dependencies, resolved_spec=spec
+            node.tool_id,
+            node.action,
+            params,
+            allow_references_from=dependencies,
+            resolved_spec=spec,
         )
         if not validation.ok:
             return [], f"方案动作 {identity}：{validation.message}"
-        if not unresolved_placeholders(host_params) and (violation := action_schema_violation(spec, params)):
+        if not unresolved_placeholders(host_params) and (
+            violation := action_schema_violation(spec, params)
+        ):
             return [], f"方案动作 {identity} 参数不符合当前契约，字段路径 {violation['path']}"
         if call["approval_required"] != spec.approval_required:
             return [], f"方案动作 {identity} 的审批说明与当前契约不符"
@@ -308,11 +353,19 @@ def verify_runtime_goal(
     output: str,
     consume_format_retry: Callable[[], bool] | None = None,
     plan_delivery: PlanVerdict | None = None,
+    on_progress: Callable[[dict[str, Any]], None] | None = None,
+    replay_response: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Tool-free review; one extra format request requires the original task's budget."""
     from openai import APIError, APITimeoutError, DefaultHttpxClient, OpenAI
     from openai.types.responses import ResponseInputParam
 
+    from app.application.agent_runtime.verification_budget import (
+        JOB_HEADER,
+        VERIFIER_VERSION,
+        active_verification_job_id,
+        phase_deadline,
+    )
     from app.application.tool_execution_deadline import remaining_invocation_seconds
 
     validate_runtime_goal(binding.run)
@@ -323,6 +376,7 @@ def verify_runtime_goal(
     snapshot = goal_evidence_snapshot(contract, rows, output, answers)
     report: dict[str, Any] = {
         "protocol": GOAL_PROTOCOL,
+        "verifier_version": VERIFIER_VERSION,
         "goal_digest": contract["digest"],
         "evidence_digest": snapshot["digest"],
         "response_digest": canonical_digest(output),
@@ -334,6 +388,22 @@ def verify_runtime_goal(
         "error_code": "goal_verification_unavailable",
         "attempts": [],
     }
+    input_identity = {
+        key: report[key] for key in ("goal_digest", "evidence_digest", "response_digest")
+    }
+    if replay_response is not None and (
+        replay_response.get("state") != "response_received"
+        or replay_response.get("verifier_version") != VERIFIER_VERSION
+        or replay_response.get("input") != input_identity
+        or not isinstance(replay_response.get("response"), dict)
+        or replay_response.get("response_digest")
+        != canonical_digest(replay_response.get("response"))
+    ):
+        report.update(
+            error_code="goal_verification_evidence_changed",
+            feedback="原核验响应与当前目标或结果版本不一致，不能复用旧证据。",
+        )
+        return _finish_report(report)
     states = {receipt_state(row) for row in rows}
     if model_unsettled(binding.metadata) or states & {
         "unknown",
@@ -364,7 +434,9 @@ def verify_runtime_goal(
             report.update(
                 status="unavailable" if unavailable else "needs_work",
                 error_code="plan_delivery_unavailable" if unavailable else "plan_delivery_invalid",
-                feedback=(plan_delivery.error or output) if plan_delivery else "方案缺少可核对的交付。",
+                feedback=(plan_delivery.error or output)
+                if plan_delivery
+                else "方案缺少可核对的交付。",
             )
             return _finish_report(report)
         report["plan_delivery"] = plan_delivery.proof
@@ -386,7 +458,11 @@ def verify_runtime_goal(
             key: source for key, source in file_evidence.items() if key not in stale_files
         }
     previous = binding.run.metadata.get("runtime_goal_verification")
-    if isinstance(previous, dict) and previous.get("status") in {"verified", "needs_work"}:
+    if (
+        isinstance(previous, dict)
+        and previous.get("verifier_version") == VERIFIER_VERSION
+        and previous.get("status") in {"verified", "needs_work"}
+    ):
         coverage = goal_report_coverage(contract, rows, output, answers, previous)
         # 旧通过报告只有在当前证据上重新通过才能复用；其余同摘要结果只能沿用作未完成结论。
         if coverage["completed"]:
@@ -417,13 +493,38 @@ def verify_runtime_goal(
                 {key: value for key, value in previous.items() if key != "report_digest"}
             )
         ):
+            if not valid_compensation_review(
+                previous.get("review"),
+                contract,
+                snapshot,
+                output,
+                file_evidence=file_evidence,
+            ):
+                invalid = {
+                    key: copy.deepcopy(value)
+                    for key, value in previous.items()
+                    if key != "report_digest"
+                }
+                invalid.update(
+                    status="unavailable",
+                    accepted=False,
+                    error_code="goal_verification_invalid_gap",
+                )
+                return _finish_report(invalid)
             return copy.deepcopy(previous)
     route = binding.metadata.get("runtime_config") or {}
     mimo_reasoning = str(
         route.get("upstream_vendor") or ""
     ).strip().casefold() == "xiaomi" and config.model.casefold().startswith("mimo-")
     started = time.monotonic()
-    persisted_deadline = float(binding.metadata.get("deadline_at") or 0)
+    verification_job = active_verification_job_id(binding.run, binding.metadata)
+    if binding.metadata.get("verification_budget") and not verification_job:
+        report.update(
+            error_code="goal_verification_task_missing",
+            feedback="目标核验没有原任务的持久核验授权，不能消耗预留资源。",
+        )
+        return _finish_report(report)
+    persisted_deadline = phase_deadline(binding.run, binding.metadata)
     seconds = min(float(config.turn_timeout_seconds), persisted_deadline - time.time(), 90.0)
     # Verification can outlast a normal tool RPC; the original task still bounds it.
     request_limit = seconds
@@ -453,13 +554,18 @@ def verify_runtime_goal(
         for spec in XiaoxToolBridge.visible_actions(binding, []):
             action_catalog.setdefault(spec.tool_id, []).append(spec.action)
     documents, source_blocks = _file_citation_catalogue(file_evidence or {})
-    response_blocks = {
-        f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)
-    } if source_blocks else {}
+    response_blocks = (
+        {f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)}
+        if source_blocks
+        else {}
+    )
     schema = review_schema(
-        contract, action_catalog=action_catalog, file_evidence=file_evidence,
+        contract,
+        action_catalog=action_catalog,
+        file_evidence=file_evidence,
         receipt_ids=tuple(row["evidence_id"] for row in snapshot["evidence"]),
-        source_block_ids=tuple(source_blocks), response_block_ids=tuple(response_blocks),
+        source_block_ids=tuple(source_blocks),
+        response_block_ids=tuple(response_blocks),
     )
     wire_validator = Draft202012Validator(schema) if file_evidence is not None else None
     payload = {
@@ -467,8 +573,11 @@ def verify_runtime_goal(
         "rules": list(_RULES),
         "original_request": request_view,
         "host_constraints": contract["scope"].get("constraints") or {},
-        **({"requested_deliverable": contract["scope"]["requested_deliverable"]}
-           if "requested_deliverable" in contract["scope"] else {}),
+        **(
+            {"requested_deliverable": contract["scope"]["requested_deliverable"]}
+            if "requested_deliverable" in contract["scope"]
+            else {}
+        ),
         "answers": answers,
         "evidence": _review_evidence_view(snapshot["evidence"]),
         "response": output,
@@ -483,7 +592,9 @@ def verify_runtime_goal(
     if plan_delivery and plan_delivery.proof:
         payload["verified_plan_delivery"] = plan_delivery.proof
         # This branch reviews the system-rendered plan, not whether its steps were executed.
-        payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["status"]["description"] = (
+        payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["status"][
+            "description"
+        ] = (
             "按已由宿主绑定并渲染的方案覆盖原始要求来判定。方案步骤无需已执行，"
             "实际执行回执不属于本次交付条件。"
         )
@@ -505,13 +616,8 @@ def verify_runtime_goal(
         return _finish_report(report)
     error = ""
     format_failure = False
-    with OpenAI(
-        api_key=config.provider_token,
-        base_url=config.provider_url,
-        max_retries=0,
-        timeout=min(request_limit, seconds),
-        http_client=DefaultHttpxClient(trust_env=False, follow_redirects=False),
-    ) as client:
+    with ExitStack() as clients:
+        client = None
         for attempt in range(2):
             remaining = remaining_invocation_seconds(deadline - time.monotonic())
             if not math.isfinite(remaining) or remaining <= 0:
@@ -544,14 +650,46 @@ def verify_runtime_goal(
             diagnostic["max_output_tokens"] = output_budget
             report["attempts"].append(diagnostic)
             try:
-                response = client.responses.create(
-                    model=config.model,
-                    input=cast(ResponseInputParam, messages),
-                    tools=[],
-                    store=False,
-                    max_output_tokens=output_budget,
-                    timeout=min(request_limit, remaining),
-                )
+                if replay_response is not None:
+                    raw = copy.deepcopy(replay_response["response"])
+                    replay_response = None
+                    diagnostic["replayed_settled_response"] = True
+                else:
+                    if on_progress is not None:
+                        on_progress(
+                            {
+                                "state": "requesting",
+                                "input": input_identity,
+                                "verifier_version": VERIFIER_VERSION,
+                                "attempt": attempt + 1,
+                            }
+                        )
+                    if client is None:
+                        client = clients.enter_context(
+                            OpenAI(
+                                api_key=config.provider_token,
+                                base_url=config.provider_url,
+                                max_retries=0,
+                                timeout=min(request_limit, seconds),
+                                http_client=DefaultHttpxClient(
+                                    trust_env=False, follow_redirects=False
+                                ),
+                            )
+                        )
+                    response = client.responses.create(
+                        model=config.model,
+                        input=cast(ResponseInputParam, messages),
+                        tools=[],
+                        store=False,
+                        max_output_tokens=output_budget,
+                        timeout=min(request_limit, remaining),
+                        **(
+                            {"extra_headers": {JOB_HEADER: verification_job}}
+                            if verification_job
+                            else {}
+                        ),
+                    )
+                    raw = response.model_dump()
             except APIError as exc:
                 # The gateway owns unknown billing/transport outcomes. Never
                 # turn a lost response into another speculative request.
@@ -564,7 +702,17 @@ def verify_runtime_goal(
                     feedback="目标核验请求未完成，请核对原任务计量状态。",
                 )
                 break
-            raw = response.model_dump()
+            if on_progress is not None:
+                on_progress(
+                    {
+                        "state": "response_received",
+                        "input": input_identity,
+                        "verifier_version": VERIFIER_VERSION,
+                        "attempt": attempt + 1,
+                        "response": raw,
+                        "response_digest": canonical_digest(raw),
+                    }
+                )
             diagnostic.update(response_id=raw.get("id"), response_status=raw.get("status"))
             if remaining_invocation_seconds(deadline - time.monotonic()) <= 0:
                 diagnostic["state"] = "expired"
@@ -584,7 +732,9 @@ def verify_runtime_goal(
                     and (
                         not isinstance(item.get("content"), list)
                         or any(
-                            not isinstance(part, dict) or part.get("type") != "output_text"
+                            not isinstance(part, dict)
+                            or part.get("type") != "output_text"
+                            or not isinstance(part.get("text"), str)
                             for part in item["content"]
                         )
                     )
@@ -611,8 +761,14 @@ def verify_runtime_goal(
                 )
                 break
             try:
+                output_text = "".join(
+                    part["text"]
+                    for item in items
+                    if item["type"] == "message"
+                    for part in item["content"]
+                )
                 decoded = json.loads(
-                    _review_json_text(response.output_text), object_pairs_hook=_unique_json_object
+                    _review_json_text(output_text), object_pairs_hook=_unique_json_object
                 )
                 json.dumps(decoded, allow_nan=False)
                 if isinstance(decoded, dict) and isinstance(decoded.get("goals"), list):
@@ -637,8 +793,10 @@ def verify_runtime_goal(
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"
-            if plan_delivery and plan_delivery.proof and (
-                review["plan_content"] != plan_delivery.proof["kind"]
+            if (
+                plan_delivery
+                and plan_delivery.proof
+                and (review["plan_content"] != plan_delivery.proof["kind"])
             ):
                 errors.append("方案的能力声明未通过与交付类型一致的核对。")
             calls = planned_tool_calls(review)
@@ -682,6 +840,19 @@ def verify_runtime_goal(
                 ),
                 error_code="" if complete else "goal_verification_required",
             )
+            if not complete and not valid_compensation_review(
+                review,
+                contract,
+                snapshot,
+                output,
+                file_evidence=file_evidence,
+            ):
+                # Invalid provenance or evidence is a review defect, never an
+                # instruction to dispatch an invented "missing" operation.
+                report.update(
+                    status="unavailable",
+                    error_code="goal_verification_invalid_gap",
+                )
             return _finish_report(report)
     if format_failure:
         report.update(

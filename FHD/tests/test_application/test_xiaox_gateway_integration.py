@@ -140,7 +140,9 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
     monkeypatch.setattr(
         "app.infrastructure.llm.model_admission.admit_model_call", lambda *args, **kwargs: None
     )
-    ledger.set_model_wallet_balance(str(actor.user_id), 100)
+    initial_balance = 100
+    task_budget = 96
+    ledger.set_model_wallet_balance(str(actor.user_id), initial_balance)
     upstream = FastAPI()
     requests = []
     model_tools = []
@@ -241,7 +243,13 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
             qualification_file=qualification,
             turn_timeout_seconds=45,
         )
-        context = {**actor.context, "turn_id": "cli-integration-one", "ai_cost_budget_units": 96}
+        # Keep one complete review request reserved inside the original budget
+        # while execution settles its smaller actual usage.
+        context = {
+            **actor.context,
+            "turn_id": "cli-integration-one",
+            "ai_cost_budget_units": task_budget,
+        }
         events = []
         options = {
             "system_prompt": "只使用受控 MCP 工具；缺少月份时调用 request_input。",
@@ -281,7 +289,11 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
             **options,
         )
 
-    assert second["ok"] is True and second["exit_status"] == "reply_completed", second
+    assert second["ok"] is True and second["exit_status"] == "reply_completed", json.dumps(
+        second,
+        ensure_ascii=False,
+        default=str,
+    )
     assert second["business_completed"] is False and second["output"] == "已收到月份回答"
     saved = repository.get(first["run_id"])
     assert saved.metadata["xiaox_runtime"]["thread_id"] == thread_id
@@ -293,8 +305,18 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
         entry["state"] for entry in saved.metadata["xiaox_runtime"]["model_requests"].values()
     } == {"completed"}
     assert saved.metadata["reserved_cost_units"] == 0
+    assert saved.metadata["ai_cost_budget_units"] == task_budget
+    assert saved.metadata["xiaox_runtime"]["verification_budget"]["model_calls"] == 1
+    assert saved.metadata["xiaox_runtime"]["verification_budget"]["max_model_calls"] == 2
+    assert (
+        sum(
+            row["purpose"] == "verification"
+            for row in saved.metadata["xiaox_runtime"]["model_requests"].values()
+        )
+        == 1
+    )
     assert saved.metadata["ai_cost_units_total"] == 4
-    assert ledger.get_model_wallet(str(actor.user_id))["balance_units"] == 96
+    assert ledger.get_model_wallet(str(actor.user_id))["balance_units"] == initial_balance - 4
     assert all(body["model"] == route.model and body["store"] is False for body in requests)
     assert saved.final_output["business_result"]["status"] == "reply_completed"
     assert saved.final_output["business_result"]["success"] is False

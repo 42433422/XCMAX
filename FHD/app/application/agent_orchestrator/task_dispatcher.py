@@ -94,6 +94,7 @@ class AgentTaskDispatcher:
         self._outcome_worker: threading.Thread | None = None
         self._last_outcome_recovery = float("-inf")
         self._xiaox_resume_cursor: dict[str, str] = {}
+        self._goal_verification_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -202,9 +203,20 @@ class AgentTaskDispatcher:
             from app.application.agent_orchestrator.verification_recovery import (
                 reconcile_pending_verifications,
             )
+            from app.application.agent_runtime.goal_verification_task import (
+                enqueue_pending_goal_verifications,
+            )
             from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
             from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
 
+            try:
+                enqueue_pending_goal_verifications(
+                    repository=self._run_repo,
+                    stopped=self._stop.is_set,
+                    cursor=self._goal_verification_cursor,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("independent goal verification remains pending", exc_info=True)
             try:
                 reconcile_pending_verifications(
                     repository=self._run_repo, stopped=self._stop.is_set

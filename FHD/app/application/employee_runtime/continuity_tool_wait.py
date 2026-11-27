@@ -92,7 +92,7 @@ class ContinuityRequestContext:
                 del self._requests.frame
 
 
-def run_process(command, *, input, cwd, timeout):
+def run_process(command, *, input, cwd, timeout, env=None):
     """Reap the process group on timeout/interruption; effects remain unknown."""
     # Reuse the server-bound budget, never a client-supplied duration. No new
     # arbitrary ceiling for legitimate large ELT files when no budget exists.
@@ -106,6 +106,7 @@ def run_process(command, *, input, cwd, timeout):
         stderr=subprocess.PIPE,
         text=True,
         cwd=cwd,
+        env=env,
         start_new_session=True,
     ) as process:
         completed = False

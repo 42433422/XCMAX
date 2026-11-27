@@ -33,12 +33,13 @@ from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.fixture
-def receipt_task(runtime_entry, local_tools, monkeypatch):
+def receipt_task(runtime_entry, local_tools, monkeypatch, request):
     from app.application.agent_orchestrator.approval_consumption_repository import (
         SQLAlchemyApprovalConsumptionRepository,
     )
 
     state = runtime_entry
+    scenario = getattr(request, "param", {})
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setattr(
         "app.application.agent_orchestrator.approval_grant._consumption_repository",
@@ -79,7 +80,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     }
     parent = AgentRun(
         user_id=str(state.actor.user_id),
-        message="创建客户",
+        message=scenario.get("request", "创建客户"),
         status="running",
         intent="xiaox.runtime",
     )
@@ -200,7 +201,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
                 assert "创建客户" in text
             else:
                 assert text is None and "原目标仍有一项条件待核对" in goal_feedback
-            for event in completed("原客户已创建并核验"):
+            for event in completed(getattr(state, "corrected_answer", "原客户已创建并核验")):
                 yield {**event, "thread_id": "original-thread"}
 
         async def interrupt(self):
@@ -209,7 +210,16 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     async def resumed_runtime(**kwargs):
         return await run_xiaox_agent(**kwargs, transport_factory=Transport)
 
-    def review(binding, _config, *, rows, output, consume_format_retry):
+    def review(
+        binding,
+        _config,
+        *,
+        rows,
+        output,
+        consume_format_retry,
+        on_progress=None,
+        replay_response=None,
+    ):
         assert callable(consume_format_retry)
         contract = binding.run.metadata["runtime_goal_contract"]
         snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
@@ -229,10 +239,23 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
             "uncovered_sources": [],
             "feedback": "",
         }
+        if scenario.get("reply_goal"):
+            raw["goals"].append(
+                {
+                    "goal_id": "verification_explanation",
+                    "source_id": "request",
+                    "source": scenario["reply_goal"],
+                    "kind": "reply",
+                    "status": "satisfied",
+                    "evidence_ids": ["response"],
+                    "reason": "The remaining explanation is bound to the original request",
+                }
+            )
         reviewed, errors = validate_goal_review(raw, contract, snapshot, output)
         assert not errors, errors
         report = {
             "protocol": GOAL_PROTOCOL,
+            "verifier_version": 1,
             "goal_digest": contract["digest"],
             "evidence_digest": snapshot["digest"],
             "response_digest": canonical_digest(output),
@@ -342,7 +365,18 @@ def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent
     assert state.queue.get(parent.run_id).state == "succeeded"
 
 
-def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same_task(
+@pytest.mark.parametrize(
+    "receipt_task",
+    [
+        {
+            "request": "创建客户，并说明原客户的独立核验依据",
+            "reply_goal": "说明原客户的独立核验依据",
+        }
+    ],
+    indirect=True,
+    ids=["missing_original_explanation"],
+)
+def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answer(
     receipt_task, monkeypatch
 ):
     from app.application.agent_runtime import goal_verifier
@@ -352,13 +386,25 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     state.complete_child()
     review = goal_verifier.verify_runtime_goal
 
-    def missing_goal(binding, config, *, rows, output, consume_format_retry):
+    def missing_goal(
+        binding,
+        config,
+        *,
+        rows,
+        output,
+        consume_format_retry,
+        on_progress=None,
+        replay_response=None,
+    ):
         report = review(
             binding, config, rows=rows, output=output, consume_format_retry=consume_format_retry
         )
         report.pop("report_digest")
         report.update(status="needs_work", accepted=False, feedback="原目标仍有一项条件待核对")
-        report["review"]["goals"][0]["status"] = "unmet"
+        # Keep the completed write covered. Only the distinct, original reply
+        # obligation is missing; relabeling a successful write cannot authorize
+        # its compensation or manufacture a new goal.
+        report["review"]["goals"][1]["status"] = "unmet"
         return {**report, "report_digest": canonical_digest(report)}
 
     monkeypatch.setattr(goal_verifier, "verify_runtime_goal", missing_goal)
@@ -396,6 +442,9 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     goal_digest = refreshed.metadata["runtime_goal_digest"]
     generation = refreshed.metadata["xiaox_runtime"]["generation"]
     monkeypatch.setattr(goal_verifier, "verify_runtime_goal", review)
+    # Compensation changes the candidate, not the completed business action.
+    # An unchanged candidate cannot gain a fourth review of the same evidence.
+    state.corrected_answer = "原客户已创建并核验；依据是原审批客户的 SQL 独立回读与回执一致。"
     options = {
         "run_id": state.parent_id,
         "task": "继续原任务",

@@ -147,7 +147,10 @@ def reconcile_stale_running_runs(
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
     )
+    from app.application.agent_runtime.verification_budget import JOB_KEY
     from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+    from app.infrastructure.xiaox.queued_runtime import recover_abandoned_goal_verification
 
     repository = get_agent_run_repository()
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -158,6 +161,39 @@ def reconcile_stale_running_runs(
     current = str(now or utc_now_iso())
     desktop = _desktop_single_process()
     reconciled = 0
+    # A former synchronous entry has no queue lease to reclaim. Only an expired
+    # original grant can be parked for the existing independent-review scanner.
+    # Read/authority checks run outside the reconciliation write transaction.
+    with repository.transaction(read_only=True) as db:
+        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
+
+        direct_query = db.query(AgentRunRecord).filter(
+            AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES),
+            AgentRunRecord.intent == "xiaox.runtime",
+        )
+        if not desktop:
+            direct_query = direct_query.filter(
+                AgentRunRecord.updated_at <= _stale_cutoff(current, stale_after_seconds)
+            )
+        direct_ids = [
+            record.run_id
+            for record in direct_query.all()
+            if db.get(AgentTaskExecutionRecord, record.run_id) is None
+            and ((_load_payload(record.payload_json).get("metadata") or {}).get(JOB_KEY) or {}).get(
+                "state"
+            )
+            in {"running", "pending", "needs_work", "verified", "blocked"}
+        ]
+    for run_id in direct_ids:
+        try:
+            if recover_abandoned_goal_verification(
+                XiaoxBindingStore(repository),
+                run_id,
+                now=(_parse_timestamp(current) or datetime.now(UTC)).timestamp(),
+            ):
+                reconciled += 1
+        except XiaoxBindingError:
+            pass  # The original control, authorization and uncertain-effect guards remain closed.
     with repository.transaction() as db:
         from app.db.models.agent import (
             AgentRunRecord,
@@ -185,6 +221,29 @@ def reconcile_stale_running_runs(
                 and str(execution.lease_expires_at or "") > current
             ):
                 # 服务端租约仍有效：交由既有重认领机制处理，启动对账不越权改写。
+                continue
+            payload = _load_payload(record.payload_json)
+            metadata = payload.get("metadata") or {}
+            verification = metadata.get(JOB_KEY) or {}
+            runtime = metadata.get("xiaox_runtime") or {}
+            if (
+                metadata.get("runtime_type") == "xiaox"
+                and verification.get("state")
+                in {"running", "pending", "needs_work", "verified", "blocked"}
+                and verification.get("generation") == runtime.get("generation")
+                and runtime.get("coordinator_active")
+                and (
+                    (execution is not None and execution.state in {"queued", "running", "claimed"})
+                    or (
+                        execution is None
+                        and float(runtime.get("expires_at") or 0)
+                        > (_parse_timestamp(current) or datetime.now(UTC)).timestamp()
+                    )
+                )
+            ):
+                # The original queue must fence/reclaim this owner before its
+                # settled review can resume. Generic plan recovery cannot judge
+                # an SDK request or erase its independent verification checkpoint.
                 continue
             if execution is not None and execution.state in {"queued", "running", "claimed"}:
                 # Fence the observed owner/count before touching either projection.

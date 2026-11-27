@@ -58,34 +58,66 @@ def receipt(name="first", *, read_only=True):
 
 def test_review_evidence_keeps_business_facts_without_duplicate_transport_metadata():
     row = {
-        "evidence_id": "child-1", "tool_id": "employee", "action": "execute",
+        "evidence_id": "child-1",
+        "tool_id": "employee",
+        "action": "execute",
         "params": {"employee_id": "reader", "input": {"file_path": "owned-file"}},
-        "read_only": True, "state": "completed",
+        "read_only": True,
+        "state": "completed",
         "receipt": {
-            "success": True, "verified": True, "status": "completed", "message": "已回读",
-            "verification": {"status": "verified", "accepted": True, "steps": [
-                {"status": "verified", "accepted": True, "code": "checked", "checks": [
-                    {"source": "run_artifact", "status": "passed", "evidence": {"sha256": "a" * 64}}
-                ], "credential_scope_sha256": "private-scope"},
-            ]},
-            "tool_calls": [{
-                "tool_id": "employee", "action": "execute", "status": "completed",
-                "params": {"employee_id": "reader", "input": {"file_path": "owned-file"}},
-                "output": {"success": True, "data": {"sheet": "Sales", "cell": "=SUM(A1:A3)"}},
-                "error": "", "metadata": {"credential": "private-token"},
-            }],
-            "artifacts": [{
-                "artifact_id": "artifact-1", "artifact_type": "file", "name": "result.xlsx",
-                "uri": "/api/agent/runs/child-1/artifacts/artifact-1", "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "metadata": {"sha256": "a" * 64, "owner_user_id": "private-owner"},
-            }],
+            "success": True,
+            "verified": True,
+            "status": "completed",
+            "message": "已回读",
+            "verification": {
+                "status": "verified",
+                "accepted": True,
+                "steps": [
+                    {
+                        "status": "verified",
+                        "accepted": True,
+                        "code": "checked",
+                        "checks": [
+                            {
+                                "source": "run_artifact",
+                                "status": "passed",
+                                "evidence": {"sha256": "a" * 64},
+                            }
+                        ],
+                        "credential_scope_sha256": "private-scope",
+                    },
+                ],
+            },
+            "tool_calls": [
+                {
+                    "tool_id": "employee",
+                    "action": "execute",
+                    "status": "completed",
+                    "params": {"employee_id": "reader", "input": {"file_path": "owned-file"}},
+                    "output": {"success": True, "data": {"sheet": "Sales", "cell": "=SUM(A1:A3)"}},
+                    "error": "",
+                    "metadata": {"credential": "private-token"},
+                }
+            ],
+            "artifacts": [
+                {
+                    "artifact_id": "artifact-1",
+                    "artifact_type": "file",
+                    "name": "result.xlsx",
+                    "uri": "/api/agent/runs/child-1/artifacts/artifact-1",
+                    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "metadata": {"sha256": "a" * 64, "owner_user_id": "private-owner"},
+                }
+            ],
         },
     }
     view = _review_evidence_view([row])[0]
     serialized = json.dumps(view, ensure_ascii=False)
     assert "=SUM(A1:A3)" in serialized and "artifact-1" in serialized
     assert '"status": "verified"' in serialized
-    assert all(secret not in serialized for secret in ("private-token", "private-scope", "private-owner"))
+    assert all(
+        secret not in serialized for secret in ("private-token", "private-scope", "private-owner")
+    )
     assert len(serialized) < len(json.dumps(row, ensure_ascii=False))
 
 
@@ -239,18 +271,26 @@ def verifier(monkeypatch):
 
 @pytest.mark.parametrize(
     ("deliverable", "kind", "accepted"),
-    [("action_plan", "reply", True), ("action_plan", "planned_action", False),
-     ("action_plan", "read", False),
-     ("action_plan", "write", False), (None, "planned_action", False)],
+    [
+        ("action_plan", "reply", True),
+        ("action_plan", "planned_action", False),
+        ("action_plan", "read", False),
+        ("action_plan", "write", False),
+        (None, "planned_action", False),
+    ],
 )
-def test_planned_actions_are_bound_to_the_requested_deliverable(verifier, deliverable, kind, accepted):
+def test_planned_actions_are_bound_to_the_requested_deliverable(
+    verifier, deliverable, kind, accepted
+):
     verifier.run.message = "写出库存盘点方案"
     if deliverable:
         verifier.run.metadata["runtime_requested_deliverable"] = deliverable
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
     verifier.output = "按仓位列清单，逐项记录实点数，比较账面数并复核差异。"
     verifier.rows = []
-    verifier.replies = [response(review(goal(verifier.run.message, kind=kind, evidence_ids=["response"])))]
+    verifier.replies = [
+        response(review(goal(verifier.run.message, kind=kind, evidence_ids=["response"])))
+    ]
     report = verifier.verify()
     assert report["accepted"] is accepted
     assert verifier.classify(report)[1]["business_completed"] is False
@@ -273,10 +313,12 @@ def test_manual_plan_routes_are_bound_to_frozen_display_context(verifier, varian
             kind="read" if variant == "read" else "planned_action",
             evidence_ids=["response"],
         ),
-        "planned_navigation": [{
-            "navigation_id": "foreign" if variant == "unknown_id" else "pending",
-            "response_excerpt": path,
-        }],
+        "planned_navigation": [
+            {
+                "navigation_id": "foreign" if variant == "unknown_id" else "pending",
+                "response_excerpt": path,
+            }
+        ],
     }
     verifier.replies = [response(review(reference))]
     report = verifier.verify()
@@ -292,8 +334,19 @@ def test_manual_plan_routes_are_bound_to_frozen_display_context(verifier, varian
 
 
 @pytest.mark.parametrize(
-    "failure", ["", "unknown", "denied", "tenant", "params", "approval", "quote", "cycle",
-                "wrong_adapter", "ambiguous_adapter"]
+    "failure",
+    [
+        "",
+        "unknown",
+        "denied",
+        "tenant",
+        "params",
+        "approval",
+        "quote",
+        "cycle",
+        "wrong_adapter",
+        "ambiguous_adapter",
+    ],
 )
 def test_business_plan_validates_current_contract_without_executing(
     verifier, trusted_actor, monkeypatch, failure
@@ -316,15 +369,23 @@ def test_business_plan_validates_current_contract_without_executing(
         **goal(verifier.run.message, kind="planned_action", evidence_ids=["response"]),
         "planned_calls": [
             {
-                "node_id": "find", "tool_id": "customers", "action": "query",
-                "params": {"keyword": "fixture"}, "response_excerpt": "customers.query",
+                "node_id": "find",
+                "tool_id": "customers",
+                "action": "query",
+                "params": {"keyword": "fixture"},
+                "response_excerpt": "customers.query",
                 "depends_on": ["create"] if failure == "cycle" else [],
                 "approval_required": False,
             },
             {
-                "node_id": "create", "tool_id": "customers", "action": "create",
-                "params": {} if failure == "params" else {"unit_name": "{{find.data[0].unit_name}}"},
-                "response_excerpt": "customers.create", "depends_on": ["find"],
+                "node_id": "create",
+                "tool_id": "customers",
+                "action": "create",
+                "params": {}
+                if failure == "params"
+                else {"unit_name": "{{find.data[0].unit_name}}"},
+                "response_excerpt": "customers.create",
+                "depends_on": ["find"],
                 "approval_required": failure != "approval",
             },
         ],
@@ -338,7 +399,9 @@ def test_business_plan_validates_current_contract_without_executing(
     verifier.output = f"先 {quoted} 查重，再 customers.create 创建，需审批。"
     if failure == "unknown":
         verifier.output = verifier.output.replace("customers.create", "customers.new_fixture")
-        source["planned_calls"][1].update(action="new_fixture", response_excerpt="customers.new_fixture")
+        source["planned_calls"][1].update(
+            action="new_fixture", response_excerpt="customers.new_fixture"
+        )
     if failure == "quote":
         verifier.output = verifier.output.replace("customers.create", "customers.creates")
     verifier.replies = [response(review(source))]
@@ -488,7 +551,8 @@ def test_claimed_verified_receipt_cannot_override_rejected_host_verification(ver
     }
     verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
     report = verifier.verify()
-    assert report["status"] == "needs_work" and not report["accepted"]
+    assert report["status"] == "unavailable" and not report["accepted"]
+    assert report["error_code"] == "goal_verification_invalid_gap"
     assert "缺少独立核验" in report["feedback"]
     status, result = verifier.classify(report)
     assert status == "blocked" and not result["business_completed"]
@@ -519,7 +583,8 @@ def test_one_write_receipt_cannot_complete_two_distinct_effects(verifier):
         )
     ]
     report = verifier.verify()
-    assert report["status"] == "needs_work" and "重用" in report["feedback"]
+    assert report["status"] == "unavailable" and "重用" in report["feedback"]
+    assert report["error_code"] == "goal_verification_invalid_gap"
     assert verifier.classify(report)[0] == "blocked"
 
 
@@ -609,7 +674,9 @@ def test_file_facts_need_evidence_distinct_from_chat_history(verifier, monkeypat
         "Welcome to the team." if case == "unrelated_reply" else "Green: 23. Orange: 12."
     )
     if case in {"no_source", "old_response_only", "fact_feedback"}:
-        verifier.output = "Green: 24. Orange: 12." if case == "fact_feedback" else "Green: 18. Orange: 17."
+        verifier.output = (
+            "Green: 24. Orange: 12." if case == "fact_feedback" else "Green: 18. Orange: 17."
+        )
     result = goal(verifier.run.message, kind="reply", evidence_ids=["response"])
     if case == "unrelated_reply":
         result.update(file_basis="independent")
@@ -631,8 +698,13 @@ def test_file_facts_need_evidence_distinct_from_chat_history(verifier, monkeypat
     assessment = review(
         result,
         feedback="Green is 23, not 24." if case == "fact_feedback" else "",
-        feedback_disposition=("blocking" if case == "fact_feedback" else
-                              "advisory" if case == "advisory_feedback" else "none"),
+        feedback_disposition=(
+            "blocking"
+            if case == "fact_feedback"
+            else "advisory"
+            if case == "advisory_feedback"
+            else "none"
+        ),
     )
     if case == "advisory_feedback":
         assessment["feedback"] = "The two source rows were checked."
@@ -653,10 +725,16 @@ def test_file_facts_need_evidence_distinct_from_chat_history(verifier, monkeypat
         "verified_read" in directory
     )
     if accepted and case == "complete_source":
-        assert list(payload["file_evidence"][view["upload_id"]]["blocks"].values()) == view["text"].splitlines()
+        assert (
+            list(payload["file_evidence"][view["upload_id"]]["blocks"].values())
+            == view["text"].splitlines()
+        )
         assert payload["response_blocks"] == {"r1": verifier.output}
-        assert [item["source_excerpt"] for item in report["review"]["goals"][0]["file_citations"]] == [
-            "green,23", "orange,12",
+        assert [
+            item["source_excerpt"] for item in report["review"]["goals"][0]["file_citations"]
+        ] == [
+            "green,23",
+            "orange,12",
         ]
         verifier.run.metadata["runtime_goal_verification"] = report
         monkeypatch.setattr(conversation_attachments, "recalled_attachment_view", lambda *_: None)
@@ -747,19 +825,24 @@ def test_current_attachment_uses_one_bounded_schema_retry_and_host_quotes(verifi
     verifier.run.message = "What does the delivery note say about the package?"
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
         verifier.run,
-        attachments=[{
-            "name": "delivery-note.csv", "source": "owned_elt_upload",
-            "metadata": {"upload_id": upload_id, "sha256": "b" * 64},
-            "preview": {
-                "text": "Consignment\nFragile, ship upright",
-                "coverage": {"truncated": False},
-            },
-        }],
+        attachments=[
+            {
+                "name": "delivery-note.csv",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": upload_id, "sha256": "b" * 64},
+                "preview": {
+                    "text": "Consignment\nFragile, ship upright",
+                    "coverage": {"truncated": False},
+                },
+            }
+        ],
     )
     verifier.rows = []
     verifier.output = "It has to travel upright."
     candidate = goal(verifier.run.message, kind="reply", evidence_ids=["response"])
-    candidate.update(file_basis="passages", file_citations=[{"source_block_id": "s2", "response_block_id": "r1"}])
+    candidate.update(
+        file_basis="passages", file_citations=[{"source_block_id": "s2", "response_block_id": "r1"}]
+    )
     invalid = candidate | {"evidence_ids": [upload_id, "response"]}
     verifier.replies = [response(review(invalid)), response(review(candidate))]
     report = verifier.verify()
@@ -771,7 +854,8 @@ def test_current_attachment_uses_one_bounded_schema_retry_and_host_quotes(verifi
     assert schema["FileCitation"]["properties"]["source_block_id"]["enum"] == ["s1", "s2"]
     [citation] = report["review"]["goals"][0]["file_citations"]
     assert citation == {
-        "evidence_id": upload_id, "source_excerpt": "Fragile, ship upright",
+        "evidence_id": upload_id,
+        "source_excerpt": "Fragile, ship upright",
         "response_excerpt": verifier.output,
     }
 
@@ -1097,7 +1181,8 @@ def test_fenced_review_still_requires_original_host_receipts(verifier):
     raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
     verifier.replies = [response({}, text=f"```json\n{raw}\n```")]
     report = verifier.verify()
-    assert not report["accepted"] and report["status"] == "needs_work"
+    assert not report["accepted"] and report["status"] == "unavailable"
+    assert report["error_code"] == "goal_verification_invalid_gap"
     assert verifier.classify(report)[0] == "blocked"
 
 
@@ -1298,7 +1383,8 @@ def test_review_source_alias_cannot_introduce_untrusted_goal(verifier, alias, so
     ]
     report = verifier.verify()
     assert not report["accepted"]
-    assert report["status"] == "needs_work"
+    assert report["status"] == "unavailable"
+    assert report["error_code"] == "goal_verification_invalid_gap"
 
 
 @pytest.mark.parametrize(
@@ -1400,39 +1486,53 @@ def test_late_success_cannot_overwrite_an_older_unknown_execution_receipt(verifi
     assert verifier.classify(None)[0] == "blocked"
 
 
-def test_verified_attachment_group_has_distinct_citations_and_is_all_or_nothing(verifier, monkeypatch):
+def test_verified_attachment_group_has_distinct_citations_and_is_all_or_nothing(
+    verifier, monkeypatch
+):
     from app.application.agent_runtime import conversation_attachments
 
     views = [
         {
-            "name": f"{label}.csv", "text": f"{label},2", "upload_id": f"conversation-upload:{label}",
-            "source_run_id": "confirmed-selection", "sha256": letter * 64,
+            "name": f"{label}.csv",
+            "text": f"{label},2",
+            "upload_id": f"conversation-upload:{label}",
+            "source_run_id": "confirmed-selection",
+            "sha256": letter * 64,
             "coverage": {"truncated": False},
         }
         for label, letter in (("ALPHA", "a"), ("BETA", "b"))
     ]
     verifier.run.message = "Compare the two reports."
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
-        verifier.run, context_evidence=[{
-            "source": "conversation_uploads",
-            "entries": [{key: row[key] for key in ("name", "upload_id", "source_run_id")} for row in views],
-            "verified_reads": views,
-        }],
+        verifier.run,
+        context_evidence=[
+            {
+                "source": "conversation_uploads",
+                "entries": [
+                    {key: row[key] for key in ("name", "upload_id", "source_run_id")}
+                    for row in views
+                ],
+                "verified_reads": views,
+            }
+        ],
     )
     monkeypatch.setattr(conversation_attachments, "recalled_attachment_view", lambda *_: views)
     verifier.output = "Both report 2."
     verifier.rows = []
     assessment = goal(verifier.run.message, kind="reply", evidence_ids=["response"])
-    assessment.update(file_basis="complete", file_citations=[
-        {"source_block_id": "s1", "response_block_id": "r1"},
-        {"source_block_id": "s2", "response_block_id": "r1"},
-    ])
+    assessment.update(
+        file_basis="complete",
+        file_citations=[
+            {"source_block_id": "s1", "response_block_id": "r1"},
+            {"source_block_id": "s2", "response_block_id": "r1"},
+        ],
+    )
     verifier.replies = [response(review(assessment))]
     report = verifier.verify()
     assert report["accepted"]
-    assert {citation["evidence_id"] for citation in report["review"]["goals"][0]["file_citations"]} == {
-        view["upload_id"] for view in views
-    }
+    assert {
+        citation["evidence_id"] for citation in report["review"]["goals"][0]["file_citations"]
+    } == {view["upload_id"] for view in views}
     verifier.run.metadata["runtime_goal_verification"] = report
     monkeypatch.setattr(conversation_attachments, "recalled_attachment_view", lambda *_: None)
     blocked = verifier.verify()

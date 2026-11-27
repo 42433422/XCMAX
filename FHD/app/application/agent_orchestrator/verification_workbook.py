@@ -7,8 +7,8 @@ import importlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
-import sys
 import json
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -179,6 +179,8 @@ def _qc_package(pack: Path):
             if loaded == name or loaded.startswith(name + "."):
                 sys.modules.pop(loaded, None)
         sys.meta_path.remove(finder)
+
+
 def review_workbook_write(params: dict, context: dict) -> tuple[dict, list[dict]]:
     from openpyxl.utils.exceptions import InvalidFileException
 
@@ -217,6 +219,7 @@ def review_workbook_write(params: dict, context: dict) -> tuple[dict, list[dict]
 def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict) -> dict:
     from app.application.agent_orchestrator.artifact_files import read_verified_run_file
     from app.application.agent_orchestrator.verification_readback import _files, _report
+    from app.application.agent_orchestrator.workbook_recalculation import recalculate_workbook
     from app.application.employee_runtime.loader import (
         resolve_pack_dir,
         verify_direct_python_pack_trust,
@@ -258,6 +261,18 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
                 filled = Path(directory) / ("result" + suffix)
                 filled.write_bytes(read_verified_run_file(run.run_id, artifacts[0]))
                 report = module.run_qc(filled, plan, template_path=template)
+                recalculation = (
+                    recalculate_workbook(
+                        filled, plan, artifact_sha256=artifacts[0]["metadata"]["sha256"]
+                    )
+                    if report.get("verdict") == "PASS"
+                    else {"status": "not_run", "code": "formula_recalculation_qc_unmet"}
+                )
+                # Calc can run long enough for the original artifact to change.
+                # Revalidate the deliverable, not just our private frozen copy.
+                files = _files(run, step, call, output, context, suffix)
+                if files["status"] != "verified":
+                    return files
     sections = report.get("sections") or {}
     checked = {name: item.get("status") for name, item in sections.items()}
     native_count = sum(
@@ -288,9 +303,20 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
     status = (
         "verified" if valid else "failed" if report.get("verdict") == "FAIL" else "inconclusive"
     )
+    code = "result_verified" if valid else "result_workbook_qc_unmet"
+    # Saving the approved formula text and proving its numerical result are
+    # different claims. Preserve successful writes when the optional calculator
+    # is unavailable, but require it for a frozen numerical acceptance contract.
+    if (
+        valid
+        and "formula_values" in (plan.get("expected") or {})
+        and (recalculation["status"] != "verified")
+    ):
+        status = "failed" if recalculation["status"] == "failed" else "inconclusive"
+        code = recalculation["code"]
     quality = _report(
         status,
-        "result_verified" if valid else "result_workbook_qc_unmet",
+        code,
         "workbook_qc",
         verification_scope=(
             "planned_cells_formulas_protected_ranges_structural_and_native_objects"
@@ -303,7 +329,8 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
         artifact_sha256=artifacts[0]["metadata"]["sha256"],
         sections=checked,
         cell_changes=report.get("cell_changes"),
-        formula_recalculation_verified=False,
+        formula_recalculation_verified=recalculation.get("formula_recalculation_verified") is True,
+        formula_recalculation=recalculation,
     )
     quality["checks"] = files["checks"] + quality["checks"]
     return quality

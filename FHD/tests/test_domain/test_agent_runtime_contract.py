@@ -49,11 +49,30 @@ def _write_goal(goal_id: str, source: str, evidence_id: str) -> dict:
     }
 
 
-def test_batch_write_receipt_backs_as_many_atomic_goals_as_its_phases():
+def test_batch_write_receipt_backs_as_many_atomic_goals_as_verified_changes():
     message = "写入日期，写入金额，设置金额公式"
     run = AgentRun(user_id="71", message=message, run_id="run-batch")
     contract = build_goal_contract(run)
-    snapshot = goal_evidence_snapshot(contract, [_batch_write_row("run_child", 3)], "已完成")
+    row = _batch_write_row("run_child", 3)
+    row["receipt"]["verification"] = {
+        "status": "verified",
+        "accepted": True,
+        "steps": [
+            {
+                "checks": [
+                    {
+                        "source": "workbook_qc",
+                        "status": "passed",
+                        "evidence": {
+                            "sections": {"conformance": "pass"},
+                            "cell_changes": {"scan_complete": True, "groups": [{"count": 3}]},
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+    snapshot = goal_evidence_snapshot(contract, [row], "已完成")
     raw = {
         "goals": [
             _write_goal(f"g{index}", text, "run_child")
@@ -71,6 +90,11 @@ def test_batch_write_receipt_backs_as_many_atomic_goals_as_its_phases():
     over["goals"].append(_write_goal("g-over", "写入日期", "run_child"))
     _, over_errors = validate_goal_review(over, contract, snapshot, "已完成")
     assert any("重用了" in item for item in over_errors)
+
+    # The submitted plan alone never proves that three effects occurred.
+    unproven = goal_evidence_snapshot(contract, [_batch_write_row("run_child", 3)], "已完成")
+    _, unproven_errors = validate_goal_review(raw, contract, unproven, "已完成")
+    assert any("重用了" in item for item in unproven_errors)
 
 
 def test_single_phase_write_receipt_still_cannot_back_two_goals():

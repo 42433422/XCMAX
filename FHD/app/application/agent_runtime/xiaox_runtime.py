@@ -22,6 +22,21 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from app.application.agent_orchestrator import run_lifecycle
 from app.application.agent_orchestrator.run_models import AgentRun, RunStatus
+from app.application.agent_runtime.goal_verification_task import (
+    begin_verification,
+    compensable_verification,
+    finish_verification,
+    interrupted_verification,
+    resumable_verification,
+    save_verification_progress,
+    verify_artifact_bytes,
+)
+from app.application.agent_runtime.verification_budget import (
+    JOB_KEY,
+    VERIFIER_VERSION,
+    initialize_verification_budget,
+    verification_reserve,
+)
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.domain.task_lifecycle.agent_runtime_results import (
     ACTIVE_STATES as _ACTIVE,
@@ -86,7 +101,8 @@ def _input_text(
                     "constraints": (goal.get("scope") or {}).get("constraints") or {},
                     **(
                         {"requested_deliverable": goal["scope"]["requested_deliverable"]}
-                        if (goal.get("scope") or {}).get("requested_deliverable") else {}
+                        if (goal.get("scope") or {}).get("requested_deliverable")
+                        else {}
                     ),
                 },
                 ensure_ascii=False,
@@ -101,7 +117,11 @@ def _input_text(
                 + json.dumps(request["attachments"], ensure_ascii=False, allow_nan=False)
             )
         reference_evidence = [
-            {key: value for key, value in item.items() if key not in {"verified_read", "verified_reads"}}
+            {
+                key: value
+                for key, value in item.items()
+                if key not in {"verified_read", "verified_reads"}
+            }
             for item in request.get("context_evidence") or []
             if item.get("source") != "host_skill"
         ]
@@ -110,7 +130,11 @@ def _input_text(
 
             for item in reference_evidence:
                 if item["source"] == EVIDENCE_SOURCE:
-                    key = "verified_reads" if isinstance(recalled_attachment, list) else "verified_read"
+                    key = (
+                        "verified_reads"
+                        if isinstance(recalled_attachment, list)
+                        else "verified_read"
+                    )
                     item[key] = recalled_attachment
         if reference_evidence:
             sections.append(
@@ -200,14 +224,106 @@ def _write_goal_unmet(review: dict[str, Any]) -> bool:
     )
 
 
-def _has_blocking_receipt(rows: list[dict[str, Any]]) -> bool:
-    # Only a verified success recorded as low-risk and read-only at claim time
-    # can precede a missing write without blocking recovery.
+def _has_blocking_receipt(
+    rows: list[dict[str, Any]],
+    *,
+    allow_verified_writes: bool = False,
+) -> bool:
+    # Verified reads are safe by default. A caller may admit verified writes
+    # only after binding the missing goal to the original current review.
     return any(
         _receipt_state(row) not in {"missing", "skipped"}
-        and not (row.get("read_only") is True and _receipt_verified(row))
+        and not (
+            (
+                row.get("read_only") is True
+                or (allow_verified_writes and row.get("read_only") is False)
+            )
+            and _receipt_verified(row)
+        )
         for row in rows
     )
+
+
+def _compensation_feedback(binding: Any, rows: list[dict[str, Any]]) -> str | None:
+    """Reload the original missing goals; old review data cannot grant a new action."""
+    job = binding.run.metadata.get(JOB_KEY) or {}
+    if job.get("state") != "needs_work":
+        return None
+    if verification_reserve(binding.metadata)[0] < 1:
+        raise XiaoxBindingError(
+            "goal_verification_budget_exhausted", "原任务没有可供补偿后复检的核验预算"
+        )
+    if not compensable_verification(binding.run, rows):
+        raise XiaoxBindingError(
+            "goal_verification_invalid_gap", "原核验缺口来源、证据或执行条件尚不满足补偿要求"
+        )
+    report = binding.run.metadata["runtime_goal_verification"]
+    assessed = report.get("review") or {}
+    goals = assessed.get("goals") or []
+    return json.dumps(
+        {
+            "feedback": report.get("feedback") or "请仅补齐原目标的未完成事项。",
+            "verification_job_id": job["job_id"],
+            "remaining_goals": [goal for goal in goals if goal.get("status") == "unmet"],
+            "completed_goal_ids": [
+                goal["goal_id"]
+                for goal in goals
+                if goal.get("status") in {"satisfied", "not_applicable"}
+            ],
+            "violations": assessed.get("violations") or [],
+            "uncovered_sources": assessed.get("uncovered_sources") or [],
+            "constraints": "保留已完成回执；仅补齐缺口，不重做成功或未知写入；原权限、审批、预算继续生效。",
+        },
+        ensure_ascii=False,
+    )
+
+
+def _allows_verified_write_compensation(binding: Any, rows: list[dict[str, Any]]) -> bool:
+    """A completed original write is progress when a separate unmet goal is explicit."""
+    from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
+
+    if _model_unsettled(binding.metadata) or _has_blocking_receipt(
+        rows, allow_verified_writes=True
+    ):
+        return False
+    try:
+        if _compensation_feedback(binding, rows) is None:
+            return False
+    except XiaoxBindingError:
+        # A new tool receipt invalidates the old proposal opportunity. Review
+        # the new evidence before proposing any further effect.
+        return False
+    review = (binding.run.metadata.get("runtime_goal_verification") or {}).get("review") or {}
+    if review.get("violations") or review.get("uncovered_sources"):
+        return False
+    contract = binding.run.metadata["runtime_goal_contract"]
+    sources = {"request": contract["request"]["text"]}
+    sources.update({row["source_id"]: row["answer"] for row in goal_answers(binding.run)})
+    objective = (contract["scope"].get("constraints") or {}).get("objective")
+    if isinstance(objective, str):
+        sources["objective"] = objective
+    goals = review.get("goals") or []
+    missing = [
+        goal for goal in goals if goal.get("kind") == "write" and goal.get("status") == "unmet"
+    ]
+    writes = [goal for goal in goals if goal.get("kind") == "write"]
+    if not missing or any(
+        not goal.get("source") or goal["source"] not in sources.get(goal.get("source_id"), "")
+        for goal in writes
+    ):
+        return False
+    completed_sources = {
+        (goal["source_id"], goal["source"]) for goal in writes if goal.get("status") == "satisfied"
+    }
+    if any((goal["source_id"], goal["source"]) in completed_sources for goal in missing):
+        return False
+    covered = {
+        identity
+        for goal in goals
+        if goal.get("kind") == "write" and goal.get("status") == "satisfied"
+        for identity in goal.get("evidence_ids") or []
+    }
+    return all(row.get("read_only") is True or row.get("child_run_id") in covered for row in rows)
 
 
 def _failed_business_details(rows: list[dict[str, Any]]) -> list[str]:
@@ -242,14 +358,19 @@ def _dispatch_action_proposal(
     pair = options.get(payload["capability"])
     if pair is None:
         return {
-            "dispatched": False, "status": "not_started", "error_code": "proposal_capability_unavailable"
+            "dispatched": False,
+            "status": "not_started",
+            "error_code": "proposal_capability_unavailable",
         }
     tool_id, action = pair
     selected = {"tool_id": tool_id, "action": action}
     params = payload.get("params")
     if payload.keys() != {"capability", "params"} or not isinstance(params, dict):
         return {
-            "dispatched": False, **selected, "status": "not_started", "error_code": "proposal_shape_invalid"
+            "dispatched": False,
+            **selected,
+            "status": "not_started",
+            "error_code": "proposal_shape_invalid",
         }
     try:
         described = bridge.invoke(token, "capability_describe", selected)
@@ -346,7 +467,10 @@ def _proposal_contract(
         except RECOVERABLE_ERRORS:
             return schema
         params = (response.get("capability") or {}).get("input_schema")
-        if isinstance(params, dict) and len(json.dumps(params, ensure_ascii=False).encode()) <= 16384:
+        if (
+            isinstance(params, dict)
+            and len(json.dumps(params, ensure_ascii=False).encode()) <= 16384
+        ):
             schema["if"] = {"properties": {"capability": {"const": selected}}}
             schema["then"] = {"properties": {"params": params}}
     return schema
@@ -355,10 +479,14 @@ def _proposal_contract(
 def _failure_diagnostics(run: AgentRun, result: dict[str, Any]) -> dict[str, str]:
     """Describe the current failure; recovered attempts remain in their own ledger."""
     stage = kind = reason = ""
-    if result.get("exit_status") == "goal_verification_required":
+    if result.get("exit_status") in {"goal_verification_required", "goal_verification_invalid_gap"}:
         report = run.metadata.get("runtime_goal_verification") or {}
         stage = "goal_verification"
-        kind = str(report.get("error_code") or "goal_verification_required")
+        kind = str(
+            result["exit_status"]
+            if result["exit_status"] == "goal_verification_invalid_gap"
+            else report.get("error_code") or "goal_verification_required"
+        )
         reason = str(report.get("feedback") or result.get("error") or "")
     elif result.get("execution_state") == "unknown":
         model_unknown = _model_unsettled(run.metadata.get("xiaox_runtime") or {})
@@ -423,6 +551,7 @@ async def run_xiaox_agent(
     cancelled: asyncio.CancelledError | None = None
     turn_deadline: asyncio.Timeout | None = None
     fatal_error: Exception | None = None
+    verification_only = False
 
     def mutate(fn: Callable[[AgentRun, dict[str, Any]], None]) -> Any:
         def guarded(run: AgentRun, metadata: dict[str, Any]) -> None:
@@ -446,6 +575,90 @@ async def run_xiaox_agent(
         # reservation; later turns and restarted coordinators retain its use.
         mutate(reserve)
         return consumed
+
+    async def review_candidate(output, rows, *, plan_delivery=None):
+        from app.application.agent_runtime.goal_verifier import verify_runtime_goal
+        from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+        reviewed_output = plan_delivery.output if plan_delivery is not None else output
+        job = begin_verification(
+            store,
+            run_id,
+            generation=generation,
+            rows=rows,
+            output=reviewed_output,
+            raw_output=output,
+        )
+        verify_artifact_bytes(rows)
+        binding = store.get(run_id)
+        replay = job.get("progress")
+        if not replay or replay.get("state") != "response_received":
+            replay = None
+            # The gateway retains an original settled response even if the
+            # coordinator lost it. Parsing it again is not another billed call.
+            for call in reversed(list((binding.metadata.get("model_requests") or {}).values())):
+                raw = call.get("verification_response")
+                if (
+                    call.get("state") == "completed"
+                    and isinstance(raw, dict)
+                    and call.get("verification_job_id") == job["job_id"]
+                    and call.get("verification_input_digest") == job["input_digest"]
+                    and call.get("verification_response_digest") == canonical_digest(raw)
+                ):
+                    replay = {
+                        "state": "response_received",
+                        "response": raw,
+                        "verifier_version": VERIFIER_VERSION,
+                        "response_digest": canonical_digest(raw),
+                        "attempt": 1,
+                        "input": {
+                            key: job[key]
+                            for key in (
+                                "goal_digest",
+                                "evidence_digest",
+                                "response_digest",
+                            )
+                        },
+                    }
+                    break
+
+        def progress(value):
+            save_verification_progress(
+                store,
+                run_id,
+                job_id=job["job_id"],
+                generation=generation,
+                progress=value,
+            )
+
+        review = await asyncio.to_thread(
+            verify_runtime_goal,
+            binding,
+            actual_config,
+            rows=rows,
+            output=output,
+            consume_format_retry=consume_format_retry,
+            on_progress=progress,
+            replay_response=replay,
+            **({"plan_delivery": plan_delivery} if plan_delivery is not None else {}),
+        )
+        if (
+            review.get("status") == "needs_work"
+            and _write_goal_unmet(review)
+            and not _has_blocking_receipt(rows)
+        ):
+            review = {**review, "error_code": "business_action_required"}
+            review["report_digest"] = canonical_digest(
+                {key: value for key, value in review.items() if key != "report_digest"}
+            )
+        finish_verification(
+            store,
+            run_id,
+            job_id=job["job_id"],
+            generation=generation,
+            review=review,
+        )
+        return review
 
     def revoke(reason: str, *, release_coordinator: bool = False) -> None:
         if grant is None:
@@ -491,13 +704,29 @@ async def run_xiaox_agent(
             rows = store.receipt_snapshot(run_id)
             binding = store.get(run_id)
             result["output"] = "\n\n".join(text for text in texts.values() if text.strip())
+            verification_interrupted = bool(
+                (binding.run.metadata.get(JOB_KEY) or {}).get("state") == "running"
+                and runtime_status == "interrupted"
+                and cancelled is None
+                and fatal_error is None
+            )
             status: RunStatus = _classify(
                 result,
                 rows,
                 _classification_metadata(binding),
                 completion_mode,
-                runtime_status,
+                "completed" if verification_interrupted else runtime_status,
             )
+            if (
+                verification_interrupted
+                and result.get("exit_status") == "goal_verification_required"
+            ):
+                result.update(
+                    retryable=True,
+                    verification_state="pending",
+                    error_code="goal_verification_interrupted",
+                    error="独立核验中断，原执行结果与核验检查点已保留",
+                )
             if budget_stop := _budget_stop_reason(binding):
                 # A spent model-call budget is a host budget fact, not a business
                 # verification failure. Keep the reason readable and keep every
@@ -522,12 +751,50 @@ async def run_xiaox_agent(
                     execution_state=status,
                     runtime_completed=False,
                 )
+            elif result.get("error_code") == "goal_verification_invalid_gap":
+                status = "blocked"
+                result.update(
+                    ok=False,
+                    business_completed=False,
+                    reply_completed=False,
+                    exit_status="goal_verification_invalid_gap",
+                    execution_state="blocked",
+                    retryable=False,
+                )
 
             def finish(run: AgentRun, metadata: dict[str, Any]) -> None:
                 if started_at := metadata.pop("active_started_at", None):
                     metadata["active_seconds"] = float(metadata.get("active_seconds", 0)) + max(
                         0.0, time.time() - float(started_at)
                     )
+                interrupted_verification(
+                    run,
+                    metadata,
+                    cancelled=runtime_status == "cancelled",
+                    fatal_error_code=(
+                        str(result.get("error_code") or "goal_verification_failed")
+                        if fatal_error is not None or runtime_status == "failed"
+                        else ""
+                    ),
+                )
+                verification = run.metadata.get(JOB_KEY) or {}
+                if verification.get("state") == "needs_work" and result.get("error_code") in {
+                    "goal_verification_budget_exhausted",
+                    "goal_verification_invalid_gap",
+                }:
+                    verification.update(state="blocked", terminal_code=result["error_code"])
+                if verification.get("state") in {"running", "pending", "needs_work"} and float(
+                    metadata.get("active_seconds") or 0
+                ) >= float(config.turn_timeout_seconds):
+                    # Only active time consumes the original task allowance.
+                    # A previous wall-clock deadline cannot charge a blocked wait.
+                    verification.update(state="blocked", terminal_code="runtime_budget_exhausted")
+                if verification:
+                    result["verification_state"] = verification.get("state")
+                    if verification.get("state") in {"blocked", "cancelled"}:
+                        result["retryable"] = False
+                    if verification.get("terminal_code"):
+                        result["terminal_code"] = verification["terminal_code"]
                 result["active_seconds"] = float(metadata.get("active_seconds") or 0)
                 result["model_request_attempts"] = len(metadata.get("model_requests") or {})
                 if result.get("error_code") == "model_call_budget_exhausted":
@@ -567,7 +834,9 @@ async def run_xiaox_agent(
                     )
                 run.error = str(result.get("error") or run.error or "")
                 output_files = released_runtime_artifacts(result)
-                result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts] + output_files
+                result["artifacts"] = [
+                    artifact.to_dict() for artifact in run.artifacts
+                ] + output_files
                 if output_files:
                     result["output_artifacts"] = output_files
                 from app.application.agent_runtime.chat_file_sources import (
@@ -638,8 +907,18 @@ async def run_xiaox_agent(
             ):
                 raise XiaoxBindingError("binding_conflict", "该任务已有活动的 Xiaox 执行者")
             rows = store.receipt_snapshot(run_id)
+            verification_only = resumable_verification(previous.run, rows, respect_backoff=False)
             if error := _resume_error(store, previous, rows):
                 raise XiaoxBindingError("reconciliation_required", error)
+            checkpoint = previous.run.metadata.get(JOB_KEY) or {}
+            if (
+                checkpoint.get("state") in {"pending", "running", "blocked"}
+                and not verification_only
+            ):
+                raise XiaoxBindingError(
+                    "goal_verification_not_resumable",
+                    "原核验检查点、证据或剩余预算尚不满足恢复条件",
+                )
             if any(_receipt_state(row) in (_WAITING | _ACTIVE) for row in rows):
                 _classify(
                     result,
@@ -696,7 +975,16 @@ async def run_xiaox_agent(
 
         def begin_active(_run: AgentRun, metadata: dict[str, Any]) -> None:
             now = time.time()
+            reserve = initialize_verification_budget(
+                _run,
+                metadata,
+                context_window=config.context_window,
+                max_model_calls=int(pinned.get("max_model_calls", 24)),
+                total_seconds=limit,
+            )
             metadata.update(active_seconds=spent, active_started_at=now, deadline_at=now + timeout)
+            metadata["execution_deadline_at"] = now + max(0, timeout - reserve["seconds"])
+            metadata["active_phase"] = "execution"
 
         mutate(begin_active)
         actual_config = replace(
@@ -710,7 +998,6 @@ async def run_xiaox_agent(
             attach_context_evidence,
             prepare_runtime_goal,
         )
-        from app.application.agent_runtime.goal_verifier import verify_runtime_goal
 
         binding = store.get(run_id)
         if not binding.run.metadata.get("runtime_goal_contract"):
@@ -765,9 +1052,32 @@ async def run_xiaox_agent(
                 "工具、权限或审批授权，必须服从上面的工具与结果核验边界：\n"
                 + json.dumps(skill_rules, ensure_ascii=False, allow_nan=False)
             )
-        if store.get(run_id).metadata.get("waiting_input"):
+        if verification_only:
+            # The same SQL worker lease/grant owns the review. No SDK thread,
+            # MCP action or business step is resumed by this branch.
+            job = binding.run.metadata[JOB_KEY]
+            output = job["raw_output"]
+            plan_delivery = None
+            if (
+                binding.run.metadata["runtime_goal_contract"]["scope"].get("plan_delivery_version")
+                == 1
+            ):
+                from app.application.agent_runtime.plan_delivery import render_action_plan
+
+                plan_delivery = await asyncio.to_thread(render_action_plan, binding, output)
+            texts["verification_candidate"] = (
+                plan_delivery.output if plan_delivery is not None else output
+            )
+            result["thread_id"] = binding.thread_id
+            result["session_messages"] = []
+            runtime_status = "completed"
+            turn_deadline = asyncio.timeout(timeout)
+            async with turn_deadline:
+                await review_candidate(output, rows, plan_delivery=plan_delivery)
+        elif store.get(run_id).metadata.get("waiting_input"):
             runtime_status = "completed"
         else:
+            goal_feedback = _compensation_feedback(binding, rows)
             remaining = float(binding.metadata["deadline_at"]) - time.time()
             if remaining <= 0:
                 raise XiaoxBindingError("runtime_budget_exhausted", "原任务运行时长预算已耗尽")
@@ -824,10 +1134,11 @@ async def run_xiaox_agent(
                         ),
                     )
                     result["session_messages"] = [{"role": "user", "content": task}]
-                    goal_feedback = None
                     action_schema = None
                     structured_plan = (
-                        binding.run.metadata["runtime_goal_contract"]["scope"].get("plan_delivery_version")
+                        binding.run.metadata["runtime_goal_contract"]["scope"].get(
+                            "plan_delivery_version"
+                        )
                         == 1
                     )
                     if structured_plan:
@@ -846,7 +1157,8 @@ async def run_xiaox_agent(
                         runtime_status = "running"
                         stream = (
                             active.stream_turn(
-                                text, **({"output_schema": action_schema} if structured_plan else {})
+                                text,
+                                **({"output_schema": action_schema} if structured_plan else {}),
                             )
                             if goal_feedback is None
                             else active.stream_turn(
@@ -959,7 +1271,13 @@ async def run_xiaox_agent(
                             break
                         output = "\n\n".join(value for value in texts.values() if value.strip())
                         rows = store.receipt_snapshot(run_id)
-                        if proposal_options and not _has_blocking_receipt(rows):
+                        if proposal_options and not _has_blocking_receipt(
+                            rows,
+                            allow_verified_writes=_allows_verified_write_compensation(
+                                store.get(run_id),
+                                rows,
+                            ),
+                        ):
                             proposed = await asyncio.to_thread(
                                 _dispatch_action_proposal,
                                 tool_bridge,
@@ -1009,43 +1327,15 @@ async def run_xiaox_agent(
                                 texts["validated_plan"] = plan_delivery.output
                             if plan_delivery.unavailable:
                                 result["plan_unavailable"] = plan_delivery.output
-                        review = await asyncio.to_thread(
-                            verify_runtime_goal,
-                            binding,
-                            actual_config,
-                            rows=rows,
-                            output=output,
-                            consume_format_retry=consume_format_retry,
-                            **({"plan_delivery": plan_delivery} if structured_plan else {}),
-                        )
-
+                        review = await review_candidate(output, rows, plan_delivery=plan_delivery)
+                        binding = store.get(run_id)
                         if (
-                            review.get("status") == "needs_work"
-                            and _write_goal_unmet(review)
-                            and not _has_blocking_receipt(rows)
+                            review.get("status") != "needs_work"
+                            or attempt == 2
+                            or binding.run.metadata[JOB_KEY].get("state") != "needs_work"
                         ):
-                            # A verified read does not satisfy a write goal.
-                            review = {**review, "error_code": "business_action_required"}
-
-                        def record_review(run: AgentRun, metadata: dict[str, Any]) -> None:
-                            store._validate_current(run, metadata, generation)
-                            run.metadata["runtime_goal_verification"] = copy.deepcopy(review)
-                            run.add_event(
-                                "runtime.goal.verified",
-                                "已独立核对原始目标与实际结果",
-                                {
-                                    "status": review.get("status"),
-                                    "attempt": attempt + 1,
-                                    "report_digest": review.get("report_digest"),
-                                },
-                            )
-
-                        mutate(record_review)
-                        if review.get("status") != "needs_work" or attempt == 2:
                             break
-                        goal_feedback = str(
-                            review.get("feedback") or "请重新核对原始目标和已有回执。"
-                        )
+                        goal_feedback = _compensation_feedback(binding, rows)
                         if not structured_plan:
                             action_schema = None
                         proposal_options = {}
@@ -1060,7 +1350,12 @@ async def run_xiaox_agent(
                                 tool_bridge is not None
                                 and binding.run.metadata.get(_EXECUTION_MODE) != "plan"
                                 and not proposal_submitted
-                                and not _has_blocking_receipt(rows)
+                                and not _has_blocking_receipt(
+                                    rows,
+                                    allow_verified_writes=_allows_verified_write_compensation(
+                                        binding, rows
+                                    ),
+                                )
                             ):
                                 proposal_options = await asyncio.to_thread(
                                     _write_proposal_options,
@@ -1121,7 +1416,10 @@ async def run_xiaox_agent(
         )
         if isinstance(exc, ImportError):
             logger.error("Xiaox component import failed: %s", exc.name or type(exc).__name__)
-            result.update(error_code="runtime_component_unavailable", error="运行组件加载失败，请核对当前桌面服务版本")
+            result.update(
+                error_code="runtime_component_unavailable",
+                error="运行组件加载失败，请核对当前桌面服务版本",
+            )
         runtime_status = "interrupted" if isinstance(exc, TimeoutError) else "failed"
         if isinstance(exc, XiaoxBindingError) and exc.code in {"cancelled", "paused"}:
             runtime_status = exc.code

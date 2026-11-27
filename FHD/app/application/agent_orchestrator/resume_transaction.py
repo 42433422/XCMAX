@@ -20,6 +20,68 @@ from app.application.agent_orchestrator.task_models import TaskControlCommand
 from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTaskExecutionRecord
 
 
+def _verified_xiaox_child_effects(db: Any, run: AgentRun, effects: list[str]) -> set[str]:
+    """Settle only an exact delegated step from its current independent SQL receipt."""
+    from app.application.agent_orchestrator.result_verification import verified_effect_receipt
+    from app.application.agent_orchestrator.task_models import mod_id_of_run, tenant_id_of_run
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+
+    metadata = run.metadata.get("xiaox_runtime")
+    if run.metadata.get("runtime_type") != "xiaox" or not isinstance(metadata, dict):
+        return set()
+    try:
+        XiaoxBindingStore._validate_goal(run, metadata)
+    except XiaoxBindingError:
+        return set()
+    completed = set()
+    for effect in effects:
+        parts = effect.split(":")
+        if len(parts) != 3 or parts[0] != "child":
+            continue
+        _, child_id, step_id = parts
+        calls = [
+            call
+            for call in (metadata.get("calls") or {}).values()
+            if call.get("child_run_id") == child_id
+        ]
+        if not calls:
+            continue
+        record = db.query(AgentRunRecord).filter_by(run_id=child_id).with_for_update().one_or_none()
+        child = agent_run_from_dict(json.loads(record.payload_json)) if record is not None else None
+        if (
+            child is None
+            or child.status != "completed"
+            or len(child.steps) != 1
+            or child.user_id != run.user_id
+            or tenant_id_of_run(child) != tenant_id_of_run(run)
+            or mod_id_of_run(child) != mod_id_of_run(run)
+            or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != run.run_id
+        ):
+            continue
+        step = child.steps[0]
+        task_id = (child.metadata.get("task_context") or {}).get("task_id")
+        operation = {"tool_id": step.tool_id, "action": step.action, "params": step.params}
+        nodes = (child.metadata.get("plan") or {}).get("nodes") or []
+        if (
+            step.step_id != step_id
+            or not task_id
+            or len(nodes) != 1
+            or nodes[0].get("node_id") != step.node_id
+            or {key: nodes[0].get(key) for key in operation} != operation
+            or any(
+                call.get("child_task_id") != task_id
+                or call.get("fingerprint") != canonical_digest(operation)
+                or {key: call.get(key) for key in operation} != operation
+                for call in calls
+            )
+            or not verified_effect_receipt(child, step)
+        ):
+            continue
+        completed.add(effect)
+    return completed
+
+
 def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False) -> list[str]:
     """Only a durable successful step receipt can settle an old open effect."""
     from app.application.agent_orchestrator.result_verification import verified_effect_receipt
@@ -30,6 +92,7 @@ def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False)
     tenant = tenant_id_of_run(run)
     body = book.get("agent", tenant, run.run_id)
     completed = {step.step_id for step in run.steps if verified_effect_receipt(run, step)}
+    completed.update(_verified_xiaox_child_effects(db, run, body.get("effects") or []))
     remaining = sorted(set(body.get("effects") or []) - completed)
     if clear_confirmed and not remaining and body.get("effects"):
         body["effects"] = []
