@@ -1,5 +1,5 @@
 {
-  "lines": 2801484,
+  "lines": 2801494,
   "updated": "2026-11-27",
-  "note": "PR #3721 拆分 verification_finance.py 以满足 G11 <40KB 结构门禁"
+  "note": "PR #3721 ruff format 换行后刷新基线"
 }
