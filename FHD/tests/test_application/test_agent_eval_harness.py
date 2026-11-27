@@ -29,17 +29,17 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert result["score"] == 1.0
     assert result["coverage"] == {
         "fixture_contract_passed": 123,
-        "business_effect_verified": 16,
+        "business_effect_verified": 17,
         "artifact_integrity_verified": 2,
         "task_admission_verified": 1,
         "read_only_contract": 8,
-        "unverified": 45,
+        "unverified": 44,
         "not_exercised": 51,
     }
     dispatch_only = [
         row for row in result["results"] if row["coverage_scope"] == "dispatch_contract_only"
     ]
-    assert len(dispatch_only) == 39
+    assert len(dispatch_only) == 38
     assert all(row["business_goal_expected"] for row in dispatch_only)
     assert all(row["result_coverage"] == "unverified" for row in dispatch_only)
     denied = [
