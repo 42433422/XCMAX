@@ -35,10 +35,19 @@ def _fixture(path):
 def test_dependency_tokens_keep_quoted_sheet_and_unresolved_names():
     result = formula_dependency_facts("=A1+'Other sheet'!$B$2+INDIRECT(A3)+NamedRange", "Data")
     assert result["references"][1] == {
-        "token": "'Other sheet'!$B$2", "sheet": "Other sheet", "kind": "cross_sheet",
+        "token": "'Other sheet'!$B$2",
+        "sheet": "Other sheet",
+        "kind": "cross_sheet",
     }
     assert set(result["unresolved"]) == {"dynamic_reference", "named_or_unknown"}
     assert formula_dependency_facts("", "Data")["unresolved"] == ["missing_formula_text"]
+
+
+def test_invalid_and_nonstatic_dependencies_are_not_claimed_as_resolved():
+    assert formula_dependency_facts("=)", "Data")["unresolved"] == ["unsupported_formula_syntax"]
+    assert formula_dependency_facts("=XFE1", "Data")["unresolved"] == ["named_or_unknown"]
+    result = formula_dependency_facts("=[Book.xlsx]Data!A1+Table1[Column]+Sheet1:Sheet2!B1", "Data")
+    assert set(result["unresolved"]) == {"external", "structured", "three_dimensional"}
 
 
 def test_cache_is_observed_not_recalculated(tmp_path):
@@ -97,7 +106,8 @@ def test_real_libreoffice_recalculation_compatibility(tmp_path):
         assert formulas["Data"]["B5"].value == "=SUM(B4,7)"
         assert str(formulas["Data"].merged_cells) == "A8:B8"
         assert formulas["Data"]["A8"].value == "untouched"
-        assert summarize_formula_evidence(calculated.read_bytes())["formula_recalculation_verified"] is False
+        evidence = summarize_formula_evidence(calculated.read_bytes())
+        assert evidence["formula_recalculation_verified"] is False
     finally:
         values.close()
         formulas.close()

@@ -7,6 +7,7 @@ from zipfile import BadZipFile, ZipFile
 
 from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 from openpyxl.utils.cell import range_boundaries
+from openpyxl.xml.constants import MAX_COLUMN, MAX_ROW
 
 from app.application.reviewed_excel_formula_cells import formula_facts
 
@@ -18,11 +19,12 @@ _MAX_EXPANDED_BYTES = 128 * 1024 * 1024
 def formula_dependency_facts(formula: str, sheet: str) -> dict:
     """Keep lexical reference tokens, not an assumed complete dependency graph."""
     refs, unresolved = [], []
-    if not formula or not formula.startswith("="):
+    if not formula or not formula.startswith("=") or not formula[1:].strip():
         return {"references": refs, "unresolved": ["missing_formula_text"]}
     try:
         tokens = Tokenizer(formula).items
-    except TokenizerError:
+    except (TokenizerError, IndexError):
+        # openpyxl 3.1.5 raises IndexError on an unmatched closing delimiter.
         return {"references": refs, "unresolved": ["unsupported_formula_syntax"]}
     for token in tokens:
         if token.type == "FUNC" and token.subtype == "OPEN":
@@ -44,7 +46,14 @@ def formula_dependency_facts(formula: str, sheet: str) -> dict:
         else:
             try:
                 bounds = range_boundaries(address)
-                is_range = ":" in address or all(part is not None for part in bounds)
+                c1, r1, c2, r2 = bounds
+                is_range = (
+                    (":" in address or all(part is not None for part in bounds))
+                    and all(1 <= c <= MAX_COLUMN for c in (c1, c2) if c is not None)
+                    and all(1 <= row <= MAX_ROW for row in (r1, r2) if row is not None)
+                    and (c1 is None or c2 is None or c1 <= c2)
+                    and (r1 is None or r2 is None or r1 <= r2)
+                )
             except ValueError:
                 is_range = False
             kind = ("cross_sheet" if separator else "local") if is_range else "named_or_unknown"
