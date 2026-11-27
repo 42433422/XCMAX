@@ -103,7 +103,10 @@ def resume_error(
             )
             if (
                 no_effect is not None
-                and not run_lifecycle.requires_retry_reconciliation(child)
+                and (
+                    no_effect.get("effect") == "artifact_created"
+                    or not run_lifecycle.requires_retry_reconciliation(child)
+                )
                 and receipt_state(row) == "failed"
                 and row["receipt"].get("execution") == no_effect
                 and isinstance(original, dict)
@@ -113,8 +116,8 @@ def resume_error(
                 )
                 and read_call_receipt(store, binding, original) == row["receipt"]
             ):
-                # The original rejection proves no write happened. Continuing
-                # the parent can plan remaining work without replaying this child.
+                # The effect is either absent or a read-back file with failed
+                # expectations. Only the parent may plan; this child is not replayed.
                 continue
             # We never retry a child here; nevertheless enforce the existing
             # continuation guard before allowing a model to propose more work.
@@ -207,6 +210,14 @@ def _pending_step(run: AgentRun, step: Any, record: Any) -> bool:
 def _failed_execution_receipt(child: Any, step: Any, record: Any) -> dict[str, Any] | None:
     """Project only the bound, frozen original rejection; never infer from failure."""
     from app.application.agent_orchestrator.result_verification import _binding_valid
+    from app.application.agent_orchestrator.verification_workbook import (
+        known_workbook_expectation_failure,
+    )
+
+    if len(getattr(child, "steps", [])) == len(
+        child.tool_calls
+    ) == 1 and known_workbook_expectation_failure(child, step, record):
+        return {"outcome": "succeeded", "committed": True, "effect": "artifact_created"}
 
     if (
         record is None
@@ -336,6 +347,7 @@ def read_call_receipt(
         and not verification["accepted"]
         and any(
             (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+            and not (execution is not None and execution.get("effect") == "artifact_created")
             and record.call_id not in pending_calls
             and (
                 record.output.get("success") is True
@@ -386,6 +398,8 @@ def read_call_receipt(
         and all(_verified_step(child, step, latest.get(step.step_id)) for step in completed_steps)
     )
     status = child.status
+    if execution is not None and execution.get("effect") == "artifact_created":
+        status = "failed"
     if status == "blocked" and any(record.call_id in pending_calls for record in latest.values()):
         status = "running"
     if status == "completed" and not verified:
@@ -453,6 +467,11 @@ def read_call_receipt(
         "clarification": clarification,
         "retryable": False,
         "reconciliation_required": False,
+        **(
+            {"error_code": "artifact_expectation_mismatch"}
+            if execution is not None and execution.get("effect") == "artifact_created"
+            else {}
+        ),
         **({"execution": execution} if execution is not None else {}),
         "message": message,
         "tool_calls": [_safe_output(record.to_dict()) for record in latest.values()],

@@ -38,6 +38,7 @@ from app.application.agent_orchestrator.task_models import (
     task_from_run,
     tenant_id_of_run,
 )
+from app.domain.task_lifecycle.agent_runtime_results import receipt_artifact_failure
 
 _TASK_ID_PATH = "$.metadata.task_context.task_id"
 _TENANT_PATH = "$.metadata.runtime_context.tenant_id"
@@ -263,7 +264,15 @@ def preserve_run_evidence(
     settled_xiaox = bool(
         allow_verified_xiaox_recovery
         and previous.metadata.get("runtime_type") == "xiaox"
-        and previous.status in {"running", "waiting_user", "unknown"}
+        and previous.status in {"running", "waiting_user", "unknown", "blocked"}
+        and (
+            previous.status != "blocked"
+            or any(
+                receipt_artifact_failure(row)
+                for row in (run.final_output.get("xiaox_result") or {}).get("business_receipts")
+                or []
+            )
+        )
         and (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
         and not old.get("stream_interruption")
         and not run.metadata.get("recovery")

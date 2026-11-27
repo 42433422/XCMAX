@@ -29,6 +29,7 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     classify_runtime_result,
     failure_diagnostics,
     model_unsettled,
+    receipt_artifact_failure,
     receipt_settled_failure,
     receipt_state,
     receipt_verified,
@@ -65,6 +66,9 @@ def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
     prior = {str(row.get("call_id")): row for row in previous.get("business_receipts") or []}
     return any(
         receipt_state(prior[str(row["call_id"])]) in WAITING_STATES | ACTIVE_STATES
+        or (
+            receipt_state(prior[str(row["call_id"])]) == "unknown" and receipt_artifact_failure(row)
+        )
         for row in rows
         if str(row.get("call_id")) in prior
     )
@@ -110,10 +114,14 @@ def project_receipt_state(
         str(run.metadata.get("runtime_completion_mode") or "auto"),
         str(metadata.get("runtime_status") or "interrupted"),
     )
-    if result.get("exit_status") in {
-        "goal_verification_required",
-        "partial",
-    } and _continuation_ready(run, rows):
+    if (
+        result.get("exit_status") in {"goal_verification_required", "partial"}
+        or (
+            (verified_child_recovery or previous.get("exit_status") == "continuation_pending")
+            and result.get("exit_status") == "failed"
+            and any(receipt_artifact_failure(row) for row in rows)
+        )
+    ) and _continuation_ready(run, rows):
         # A completed child is new evidence for the same runtime, never proof
         # that every original goal is complete. The dispatcher owns continuation.
         status = "running"
@@ -183,7 +191,7 @@ def refresh_xiaox_receipts(
     execution = queue.get(run.run_id)
     if execution is not None and (
         execution.state
-        not in {"waiting_approval", "waiting_input", "waiting_auth", "paused", "blocked"}
+        not in {"waiting_approval", "waiting_input", "waiting_auth", "paused", "blocked", "unknown"}
         or execution.lease_owner
         or execution.lease_expires_at
     ):
@@ -224,7 +232,7 @@ def resume_ready_xiaox_runs(
     with repository.transaction(read_only=True) as db:
         query = db.query(AgentRunRecord).filter(
             AgentRunRecord.intent == "xiaox.runtime",
-            AgentRunRecord.status.in_(("waiting_user", "running", "unknown")),
+            AgentRunRecord.status.in_(("waiting_user", "running", "unknown", "blocked")),
         )
         if cursor:
             query = query.filter(

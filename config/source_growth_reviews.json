@@ -27,14 +27,14 @@
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
-      "base_blob": "0ded2ed2e0133c366cb71093e5d3eff48b40ef2d",
-      "head_blob": "1f4b6a75beff509fc9c6de06147502acc3c3040b",
-      "before_lines": 1318,
-      "after_lines": 1343,
-      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；合并串行Schema初始化、保存时状态审计及终止控制回执保留，维持同一事务和CAS。 本登记不是人工架构批准。",
-      "boundary": "仅修改原任务仓储的schema初始化，锁与事务统一委托现有orm_tables辅助函数；运行状态、事件及审批账本仍是原唯一来源。 集成冲突以当前main与来源提交共同祖先三方核对，用户已追加授权纳入01/06，合并共享状态投影和原预算内独立核验。",
-      "validation": "真实PostgreSQL运行test_task_execution_repository与test_agent_schema_concurrency，共74通过、零跳过；test_stale_handoff_recovery原PG用例另1通过。保留SQLite组合回归与原任务事务，最终集成HEAD完整CI仍须核对。",
-      "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
+      "base_blob": "1f4b6a75beff509fc9c6de06147502acc3c3040b",
+      "head_blob": "9531bd637e884d816d0a32863e40e0b28ea795e5",
+      "before_lines": 1343,
+      "after_lines": 1352,
+      "reason": "Review request: distinguish independently read-back workbook expectation failure from unknown effects in the existing SQL parent continuation.",
+      "boundary": "Exact original file, call, scope and frozen-contract proofs only; no replay, new runtime, approval bypass or budget reset.",
+      "validation": "Native Calc calculation and strict failed-receipt regressions plus SQL reopen/lease/model-unknown/foreign-effect/pause negatives. Full exact-head CI and real desktop acceptance remain separate.",
+      "follow_up": "Review this precise blob and existing SQL CAS boundary; request only, not architecture approval.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py": {
