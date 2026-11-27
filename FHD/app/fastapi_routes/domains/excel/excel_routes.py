@@ -258,8 +258,7 @@ def skills_analyze_excel(request: Request, body: dict = Body(default_factory=dic
         action="analyze",
         params={
             "file_path": file_path,
-            "sheet_name": data.get("sheet_name"),
-            "output_json": data.get("output_json"),
+            **{key: data[key] for key in ("sheet_name", "output_json") if key in data},
         },
         intent="skills_analyze_excel",
         message=f"Analyze Excel skill file: {file_path}",
@@ -284,8 +283,7 @@ def skills_view_excel(request: Request, body: dict = Body(default_factory=dict))
         action=action,
         params={
             "file_path": file_path,
-            "sheet_name": data.get("sheet_name"),
-            "max_rows": data.get("max_rows"),
+            **{key: data[key] for key in ("sheet_name", "max_rows") if key in data},
         },
         intent=f"skills_view_excel_{action}",
         message=f"View Excel skill file: {file_path}",
@@ -310,7 +308,7 @@ def skills_generate_label_template(request: Request, body: dict = Body(default_f
         params={
             "image_path": image_path,
             "class_name": data.get("class_name", "LabelTemplateGenerator"),
-            "output_file": data.get("output_file"),
+            **({"output_file": data["output_file"]} if "output_file" in data else {}),
             "enable_ocr": data.get("enable_ocr", True),
             "verbose": data.get("verbose", True),
         },

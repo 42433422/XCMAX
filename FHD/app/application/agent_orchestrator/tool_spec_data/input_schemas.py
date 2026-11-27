@@ -396,8 +396,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("inventory", "stock_out"): _object_schema(
         ["product_id", "warehouse_id", "quantity"],
         {
-            "product_id": {},
-            "warehouse_id": {},
+            "product_id": {"not": {"type": "null"}},
+            "warehouse_id": {"not": {"type": "null"}},
             "quantity": {"type": "number"},
             "batch_no": {"type": "string"},
             "location_id": {},
@@ -411,9 +411,9 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("inventory", "transfer"): _object_schema(
         ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
         {
-            "product_id": {},
-            "from_warehouse_id": {},
-            "to_warehouse_id": {},
+            "product_id": {"not": {"type": "null"}},
+            "from_warehouse_id": {"not": {"type": "null"}},
+            "to_warehouse_id": {"not": {"type": "null"}},
             "quantity": {"type": "number"},
             "batch_no": {"type": "string"},
             "from_location_id": {},
@@ -979,7 +979,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("document_template", "update"): _object_schema(
         ["id"],
         {
-            "id": {},
+            "id": {"not": {"type": "null"}},
             "name": {"type": "string"},
             "template_name": {"type": "string"},
             "template_type": {"type": "string"},
@@ -994,7 +994,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "replace_mode": {"type": "boolean"},
         },
     ),
-    ("document_template", "delete"): _object_schema(["id"], {"id": {}}),
+    ("document_template", "delete"): _object_schema(["id"], {"id": {"not": {"type": "null"}}}),
     ("document_template", "clear"): _object_schema([], {}),
     ("document_template", "ingest"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
     ("document_template", "upload"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
@@ -1223,7 +1223,11 @@ _SPECIAL_INPUT_SCHEMAS[("desktop_automation", "computer_execute")] = {
                 "type": "array",
                 "minItems": 1,
                 "maxItems": 20,
-                "items": {"type": "object", "required": ["action"]},
+                "items": {
+                    "type": "object",
+                    "required": ["action"],
+                    "properties": {"action": {"type": "string"}},
+                },
                 "description": 'browser: navigate(url), click(target), fill(target,text), press(target,key), select(target,value), check(target,checked); target 如 {"role":"button","name":"保存"}、{"label":"姓名"}、{"test_id":"save"} 或 {"selector":"#save"}。desktop: click(x,y), move(x,y), drag(x,y,to_x,to_y), type(text), press(keys), scroll(x,y,clicks)；坐标使用截图返回的 input_width/input_height。',
             },
             "verification": {

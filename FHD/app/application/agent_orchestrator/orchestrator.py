@@ -650,6 +650,14 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for node in plan.nodes
         ):
             return "持久化计划参数或依赖已变化，拒绝续跑"
+        for node in plan.nodes:
+            if node.tool_id == "clarify" and node.action == "ask":
+                continue
+            denial = actor_tool_denial(
+                node.tool_id, node.action, context, steps[node.node_id].params
+            )
+            if denial is not None:
+                return "计划权限复核未通过，拒绝续跑"
         registry = _execution_registry(context, plan)
         if validate_required_params(plan, registry):
             return "计划不再符合当前工具注册表或参数契约，拒绝续跑"
@@ -664,11 +672,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             expected_risk = "high" if node.node_id in approval_ids else node.risk
             if step.risk != expected_risk or step.idempotent != node.idempotent:
                 return "计划风险或幂等属性与当前工具契约不一致，拒绝续跑"
-            if node.tool_id == "clarify" and node.action == "ask":
-                continue
-            denial = actor_tool_denial(node.tool_id, node.action, context, step.params)
-            if denial is not None:
-                return "计划权限复核未通过，拒绝续跑"
         return ""
 
     def continue_after_clarification(
@@ -1065,6 +1068,58 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
 
+        for node in plan.nodes:
+            if node.tool_id == "clarify" and node.action == "ask":
+                continue
+            step = steps_by_node[node.node_id]
+            denial = actor_tool_denial(node.tool_id, node.action, runtime_context, step.params)
+            if denial is not None:
+                code = str(denial.get("error_code") or "tool_permission_denied")
+                run.status, run.error = "blocked", str(denial.get("message") or "权限校验失败")
+                unsafe = _mark_prior_effects_for_reconciliation(run, code)
+                # Preflight denial is a non-execution receipt, not a generic
+                # tool failure. Never overwrite an already executed receipt.
+                reason = str(denial.get("reason") or code)
+                if step.status in {"pending", "waiting_user"}:
+                    step.error = run.error
+                    step.output = {
+                        "success": False,
+                        "error_code": code,
+                        "reason": reason,
+                        "message": run.error,
+                        "user_id": str(runtime_context.get("user_id") or ""),
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "task_id": run.run_id,
+                    }
+                run.add_event(
+                    "tool.permission_denied",
+                    run.error,
+                    {
+                        "step_id": step.step_id,
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "reason": reason,
+                        "user_id": str(runtime_context.get("user_id") or ""),
+                        "execution_started": False,
+                    },
+                )
+                run.add_event(
+                    "workflow.plan_audit_rejected",
+                    "完整计划权限预检未通过，未执行任何节点",
+                    {
+                        "run_id": run.run_id,
+                        "node_id": node.node_id,
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "error_code": code,
+                        "reconciliation_required": bool(unsafe),
+                        "completed_non_idempotent_step_ids": unsafe,
+                        "execution_started": False,
+                    },
+                )
+                self._repo.save(run)
+                return
         registry = _execution_registry(runtime_context, plan)
         plan_error = validate_plan_graph(plan) or validate_required_params(plan, registry)
         if plan_error:
@@ -1129,58 +1184,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return
             if node.node_id in approval_ids:
                 node.risk = "high"
-        for node in plan.nodes:
-            if node.tool_id == "clarify" and node.action == "ask":
-                continue
-            step = steps_by_node[node.node_id]
-            denial = actor_tool_denial(node.tool_id, node.action, runtime_context, step.params)
-            if denial is not None:
-                code = str(denial.get("error_code") or "tool_permission_denied")
-                run.status, run.error = "blocked", str(denial.get("message") or "权限校验失败")
-                unsafe = _mark_prior_effects_for_reconciliation(run, code)
-                # Preflight denial is a non-execution receipt, not a generic
-                # tool failure. Never overwrite an already executed receipt.
-                reason = str(denial.get("reason") or code)
-                if step.status in {"pending", "waiting_user"}:
-                    step.error = run.error
-                    step.output = {
-                        "success": False,
-                        "error_code": code,
-                        "reason": reason,
-                        "message": run.error,
-                        "user_id": str(runtime_context.get("user_id") or ""),
-                        "tool_id": node.tool_id,
-                        "action": node.action,
-                        "task_id": run.run_id,
-                    }
-                run.add_event(
-                    "tool.permission_denied",
-                    run.error,
-                    {
-                        "step_id": step.step_id,
-                        "tool_id": node.tool_id,
-                        "action": node.action,
-                        "reason": reason,
-                        "user_id": str(runtime_context.get("user_id") or ""),
-                        "execution_started": False,
-                    },
-                )
-                run.add_event(
-                    "workflow.plan_audit_rejected",
-                    "完整计划权限预检未通过，未执行任何节点",
-                    {
-                        "run_id": run.run_id,
-                        "node_id": node.node_id,
-                        "tool_id": node.tool_id,
-                        "action": node.action,
-                        "error_code": code,
-                        "reconciliation_required": bool(unsafe),
-                        "completed_non_idempotent_step_ids": unsafe,
-                        "execution_started": False,
-                    },
-                )
-                self._repo.save(run)
-                return
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 
         run.add_event(

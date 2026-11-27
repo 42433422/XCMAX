@@ -481,6 +481,26 @@
               "confirmed"
             ],
             "properties": {
+              "operation_id": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "revision": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "reason": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "price": {
+                "not": {
+                  "type": "null"
+                }
+              },
               "product_id": {
                 "type": "integer"
               },
@@ -556,6 +576,26 @@
               "confirmed"
             ],
             "properties": {
+              "operation_id": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "revision": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "reason": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "price": {
+                "not": {
+                  "type": "null"
+                }
+              },
               "product_id": {
                 "type": "integer"
               },

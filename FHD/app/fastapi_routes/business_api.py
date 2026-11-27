@@ -54,7 +54,7 @@ async def business_print_label(
     return _run_business_event_agent(
         request=request,
         action="print_label",
-        params=body.model_dump(),
+        params=body.model_dump(exclude={"job_id"} - body.model_fields_set),
         route_path="/api/business/print/label",
     )
 

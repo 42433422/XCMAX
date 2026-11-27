@@ -37,15 +37,15 @@ def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_f
         raise _facade().HTTPException(status_code=400, detail="缺少购买单位")
     if not isinstance(products, list) or not products:
         raise _facade().HTTPException(status_code=400, detail="产品列表不能为空")
+    params: dict[str, Any] = {
+        "unit_name": purchase_unit,
+        "products": products,
+        **{key: payload[key] for key in ("contact_person", "contact_phone") if key in payload},
+    }
     result = _facade()._run_shipment_records_agent(
         request=request,
         action="create",
-        params={
-            "unit_name": purchase_unit,
-            "products": products,
-            "contact_person": payload.get("contact_person"),
-            "contact_phone": payload.get("contact_phone"),
-        },
+        params=params,
         route_path="/api/orders",
     )
     receipt, status = _capability_http_receipt(result)

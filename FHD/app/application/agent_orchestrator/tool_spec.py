@@ -191,7 +191,7 @@ def _schema_from_required(required_params: list[str]) -> dict[str, Any]:
     return {
         "type": "object",
         "required": list(required_params),
-        "properties": {key: {} for key in required_params},
+        "properties": {key: {"not": {"type": "null"}} for key in required_params},
     }
 
 

@@ -108,10 +108,7 @@ def save_printer_selection(
         result, status = _run_print_agent(
             request=request,
             action="save_printer_selection",
-            params={
-                "document_printer": data.get("document_printer"),
-                "label_printer": data.get("label_printer"),
-            },
+            params={key: data[key] for key in ("document_printer", "label_printer") if key in data},
             route_path="/api/print/printer-selection",
         )
         return JSONResponse(result, status_code=status)
@@ -137,7 +134,6 @@ def get_default_printer():
 def print_document(request: Request, data: dict[str, Any] = Body(default_factory=dict)):
     try:
         file_path = data.get("file_path", "")
-        printer_name = data.get("printer_name")
         use_automation = data.get("use_automation", False)
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
@@ -149,7 +145,7 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
             action="print_document",
             params={
                 "file_path": str(resolved_file),
-                "printer_name": printer_name,
+                **({"printer_name": data["printer_name"]} if "printer_name" in data else {}),
                 "use_automation": use_automation,
             },
             route_path="/api/print/document",
@@ -164,7 +160,6 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
 def print_label(request: Request, data: dict[str, Any] = Body(default_factory=dict)):
     try:
         file_path = data.get("file_path", "")
-        printer_name = data.get("printer_name")
         copies = data.get("copies", 1)
         try:
             copies = int(copies)
@@ -182,7 +177,7 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
             action="print_label",
             params={
                 "file_path": str(file_path),
-                "printer_name": printer_name,
+                **({"printer_name": data["printer_name"]} if "printer_name" in data else {}),
                 "copies": copies,
             },
             route_path="/api/print/label",

@@ -232,13 +232,19 @@ def inventory_in(request: Request, body: dict = Body(default_factory=dict)):
             "product_id": data.get("product_id"),
             "warehouse_id": data.get("warehouse_id"),
             "quantity": float(data.get("quantity", 0)),
-            "batch_no": data.get("batch_no"),
-            "location_id": data.get("location_id"),
-            "unit_price": _float_or_none(data.get("unit_price")),
-            "reference_type": data.get("reference_type"),
-            "reference_id": data.get("reference_id"),
-            "operator": data.get("operator"),
-            "remark": data.get("remark"),
+            **{
+                key: _float_or_none(data[key]) if key == "unit_price" else data[key]
+                for key in (
+                    "batch_no",
+                    "location_id",
+                    "unit_price",
+                    "reference_type",
+                    "reference_id",
+                    "operator",
+                    "remark",
+                )
+                if key in data
+            },
         },
         route_path="/api/inventory/in",
     )
@@ -254,13 +260,19 @@ def inventory_out(request: Request, body: dict = Body(default_factory=dict)):
             "product_id": data.get("product_id"),
             "warehouse_id": data.get("warehouse_id"),
             "quantity": float(data.get("quantity", 0)),
-            "batch_no": data.get("batch_no"),
-            "location_id": data.get("location_id"),
-            "unit_price": _float_or_none(data.get("unit_price")),
-            "reference_type": data.get("reference_type"),
-            "reference_id": data.get("reference_id"),
-            "operator": data.get("operator"),
-            "remark": data.get("remark"),
+            **{
+                key: _float_or_none(data[key]) if key == "unit_price" else data[key]
+                for key in (
+                    "batch_no",
+                    "location_id",
+                    "unit_price",
+                    "reference_type",
+                    "reference_id",
+                    "operator",
+                    "remark",
+                )
+                if key in data
+            },
         },
         route_path="/api/inventory/out",
     )
@@ -277,11 +289,11 @@ def inventory_transfer(request: Request, body: dict = Body(default_factory=dict)
             "from_warehouse_id": data.get("from_warehouse_id"),
             "to_warehouse_id": data.get("to_warehouse_id"),
             "quantity": float(data.get("quantity", 0)),
-            "batch_no": data.get("batch_no"),
-            "from_location_id": data.get("from_location_id"),
-            "to_location_id": data.get("to_location_id"),
-            "operator": data.get("operator"),
-            "remark": data.get("remark"),
+            **{
+                key: data[key]
+                for key in ("batch_no", "from_location_id", "to_location_id", "operator", "remark")
+                if key in data
+            },
         },
         route_path="/api/inventory/transfer",
     )

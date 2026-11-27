@@ -202,6 +202,132 @@ def test_validated_empty_params_are_an_independent_object(monkeypatch, params):
     assert validation.normalized_params is not params
 
 
+@pytest.mark.parametrize("value", [7, "7", 0, False, [], {}])
+def test_legacy_required_metadata_rejects_missing_and_null_without_narrowing_values(
+    monkeypatch, value
+):
+    contract = tool_spec.ToolActionSpecV2(
+        "contract_fixture", "execute", input_schema=tool_spec._schema_from_required(["value"])
+    )
+    monkeypatch.setattr(tool_spec, "get_tool_action_spec", lambda *_: contract)
+    assert tool_spec.validate_tool_call("contract_fixture", "execute", {"value": value}).ok
+    for invalid in ({}, {"value": None}):
+        result = tool_spec.validate_tool_call("contract_fixture", "execute", invalid)
+        assert not result.ok and result.error_code == "schema_validation_failed"
+
+
+def test_explicit_nullable_schema_survives_legacy_required_metadata(monkeypatch):
+    schema = {
+        "type": "object",
+        "properties": {"value": {"type": ["string", "null"]}},
+    }
+    monkeypatch.setattr(
+        "resources.config.risk_actions_loader.get_workflow_tools_from_registry",
+        lambda: {
+            "nullable_fixture": {
+                "actions": {"execute": {"required_params": ["value"], "input_schema": schema}}
+            }
+        },
+    )
+    monkeypatch.setattr("app.application.tools.mcp.registry.merge_mcp_tools", lambda tools: tools)
+    monkeypatch.setattr(tool_spec, "_add_aiopen_tool_specs", lambda specs: None)
+    monkeypatch.setattr(tool_spec, "_TOOL_SPECS_CACHE", None)
+    monkeypatch.setattr(tool_spec, "_TOOL_SPECS_SOURCE", None)
+    assert tool_spec.validate_tool_call("nullable_fixture", "execute", {"value": None}).ok
+    assert not tool_spec.validate_tool_call("nullable_fixture", "execute", {}).ok
+
+
+@pytest.mark.parametrize(
+    "tool,action,params,identifiers",
+    [
+        (
+            "inventory",
+            "stock_out",
+            {"product_id": 1, "warehouse_id": 2, "quantity": 3},
+            ("product_id", "warehouse_id"),
+        ),
+        (
+            "inventory",
+            "transfer",
+            {"product_id": 1, "from_warehouse_id": 2, "to_warehouse_id": 3, "quantity": 4},
+            ("product_id", "from_warehouse_id", "to_warehouse_id"),
+        ),
+        ("document_template", "update", {"id": 7}, ("id",)),
+        ("document_template", "delete", {"id": "fs:owned.xlsx"}, ("id",)),
+    ],
+)
+def test_required_identifiers_refuse_null_before_dispatch_and_keep_existing_forms(
+    monkeypatch, tool, action, params, identifiers
+):
+    dispatch = Mock(side_effect=AssertionError("null identifiers must not reach business tools"))
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    original = deepcopy(params)
+    assert tool_spec.validate_tool_call(tool, action, params).ok
+    assert tool_spec.validate_tool_call(
+        tool, action, {**params, **{key: str(params[key]) for key in identifiers}}
+    ).ok
+    for key in identifiers:
+        result = AgentToolExecutor().execute(
+            AgentStep("invalid", tool, action, params={**params, key: None}), runtime_context={}
+        )
+        assert not result["success"] and result["error_code"] == "schema_validation_failed"
+        assert result["execution"] == {"outcome": "not_executed", "committed": False}
+    assert params == original
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize("payload", [None, 7, "invalid", []])
+def test_sales_closed_loop_requires_an_object_payload(payload):
+    assert not tool_spec.validate_tool_call("sales", "execute_closed_loop", {"payload": payload}).ok
+    assert tool_spec.validate_tool_call(
+        "sales", "execute_closed_loop", {"payload": {"idempotency_key": "original-request"}}
+    ).ok
+
+
+@pytest.mark.parametrize("action", [None, 7])
+def test_computer_steps_require_a_nonnull_action(action):
+    params = {"request_id": "original-request", "target": "browser", "steps": [{"action": action}]}
+    assert not tool_spec.validate_tool_call("desktop_automation", "computer_execute", params).ok
+    params["steps"] = [{"action": "navigate", "url": "https://example.com"}]
+    assert tool_spec.validate_tool_call("desktop_automation", "computer_execute", params).ok
+
+
+def test_memory_candidate_keeps_its_explicit_nullable_value_contract():
+    params = {"memory_type": "preference", "key": "optional_preference", "value": None}
+    assert tool_spec.validate_tool_call("memory_v2", "propose_candidate", params).ok
+    assert not tool_spec.validate_tool_call(
+        "memory_v2",
+        "propose_candidate",
+        {key: value for key, value in params.items() if key != "value"},
+    ).ok
+
+
+@pytest.mark.parametrize("action", ["append_price", "correct_price"])
+@pytest.mark.parametrize("field", ["operation_id", "revision", "reason", "price"])
+def test_catalog_required_values_refuse_null_before_original_effect_lookup(
+    monkeypatch, action, field
+):
+    spec = tool_spec.get_tool_action_spec("catalog_products_v1", action)
+    assert spec is not None
+    params = deepcopy(spec.contract_samples[0]["input"])
+    if action == "correct_price":
+        params.update(period_start=None, period_end=None)
+    assert tool_spec.validate_tool_call("catalog_products_v1", action, params).ok
+    original = deepcopy(params)
+    lookup = Mock(side_effect=AssertionError("invalid input must not enter the catalog adapter"))
+    monkeypatch.setattr("app.application.agent_orchestrator.tool_executor._execute_catalog", lookup)
+    result = AgentToolExecutor().execute(
+        AgentStep("invalid", "catalog_products_v1", action, params={**params, field: None}),
+        runtime_context={},
+    )
+    assert not result["success"] and result["error_code"] == "schema_validation_failed"
+    assert result["execution"] == {"outcome": "not_executed", "committed": False}
+    assert params == original
+    lookup.assert_not_called()
+
+
 @pytest.mark.parametrize("deferred", ["reference", "clarification"])
 @pytest.mark.parametrize(
     "known_schema,known",

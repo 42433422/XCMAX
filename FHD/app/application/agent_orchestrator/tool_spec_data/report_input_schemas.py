@@ -40,6 +40,7 @@ REPORT_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "required": ["payload"],
         "properties": {
             "payload": {
+                "type": "object",
                 "description": (
                     "销售闭环包含 order、fulfillment、invoice、payment_allocation。"
                     "部分交付按 order.items 顺序在 fulfillment.line_quantities 提供各行正数交付量，"

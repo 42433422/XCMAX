@@ -424,7 +424,19 @@ def test_inventory_in_without_unit_price(
     )
     assert r.status_code == 202, r.text
     assert r.json()["success"] is False and r.json()["approval_request_id"]
-    assert capability_runs.get(r.json()["run_id"]).steps[0].params["unit_price"] is None
+    assert "unit_price" not in capability_runs.get(r.json()["run_id"]).steps[0].params
+    mock_inventory_svc.inventory_in.assert_not_called()
+
+
+def test_inventory_in_explicit_null_unit_price_is_rejected(
+    inventory_client: TestClient, mock_inventory_svc: MagicMock
+) -> None:
+    response = inventory_client.post(
+        "/api/inventory/in",
+        json={"product_id": 1, "warehouse_id": 2, "quantity": 3, "unit_price": None},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error_code"] == "schema_validation_failed"
     mock_inventory_svc.inventory_in.assert_not_called()
 
 
