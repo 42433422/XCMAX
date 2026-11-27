@@ -86,7 +86,7 @@ class DocumentParser:
             return self._extract_pptx_text(path)
         if suffix in {".xlsx", ".xls"}:
             return self._extract_excel_text(path)
-        if suffix in {".txt", ".md", ".csv", ".json", ".log"}:
+        if suffix in {".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".log"}:
             text, encoding = self._read_text_with_fallback(path)
             return (text, "text_file", {"extension": suffix, "encoding": encoding})
         if suffix in {".html", ".htm"}:

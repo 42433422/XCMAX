@@ -2,7 +2,8 @@
   "brief": "CSV全量读取员工：上传 .csv 文件，使用 direct_python 解析为结构化 data.json，包含 columns、rows、row_count、meta，禁止 LLM 编造行列。",
   "mode": "direct_python_file_transform",
   "accepted_extensions": [
-    ".csv"
+    ".csv",
+    ".tsv"
   ],
   "default_action": "convert",
   "default_output_relpath": "outputs/data.json",
@@ -15,7 +16,7 @@
   ],
   "requirements": [
     "Use direct_python only; handlers must be [\"direct_python\"].",
-    "Parse .csv with csv.DictReader; write outputs/data.json.",
+    "Parse CSV/TSV with the shared stdlib csv adapter; preserve quoted newlines, duplicate/empty headers and source positions.",
     "JSON must include columns, rows, row_count, meta (delimiter, encoding, source).",
     "Never claim success unless data.json is actually written.",
     "Return {ok, summary, items, warnings, error, meta}."

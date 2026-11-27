@@ -172,10 +172,14 @@ def test_llm_escalation_accepts_confident_unknown_classification(tmp_path, monke
     assert result["reason"].startswith("llm:")
 
 
-def test_llm_not_consulted_for_recipe_or_unconfident_answer(tmp_path, monkeypatch):
+def test_llm_precedes_recipe_rules_but_requires_confident_answer(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FHD_ELT_LLM_CLASSIFY_TESTS", "1")
+    from app.application.elt import llm_assist
     from app.application.elt import target_detection as detection
 
+    monkeypatch.setattr(llm_assist, "elt_llm_enabled", lambda: True)
+    monkeypatch.setattr(detection, "_infer_dynamic_schema", lambda _rows: None)
     recipe = tmp_path / "recipe-guard.xlsx"
     book = Workbook()
     sheet = book.active
@@ -185,16 +189,38 @@ def test_llm_not_consulted_for_recipe_or_unconfident_answer(tmp_path, monkeypatc
     book.close()
 
     calls: list[int] = []
+    confidence = 0.99
     monkeypatch.setattr(
-        detection,
-        "_llm_classification",
-        lambda lines: calls.append(1) or {"target_type": "products", "confidence": 0.99},
+        llm_assist,
+        "advise_target_classification",
+        lambda _text: (
+            calls.append(1)
+            or llm_assist.LlmAssistResult(
+                used_llm=True, data={"target_type": "products", "confidence": confidence}
+            )
+        ),
     )
-    assert detection.detect_elt_target(recipe)["target_type"] == "abnormal"
-    assert calls == []
+    accepted = detection.detect_elt_target(recipe)
+    assert accepted["target_type"] == "products"
+    assert accepted["decision_source"] == "model" and accepted["confirmed"] is True
+    assert accepted["rule_candidate"]["reason"] == "recipe_sheet_not_master_data"
+    assert calls == [1]
 
-    # 模型没给出可信答案时不改变确定性结论。
-    monkeypatch.setattr(detection, "_llm_classification", lambda _lines: None)
+    confidence = 0.4
+    unconfident = detection.detect_elt_target(recipe)
+    assert unconfident["target_type"] == "abnormal"
+    assert unconfident["decision_source"] == "model" and unconfident["confirmed"] is False
+    assert unconfident["confidence"] == 0.4 and unconfident["needs_review"] is True
+    assert calls == [1, 1]
+
+    monkeypatch.setattr(llm_assist, "elt_llm_enabled", lambda: False)
+    fallback = detection.detect_elt_target(recipe)
+    assert fallback["target_type"] == "abnormal"
+    assert fallback["decision_source"] == "rule_fallback"
+    assert fallback["reason"] == "recipe_sheet_not_master_data"
+    assert calls == [1, 1]
+
+    # 无模型时仍保留未确认的规则候选。
     escalated = detection._escalate(
         {"target_type": "abnormal", "confidence": 0.0, "reason": "unconfirmed_template:.xlsx"},
         ["未知内容"],
@@ -425,10 +451,14 @@ def test_fault_retry_does_not_duplicate_written_rows(tmp_path, monkeypatch):
 
 
 def test_corrupt_and_empty_workbooks_still_fail():
-    with pytest.raises(ReviewedExcelError, match="为空|无法读取"):
+    from app.infrastructure.document_parsing.archive_safety import OfficeArchiveError
+
+    with pytest.raises(ReviewedExcelError, match="文件为空"):
         inspect_workbook(b"")
-    with pytest.raises(ReviewedExcelError, match="为空|无法读取"):
+    with pytest.raises(ReviewedExcelError, match="office_invalid_or_unsafe_archive") as rejected:
         inspect_workbook(b"this is not a workbook")
+    assert isinstance(rejected.value.__cause__, OfficeArchiveError)
+    assert str(rejected.value.__cause__) == "office_invalid_or_unsafe_archive"
     buffer = BytesIO()
     Workbook().save(buffer)
     assert inspect_workbook(buffer.getvalue())["sha256"]

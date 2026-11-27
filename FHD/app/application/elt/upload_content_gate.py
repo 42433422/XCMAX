@@ -7,6 +7,7 @@ import zlib
 from pathlib import Path
 
 from app.application.elt.errors import EltError
+from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
 
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _ENCRYPTED_OOXML_MARKER = "EncryptedPackage".encode("utf-16-le")
@@ -22,6 +23,7 @@ _LABEL = {
     ".xlsx": "Excel 工作簿",
     ".xlsm": "Excel 工作簿",
     ".csv": "CSV 表格",
+    ".tsv": "TSV 表格",
     ".docx": "Word 文档",
     ".doc": "Word 文档",
     ".pptx": "PPT 演示文稿",
@@ -32,6 +34,7 @@ _LABEL = {
     ".jpeg": "JPEG 图片",
 }
 _MIME = {
+    ".tsv": {"text/tab-separated-values", "text/plain", "text/tsv"},
     ".xlsx": {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.ms-excel",
@@ -120,6 +123,7 @@ def _check_ooxml(path: Path, suffix: str, head: bytes) -> None:
                 )
             if _OOXML_PART[suffix] not in {item.filename for item in members}:
                 raise _mismatch(suffix, f"缺少 {_OOXML_PART[suffix]}")
+            inspect_office_archive(path, max_expanded_bytes=_MAX_UNCOMPRESSED_BYTES)
             broken = archive.testzip()
     except (
         zipfile.BadZipFile,
@@ -148,6 +152,6 @@ def check_stored_content(path: Path, suffix: str) -> None:
     elif suffix in _IMAGE_MAGIC:
         if not head.startswith(_IMAGE_MAGIC[suffix]):
             raise _mismatch(suffix, "图片文件头不匹配")
-    elif suffix == ".csv":
+    elif suffix in {".csv", ".tsv"}:
         if b"\x00" in head or head.startswith(_BINARY_MAGIC):
             raise _mismatch(suffix, "包含二进制内容，不是文本表格")

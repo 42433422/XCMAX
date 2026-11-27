@@ -53,7 +53,7 @@ def _year_from_text(text: str, *, month: int, match_start: int) -> int | None:
 def _serial_datetime(value: float) -> datetime | None:
     if not (_SERIAL_MIN <= value <= _SERIAL_MAX):
         return None
-    return cast(datetime, (_EXCEL_EPOCH + pd.Timedelta(days=float(value))).to_pydatetime())
+    return cast(datetime, (_EXCEL_EPOCH + pd.Timedelta(float(value), unit="D")).to_pydatetime())
 
 
 def first_date(

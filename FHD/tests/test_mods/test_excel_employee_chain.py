@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import weakref
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 from openpyxl import Workbook, load_workbook
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +62,78 @@ def test_excel_reader_outputs_flat_rows_with_detected_headers(tmp_path: Path) ->
     assert sheet["rows"][0]["姓名"] == "张三"
     assert sheet["rows"][1]["工时"] == 7.5
     assert sheet["row_records"][0]["cells"]["部门"] == "生产部"
+
+
+def test_excel_reader_streams_legacy_cells_without_retaining_every_projection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    reader = _load_module(
+        "excel_reader_streamed_records",
+        FHD_ROOT
+        / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py",
+    )
+    source, target = tmp_path / "source.xlsx", tmp_path / "workbook.json"
+    book = Workbook()
+    book.active.append(["number", "flag", "text"])
+    for number in range(50):
+        book.active.append([number, False, '中文\n"quoted"\\text'])
+    hidden = book.create_sheet("Hidden")
+    hidden.sheet_state = "hidden"
+    hidden.append(["header"])
+    hidden.append(["retained"])
+    book.create_sheet("Empty")
+    book.save(source)
+    book.close()
+    live, count, peak = weakref.WeakValueDictionary(), 0, 0
+    original = reader._cell_payload
+
+    class TrackedCell(dict):
+        pass
+
+    def tracked(cell):
+        nonlocal count, peak
+        projected = TrackedCell(original(cell))
+        count += 1
+        live[count] = projected
+        peak = max(peak, len(live))
+        return projected
+
+    monkeypatch.setattr(reader, "_cell_payload", tracked)
+    result = reader.convert_file(source, target, payload={"header_row": 1}, ctx={}, rule_spec={})
+    output = json.loads(target.read_text())
+    sheet = output["sheets"][0]
+    assert result["cell_count"] == 155 and count == 159
+    assert peak < 10  # Header records plus the current streamed record, not all 155 cells.
+    assert sheet["rows"][0] == {"number": 0, "flag": False, "text": '中文\n"quoted"\\text'}
+    assert [row["cells"] for row in sheet["row_records"]] == sheet["rows"]
+    assert sheet["cells"][-1]["row"] == 51 and sheet["cells"][-1]["col"] == 3
+    assert output["sheets"][1]["sheet_state"] == "hidden"
+    assert output["sheets"][2]["cells"] == output["sheets"][2]["rows"] == []
+
+
+def test_excel_reader_late_projection_failure_preserves_previous_artifact(
+    tmp_path: Path, monkeypatch
+) -> None:
+    reader = _load_module(
+        "excel_reader_projection_failure",
+        FHD_ROOT
+        / "mods/_employees/excel-full-read-employee/backend/vendor/excel_full_read/convert.py",
+    )
+    source, target = tmp_path / "source.xlsx", tmp_path / "workbook.json"
+    _sample_attendance_workbook(source)
+    target.write_text('{"previous":"verified"}')
+    original = reader._cell_payload
+
+    def fail_late(cell):
+        if cell["address"] == "D5":
+            raise OSError("injected late projection failure")
+        return original(cell)
+
+    monkeypatch.setattr(reader, "_cell_payload", fail_late)
+    with pytest.raises(OSError, match="late projection"):
+        reader.convert_file(source, target, payload={}, ctx={}, rule_spec={})
+    assert json.loads(target.read_text()) == {"previous": "verified"}
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["source.xlsx", "workbook.json"]
 
 
 def test_excel_generator_accepts_reader_workbook_json(tmp_path: Path) -> None:

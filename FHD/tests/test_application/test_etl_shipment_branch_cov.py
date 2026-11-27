@@ -904,48 +904,52 @@ class TestMappingAssist:
         mappings, meta = mapping_assist.enhance_mappings_with_llm(ds, _Adapter(), [])
         assert meta["used_llm"] is False
 
-    def test_applies_llm_suggestions(self, monkeypatch):
+    @pytest.mark.parametrize("duplicate_name", [False, True])
+    def test_applies_llm_suggestions(self, monkeypatch, duplicate_name):
         from app.application.elt.llm_assist import LlmAssistResult
 
-        def _fake(**kwargs):
-            return LlmAssistResult(
+        suggestions = [
+            {
+                "target": "name",
+                "source": "hdr1",
+                "confidence": 0.9,
+                "transform": "trim",
+                "reason": "r",
+            },
+            {"target": "price", "source": "p2", "confidence": 0.9},  # absent source
+            {"target": "ghost", "source": "hdr1", "confidence": 0.9},  # unknown target
+            {"target": "price", "source": "p3", "confidence": 0.8},  # low confidence
+        ]
+        if duplicate_name:
+            suggestions.append(dict(suggestions[0]))
+        monkeypatch.setattr(
+            mapping_assist,
+            "advise_field_mappings",
+            lambda **_kwargs: LlmAssistResult(
                 used_llm=True,
-                data={
-                    "mappings": [
-                        {
-                            "target": "name",
-                            "source": "hdr1",
-                            "confidence": 0.9,
-                            "transform": "trim",
-                            "reason": "r",
-                        },
-                        # current confidence too high -> skip
-                        {"target": "price", "source": "p2", "confidence": 0.9},
-                        # source already used -> skip
-                        {"target": "name", "source": "hdr1", "confidence": 0.9},
-                        # unknown target -> skip
-                        {"target": "ghost", "source": "x", "confidence": 0.9},
-                        # low llm confidence -> skip
-                        {"target": "price", "source": "p3", "confidence": 0.8},
-                    ]
-                },
-            )
-
-        monkeypatch.setattr(mapping_assist, "advise_field_mappings", _fake)
-        ds = self._dataset()
+                data={"mappings": suggestions},
+            ),
+        )
+        ds = self._dataset(
+            headers=["hdr1", "p3"],
+            rows=[ParsedRow(sheet="s", row_number=1, values={"hdr1": "漆", "p3": 18})],
+        )
         deterministic = [
             {"target": "name", "source": "old", "confidence": 0.5},
-            {"target": "price", "source": "p", "confidence": 0.95},
+            {"target": "price", "source": "p3", "confidence": 0.95},
         ]
         mappings, meta = mapping_assist.enhance_mappings_with_llm(ds, _Adapter(), deterministic)
         assert meta["used_llm"] is True
-        assert meta["suggestion_count"] == 5
-        assert meta["applied_count"] == 1
-        assert mappings[0]["source"] == "hdr1"
-        assert mappings[0]["suggested_by"] == "llm"
-        assert mappings[0]["transforms"] == [{"op": "trim"}]
-        # price mapping unchanged
-        assert any(m["target"] == "price" and m["source"] == "p" for m in mappings)
+        assert meta["suggestion_count"] == len(suggestions)
+        assert meta["applied_count"] == (0 if duplicate_name else 1)
+        assert mappings[0]["source"] == ("" if duplicate_name else "hdr1")
+        assert mappings[0]["suggested_by"] == ("llm_unresolved" if duplicate_name else "llm")
+        assert mappings[0]["transforms"] == ([] if duplicate_name else [{"op": "trim"}])
+        assert meta["unmapped_targets"] == (["name", "price"] if duplicate_name else ["price"])
+        assert meta["unmapped_sources"] == (["hdr1", "p3"] if duplicate_name else ["p3"])
+        assert mappings[1]["source"] == "" and mappings[1]["confidence"] == 0.0
+        assert mappings[1]["suggested_by"] == "llm_unresolved"
+        assert deterministic[1]["source"] == "p3"
 
 
 # ---------------------------------------------------------------------------
