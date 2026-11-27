@@ -1,19 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
 import AgentRunTrace from './AgentRunTrace.vue'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
-import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
 import { clearToolPermission, setToolPermission } from '@/utils/toolPermissionCache'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
-
-const mermaidRender = vi.fn(async () => ({ svg: '<svg data-testid="rendered-plan"></svg>' }))
-
-vi.mock('mermaid', () => ({
-  default: {
-    initialize: vi.fn(),
-    render: mermaidRender,
-  },
-}))
 
 function makeTrace(status: AgentRunTraceData['status'] = 'waiting'): AgentRunTraceData {
   return {
@@ -80,7 +70,6 @@ describe('AgentRunTrace', () => {
   afterEach(() => {
     clearToolPermission('browser_search')
     setRuntimeTenantStorageScopeInput(null)
-    mermaidRender.mockClear()
   })
 
   it('shows a collapsible Business Harness card with tool-specific icons', () => {
@@ -192,56 +181,7 @@ describe('AgentRunTrace', () => {
     expect(wrapper.emitted('auto-approve-tool')).toEqual([['browser_search']])
   })
 
-  it('lazily renders the execution graph when its disclosure opens', async () => {
-    const trace = makeTrace('success')
-    trace.phases.push({
-      kind: 'tool',
-      status: 'success',
-      started_event_id: 'event_3',
-      title: '发送通知',
-      node_id: 'notify',
-      tool_id: 'message_sender',
-      action: 'send',
-      output_preview: '通知已发送',
-      observations: [],
-      waiting_approval: false,
-      retries: 0,
-      repair_history: [],
-    })
-    const wrapper = mount(AgentRunTrace, { props: { trace } })
-    const graph = wrapper.get('details.art-plan-graph')
 
-    ;(graph.element as HTMLDetailsElement).open = true
-    await graph.trigger('toggle')
-    await flushPromises()
-
-    expect(mermaidRender).toHaveBeenCalledOnce()
-    expect(wrapper.get('.mermaid-host').html()).toContain('data-testid="rendered-plan"')
-  })
-
-  it('displays real Mermaid parse errors as text without creating attacker-controlled elements', async () => {
-    const trace = makeTrace('success')
-    trace.phases.push({
-      ...trace.phases[1], started_event_id: 'unsafe-tool',
-      node_id: 'unsafe', tool_id: '<svg>(',
-    } as AgentRunTraceData['phases'][number])
-    const mermaid = (await vi.importActual<typeof import('mermaid')>('mermaid')).default
-    let failure: unknown
-    try { await mermaid.parse(traceToMermaid(trace)) } catch (error) { failure = error }
-    expect(failure).toBeInstanceOf(Error)
-    const message = (failure as Error).message
-    expect(message).toContain('<svg>')
-    mermaidRender.mockRejectedValueOnce(failure)
-    const wrapper = mount(AgentRunTrace, { props: { trace } })
-    try {
-      const graph = wrapper.get('details.art-plan-graph')
-      ;(graph.element as HTMLDetailsElement).open = true
-      await graph.trigger('toggle')
-      await flushPromises()
-      expect(wrapper.get('.mermaid-fail').find('svg, script, img, [onload]').exists()).toBe(false)
-      expect(wrapper.get('.mermaid-fail').text()).toContain(message)
-    } finally { wrapper.unmount() }
-  })
 })
 
 it.each([
@@ -262,26 +202,6 @@ it.each([
   expect(event.defaultPrevented).toBe(true)
   expect(summary.attributes('aria-disabled')).toBe('true')
   wrapper.unmount()
-})
-
-it('rerenders an opened execution graph when new steps arrive and reports renderer failures', async () => {
-  const trace = makeTrace('success')
-  trace.phases.push({ ...trace.phases[1], started_event_id: 'event-3', node_id: 'notify', tool_id: 'message_sender' } as any)
-  const wrapper = mount(AgentRunTrace, { props: { trace } })
-  const graph = wrapper.get('details.art-plan-graph')
-  await graph.trigger('toggle'); expect(mermaidRender).not.toHaveBeenCalled()
-  ;(graph.element as HTMLDetailsElement).open = true
-  await graph.trigger('toggle'); await flushPromises()
-  expect(mermaidRender).toHaveBeenCalledOnce()
-  await graph.trigger('toggle'); await flushPromises()
-  expect(mermaidRender).toHaveBeenCalledOnce()
-  mermaidRender.mockRejectedValueOnce(new Error('图格式不正确'))
-  await wrapper.setProps({ trace: { ...trace, phases: [...trace.phases, { kind: 'run', status: 'failed', title: '', started_event_id: 'end' }] } })
-  await flushPromises()
-  expect(mermaidRender).toHaveBeenCalledTimes(2)
-  expect(wrapper.get('.mermaid-fail').text()).toContain('图格式不正确')
-  expect(wrapper.text()).toContain('任务结束')
-  wrapper.unmount(); mermaidRender.mockClear()
 })
 
  it('preserves explicit disclosure choices across execution updates', async () => {

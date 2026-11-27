@@ -314,43 +314,6 @@
   text-decoration: underline;
 }
 
-.art-plan-graph {
-  margin: 4px 0 0 20px;
-}
-
-.art-plan-graph > summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--art-muted);
-  font-size: 10.5px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.art-plan-graph > summary::-webkit-details-marker {
-  display: none;
-}
-
-.mermaid-host {
-  margin-top: 6px;
-  padding: 8px;
-  overflow-x: auto;
-  border: 1px solid var(--art-border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.mermaid-host :deep(svg) {
-  max-width: 100%;
-  height: auto;
-}
-
-.mermaid-fail {
-  color: var(--art-red);
-  font-size: 10px;
-}
-
 @media (max-width: 720px) {
   .art-tool-count,
   .art-duration {
@@ -372,9 +335,5 @@
   }
   .art-detail-section.is-output pre {
     color: #bce6cf;
-  }
-  .mermaid-host {
-    background: #1c222b;
-    border-color: #3a4452;
   }
 }
