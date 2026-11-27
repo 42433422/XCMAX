@@ -13,6 +13,7 @@ from app.application.elt.table_segmentation import (
     SheetSegmentation,
     segment_sheet,
     worksheet_grid,
+    worksheet_native_regions,
 )
 
 MAX_STRUCTURE_BYTES = 40 * 1024 * 1024
@@ -53,13 +54,18 @@ def load_sheet_segmentations(path: Path) -> dict[str, SheetSegmentation]:
     workbook = load_workbook(path, data_only=True, keep_links=False)
     try:
         return {
-            ws.title: segment_sheet(ws.title, *worksheet_grid(ws)) for ws in workbook.worksheets
+            ws.title: segment_sheet(
+                ws.title, *worksheet_grid(ws), native_regions=worksheet_native_regions(ws)
+            )
+            for ws in workbook.worksheets
         }
     finally:
         workbook.close()
 
 
 def _qualified_group(segmentation: SheetSegmentation | None) -> list[SegmentedTable]:
+    # Business fallback only: the full segmentation and its candidate iterator
+    # retain two-column tables, all other groups and unresolved evidence.
     group = segmentation.dominant_group() if segmentation is not None else []
     return group if group and len(group[0].headers) >= 3 else []
 
