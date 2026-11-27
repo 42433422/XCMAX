@@ -16,6 +16,14 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 | 迁移与历史入口 | [MIGRATION_REGISTRY](docs/MIGRATION_REGISTRY.md) |
 | 更新内容 | [CHANGELOG](CHANGELOG.md) |
 
+## Agent 执行、修复与核验
+
+智能对话（`agent_runtime.chat`）、Agent API 与员工（`employee_runtime.agent_runner`）统一进入原 `gateway.run_runtime_task` / Xiaox；已批准的工作流继续由原 LangGraph 执行和检查点恢复，工具仍走 SQL 子任务、权限、审批和幂等账本。复用 [Codex SDK 0.171.0](https://github.com/openai/codex)（Apache-2.0）、[LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT）、[Pydantic 2.13.4](https://github.com/pydantic/pydantic)（MIT）和原 SQLAlchemy 账本，不引入第二个 Runtime。产品适配定义原目标/证据的修复契约，通用 SDK 不掌握产品租户与业务回执，不能替代这些授权事实。
+
+`AgentRun.metadata.xiaox_runtime.react_progress` 保存结构化缺口、修复步骤、证据指纹、分项执行/修复/无进展/策略预算与恢复记录。原账本仍逐次结算所有真实模型请求和成本；核验按证据修订记账，格式纠错复用同一核验任务且继续受原模型/费用总额限制。业务修复只有新的已核验宿主证据或原目标/补答变化才能重新核验；换一句回复、重复读同一事实、记忆候选、计划和无效调用不增加业务进展。文本任务按实际成稿核验，普通 JSON 回复不要求工具。记忆/动作/核验协议的错误正文隔离在原任务的未采信候选中，不自动写记忆或执行业务。
+
+修复沿原 SDK 线程分阶段启用结构化目标重规划、原生工具选择约束、SDK 压缩上下文和原先已授权且可移植的兼容模型；保留人工停止、审批、幂等、未知副作用及原总成本上限。策略/预算耗尽明确阻断，无可用备用路线不扩权。执行关系图入口保持删除；执行链消费原 SQL 终态及恢复事件，blocked 不再统一解释为依赖故障。源码/模拟回归与真实模型、真实工具及原始卷二的验收结果分别报告。
+
 ## 客来来模块
 
 企业客户端的“数据来源”入口现统一为“客来来”，主路径 `/kellai`，标题为“智能生态 / 客来来”。普通模块 `mods/tools/kellai` 随企业包交付，五个工作区为连接与账号、消息中心、联系人、数据接入、自动化。原 `/data-sources` 和 ERP Mod 旧链接保留查询参数与定位片段并转到新入口；内部导航键保持兼容已有角色和移动菜单。
@@ -38,7 +46,7 @@ Agent 持久化与生命连续性继续复用 Xiaox Runtime、固定 Codex SDK�
 
 Worker 的心跳、副作用登记与完成回执必须携带首次认领的 owner 和 execution_count；过期或被接管的执行者不得更新新租约或提交业务。入队、认领、接管与重启中断事件同原 SQL 事务提交。重启保留合法父子等待，只恢复原任务可证明安全的余步；取消、暂停及旧回执不能自动重新唤醒任务。回归入口为 `test_task_event_durability.py`、`test_stale_run_reconciler.py`、`test_task_execution_repository.py`、`test_worker_repository.py`、`test_native_task_recovery*.py` 与 `test_xiaox_receipt_projection.py`；原 PostgreSQL 事务 CI 同时执行新增账本用例。本地文件库、真实 PostgreSQL 和进程中断回归只证明相应恢复边界，真实模型及长时生产验收另行取证。
 
-独立目标核验沿用固定 Codex SDK `0.171.0`、仓库内 LangGraph 检查点及现有 SQLAlchemy 任务、租约、请求和计费账本。产品适配只保存原目标、完整回执、候选回复、模型路由和核验器版本的摘要，以及已结算模型响应与未完成目标；通用编排组件不掌握这些宿主授权与业务证据，因此在原运行时增加适配，不另建 Agent Runtime。执行阶段从原调用、费用和活跃时长预算中预留核验资源；调用和费用通常保留四分之一、至少一次完整核验，核验总调用上限至多三次。补偿前仍须留出下一次核验资源，所有请求消耗原账本，不补充原总预算；同一核验检查点最多尝试三次（含首次）。未决副作用或模型费用继续等待原账本对账；核验恢复不启动 SDK 执行，缺口补偿仍经过原工具权限、审批与幂等入口。
+独立目标核验沿用固定 Codex SDK `0.171.0`、仓库内 LangGraph 检查点及现有 SQLAlchemy 任务、租约、请求和计费账本。产品适配只保存原目标、完整回执、候选回复、模型路由和核验器版本的摘要，以及已结算模型响应与未完成目标；通用编排组件不掌握这些宿主授权与业务证据，因此在原运行时增加适配，不另建 Agent Runtime。执行阶段从原调用、费用和活跃时长预算中预留核验资源；调用和费用通常保留四分之一、至少一次完整核验，新任务的独立核验按不同有效证据版本计数、至多三次；同一报告的格式修复不占新的核验轮次，但仍消耗原模型调用、费用及一次格式修复额度，旧任务保留原冻结上限。补偿前仍须留出下一次核验资源，所有请求消耗原账本，不补充原总预算；同一核验检查点最多尝试三次（含首次）。未决副作用或模型费用继续等待原账本对账；核验恢复不启动 SDK 执行，缺口补偿仍经过原工具权限、审批与幂等入口。
 
 Excel 公式复用 [LibreOffice Calc](https://github.com/LibreOffice/core)（MPL-2.0，发行版附带第三方许可）真实计算，现有 [openpyxl 3.1.5](https://foss.heptapod.net/openpyxl/openpyxl/-/tags/3.1.5)（MIT）及 [defusedxml 0.7.1](https://github.com/tiran/defusedxml/tree/v0.7.1)（PSF-2.0）负责读取、结构核对和安全 XML 解析。部署须配置 `LIBREOFFICE_PATH` 与完整 `LIBREOFFICE_EXPECTED_VERSION`，执行器版本不匹配即待核对。Linux 通过现有进程等待器和 `prlimit` 在启动前限制单进程 CPU 60 秒、地址空间 2 GiB、单文件 64 MiB 及文件描述符 256 个，并保留宿主更严格的既有限额；缺少限额机制即拒绝启动。共享应用数据目录的文件锁只允许一个 Calc 调用，等锁和执行共用原截止时间；这些限制不声称提供进程树总内存、PID 或文件系统沙箱。每次只在隔离副本和独立 profile 强制 OOXML 重算，保留原交付文件及 SHA，证据记录计算器版本、源/计算副本摘要和公式值摘要；宏、外链、外部函数及不支持的公式形态拒绝计算。原请求冻结的 `plan.expected.formula_values` 可声明独立预期值与数值容差；写入公式文本本身不构成计算或业务正确性证据。
 

@@ -283,6 +283,17 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     if (!intent) intent = pickString(data, 'intent', 'user_message', 'message_text')
     if (ev.event_id) lastEventId = ev.event_id
 
+    if (type === 'run.state_changed' || type === 'runtime.xiaox.finished') {
+      const value = asString(data.to_status || data.runtime_status)
+      const states: Record<string, TracePhaseStatus> = {
+        completed: 'success', failed: 'failed', blocked: 'blocked', cancelled: 'cancelled', paused: 'paused',
+      }
+      if (states[value]) {
+        status = type === 'runtime.xiaox.finished' && value === 'completed' && data.business_completed !== true ? status : states[value]
+        terminal = type === 'run.state_changed' && ['completed', 'failed', 'blocked', 'cancelled'].includes(value)
+      }
+      continue
+    }
     if (type === 'run.observed') {
       totalDurationMs = pickNumber(data, 'duration_ms') ?? totalDurationMs
       durationScope = pickString(data, 'duration_scope') || durationScope

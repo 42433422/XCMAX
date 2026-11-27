@@ -324,6 +324,25 @@ def begin_verification(
         if _identity(run, _current_rows(metadata), output) != identity:
             raise XiaoxBindingError("goal_verification_changed", "原业务回执已变化，需要重新取证")
         previous = run.metadata.get(JOB_KEY) or {}
+        from app.domain.task_lifecycle.react_progress import (
+            CONTROL_KEY,
+            output_channel,
+            requires_actions,
+            review_signature,
+        )
+
+        control = metadata.get(CONTROL_KEY) or {}
+        if output_channel(output) != "reply":
+            raise XiaoxBindingError(
+                "react_output_protocol_mismatch", "内部协议输出不能作为最终交付核验"
+            )
+        if (
+            previous.get("state") in {"needs_work", "verified"}
+            and requires_actions(control)
+            and control.get("last_review_signature")
+            == review_signature(run, _current_rows(metadata), output)
+        ):
+            raise XiaoxBindingError("react_evidence_unchanged", "没有新执行证据，不重复独立核验")
         same = previous.get("job_id") == identity["job_id"]
         attempts = int(previous.get("attempts") or 0) if same else 0
         if attempts >= 3:

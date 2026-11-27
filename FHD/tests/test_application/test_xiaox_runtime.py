@@ -11,6 +11,7 @@ import pytest
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_runtime import xiaox_runtime as runtime
+from app.application.agent_runtime.goal_verifier import verify_runtime_goal as actual_review
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
 from app.infrastructure.xiaox import XiaoxTransportConfig
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
@@ -499,7 +500,6 @@ async def test_unavailable_plan_delivers_safe_observation_without_model_review(
     from app.infrastructure.xiaox.tools import XiaoxToolBridge
 
     # Restore the real early verdict, which must never call a second model on this branch.
-    from tests.test_application.test_xiaox_goal_verifier import verify_runtime_goal as actual_review
 
     assert verify_runtime_goal is not actual_review
     monkeypatch.setattr(

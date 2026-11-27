@@ -55,6 +55,7 @@ _PRIVATE_KEYS = frozenset(
         "runtime_goal_verification",
         "runtime_goal_verification_task",
         "verification_budget",
+        "react_progress",
         "verification_response",
         "active_phase",
         "execution_deadline_at",

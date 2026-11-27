@@ -112,7 +112,7 @@ describe('groupAgentRunsIntoTasks', () => {
       ['running', 'running', '执行中'],
       ['retrying', 'running', '正在重试'],
       ['waiting_user', 'blocked', '等待审批或用户确认'],
-      ['blocked', 'blocked', '等待依赖解除'],
+      ['blocked', 'blocked', '已阻断，请核对任务回执'],
       ['paused', 'paused', '已暂停，可继续'],
       ['completed', 'success', '任务完成'],
       ['failed', 'failed', '执行失败'],

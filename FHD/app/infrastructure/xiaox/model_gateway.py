@@ -354,10 +354,16 @@ def _portable_fallback_body(body: dict[str, Any]) -> bool:
 class _ModelCallLimitReached(Exception):
     """Raised inside a binding mutation so the refusal can be committed first."""
 
-    def __init__(self, max_model_calls: int, used_model_calls: int) -> None:
+    def __init__(
+        self,
+        max_model_calls: int,
+        used_model_calls: int,
+        reason: str = "model_call_budget_exhausted",
+    ) -> None:
         super().__init__("model call limit reached")
         self.max_model_calls = max_model_calls
         self.used_model_calls = used_model_calls
+        self.reason = reason
 
 
 def _remaining(binding: Any) -> float:
@@ -425,6 +431,16 @@ def _claim(
                 raise HTTPException(409, "Task model-call limit is invalid")
             if len(calls) >= maximum_calls:
                 raise _ModelCallLimitReached(maximum_calls, len(calls))
+            control = metadata.get("react_progress") or {}
+            phase = "repair" if control.get("repairing") else "execution"
+            if not verification_job and control:
+                limit = control["limits"][phase]
+                used = sum(
+                    row.get("execution_phase", row.get("purpose")) == phase
+                    for row in calls.values()
+                )
+                if used >= limit:
+                    raise _ModelCallLimitReached(limit, used, f"react_{phase}_budget_exhausted")
             reserved_calls, reserved_cost = verification_reserve(metadata)
             if verification_job:
                 if metadata.get("verification_budget") and reserved_calls <= 0:
@@ -455,6 +471,11 @@ def _claim(
                 "route_identity": route.identity,
                 **({"observation": observation} if observation else {}),
                 "purpose": "verification" if verification_job else "execution",
+                "execution_phase": "verification"
+                if verification_job
+                else (
+                    "repair" if metadata.get("react_progress", {}).get("repairing") else "execution"
+                ),
                 **(
                     {
                         "verification_job_id": verification_job,
@@ -486,11 +507,12 @@ def _claim(
 
             def record(run: Any, metadata: dict[str, Any]) -> None:
                 metadata["model_call_limit"] = {
-                    "reason": "model_call_budget_exhausted",
+                    "reason": exhausted_reason,
                     "max_model_calls": max_model_calls,
                     "used_model_calls": used_model_calls,
                 }
 
+            exhausted_reason = exhausted.reason
             store.update(binding.run_id, record, generation=binding.metadata.get("generation"))
             raise HTTPException(429, "Task model-call limit reached") from exhausted
         return binding, reserve
@@ -713,6 +735,38 @@ async def forward_responses(request: Request):
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
     verification_job = request.headers.get(JOB_HEADER, "")
+    from app.domain.task_lifecycle.react_progress import (
+        CONTROL_KEY,
+        receipt_facts,
+        requires_actions,
+    )
+
+    control = binding.metadata.get(CONTROL_KEY) or {}
+    if not verification_job and control.get("repairing"):
+        target = control.get("route_switch_target")
+        if target and target != active:
+            if target not in authorized or authorized.index(target) != route_index + 1:
+                raise HTTPException(409, "Repair model target no longer matches authorized routes")
+            if not _portable_fallback_body(requested_body):
+                raise HTTPException(
+                    409, "Repair context is not portable to the authorized alternate model"
+                )
+            route_index = authorized.index(target)
+            route = routes[route_index]
+            body = _prepare_body({**requested_body, "model": route.model}, route)
+        rows = [
+            {"call_id": key, **value}
+            for key, value in (binding.metadata.get("calls") or {}).items()
+        ]
+        if (
+            control.get("strategy", 0) >= 1
+            and requires_actions(control)
+            and not (set(receipt_facts(rows)) - set(control.get("facts", [])))
+        ):
+            if not body.get("tools"):
+                raise HTTPException(409, "The current repair requires authorized host tools")
+            body["tool_choice"] = "required"
+
     if verification_job or binding.metadata.get("active_phase") == "verification":
         if not verification_job or verification_job != active_verification_job_id(
             binding.run, binding.metadata

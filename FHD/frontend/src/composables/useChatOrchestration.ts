@@ -405,7 +405,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         'runtime.xiaox.item.started', 'runtime.xiaox.item.completed', 'runtime.model.started',
         'runtime.model.completed', 'runtime.model.failed', 'runtime.model.failure',
         'runtime.goal.verification.started', 'runtime.goal.verified', 'runtime.xiaox.finished',
-        'run.state_changed']) stream.addEventListener(name, handle)
+        'run.state_changed', 'runtime.progress.stalled', 'runtime.output.quarantined',
+        'runtime.recovery.strategy_changed']) stream.addEventListener(name, handle)
       stream.addEventListener('stream.closed', reconnect)
       stream.addEventListener('stream.unauthorized', () => { if (isCurrent()) stopTurnObservation() })
       stream.onerror = reconnect

@@ -12,6 +12,15 @@ function ev(event_type: AgentRunEvent['event_type'], overrides: Partial<AgentRun
 }
 
 describe('buildAgentRunTraceFromEvents', () => {
+  it('uses the persisted blocked state after SDK completion without business success', () => {
+    const events = [
+      ev('runtime.xiaox.turn.started', { data: { turn_id: 'turn-1' } }),
+      ev('runtime.xiaox.finished', { data: { status: 'completed', business_success: false } }),
+      ev('run.state_changed', { data: { to_status: 'blocked' } }),
+    ]
+    expect(buildAgentRunTraceFromEvents(events, 'run_test')).toMatchObject({ status: 'blocked', terminal: true })
+  })
+
   it('correlates model failures and retries without closing the enclosing SDK turn', () => {
     const events = [
       ev('runtime.xiaox.turn.started', { event_id: 'turn-start', data: { turn_id: 'turn-1' } }),

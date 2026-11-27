@@ -7,6 +7,16 @@ function event(event_type: string, data: Record<string, unknown> = {}): AgentRun
 }
 
 describe('durable runtime events in chat', () => {
+  it.each(['runtime.progress.stalled', 'runtime.output.quarantined', 'runtime.recovery.strategy_changed'])(
+    'projects recovery %s without exposing quarantined memory or identifiers', eventType => {
+      const projected = runtimeRunChatEvents(event(eventType, {
+        output: '{"head_fact":"invented business result"}', trace_id: 'private-trace',
+      }))
+      expect(projected).toMatchObject([{ type: 'thinking' }])
+      expect(JSON.stringify(projected)).not.toMatch(/head_fact|invented|private-trace/)
+    },
+  )
+
   it('shows model activity and safe progress without exposing unverified draft text', () => {
     expect(runtimeRunChatEvents(event('runtime.model.started'))).toEqual([{ type: 'model_activity' }])
     expect(runtimeRunChatEvents(event('runtime.xiaox.item.completed', {

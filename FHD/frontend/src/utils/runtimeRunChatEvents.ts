@@ -12,6 +12,14 @@ export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
     return [{ type: 'thinking', delta: '模型响应已完成，正在核对执行结果…' }]
   if (type === 'runtime.model.failure' || type === 'runtime.model.failed')
     return [{ type: 'thinking', delta: '模型请求未完成，正在核对原请求状态…' }]
+  if (type === 'runtime.progress.stalled')
+    return [{ type: 'thinking', delta: '尚无新的业务执行证据，正在调整执行策略…' }]
+  if (type === 'runtime.output.quarantined')
+    return [{ type: 'thinking', delta: '非交付输出已隔离，正在继续原任务…' }]
+  if (type === 'runtime.recovery.strategy_changed') {
+    const labels: Record<string, string> = { tool_constraint: '正在按原目标约束工具选择…', context_repair: '正在修复原任务上下文…', compatible_route: '正在核对原授权备用模型…' }
+    return [{ type: 'thinking', delta: labels[asString(data.strategy)] || '正在恢复原任务执行…' }]
+  }
   if (type === 'runtime.goal.verification.started')
     return [{ type: 'thinking', delta: '正在独立核对任务目标与操作回执…' }]
   if (type === 'runtime.goal.verified')
