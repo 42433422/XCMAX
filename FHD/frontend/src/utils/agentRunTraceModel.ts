@@ -293,6 +293,40 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       continue
     }
 
+    if (type === 'runtime.model.started' || type === 'runtime.xiaox.turn.started') {
+      phases.push({ ...observation, kind: 'planner', status: 'running',
+        started_event_id: asString(ev.event_id), started_at: asString(ev.created_at),
+        title: '模型正在分析任务' })
+      continue
+    }
+    if (type === 'runtime.model.completed' || type === 'runtime.model.failed'
+      || type === 'runtime.model.failure' || type === 'runtime.xiaox.turn.completed') {
+      const phase = [...phases].reverse().find(p => p.kind === 'planner' && p.status === 'running')
+      if (phase) {
+        phase.status = type.includes('failed') || type.includes('failure') ? 'failed' : 'success'
+        phase.title = phase.status === 'failed' ? '模型请求未完成' : '模型响应已完成'
+      }
+      continue
+    }
+    if (type === 'runtime.xiaox.item.started' || type === 'runtime.xiaox.item.completed') {
+      if (asString(data.item_type) !== 'mcpToolCall') continue
+      const nodeId = asString(data.item_id)
+      if (type.endsWith('.started')) {
+        phases.push({ ...observation, kind: 'tool', status: 'running',
+          started_event_id: asString(ev.event_id), started_at: asString(ev.created_at),
+          node_id: nodeId, tool_id: asString(data.tool_id), action: asString(data.action),
+          title: asString(data.action) || '授权工具调用', observations: [],
+          waiting_approval: false, retries: 0, repair_history: [] })
+      } else {
+        const phase = findToolPhase(nodeId)
+        if (phase) {
+          phase.status = data.status === 'failed' ? 'failed' : 'waiting'
+          phase.title = phase.status === 'failed' ? '工具调用失败' : '工具调用已结束，待回执核对'
+        }
+      }
+      continue
+    }
+
     // PlannerPhase
     if (type === 'planner.started') {
       const openPlanner = [...phases].reverse().find((p) => p.kind === 'planner' && p.status === 'running') as TracePlannerPhase | undefined

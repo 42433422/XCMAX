@@ -15,8 +15,8 @@ function eventStream() {
   })
   return {
     response: new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }),
-    emit(event: unknown) {
-      if (open) controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`))
+    emit(event: unknown, type = '', id = '') {
+      if (open) controller.enqueue(new TextEncoder().encode(`${id ? `id: ${id}\n` : ''}${type ? `event: ${type}\n` : ''}data: ${JSON.stringify(event)}\n\n`))
     },
     close() { if (open) { open = false; controller.close() } },
   }
@@ -42,6 +42,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>
   let resumed: Array<ReturnType<typeof eventStream> & { signal?: AbortSignal | null }>
   let otherStreams: Array<ReturnType<typeof eventStream>>
+  let runStreams: Array<ReturnType<typeof eventStream>>
   let mountChat: () => void
 
   beforeEach(async () => {
@@ -55,6 +56,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
     taskStatus = 'running'
     resumed = []
     otherStreams = []
+    runStreams = []
     readReceipt = async () => ({ success: true, id: 'original', durable: true, revision: 1, messages: [] })
     receiptHttpStatus = 200
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -80,6 +82,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
       if (url.pathname.endsWith('/events/stream')) {
         const stream = eventStream()
         otherStreams.push(stream)
+        if (url.pathname.includes('/api/agent/runs/')) runStreams.push(stream)
         init?.signal?.addEventListener('abort', () => stream.close(), { once: true })
         return stream.response
       }
@@ -471,7 +474,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
     },
   )
 
-  it('reflects waiting and blocked task states without replaying or completing the turn', async () => {
+  it('reads a saved blocked receipt instead of leaving only the progress note', async () => {
     const reply = originalReply()
     taskStatus = 'waiting_user'
     await api.refreshTasks()
@@ -479,12 +482,51 @@ describe('persisted chat turn observation through the real SDK and task workspac
     expect(reply.workflowAction).toBe('waiting_approval')
     expect(reply.content).toContain('等待确认')
     taskStatus = 'blocked'
+    readReceipt = async () => ({ ...terminalHistory('blocked'), messages: [{
+      id: 8, role: 'assistant', content: '15 题未完成，原任务已阻断。',
+      metadata: { summary: { status: 'blocked', turn_id: 'original-turn' } },
+    }] })
     await api.refreshTasks()
     await flushPromises()
     expect(reply.workflowAction).toBe('blocked')
-    expect(reply.content).toContain('核对原任务的回执')
+    expect(reply.content).toContain('15 题未完成')
     expect(resumed[0].signal?.aborted).toBe(true)
-    expect(receiptReads()).toHaveLength(0)
+    expect(receiptReads()).toHaveLength(1)
+  })
+
+  it('projects durable model and tool events onto the original chat message', async () => {
+    const reply = originalReply()
+    expect(runStreams).toHaveLength(1)
+    const emit = (type: string, data: Record<string, unknown>, id: string) =>
+      runStreams[0].emit({ event_id: id, run_id: 'original-run', event_type: type, data }, type, id)
+    emit('runtime.model.started', {}, 'e1')
+    await flushPromises()
+    expect(reply.waitingHint).toContain('模型正在分析')
+    emit('runtime.model.completed', {}, 'e1b')
+    await flushPromises()
+    expect(reply.waitingHint).toBeUndefined()
+    expect(reply.toolProgressLabel).toContain('模型响应已完成')
+    emit('runtime.xiaox.item.started', { item_type: 'mcpToolCall', item_id: 'call-1',
+      tool_id: 'excel_analysis', action: 'read' }, 'e2')
+    await flushPromises()
+    expect(reply.agentRunTrace?.phases).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'tool', status: 'running', node_id: 'call-1' }),
+    ]))
+    emit('runtime.xiaox.item.completed', { item_type: 'mcpToolCall', item_id: 'call-1',
+      status: 'completed' }, 'e3')
+    await flushPromises()
+    expect(reply.agentRunTrace?.phases).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'tool', status: 'waiting', node_id: 'call-1' }),
+    ]))
+    taskStatus = 'blocked'
+    readReceipt = async () => ({ ...terminalHistory('blocked'), messages: [{
+      id: 8, role: 'assistant', content: '原任务核验未通过。',
+      metadata: { summary: { status: 'blocked', turn_id: 'original-turn' } },
+    }] })
+    emit('runtime.xiaox.finished', {}, 'e4')
+    await flushPromises()
+    expect(reply.workflowAction).toBe('blocked')
+    expect(reply.content).toContain('原任务核验未通过')
   })
 
   it('reads the original turn receipt when the task finishes and ignores another turn receipt', async () => {

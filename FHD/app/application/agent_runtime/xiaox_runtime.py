@@ -1243,15 +1243,20 @@ async def run_xiaox_agent(
                                         texts.pop(key, None)
                                     else:
                                         texts[key] = str(item.get("text") or "")
-                                if method in {"turn/started", "turn/completed", "item/completed"}:
+                                if method in {"turn/started", "turn/completed", "item/started", "item/completed"}:
                                     data = {
                                         "thread_id": thread_id,
                                         "turn_id": turn_id,
-                                        "item_id": event.get("item_id"),
+                                        "item_id": event.get("item_id") or item.get("id"),
                                         "item_type": item.get("type"),
                                         "status": (payload.get("turn") or {}).get("status")
                                         or item.get("status"),
                                     }
+                                    if item.get("type") == "mcpToolCall":
+                                        # Names are safe progress metadata; arguments and draft
+                                        # output stay private until a verified receipt exists.
+                                        data["tool_id"] = str(item.get("server") or "")[:128]
+                                        data["action"] = str(item.get("tool") or "")[:128]
 
                                     def record(run: AgentRun, metadata: dict[str, Any]) -> None:
                                         metadata["turn_id"] = turn_id
@@ -1275,9 +1280,15 @@ async def run_xiaox_agent(
                                             "method": method,
                                             "thread_id": thread_id,
                                             "turn_id": turn_id,
-                                            "item_id": event.get("item_id"),
+                                            "item_id": event.get("item_id") or item.get("id"),
                                             "payload": (
-                                                {"item": {"type": item.get("type")}}
+                                                {"item": {
+                                                    "type": item.get("type"),
+                                                    "id": event.get("item_id") or item.get("id"),
+                                                    "status": item.get("status"),
+                                                    **({"server": data["tool_id"], "tool": data["action"]}
+                                                       if item.get("type") == "mcpToolCall" else {}),
+                                                }}
                                                 if method.startswith("item/")
                                                 else {"turn": {"status": data["status"]}}
                                             ),

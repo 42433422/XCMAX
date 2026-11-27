@@ -43,6 +43,11 @@ import { useChatOrchestrationRemoteRound, type ChatTurnObservationOptions } from
 import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
 import { APPROVAL_GRANT_MISSING_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import agentRunsApi from '@/api/agentRuns'
+import type { AgentRunEvent } from '@/api/agentRuns'
+import { buildFullApiUrl } from '@/api/core'
+import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
+import { buildAgentRunTraceFromEvents } from '@/utils/agentRunTraceModel'
+import { runtimeRunChatEvents } from '@/utils/runtimeRunChatEvents'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
@@ -302,10 +307,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     clearLocalHistory: clearLocalTaskHistory,
   })
   let observedTurn: { turn: ActiveChatTurn; controller: AbortController; message: ChatMessage; checkingReceipt: boolean;
-    sessionId: string; revision?: number; isCurrent: () => boolean; retryAt: number; failures: number } | undefined
+    sessionId: string; revision?: number; isCurrent: () => boolean; retryAt: number; failures: number;
+    stream?: AuthenticatedEventStream; reconnectTimer?: number; lastEventId?: string;
+    events: AgentRunEvent[]; seenEvents: Set<string> } | undefined
 
   function stopTurnObservation() {
     observedTurn?.controller.abort()
+    observedTurn?.stream?.close()
+    if (observedTurn?.reconnectTimer !== undefined) window.clearTimeout(observedTurn.reconnectTimer)
     observedTurn = undefined
   }
 
@@ -344,15 +353,66 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     message.workflowAction = turn.status
     message.toolProgressLabel = text
     if (turn.taskId) message.recoveryTaskId = turn.taskId
-    if (turn.status === 'blocked') return
     const controller = new AbortController()
     const scope = captureLocalScope()
     const observation = { turn, controller, message, checkingReceipt: false, sessionId: scope.sessionId,
-      revision: options.revision, isCurrent: () => scope.isCurrent() && options.isCurrent?.() !== false, retryAt: 0, failures: 0 }
+      revision: options.revision, isCurrent: () => scope.isCurrent() && options.isCurrent?.() !== false, retryAt: 0, failures: 0,
+      events: [] as AgentRunEvent[], seenEvents: new Set<string>(), stream: undefined as AuthenticatedEventStream | undefined,
+      reconnectTimer: undefined as number | undefined, lastEventId: undefined as string | undefined }
     observedTurn = observation
     const isCurrent = () => observedTurn === observation && observation.isCurrent() && messages.value.includes(message)
-    // Both new queued turns and reopened history use the existing task feed and
-    // its 15-second refresh. No second background scheduler or execution retry.
+    const connectRunEvents = () => {
+      if (!isCurrent() || typeof agentRunsApi.eventStreamPath !== 'function') return
+      const url = buildFullApiUrl(agentRunsApi.eventStreamPath(turn.runId, observation.lastEventId))
+      const stream = new AuthenticatedEventStream(url)
+      observation.stream = stream
+      const reconnect = () => {
+        if (!isCurrent() || observation.stream !== stream) return
+        stream.close()
+        observation.stream = undefined
+        void agentTaskRuntime.refreshTasks().catch(() => undefined)
+        observation.reconnectTimer = window.setTimeout(() => {
+          observation.reconnectTimer = undefined
+          connectRunEvents()
+        }, 1500)
+      }
+      const handle = (raw: Event) => {
+        if (!isCurrent()) return
+        let event: AgentRunEvent
+        try { event = JSON.parse((raw as MessageEvent).data) as AgentRunEvent } catch { return }
+        if (event.run_id !== turn.runId || !event.event_id || observation.seenEvents.has(event.event_id)) return
+        observation.seenEvents.add(event.event_id)
+        observation.lastEventId = event.event_id
+        observation.events.push(event)
+        message.agentRunTrace = buildAgentRunTraceFromEvents(observation.events, turn.runId)
+        for (const projected of runtimeRunChatEvents(event)) {
+          if (projected.type === 'model_activity') message.waitingHint = '模型正在分析任务…'
+          if (projected.type === 'tool_call') {
+            message.toolProgressLabel = projected.label
+            delete message.waitingHint
+          }
+          if (projected.type === 'thinking') {
+            const steps = String(message.thinkingSteps || '').split('\n').filter(Boolean)
+            message.thinkingSteps = [...steps.slice(-14), projected.delta].join('\n')
+            message.toolProgressLabel = projected.delta
+            delete message.waitingHint
+          }
+        }
+        if (['runtime.xiaox.finished', 'run.state_changed', 'runtime.model.failure'].includes(event.event_type))
+          void agentTaskRuntime.refreshTasks().catch(() => undefined)
+      }
+      for (const name of ['runtime.xiaox.turn.started', 'runtime.xiaox.turn.completed',
+        'runtime.xiaox.item.started', 'runtime.xiaox.item.completed', 'runtime.model.started',
+        'runtime.model.completed', 'runtime.model.failed', 'runtime.model.failure',
+        'runtime.goal.verification.started', 'runtime.goal.verified', 'runtime.xiaox.finished',
+        'run.state_changed']) stream.addEventListener(name, handle)
+      stream.addEventListener('stream.closed', reconnect)
+      stream.addEventListener('stream.unauthorized', () => { if (isCurrent()) stopTurnObservation() })
+      stream.onerror = reconnect
+    }
+    connectRunEvents()
+    // The task feed supplies terminal status; this read-only run event stream
+    // supplies SDK progress without resubmitting the original request.
     void agentTaskRuntime.refreshTasks().catch(() => undefined)
     if (options.resume === false) return
     let receipt: unknown
@@ -437,8 +497,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       observation.message.workflowAction = status
       chatSessionActivity.forSession(observation.sessionId).setStatus(['waiting_approval', 'paused'].includes(status) ? 'waiting' : 'review')
-      if (status === 'blocked') stopTurnObservation()
-      return
+      if (status !== 'blocked') return
     }
     if (Date.now() < observation.retryAt) return
     observation.checkingReceipt = true
@@ -462,7 +521,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (receipt.activeTurn) {
         if (receipt.activeTurn.status === 'blocked') observeActiveTurn(receipt.activeTurn)
       } else if (data.success === true && data.durable === true && receipt.savedMessage
-        && ['completed', 'failed', 'cancelled', 'rejected', 'interrupted', 'unknown'].includes(asString(binding.status))
+        && ['completed', 'failed', 'blocked', 'cancelled', 'rejected', 'interrupted', 'unknown'].includes(asString(binding.status))
         && asString(receipt.savedMessage.content).trim()
         && binding.turn_id === observation.turn.turnId && binding.run_id === observation.turn.runId) {
         const action = ['cancelled', 'rejected'].includes(asString(binding.status)) ? asString(binding.status) : receipt.workflowAction

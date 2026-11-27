@@ -37,6 +37,7 @@ class StreamLifetime:
         self._observers = []
         self._tool_observers = []
         self._note_observers = []
+        self._model_observers = []
         self._delta_observers = []
         self._tool_sequence = 0
         self._tool_pending = []
@@ -86,6 +87,19 @@ class StreamLifetime:
     def observe_notes(self, callback):
         with self._lock:
             self._note_observers.append(callback)
+
+    def observe_model_activity(self, callback):
+        with self._lock:
+            self._model_observers.append(callback)
+
+    def publish_model_activity(self):
+        with self._lock:
+            callbacks = list(self._model_observers)
+        for callback in callbacks:
+            try:
+                callback()
+            except BOUNDARY_ERRORS:
+                logging.getLogger(__name__).debug("model activity observer failed", exc_info=True)
 
     def observe_deltas(self, callback):
         with self._lock:
@@ -262,6 +276,18 @@ def publish_stream_note(text):
     lifetime = current_lifetime.get()
     if lifetime is not None:
         lifetime.publish_note(text)
+
+
+def watch_stream_model_activity(callback):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.observe_model_activity(callback)
+
+
+def publish_stream_model_activity():
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.publish_model_activity()
 
 
 def watch_stream_deltas(callback):

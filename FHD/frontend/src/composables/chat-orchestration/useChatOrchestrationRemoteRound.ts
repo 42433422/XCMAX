@@ -587,6 +587,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (card) extras.approvalCard = card
           }
           applyStreamText(finalText, Object.keys(extras).length ? extras : undefined)
+          if (streamMessage?.liveSteps?.length)
+            streamMessage.liveSteps = streamMessage.liveSteps.filter(step => step.state !== 'running')
           observeModelOutcome(finalText, donePayload)
         }
         if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
@@ -661,6 +663,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           }
           if (ev.type === 'route_metadata') {
             consumeRoute(ev.route_metadata)
+          } else if (ev.type === 'model_activity') {
+            if (canUpdateStream() && streamMessage) streamMessage.waitingHint = '模型正在分析任务…'
+            setLoadingProgress('模型正在分析任务…', requestScope.sessionId)
           } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             const hint = String(ev.text || ev.label || '').trim()

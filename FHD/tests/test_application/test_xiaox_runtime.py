@@ -123,6 +123,10 @@ def test_reply_delivers_final_answer_without_commentary(setup_runtime):
     events = completed("第一天游故宫，第二天游颐和园。")
     events[1]["payload"]["item"]["phase"] = "final_answer"
     events[1:1] = [
+        event("item/started", {"item": {
+            "id": "tool-progress", "type": "mcpToolCall", "server": "excel_analysis",
+            "tool": "read", "arguments": {"secret": "must-stay-private"},
+        }}),
         event("item/agentMessage/delta", {"delta": "我先检索"}, item_id="progress"),
         event(
             "item/completed",
@@ -143,7 +147,13 @@ def test_reply_delivers_final_answer_without_commentary(setup_runtime):
         )
     )
     assert "我先检索" not in repr(public_events)
+    assert "must-stay-private" not in repr(public_events)
     assert "第一天游故宫" not in repr(public_events)
+    started = [row for row in store.run.events if row.event_type == "runtime.xiaox.item.started"]
+    assert len(started) == 1
+    assert started[0].data["tool_id"] == "excel_analysis"
+    assert started[0].data["item_id"] == "tool-progress"
+    assert "must-stay-private" not in repr(started)
     assert any(event["method"] == "turn/completed" for event in public_events)
     assert result["ok"] is True
     assert result["output"] == "第一天游故宫，第二天游颐和园。"

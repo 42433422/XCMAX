@@ -467,6 +467,10 @@ def _claim(
                     else {}
                 ),
             }
+            run.add_event(
+                "runtime.model.started",
+                data={"request_id": request_id, "purpose": calls[request_id]["purpose"]},
+            )
             # The SDK thread keeps its original logical model. Persist the
             # actual route so its later opaque history never goes back to the
             # previous provider after a successful switch or a host restart.
@@ -573,6 +577,10 @@ def _finish(
         if terminal:
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
+        run.add_event(
+            "runtime.model.completed" if state == "completed" else "runtime.model.failed",
+            data={"request_id": request_id, "purpose": call.get("purpose")},
+        )
         if state == "completed":
             for key in ("runtime_failure_kind", "runtime_failure_reason", "runtime_failure_stage"):
                 run.metadata.pop(key, None)

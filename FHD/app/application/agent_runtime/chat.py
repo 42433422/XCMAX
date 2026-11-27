@@ -42,12 +42,21 @@ _INSTRUCTIONS = (
 
 
 def stream_runtime_event(event: dict[str, Any]) -> None:
-    from app.infrastructure.chat_stream_lifetime import publish_stream_note
+    from app.infrastructure.chat_stream_lifetime import publish_stream_model_activity
+    from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
 
     method, payload = event.get("method"), event.get("payload") or {}
     # The existing chat stream publishes the classified response, never draft deltas.
-    if method == "item/started" and (payload.get("item") or {}).get("type") == "mcpToolCall":
-        publish_stream_note("正在通过授权工具处理任务…")
+    item = payload.get("item") or {}
+    if method == "turn/started":
+        publish_stream_model_activity()
+    elif method in {"item/started", "item/completed"} and item.get("type") == "mcpToolCall":
+        publish_stream_tool_record({
+            "phase": "progress", "node_id": str(item.get("id") or event.get("item_id") or ""),
+            "tool_id": str(item.get("server") or ""), "action": str(item.get("tool") or ""),
+            "label": "正在通过授权工具处理任务…" if method == "item/started"
+            else "工具调用结束，正在核对回执…",
+        })
 
 
 def runtime_chat_files(result: dict[str, Any]) -> list[dict[str, Any]]:

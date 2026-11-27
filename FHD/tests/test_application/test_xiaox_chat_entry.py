@@ -173,9 +173,11 @@ def test_approval_card_targets_frozen_child_not_coordinator():
 
 @pytest.mark.parametrize("mode", ["auto", "business", "reply"])
 def test_unverified_candidate_is_not_streamed_but_progress_is(monkeypatch, mode):
-    delta, note = Mock(), Mock()
+    delta, note, tool, activity = Mock(), Mock(), Mock(), Mock()
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_delta", delta)
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", note)
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_tool_record", tool)
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_model_activity", activity)
     chat.stream_runtime_event(
         {
             "method": "item/agentMessage/delta",
@@ -190,7 +192,13 @@ def test_unverified_candidate_is_not_streamed_but_progress_is(monkeypatch, mode)
             "payload": {"item": {"type": "mcpToolCall"}},
         }
     )
-    note.assert_called_once()
+    tool.assert_called_once_with({
+        "phase": "progress", "node_id": "", "tool_id": "", "action": "",
+        "label": "正在通过授权工具处理任务…",
+    })
+    note.assert_not_called()
+    chat.stream_runtime_event({"method": "turn/started", "payload": {"turn": {"status": "inProgress"}}})
+    activity.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -434,8 +442,10 @@ def test_stream_progress_and_setup_failure_never_emit_unverified_draft(monkeypat
 
     deltas = Mock()
     notes = Mock()
+    tools = Mock()
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_delta", deltas)
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", notes)
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_tool_record", tools)
     invoke, execute, _ = entry
     execute.side_effect = RuntimeSetupError("runtime_account_model_required", "private key")
     failed = invoke({"session_id": "original", "agent_runtime_run_id": "existing"})
@@ -455,7 +465,8 @@ def test_stream_progress_and_setup_failure_never_emit_unverified_draft(monkeypat
             "payload": {"item": {"type": "mcpToolCall"}},
         }
     )
-    notes.assert_called_once()
+    tools.assert_called_once()
+    notes.assert_not_called()
 
 
 @pytest.mark.parametrize(
