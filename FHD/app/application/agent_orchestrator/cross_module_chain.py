@@ -301,7 +301,13 @@ def _audit(
 
 
 def _run_employee(
-    employee_id: str, task: str, payload: dict[str, Any], workspace: Path, *, user_id: int
+    employee_id: str,
+    task: str,
+    payload: dict[str, Any],
+    workspace: Path,
+    *,
+    user_id: int,
+    runtime_context: dict[str, Any],
 ) -> dict[str, Any]:
     pack = load_employee_pack_from_disk(employee_id)
     result = execute_employee_task_local(
@@ -310,7 +316,7 @@ def _run_employee(
         {**payload, "skip_collaboration": True, "workspace_root": str(workspace)},
         user_id=user_id,
         workspace_root=str(workspace),
-        runtime_context={"employee_collaboration_skip": True},
+        runtime_context={**runtime_context, "employee_collaboration_skip": True},
     )
     return {"pack": {"id": pack["pack_id"], "version": pack["version"]}, "result": result}
 
