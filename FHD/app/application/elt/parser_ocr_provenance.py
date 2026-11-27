@@ -30,7 +30,9 @@ def enrich_ocr_provenance(
             "source_suffix": source_suffix,
             "ocr_block_count": int(result.get("block_count") or 0),
             "ocr_meta_lines": list(result.get("meta_lines") or []),
-            "ocr_page_count": len(result.get("pages") or []),
+            "ocr_page_count": len({page.get("page_number") for page in result.get("pages") or []}),
+            "ocr_source_sha256": result.get("source_sha256"),
+            "ocr_structure_status": result.get("structure_status", "unknown"),
         }
     )
     page_by_sheet = {str(page.get("sheet_name") or ""): page for page in result.get("pages") or []}
@@ -55,18 +57,17 @@ def enrich_ocr_provenance(
             column = int(columns.get(field_name) or 0)
             evidence = evidence_by_cell.get((item.row_number, column))
             if evidence is None:
-                evidence = next(
-                    (
-                        block
-                        for block in page.get("blocks") or []
-                        if text == clean_cell_text(block.get("text"))
-                    ),
-                    None,
-                )
+                # Repeated text is not an unambiguous cell-to-image association.
+                matches = [
+                    block
+                    for block in page.get("blocks") or []
+                    if text == clean_cell_text(block.get("text"))
+                ]
+                evidence = matches[0] if len(matches) == 1 else None
             if not evidence:
                 low_confidence_fields.append(field_name)
                 cell_evidence[field_name] = {
-                    "page": page.get("page_number") or 1,
+                    "page": page.get("page_number"),
                     "original_text": text,
                     "confidence": None,
                 }
@@ -77,7 +78,7 @@ def enrich_ocr_provenance(
             if confidence is None or confidence < OCR_REVIEW_CONFIDENCE:
                 low_confidence_fields.append(field_name)
             cell_evidence[field_name] = {
-                "page": page.get("page_number") or 1,
+                "page": page.get("page_number"),
                 "original_text": str(evidence.get("text") or text),
                 "confidence": confidence,
                 "position": {
@@ -88,7 +89,7 @@ def enrich_ocr_provenance(
             }
         item.provenance.update(
             {
-                "page": page.get("page_number") or 1,
+                "page": page.get("page_number"),
                 "table_position": {
                     "sheet": item.sheet,
                     "row": item.row_number,
@@ -96,6 +97,8 @@ def enrich_ocr_provenance(
                     "columns": columns,
                 },
                 "ocr": True,
+                "structure_status": page.get("structure_status", "unknown"),
+                "source_sha256": result.get("source_sha256"),
                 "confidence": min(confidences) if confidences else None,
                 "low_confidence_fields": sorted(set(low_confidence_fields)),
                 "cells": cell_evidence,

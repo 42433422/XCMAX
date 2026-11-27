@@ -340,6 +340,9 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.application.office_plaintext_generate",
         "resolve_presentation_spec",
     ),
+    "read_workbook_facts": ("app.application.tabular_workbook", "read_workbook_facts"),
+    "read_native_document": ("app.infrastructure.document_parsing.native", "read_native_document"),
+    "tabular_column_keys": ("app.infrastructure.document_parsing.delimited", "column_keys"),
     "resolve_table_spec": ("app.application.office_plaintext_generate", "resolve_table_spec"),
     "resolve_word_document_spec": (
         "app.application.office_plaintext_generate",

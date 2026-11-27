@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-_TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".log"}
+_TEXT_SUFFIXES = {".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".log"}
 _TABLE_SUFFIXES = {".xlsx", ".xls"}
 
 

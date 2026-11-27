@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import itertools
 import re
 from dataclasses import replace
@@ -21,6 +20,7 @@ from app.application.elt.parser_structure import (
     probe_sheet_rows,
 )
 from app.application.elt.parser_table_structure import (
+    MAX_STRUCTURE_BYTES,
     load_sheet_segmentations,
     plan_rows,
     structured_layout,
@@ -32,14 +32,19 @@ from app.application.elt.parser_target_match import (
 )
 from app.application.elt.parser_types import ParsedDataset, ParsedRow, ParsedRows
 from app.application.elt.table_segmentation import SegmentedTable
+from app.infrastructure.excel.sparse_rows import iter_present_rows
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 MAX_ROWS = 100_000
-STRUCTURED_SUFFIXES = {".xlsx", ".xlsm", ".csv"}
+STRUCTURED_SUFFIXES = {".xlsx", ".xlsm", ".csv", ".tsv"}
 OCR_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png"}
 KNOWLEDGE_ONLY_SUFFIXES = {".doc", ".docx", ".ppt", ".pptx"}
 SUPPORTED_SUFFIXES = STRUCTURED_SUFFIXES | OCR_SUFFIXES | KNOWLEDGE_ONLY_SUFFIXES
 _ROW_DIFFERENCE_LIMIT = 50
+
+
+def _omitted_row_count(rows: list[dict[str, Any]]) -> int:
+    return sum(item.get("row_count", 1) for item in rows)
 
 
 def _row_reconciliation(
@@ -53,10 +58,11 @@ def _row_reconciliation(
     for code, rows, message in row_groups:
         if not rows:
             continue
-        dropped += len(rows)
+        count = _omitted_row_count(rows)
+        dropped += count
         item: dict[str, Any] = {
             "code": code,
-            "count": len(rows),
+            "count": count,
             "message": message,
             "rows": rows[:_ROW_DIFFERENCE_LIMIT],
         }
@@ -168,6 +174,18 @@ def _row_data(headers: list[str], values: Any) -> dict[str, Any]:
 def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     from openpyxl import load_workbook
 
+    from app.infrastructure.document_parsing.archive_safety import (
+        OfficeArchiveError,
+        inspect_office_archive,
+    )
+
+    try:
+        # The existing upload gate bounds compressed bytes. Read-only business
+        # streaming may exceed the smaller in-memory segmentation budget.
+        inspect_office_archive(path, max_compressed_bytes=path.stat().st_size)
+    except OfficeArchiveError as exc:
+        raise EltError("ELT_UNSAFE_WORKBOOK", f"工作簿安全读取受阻：{exc}") from exc
+    structure_budget_exceeded = path.stat().st_size > MAX_STRUCTURE_BYTES
     workbook = load_workbook(
         path,
         read_only=True,
@@ -242,10 +260,18 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             all_headers.extend(header for header in headers if header not in all_headers)
             sheet_count = 0
             plan = plan_rows(segmentations.get(worksheet.title), layout.header_end + 1)
-            for row_number, cells in enumerate(
-                worksheet.iter_rows(min_row=layout.header_end + 2),
-                start=layout.header_end + 2,
-            ):
+            previous_row = layout.header_end + 1
+            for row_number, cells in iter_present_rows(worksheet, min_row=previous_row + 1):
+                if row_number > previous_row + 1:
+                    blank_rows.append(
+                        {
+                            "sheet": worksheet.title,
+                            "row_start": previous_row + 1,
+                            "row_end": row_number - 1,
+                            "row_count": row_number - previous_row - 1,
+                        }
+                    )
+                previous_row = row_number
                 row_values = tuple(_cell_value(cell) for cell in cells)
                 located = {"sheet": worksheet.title, "row": row_number}
                 if all(value in (None, "") for value in row_values):
@@ -386,7 +412,11 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     reconciliation, warnings = _row_reconciliation(
         len(result),
         [
-            ("ELT_BLANK_ROWS_SKIPPED", blank_rows, f"已跳过 {len(blank_rows)} 行空白行。"),
+            (
+                "ELT_BLANK_ROWS_SKIPPED",
+                blank_rows,
+                f"已跳过 {_omitted_row_count(blank_rows)} 行空白行。",
+            ),
             (
                 "ELT_REPEATED_HEADERS_SKIPPED",
                 repeated_rows,
@@ -406,6 +436,13 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             )
         ],
     )
+    if structure_budget_exceeded:
+        warnings.append(
+            {
+                "code": "ELT_STRUCTURE_BUDGET_EXCEEDED",
+                "message": "文件超过 40 MiB 结构识别预算；仅提供流式业务视图，完整结构未核验。",
+            }
+        )
     return ParsedDataset(
         headers=all_headers,
         rows=result,
@@ -415,6 +452,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             "skipped_sheets": skipped_sheets,
             "headers": all_headers,
             "structure_detection": "deterministic_v2",
+            "structure_status": "partial" if structure_budget_exceeded else "candidate",
+            "structure_reason": "resource_budget" if structure_budget_exceeded else None,
+            "raw_content_scope": "business_projection_only",
             "excluded_rows": excluded_rows,
             "row_reconciliation": reconciliation,
             "business_notes": business_notes,
@@ -424,30 +464,31 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
 
 
 def _csv_reader(path: Path):
-    for encoding in ("utf-8-sig", "gb18030"):
-        handle = None
-        try:
-            handle = path.open("r", encoding=encoding, newline="")
-            sample = handle.read(8192)
-            handle.seek(0)
-            try:
-                dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-            except csv.Error:
-                dialect = csv.excel
-            return handle, csv.reader(handle, dialect, skipinitialspace=True)
-        except UnicodeDecodeError:
-            if handle is not None:
-                handle.close()
-            continue
-    raise EltError("ELT_CSV_ENCODING_UNSUPPORTED", "CSV 编码无法识别")
+    from app.infrastructure.document_parsing.delimited import open_delimited
+
+    try:
+        handle, reader, _metadata = open_delimited(path)
+    except ValueError as exc:
+        raise EltError("ELT_CSV_ENCODING_UNSUPPORTED", "CSV 编码无法识别") from exc
+    return handle, reader
 
 
 def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     handle, reader = _csv_reader(path)
     rows = ParsedRows()
     dataset = None
+
+    def located_records():
+        previous_line = 0
+        for values in reader:
+            end_line = reader.line_num
+            yield values, previous_line + 1, end_line
+            previous_line = end_line
+
     try:
-        probe = list(itertools.islice(reader, 60))
+        records = located_records()
+        probe_records = list(itertools.islice(records, 60))
+        probe = [values for values, _start, _end in probe_records]
         layout = detect_table_layout(
             probe,
             header_hints=target_header_hints(target_type),
@@ -460,9 +501,9 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
         repeated_rows: list[dict[str, Any]] = []
         footer_rows: list[dict[str, Any]] = []
         business_notes: list[str] = []
-        remaining_probe = probe[layout.header_end + 1 :]
-        for row_number, values in enumerate(
-            itertools.chain(remaining_probe, reader),
+        remaining_probe = probe_records[layout.header_end + 1 :]
+        for row_number, (values, line_start, line_end) in enumerate(
+            itertools.chain(remaining_probe, records),
             start=layout.header_end + 2,
         ):
             located = {"sheet": "CSV", "row": row_number}
@@ -491,6 +532,9 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                     provenance={
                         "sheet": "CSV",
                         "row": row_number,
+                        "physical_line_start": line_start,
+                        "physical_line_end": line_end,
+                        "original_values": list(values),
                         "original_fragment": dict(zip(headers, values)),
                         "columns": {headers[index]: index + 1 for index in range(len(headers))},
                         "header_rows": {
@@ -573,7 +617,7 @@ def parse_file(
             ],
             source_features={"kind": "document", "knowledge_only": True},
         )
-    if suffix == ".csv":
+    if suffix in {".csv", ".tsv"}:
         if compatibility_preset_id:
             raise EltError(
                 "ELT_COMPATIBILITY_PRESET_FILE_UNSUPPORTED",

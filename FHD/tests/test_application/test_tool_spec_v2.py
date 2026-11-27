@@ -635,6 +635,33 @@ def test_excel_export_contract_accepts_supported_file_names(file_path, valid):
     assert (export_input_error(payload) is None) is valid
 
 
+@pytest.mark.parametrize(
+    ("action", "field", "invalid"),
+    [
+        ("read", "expected_sha256", "a" * 63),
+        ("read", "expected_sha256", "g" * 64),
+        ("export", "file_path", "result.xls"),
+        ("export", "file_path", "result.xlsx.zip"),
+    ],
+)
+def test_workbook_contract_examples_keep_native_hash_and_export_suffix_constraints(
+    action, field, invalid
+):
+    from jsonschema import Draft202012Validator
+
+    spec = get_tool_action_spec("excel_analysis", action)
+    assert spec is not None and spec.contract_samples
+    input_validator = Draft202012Validator(spec.input_schema)
+    output_validator = Draft202012Validator(spec.output_schema)
+    for sample in spec.contract_samples:
+        assert input_validator.is_valid(sample["input"])
+        assert output_validator.is_valid(sample["output"])
+        assert validate_tool_call("excel_analysis", action, sample["input"]).ok
+        changed = {**sample["input"], field: invalid}
+        assert not input_validator.is_valid(changed)
+        assert not validate_tool_call("excel_analysis", action, changed).ok
+
+
 def test_get_tool_action_spec_normalizes_action_alias() -> None:
     spec = get_tool_action_spec("employee", "run")
     assert spec is not None

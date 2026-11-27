@@ -293,7 +293,21 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
     with TemporaryDirectory(prefix="workflow-input-", dir=_staging_root()) as directory:
         path = Path(directory) / ("input" + suffix)
         path.write_bytes(content)
-        yield path
+        if suffix in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
+            from app.application.tabular_workbook import workbook_snapshot_scope
+
+            # Bind only AFTER the original session, ownership and content checks.
+            # The sealed account/tenant/Mod/session grant is never supplied by tool args.
+            identity = json.dumps(
+                [tenant_id_for_write(), str(actor.id), context["_actor_authorization"]],
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            scope = "workflow:" + hashlib.sha256(identity.encode()).hexdigest()
+            with workbook_snapshot_scope(path, scope):
+                yield path
+        else:
+            yield path
 
 
 @contextmanager

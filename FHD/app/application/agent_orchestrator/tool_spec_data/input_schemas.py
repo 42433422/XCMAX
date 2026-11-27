@@ -736,16 +736,6 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             },
         },
     ),
-    ("excel_analysis", "read"): _object_schema(
-        ["file_path"],
-        {
-            "file_path": {"type": "string"},
-            "sheet_name": {"type": "string"},
-            "header_row": EXCEL_HEADER_ROW,
-            "offset": {"type": "integer"},
-            "max_rows": {"type": "integer"},
-        },
-    ),
     ("excel_analysis", "query"): {
         **_object_schema(
             ["file_path"],
@@ -1153,6 +1143,7 @@ def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
     )
 
     schemas = {
+        ("excel_analysis", "read"): _workbook_input_schema("excel_analysis", ["file_path"]),
         ("excel_analysis", "structure"): _workbook_input_schema("excel_analysis", ["file_path"]),
         ("excel_analysis", "aggregate"): _workbook_input_schema(
             "excel_analysis", ["file_path", "metrics"]
