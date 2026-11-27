@@ -1096,12 +1096,15 @@ function emitSwitchView(view: string) {
   position: relative;
 }
 
-.chat-composer :deep(.el-sender) {
+.chat-view .chat-composer :deep(.el-sender),
+.chat-view .chat-composer :deep(.el-sender:focus-within) {
   border-radius: 14px;
   background: var(--xc-color-surface);
   box-shadow: var(--xc-shadow-sm);
-  &::after { content: none; }
+  border-color: transparent;
 }
+
+.chat-view .chat-composer :deep(.el-sender::after) { display: none; }
 
 .chat-composer :deep(.el-sender .el-sender-content) { padding: 10px 12px 8px; gap: 7px; }
 .chat-composer :deep(.el-sender-updown-wrap) {
@@ -1125,10 +1128,9 @@ function emitSwitchView(view: string) {
   caret-color: var(--xc-color-primary);
 }
 
-.chat-composer :deep(.el-sender .el-sender-content .el-sender-input .el-textarea__inner:focus-visible) {
-  outline: var(--xc-token-focus-ring-width, 3px) solid var(--xc-color-primary);
-  outline-offset: 2px;
-  box-shadow: var(--app-focus-ring);
+.chat-composer :deep(.el-textarea__inner:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }
 
 .composer-attachments {

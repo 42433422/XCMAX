@@ -271,6 +271,21 @@ def review_schema(
                 "then": {"required": ["file_basis"]},
             }
         )
+        assessment["allOf"].append(
+            {
+                "if": {
+                    "required": ["file_basis"],
+                    "properties": {
+                        "file_basis": {"enum": ["passages", "complete"]},
+                        "status": {"const": "satisfied"},
+                    },
+                },
+                "then": {
+                    "required": ["file_citations"],
+                    "properties": {"file_citations": {"minItems": 1}},
+                },
+            }
+        )
         if source_block_ids and response_block_ids:
             schema["$defs"]["FileCitation"] = {
                 "type": "object",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -183,3 +184,31 @@ def preserves_source_bindings(
         ):
             return False
     return True
+
+
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = dict(pairs)
+    if len(result) != len(pairs):
+        raise ValueError("Duplicate key in goal review JSON")
+    return result
+
+
+def review_json_text(value: str) -> str:
+    """Unwrap one presentation fence; all JSON and host checks still apply."""
+    text = value.strip()
+    lines = text.splitlines()
+    if len(lines) >= 3 and lines[0].lower() in {"```", "```json"} and lines[-1] == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return text
+
+
+def verbatim_blocks(text: str) -> list[str]:
+    lines = text.splitlines(keepends=True)
+    stride = max(1, math.ceil(len(lines) / 128))
+    blocks = []
+    for start in range(0, len(lines), stride):
+        block = "".join(lines[start : start + stride]).strip()
+        for offset in range(0, len(block), 4000):
+            if bounded := block[offset : offset + 4000].strip():
+                blocks.append(bounded)
+    return blocks

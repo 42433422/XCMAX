@@ -27,6 +27,7 @@ from app.application.agent_runtime.goal_verification_task import (
     review_repair_checkpoint,
 )
 from app.application.agent_runtime.instructions import GOAL_REVIEW_RULES as _RULES
+from app.domain.task_lifecycle import goal_review_models as review_protocol
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
     REPAIRABLE_GOAL_REVIEW_ERRORS,
@@ -44,15 +45,6 @@ from app.domain.task_lifecycle.agent_runtime_contract import (
     validate_runtime_goal,
 )
 from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
-from app.domain.task_lifecycle.goal_review_models import (
-    normalize_review_provenance as _normalize_review_provenance,
-)
-from app.domain.task_lifecycle.goal_review_models import (
-    preserves_source_bindings as _preserves_source_bindings,
-)
-from app.domain.task_lifecycle.goal_review_models import (
-    review_judgments as _review_judgments,
-)
 
 if TYPE_CHECKING:
     from app.application.agent_runtime.plan_delivery import PlanVerdict
@@ -173,34 +165,6 @@ def _review_evidence_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return view
 
 
-def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result = dict(pairs)
-    if len(result) != len(pairs):
-        raise ValueError("Duplicate key in goal review JSON")
-    return result
-
-
-def _review_json_text(value: str) -> str:
-    """Unwrap one presentation fence; all JSON and host checks still apply."""
-    text = value.strip()
-    lines = text.splitlines()
-    if len(lines) >= 3 and lines[0].lower() in {"```", "```json"} and lines[-1] == "```":
-        return "\n".join(lines[1:-1]).strip()
-    return text
-
-
-def _verbatim_blocks(text: str) -> list[str]:
-    lines = text.splitlines(keepends=True)
-    stride = max(1, math.ceil(len(lines) / 128))
-    blocks = []
-    for start in range(0, len(lines), stride):
-        block = "".join(lines[start : start + stride]).strip()
-        for offset in range(0, len(block), 4000):
-            if bounded := block[offset : offset + 4000].strip():
-                blocks.append(bounded)
-    return blocks
-
-
 def _file_citation_catalogue(
     file_evidence: dict[str, dict[str, Any]],
 ) -> tuple[
@@ -211,7 +175,7 @@ def _file_citation_catalogue(
     sources: dict[str, tuple[str, str]] = {}
     for identity, source in file_evidence.items():
         blocks = {}
-        for block in _verbatim_blocks(source["text"]):
+        for block in review_protocol.verbatim_blocks(source["text"]):
             block_id = f"s{len(sources) + 1}"
             sources[block_id] = (identity, block)
             blocks[block_id] = block
@@ -542,7 +506,10 @@ def verify_runtime_goal(
             action_catalog.setdefault(spec.tool_id, []).append(spec.action)
     documents, source_blocks = _file_citation_catalogue(file_evidence or {})
     response_blocks = (
-        {f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)}
+        {
+            f"r{index}": block
+            for index, block in enumerate(review_protocol.verbatim_blocks(output), start=1)
+        }
         if source_blocks
         else {}
     )
@@ -777,7 +744,8 @@ def verify_runtime_goal(
                     for part in item["content"]
                 )
                 decoded = json.loads(
-                    _review_json_text(output_text), object_pairs_hook=_unique_json_object
+                    review_protocol.review_json_text(output_text),
+                    object_pairs_hook=review_protocol.unique_json_object,
                 )
                 json.dumps(decoded, allow_nan=False)
                 if isinstance(decoded, dict) and isinstance(decoded.get("goals"), list):
@@ -788,7 +756,7 @@ def verify_runtime_goal(
                             feedback="原任务超过单次64项目标核验范围；全部原文及回执已保留，不能将部分核验当作全部完成。",
                         )
                         return _finish_report(report)
-                decoded = _normalize_review_provenance(decoded, contract)
+                decoded = review_protocol.normalize_review_provenance(decoded, contract)
                 wire_review = copy.deepcopy(decoded)
                 if wire_validator is not None:
                     wire_validator.validate(decoded)
@@ -813,8 +781,9 @@ def verify_runtime_goal(
                 continue
             diagnostic["state"] = "reviewed"
             if repair_review is not None and (
-                _review_judgments(review) != _review_judgments(repair_review)
-                or not _preserves_source_bindings(
+                review_protocol.review_judgments(review)
+                != review_protocol.review_judgments(repair_review)
+                or not review_protocol.preserves_source_bindings(
                     repair_review, review, payload["source_catalogue"]
                 )
             ):

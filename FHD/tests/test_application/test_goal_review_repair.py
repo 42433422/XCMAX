@@ -62,6 +62,54 @@ def test_attachment_format_repair_reports_missing_contract_field_without_file_va
     assert "file_basis" in repair and "PRIVATE-FILE-BODY" not in repair
 
 
+@pytest.mark.parametrize("missing", ["constraint", "history"])
+def test_completed_file_goal_without_own_citation_is_repaired_before_final_verdict(
+    verifier, missing
+):
+    verifier.run.message = "查看并完整概述"
+    verifier.run.metadata["_xiaox_history"] = [{"role": "user", "content": "查看"}]
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "document.docx",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "current-document", "sha256": "c" * 64},
+                "preview": {"text": "ALPHA verified body", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows = []
+    verifier.output = "Document contains ALPHA verified body."
+    corrected = review(
+        goal("查看", kind="reply", evidence_ids=["response"]),
+        goal(
+            "完整概述" if missing == "constraint" else "查看",
+            goal_id="retained",
+            kind="constraint" if missing == "constraint" else "reply",
+            evidence_ids=["response"],
+            source_id="request" if missing == "constraint" else "history:0:user",
+        ),
+    )
+    for item in corrected["goals"]:
+        item.update(
+            file_basis="complete",
+            file_citations=[{"source_block_id": "s1", "response_block_id": "r1"}],
+        )
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][1]["file_citations"] = []
+    verifier.replies = [response(rejected), response(corrected)]
+
+    report = verifier.verify()
+
+    assert report["accepted"] and len(verifier.requests) == 2
+    assert report["attempts"][0]["validation_error"] == {
+        "path": ["goals", 1, "file_citations"],
+        "rule": "minItems",
+    }
+    assert all(json.loads(request.content)["tools"] == [] for request in verifier.requests)
+
+
 @pytest.mark.parametrize("defect", ["duplicate_id", "unknown_source", "wrong_quote"])
 def test_provenance_repair_only_rechecks_the_same_candidate(verifier, defect):
     corrected = _complete_review()
