@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List, Optional
 
 DEFAULT_MAX_ROW_CAP = 0
@@ -42,157 +45,131 @@ def _display(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
-def _row_values(ws, row: int, cap_col: int) -> List[Any]:
-    return [ws.cell(row, col).value for col in range(1, cap_col + 1)]
-
-
-def _nonempty(values: List[Any]) -> int:
-    return sum(1 for v in values if _display(v))
-
-
 def _dedupe_columns(names: List[str]) -> List[str]:
-    seen: Dict[str, int] = {}
-    out: List[str] = []
-    for idx, raw in enumerate(names, start=1):
-        base = raw.strip() if raw and raw.strip() else f"col_{idx}"
-        count = seen.get(base, 0) + 1
-        seen[base] = count
-        out.append(base if count == 1 else f"{base}_{count}")
-    return out
+    from app.mod_sdk.host_services import tabular_column_keys
+
+    return tabular_column_keys(
+        [name.strip() for name in names], len(names), empty_prefix="col_", duplicate_separator="_"
+    )
 
 
-def _detect_header_row(ws, cap_row: int, cap_col: int, *, payload: Dict[str, Any]) -> int:
+def _legacy_value(cell: Dict[str, Any]) -> Any:
+    formula = cell.get("formula_attributes") is not None
+    value = cell["cached_value"] if formula else cell["value"]
+    kind = cell["cached_value_type"] if formula else cell["value_type"]
+    # Preserve historical default=str rendering while canonical values retain
+    # their explicit type and ISO representation.
+    if value is not None and kind in {"datetime", "date", "time"}:
+        return {"datetime": datetime, "date": date, "time": time}[kind].fromisoformat(value)
+    if value is not None and kind == "duration_seconds":
+        return timedelta(seconds=value)
+    return value
+
+
+def _detect_header_row(rows, cap_row: int, cap_col: int, *, payload: Dict[str, Any]) -> int:
     explicit = _int_payload(payload, "header_row", 0)
     if explicit > 0:
         return min(explicit, cap_row or explicit)
-    if cap_row <= 0 or cap_col <= 0:
-        return 1
-
     scan_rows = min(cap_row, _int_payload(payload, "header_scan_rows", HEADER_SCAN_ROWS))
-    best_row = 1
-    best_score = -1
-    for row in range(1, scan_rows + 1):
-        values = [_display(v) for v in _row_values(ws, row, cap_col)]
-        filled = _nonempty(values)
-        if filled <= 0:
+    best_row, best_score = 1, -1
+    for row in sorted(number for number in rows if number <= scan_rows):
+        values = [_display(_legacy_value(cell)) for cell in rows[row] if cell["column"] <= cap_col]
+        filled = sum(bool(value) for value in values)
+        if not filled:
             continue
-        next_filled = (
-            _nonempty([_display(v) for v in _row_values(ws, row + 1, cap_col)])
-            if row < cap_row
-            else 0
+        next_filled = sum(
+            bool(_display(_legacy_value(cell)))
+            for cell in rows.get(row + 1, ())
+            if cell["column"] <= cap_col
         )
-        keyword_hits = sum(1 for v in values if any(k in v for k in HEADER_KEYWORDS))
+        keyword_hits = sum(any(keyword in value for keyword in HEADER_KEYWORDS) for value in values)
         title_penalty = 8 if filled <= 1 and next_filled > filled else 0
         score = filled * 3 + keyword_hits * 6 + min(next_filled, filled) - title_penalty
         if score > best_score:
-            best_row = row
-            best_score = score
+            best_row, best_score = row, score
     return best_row
 
 
-def _cell_payload(ws, row: int, col: int, *, formula_ws=None) -> Dict[str, Any]:
+def _cell_payload(cell: Dict[str, Any]) -> Dict[str, Any]:
     from openpyxl.utils import get_column_letter
 
-    cell = ws.cell(row, col)
-    letter = get_column_letter(col)
-    raw = cell.value
-    display = "" if raw is None else str(raw)
-    formula = None
-    if formula_ws is not None:
-        fcell = formula_ws.cell(row, col)
-        if isinstance(fcell.value, str) and fcell.value.startswith("="):
-            formula = fcell.value
-    data_type = getattr(cell, "data_type", None)
+    raw = _legacy_value(cell)
     out = {
-        "row": row,
-        "col": col,
-        "letter": letter,
+        "row": cell["row"],
+        "col": cell["column"],
+        "letter": get_column_letter(cell["column"]),
         "value": raw,
-        "display": display,
-        "formula": formula,
-        "data_type": str(data_type) if data_type is not None else None,
+        "display": "" if raw is None else str(raw),
+        "formula": cell.get("formula"),
+        "data_type": cell.get("cached_data_type")
+        if cell.get("formula_attributes") is not None
+        else cell.get("data_type"),
+        "source_ref": cell["source_ref"],
+        "cache_state": cell["cache_state"],
     }
-    # 数字格式仅在非默认时输出（缺省即 General），模板类表格（如 [DBNum1]）靠它做回填保真。
-    number_format = getattr(cell, "number_format", None)
+    number_format = cell.get("number_format")
     if number_format and number_format != "General":
-        out["number_format"] = str(number_format)
+        out["number_format"] = number_format
     return out
 
 
-def _merged_ranges(ws, formula_ws=None) -> List[str]:
-    """合并单元格范围（如 ``A1:D1``）；模板类表格（人员块/竖向合并表头）识别依赖它。"""
-    source = ws
-    ranges = getattr(getattr(source, "merged_cells", None), "ranges", None)
-    if not ranges and formula_ws is not None:
-        source = formula_ws
-        ranges = getattr(getattr(source, "merged_cells", None), "ranges", None)
-    return sorted(str(rng) for rng in (ranges or []))
-
-
-def _sheet_to_dict(ws, formula_ws=None, *, payload: Dict[str, Any]) -> Dict[str, Any]:
-    max_row = int(ws.max_row or 0)
-    max_col = int(ws.max_column or 0)
-    row_cap = _int_payload(payload, "max_row_cap", DEFAULT_MAX_ROW_CAP)
-    col_cap = _int_payload(payload, "max_col_cap", DEFAULT_MAX_COL_CAP)
-    cap_row = _apply_cap(max_row, row_cap)
-    cap_col = _apply_cap(max_col, col_cap)
-    truncated = max_row > cap_row or max_col > cap_col
-
-    cells: List[Dict[str, Any]] = []
-    for r in range(1, cap_row + 1):
-        for c in range(1, cap_col + 1):
-            cell = ws.cell(r, c)
-            if cell.value is None and (formula_ws is None or formula_ws.cell(r, c).value is None):
-                continue
-            cells.append(_cell_payload(ws, r, c, formula_ws=formula_ws))
-
-    header_row = _detect_header_row(ws, cap_row, cap_col, payload=payload)
+def _sheet_to_dict(sheet: Dict[str, Any], *, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Old workbook.json is a derived view; full native facts never inherit caps."""
+    max_row, max_col = int(sheet.get("max_row", 0)), int(sheet.get("max_column", 0))
+    cap_row = _apply_cap(max_row, _int_payload(payload, "max_row_cap", DEFAULT_MAX_ROW_CAP))
+    cap_col = _apply_cap(max_col, _int_payload(payload, "max_col_cap", DEFAULT_MAX_COL_CAP))
+    rows = {}
+    selected = []
+    for cell in sheet["cells"]:
+        if cell["row"] > cap_row or cell["column"] > cap_col:
+            continue
+        if cell["value_state"] == "blank" and not cell.get("formula"):
+            continue
+        selected.append(cell)
+        rows.setdefault(cell["row"], []).append(cell)
+    header_row = _detect_header_row(rows, cap_row, cap_col, payload=payload)
     data_start_row = min(header_row + 1, cap_row + 1)
-
-    headers: List[Dict[str, Any]] = []
-    if cap_row >= 1 and header_row <= cap_row:
-        for c in range(1, cap_col + 1):
-            v = ws.cell(header_row, c).value
-            if v is not None and str(v).strip():
-                headers.append(_cell_payload(ws, header_row, c, formula_ws=formula_ws))
-
-    raw_columns = (
-        [_display(v) for v in _row_values(ws, header_row, cap_col)] if header_row <= cap_row else []
+    header_cells = {cell["column"]: cell for cell in rows.get(header_row, ())}
+    columns = _dedupe_columns(
+        [
+            _display(_legacy_value(header_cells[col])) if col in header_cells else ""
+            for col in range(1, cap_col + 1)
+        ]
     )
-    columns = _dedupe_columns(raw_columns)
-
-    rows_out: List[Dict[str, Any]] = []
-    row_records: List[Dict[str, Any]] = []
-    for r in range(data_start_row, cap_row + 1):
-        flat_row: Dict[str, Any] = {}
-        rich_cells: Dict[str, Any] = {}
-        has_data = False
-        for c in range(1, cap_col + 1):
-            v = ws.cell(r, c).value
-            if v is not None and str(v).strip() != "":
-                has_data = True
-            key = columns[c - 1] if c - 1 < len(columns) else f"col_{c}"
-            flat_row[key] = v
-            rich_cells[key] = v
-        if has_data:
-            rows_out.append(flat_row)
-            row_records.append({"row_index": r, "cells": rich_cells})
-
+    active_rows = [row for row in sorted(rows) if row >= data_start_row]
+    # Only the compatibility projection may become sparse. This avoids a wide
+    # sheet multiplying 100k actual records by 16k absent cells in JSON.
+    sparse = len(active_rows) * cap_col > 250_000
+    rows_out, row_records = [], []
+    for row in active_rows:
+        flat = {} if sparse else dict.fromkeys(columns)
+        for cell in rows[row]:
+            flat[columns[cell["column"] - 1]] = _legacy_value(cell)
+        rows_out.append(flat)
+        row_records.append({"row_index": row, "cells": flat})
     return {
-        "name": ws.title,
+        "name": sheet["sheet"],
+        "sheet_state": sheet["sheet_state"],
         "max_row": max_row,
         "max_column": max_col,
-        "truncated": truncated,
+        "truncated": max_row > cap_row or max_col > cap_col,
         "header_row": header_row,
+        "header_source": "legacy_compatibility_fallback",
         "data_start_row": data_start_row,
         "columns": columns,
-        "headers": headers,
+        "headers": [
+            _cell_payload(cell)
+            for cell in rows.get(header_row, ())
+            if _display(_legacy_value(cell))
+        ],
         "rows": rows_out,
         "row_records": row_records,
-        "cells": cells,
-        "cell_count": len(cells),
+        "rows_representation": "sparse" if sparse else "dense_active_rows",
+        "cells": [_cell_payload(cell) for cell in selected],
+        "cell_count": len(selected),
         "row_count": len(rows_out),
-        "merged_ranges": _merged_ranges(ws, formula_ws),
+        "merged_ranges": sheet.get("merges", []),
+        "facts_sheet_id": sheet["sheet_id"],
     }
 
 
@@ -209,7 +186,7 @@ def convert_file(
     if suffix not in {".xlsx", ".xlsm"}:
         raise ValueError(f"不支持的文件类型：{suffix or '(无后缀)'}，仅支持 .xlsx / .xlsm")
 
-    from openpyxl import load_workbook
+    from app.mod_sdk.host_services import read_workbook_facts
 
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -219,37 +196,56 @@ def convert_file(
     elif str(rule_spec.get("default_output_relpath") or "").endswith(".json"):
         json_path = output_dir / Path(str(rule_spec.get("default_output_relpath"))).name
 
-    wb_val = load_workbook(src_path, read_only=False, data_only=True)
-    wb_formula = load_workbook(src_path, read_only=False, data_only=False)
-    sheets: List[Dict[str, Any]] = []
-    try:
-        for ws in wb_val.worksheets:
-            fws = wb_formula[ws.title] if ws.title in wb_formula.sheetnames else None
-            sheets.append(_sheet_to_dict(ws, fws, payload=payload or {}))
-    finally:
-        wb_val.close()
-        wb_formula.close()
+    scope_values = [str(ctx.get(key) or "") for key in ("tenant_id", "user_id", "mod_id")]
+    scope = json.dumps(scope_values, separators=(",", ":")) if any(scope_values) else ""
+    document = read_workbook_facts(src_path, authorization_scope=scope)
+    sheets = [_sheet_to_dict(sheet, payload=payload or {}) for sheet in document["sheets"]]
 
     payload_data: Dict[str, Any] = {
         "source": src_path.name,
+        "document": document,
         "sheet_count": len(sheets),
         "sheets": sheets,
         "meta": {
             "source": src_path.name,
-            "byte_size": src_path.stat().st_size,
+            "byte_size": document["byte_size"],
             "max_row_cap": _int_payload(payload or {}, "max_row_cap", DEFAULT_MAX_ROW_CAP),
             "max_col_cap": _int_payload(payload or {}, "max_col_cap", DEFAULT_MAX_COL_CAP),
-            "cap_semantics": "0 means unlimited",
+            "cap_semantics": "0 means unlimited; caps apply only to legacy projection",
+            "source_sha256": document["source_ref"]["source_sha256"],
+            "facts_status": document["status"],
         },
     }
-    json_path.write_text(
-        json.dumps(payload_data, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
-    )
+    # Follow the existing staged artifact publication pattern. Streaming avoids
+    # another full-document string; errors leave the old verified file intact.
+    with NamedTemporaryFile(
+        dir=json_path.parent, prefix=".workbook-", suffix=".json", delete=False
+    ) as staging:
+        staged = Path(staging.name)
+    try:
+        with staged.open("w", encoding="utf-8") as handle:
+            json.dump(
+                payload_data,
+                handle,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+                allow_nan=False,
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(staged, json_path)
+    finally:
+        staged.unlink(missing_ok=True)
 
     total_cells = sum(int(s.get("cell_count") or 0) for s in sheets)
     return {
         "output_path": str(json_path),
         "sheet_count": len(sheets),
         "cell_count": total_cells,
+        "document_id": document["document_id"],
+        "source_sha256": document["source_ref"]["source_sha256"],
+        "facts_status": document["status"],
+        "legacy_projection_truncated": any(sheet["truncated"] for sheet in sheets),
         "output_schema": list(rule_spec.get("output_schema") or []),
     }

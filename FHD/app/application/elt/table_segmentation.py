@@ -10,9 +10,11 @@ reason, so callers can prove that nothing was silently dropped.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from itertools import groupby
 from typing import Any
 
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
@@ -53,6 +55,7 @@ ROLE_REASONS = {
     "side_annotation": "表头范围之外的旁注，不纳入业务记录",
     "out_of_schema": "缺少表格主列的值，按汇总或说明行排除",
     "data": "业务记录",
+    "unknown": "未能判定结构角色，保留原坐标供后续识别",
 }
 EXCLUDED_ROLES = frozenset(ROLE_REASONS) - {"data", "header", "parent_header"}
 
@@ -113,6 +116,8 @@ class SheetSegmentation:
     tables: list[SegmentedTable]
     cells: dict[tuple[int, int], tuple[str, str]]
     row_roles: list[dict[str, Any]]
+    source_positions: frozenset[tuple[int, int]]
+    native_regions: tuple[tuple[Merge, str, str], ...] = ()
 
     def groups(self) -> dict[str, list[SegmentedTable]]:
         result: dict[str, list[SegmentedTable]] = {}
@@ -129,11 +134,15 @@ class SheetSegmentation:
         return max(scored, key=lambda item: (item[0], item[1]))[2] if scored else []
 
     def coverage(self) -> dict[str, Any]:
-        counts = Counter(role for role, _ in self.cells.values())
+        assigned = self.source_positions.intersection(self.cells)
+        counts = Counter(self.cells[position][0] for position in assigned)
         return {
-            "nonempty_cells": len(self.cells),
-            "assigned_cells": sum(counts.values()),
-            "unassigned_cells": 0,
+            "scope": "input_nonblank_cells",
+            "nonempty_cells": len(self.source_positions),
+            "assigned_cells": len(assigned),
+            "unassigned_cells": len(self.source_positions - assigned),
+            "unexpected_cells": len(self.cells.keys() - self.source_positions),
+            "unknown_cells": counts["unknown"],
             "by_role": dict(sorted(counts.items())),
         }
 
@@ -141,6 +150,7 @@ class SheetSegmentation:
         return {
             "sheet": self.sheet,
             "tables": [table.public() for table in self.tables],
+            "structure_status": "fallback",
             "coverage": self.coverage(),
             "excluded_rows": [item for item in self.row_roles if item["role"] in EXCLUDED_ROLES],
         }
@@ -197,6 +207,7 @@ class _Sheet:
         self.by_row: dict[int, list[int]] = {}
         for r, c in sorted(self.cells):
             self.by_row.setdefault(r, []).append(c)
+        self.rows = sorted(self.by_row)
 
     def value(self, r: int, c: int, *, through_merge: bool = False) -> Any:
         if (r, c) in self.cells:
@@ -204,6 +215,10 @@ class _Sheet:
         if through_merge and (r, c) in self.covered:
             return self.cells.get(self.covered[(r, c)])
         return None
+
+    def rows_after(self, r: int, end: int):
+        for index in range(bisect_right(self.rows, r), bisect_right(self.rows, end)):
+            yield self.rows[index]
 
     def row_cols(self, r: int, c1: int, c2: int) -> list[int]:
         return [c for c in self.by_row.get(r, ()) if c1 <= c <= c2]
@@ -425,8 +440,11 @@ def _periodic_split(sheet: _Sheet, leaf: int, c1: int, c2: int) -> list[tuple[in
 
 
 class _Segmenter:
-    def __init__(self, sheet: _Sheet, sheet_name: str) -> None:
+    def __init__(
+        self, sheet: _Sheet, sheet_name: str, native_regions: tuple[tuple[Merge, str, str], ...]
+    ) -> None:
         self.sheet = sheet
+        self.native_regions = native_regions
         self.name = sheet_name
         self.tables: list[SegmentedTable] = []
         self.cells: dict[tuple[int, int], tuple[str, str]] = {}
@@ -453,20 +471,21 @@ class _Segmenter:
         )
 
     def run(self) -> SheetSegmentation:
-        rows = sorted(self.sheet.by_row)
+        rows = self.sheet.rows
+        source_positions = frozenset(self.sheet.cells)
         if rows:
             for c1, c2 in _column_bands(self.sheet):
                 self.segment_band(rows[0], rows[-1], c1, c2, allow_split=True)
         for (r, c), _value in self.sheet.cells.items():
             if (r, c) not in self.cells:
-                self.cells[(r, c)] = ("note", "")
+                self.cells[(r, c)] = ("unknown", "")
                 self.row_roles.append(
                     {
                         "row": r,
                         "columns": [c, c],
-                        "role": "note",
+                        "role": "unknown",
                         "table_id": "",
-                        "reason": ROLE_REASONS["note"],
+                        "reason": ROLE_REASONS["unknown"],
                     }
                 )
         first_leaf: dict[str, int] = {}
@@ -499,13 +518,20 @@ class _Segmenter:
                         item["role"] = "repeated_header"
                         item["reason"] = ROLE_REASONS["repeated_header"]
         self.row_roles.sort(key=lambda item: (item["row"], item["columns"][0]))
-        return SheetSegmentation(self.name, self.tables, self.cells, self.row_roles)
+        return SheetSegmentation(
+            self.name,
+            self.tables,
+            self.cells,
+            self.row_roles,
+            source_positions,
+            self.native_regions,
+        )
 
     def _next_rows(
         self, r: int, end: int, c1: int, c2: int, limit: int = 3
     ) -> list[tuple[int, str]]:
         found: list[tuple[int, str]] = []
-        for nr in range(r + 1, end + 1):
+        for nr in self.sheet.rows_after(r, end):
             kind = _row_kind(self.sheet, nr, c1, c2)
             if kind == "blank":
                 continue
@@ -547,7 +573,7 @@ class _Segmenter:
         while r <= end:
             kind = _row_kind(self.sheet, r, c1, c2)
             if kind == "blank":
-                r += 1
+                r = next(self.sheet.rows_after(r, end), end + 1)
                 continue
             starts_table = self._is_leaf(r, end, c1, c2) or (
                 kind in {"header", "weekday_header", "single", "data", "banner"}
@@ -824,7 +850,7 @@ class _Segmenter:
                 continue
             self.tables.remove(table)
             lo, hi = table.min_col, table.max_col
-            for r in range(first_row, last_row + 1):
+            for r in self.sheet.rows_after(first_row - 1, last_row):
                 for c in self.sheet.row_cols(r, lo, hi):
                     self.cells.pop((r, c), None)
             self.row_roles = [
@@ -877,9 +903,135 @@ class _Segmenter:
         table.data_rows = kept
 
 
-def segment_sheet(sheet_name: str, cells: Grid, merges: list[Merge]) -> SheetSegmentation:
-    """Segment one sheet. ``cells`` maps 1-based (row, col) to raw values."""
-    return _Segmenter(_Sheet(cells, merges), sheet_name).run()
+def segment_sheet(
+    sheet_name: str,
+    cells: Grid,
+    merges: list[Merge],
+    *,
+    native_regions: tuple[tuple[Merge, str, str], ...] = (),
+) -> SheetSegmentation:
+    """Segment one sheet; legacy table roles remain fallback interpretations."""
+    return _Segmenter(_Sheet(cells, merges), sheet_name, native_regions).run()
+
+
+def worksheet_native_regions(worksheet: Any) -> tuple[tuple[Merge, str, str], ...]:
+    """Read explicit finite Table/name ranges; never evaluate a defined-name formula."""
+    from openpyxl.formula.tokenizer import TokenizerError
+    from openpyxl.utils.cell import range_boundaries
+
+    result: set[tuple[Merge, str, str]] = set()
+
+    def add(ref: str, basis: str, name: str) -> None:
+        try:
+            c1, r1, c2, r2 = range_boundaries(ref)
+        except (ValueError, TypeError):
+            return
+        if r1 is None or c1 is None or r2 is None or c2 is None:
+            return
+        if 1 <= r1 <= r2 <= 1048576 and 1 <= c1 <= c2 <= 16384:
+            result.add(((r1, c1, r2, c2), basis, name))
+
+    for table in getattr(worksheet, "tables", {}).values():
+        add(table.ref, "excel_table", table.name)
+    for owner in (worksheet.parent, worksheet):
+        for name in getattr(owner, "defined_names", {}).values():
+            try:
+                if not name.attr_text or name.type != "RANGE":
+                    continue
+                for sheet, ref in name.destinations:
+                    if sheet == worksheet.title:
+                        add(ref, "defined_name", name.name)
+            except (ValueError, TypeError, IndexError, TokenizerError):
+                # Dynamic/unparseable names are not finite region evidence.
+                continue
+    return tuple(sorted(result))
+
+
+def iter_structure_candidates(segmentation: SheetSegmentation):
+    """Enumerate alternative structural candidates, not approved business mappings.
+
+    Native ranges, legacy Segmenter tables, and unresolved occupied runs coexist.
+    The latter retain coordinates even when fallback roles exclude a row.
+    """
+    from openpyxl.utils import get_column_letter
+
+    def candidate(bounds: Merge, basis: str, source: str, headers=()):
+        r1, c1, r2, c2 = bounds
+        ref = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+        return {
+            "candidate_id": f"{segmentation.sheet}!{ref}:{basis}:{source}",
+            "sheet": segmentation.sheet,
+            "range": ref,
+            "basis": basis,
+            "source": source,
+            "header_rows": list(headers),
+            "status": "candidate",
+        }
+
+    for bounds, basis, name in segmentation.native_regions:
+        yield candidate(bounds, basis, name)
+    table_bounds = {}
+    for table in segmentation.tables:
+        bounds = (
+            table.header_rows[0] if table.header_rows else table.leaf_row,
+            table.min_col,
+            max(table.end_row, table.leaf_row),
+            table.max_col,
+        )
+        table_bounds[table.table_id] = bounds
+        yield candidate(bounds, "segmenter_fallback", table.table_id, table.header_rows)
+
+    # Sparse row runs for every position not reliably attributed to a table body/header.
+    # Do not inflate a disconnected sparse sheet into one enormous rectangle.
+    runs: list[Merge] = []
+    for row, col in sorted(segmentation.source_positions):
+        role, table_id = segmentation.cells.get((row, col), ("unknown", ""))
+        assigned_bounds = table_bounds.get(table_id)
+        if role in {"data", "header", "parent_header", "repeated_header"} and assigned_bounds:
+            r1, c1, r2, c2 = assigned_bounds
+            if r1 <= row <= r2 and c1 <= col <= c2:
+                continue
+        if runs and runs[-1][0] == row and runs[-1][3] + 1 == col:
+            r1, c1, r2, _ = runs[-1]
+            runs[-1] = (r1, c1, r2, col)
+        else:
+            runs.append((row, col, row, col))
+    # Combine identical column spans on consecutive rows, without creating blank-gap rows.
+    active: dict[tuple[int, int], Merge] = {}
+    for row, row_runs in groupby(runs, key=lambda rect: rect[0]):
+        current: dict[tuple[int, int], Merge] = {}
+        for r1, c1, r2, c2 in row_runs:
+            key = (c1, c2)
+            previous = active.pop(key, None)
+            if previous is not None and previous[2] == row - 1:
+                current[key] = (previous[0], c1, r2, c2)
+            else:
+                if previous is not None:
+                    yield candidate(previous, "unresolved_occupied", "")
+                current[key] = (r1, c1, r2, c2)
+        for bounds in active.values():
+            yield candidate(bounds, "unresolved_occupied", "")
+        active = current
+    for bounds in active.values():
+        yield candidate(bounds, "unresolved_occupied", "")
+
+
+def validate_candidate_selection(
+    offered: list[dict[str, Any]], selected_ids: list[str]
+) -> list[dict[str, Any]]:
+    """Validate only candidate IDs actually offered to a model; never accept new coordinates."""
+    by_id = {item["candidate_id"]: item for item in offered}
+    if (
+        not isinstance(selected_ids, list)
+        or len(by_id) != len(offered)
+        or any(not isinstance(item, str) for item in selected_ids)
+    ):
+        raise ValueError("invalid structure candidate contract")
+    if len(set(selected_ids)) != len(selected_ids) or any(
+        item not in by_id for item in selected_ids
+    ):
+        raise ValueError("duplicate or unoffered structure candidate")
+    return [by_id[item] for item in selected_ids]
 
 
 def worksheet_grid(worksheet: Any) -> tuple[Grid, list[Merge]]:
@@ -932,7 +1084,10 @@ __all__ = [
     "ROLE_REASONS",
     "SegmentedTable",
     "SheetSegmentation",
+    "iter_structure_candidates",
     "review_grid",
     "segment_sheet",
+    "validate_candidate_selection",
     "worksheet_grid",
+    "worksheet_native_regions",
 ]

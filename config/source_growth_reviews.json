@@ -99,14 +99,14 @@
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py",
-      "base_blob": "012f67f48d91ecbb411e8e6e2f8c4840a0c82f62",
-      "head_blob": "5dae15e601a42cc00930f9cacf1c45ed4366f3ae",
-      "before_lines": 1255,
-      "after_lines": 1285,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。对齐统一能力的参数结构与当前主线owned文件、ELT预演及受控Excel查询契约；补充导出行数、对象类型和每行字段上限，真实稀疏并集及内容预算由独立轻量guard在物化前核验。",
-      "boundary": "仅声明现役输入合同，继续拒绝越权文件、任意Pandas执行与未绑定预演参数；默认工具权限和审批合同保持，新增导出预算不代表全局HTTP body限制。",
-      "validation": "输入schema、Excel查询、ELT审批与owned文件负例已执行；导出62项定向回归通过，新增25项经独立重跑，包含DataFrame前拒绝、稀疏并集、UTF-8预算、原子发布及失败清理；最终类型和SSOT门禁须通过。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "base_blob": "5dae15e601a42cc00930f9cacf1c45ed4366f3ae",
+      "head_blob": "3cb40997f0d2bc3743bc3a35ee4d5aa6c1c516c0",
+      "before_lines": 1285,
+      "after_lines": 1298,
+      "reason": "Excel读取、结构和聚合参数沿现役catalog_excel单一来源投影；删除重复schema，同时保留原生分页、原件摘要和无表头读入参数。",
+      "boundary": "仅现有ToolSpec读合同适配，不新增执行能力或放宽权限；通用host条件schema能力没有在此改变。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。",
+      "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
@@ -279,14 +279,14 @@
     },
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
-      "base_blob": "32c357b55e686c13edbce18b748491dadfd23a94",
-      "head_blob": "979d427a2ef334a94434bf30f0e0403f20e7655a",
-      "before_lines": 1580,
-      "after_lines": 1591,
-      "reason": "本次精确变更净增11行，复用既有FileLock为租户批次账本的完整读改写加跨进程互斥，并在原文件损坏时保留回执、停止写入。",
-      "boundary": "保持原JSON账本、租户/Mod/账号归属、worker所有权与审批后的原计划核对；数据库回执读回不占账本锁。未知结果不重放，业务撤回与知识回执规则保持。",
-      "validation": "本次服务/恢复71项、原stale_pending隔离复验2项及真实spawn交叉写入3项均通过，共76个不同用例；初轮2个子进程就绪超时保留记录。Ruff与格式通过，mypy未完成，最终以同一提交CI为准。",
-      "follow_up": "请沿既有架构评审核对这11行的职责和并发边界；复用现有账本，不另造调度或持久化系统。本记录是评审请求，不代表人工批准或生产验收。",
+      "base_blob": "979d427a2ef334a94434bf30f0e0403f20e7655a",
+      "head_blob": "c0c8f23a9976b4fbad398c628ffb81ce929443ce",
+      "before_lines": 1591,
+      "after_lines": 1593,
+      "reason": "AI-first表格识别保留模型不确定性和需确认状态，不以规则候选数量覆盖有效模型判断。",
+      "boundary": "仍复用原EltRun、租约、预演、批准与提交链；没有新运行时或业务账本。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。",
+      "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/batch_continuation.py": {
@@ -327,14 +327,14 @@
     },
     "FHD/app/application/elt/table_segmentation.py": {
       "base_file": "FHD/app/application/elt/table_segmentation.py",
-      "base_blob": "92f296c8d6c445c2a5701f3b0de12a965480119c",
-      "head_blob": "33c6bcf4d09a5c5994fe672c73742b1559892c7b",
-      "before_lines": 932,
-      "after_lines": 938,
-      "reason": "Review request only: Recognize whitespace-separated uppercase-RMB total footers as summary rows so they are excluded from imported business data.",
-      "boundary": "Only compacted text from the first three cells of short candidate rows affects this structural classification, with no change to persistence or model authorization.",
-      "validation": "Requires test_table_segmentation.py spaced-total footer and total-row regressions; full CI and human architecture review remain outstanding.",
-      "follow_up": "Add a near-miss regression for short product names containing an uppercase-amount marker so substring matching cannot demote legitimate data rows.",
+      "base_blob": "33c6bcf4d09a5c5994fe672c73742b1559892c7b",
+      "head_blob": "9d68577ef260bdac239e3c3280f7645c6c749478",
+      "before_lines": 938,
+      "after_lines": 1093,
+      "reason": "在原Segmenter职责内接入原生Table/名称范围、未归属区域稀疏候选及非法候选拒绝，保留原件坐标和未知内容。",
+      "boundary": "格式结构候选和业务模型解释分开；边界校验不推断客户业务语义，不引入关键词业务旁路。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。",
+      "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/employee_runtime/task_continuity.py": {
@@ -399,14 +399,14 @@
     },
     "FHD/app/application/reviewed_excel_structural_index.py": {
       "base_file": "FHD/app/application/reviewed_excel_structural_index.py",
-      "base_blob": "b57e107324ced90a96bd01d53d53b2be74d59cdf",
-      "head_blob": "e24a9da5c8426d521654c20b2c0be25ea71a4d65",
-      "before_lines": 909,
-      "after_lines": 911,
-      "reason": "Review request only: Serialize structural workbook indexing with the shared workbook-I/O lock to avoid concurrent reader/mutator interference.",
-      "boundary": "One shared import and one function decorator; structural indexing semantics remain unchanged.",
-      "validation": "Validation scope: Workbook structural-index and concurrent I/O regressions. Full integration CI and human architecture review remain outstanding; this request is not approval.",
-      "follow_up": "Keep all workbook I/O synchronization in the shared locking primitive.",
+      "base_blob": "e24a9da5c8426d521654c20b2c0be25ea71a4d65",
+      "head_blob": "0e88b11721c96f38e3b2b67c053f8b3d94ddff8a",
+      "before_lines": 911,
+      "after_lines": 924,
+      "reason": "将原结构索引全矩形遍历替换为实际单元格扫描；完整目录与40KB导航预算、截断状态、源SHA和原生回读路径统一。",
+      "boundary": "只压缩导航，原生事实不得被预览预算删除；保留原有结构消费者，不新建全局缓存。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。",
+      "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/reviewed_excel_template.py": {
@@ -1139,6 +1139,18 @@
       "boundary": "仅扩展既有事务内状态与事件写入，不新增并行存储或放宽原 claim/租约校验；未绑定候选的 life 状态变更不得替代已批准执行的 portfolio 停止。",
       "validation": "覆盖原状态 CAS、重复事件幂等、授权过期与跨进程恢复回归，并在原生 PostgreSQL 工作流中执行；全仓原生测试与客户签收仍待完成。",
       "follow_up": "请 @42433422 复核 revision 比较、事件不可变性与 SLO 证据回读的边界；后续评估状态存取与治理职责拆分；本记录是评审请求，不代表人工审批。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/tools/workflow_tools/excel_analysis.py": {
+      "base_file": "FHD/app/application/tools/workflow_tools/excel_analysis.py",
+      "base_blob": "f2655bec21380b866fff70f5c1483d907864e966",
+      "head_blob": "fa3d2f475dfaa08caf7e348490232d8b055ee0b2",
+      "before_lines": 600,
+      "after_lines": 821,
+      "reason": "扩展现有只读工具实现原生分页/范围回读，并适配3682的无表头读取、物理求和、表头需确认和导出格式合同。",
+      "boundary": "每页沿用原workflow_file_snapshot身份与当前权限核验；不吸收3682桌面/父任务/写表范围，不扩通用host校验器。",
+      "validation": "集成源码d65fa448476a55ffdf191fcd116cee7e2857a946的27模块回归440 passed/1 skipped（61.50s），包含实际稀疏原件、页间撤权、ERP注册链、完整复合键、历史身份拒绝和OOXML改名绕过负控。12条依赖分层合同通过。可选LibreOffice资格测试另行运行exit137，未计重算PASS；最终CI、真实客户原件及正式部署仍分别取证。 默认读取同样在表头/pandas/openpyxl前完成归档审计；末轮106项通过（15.64s），五个注册动作恶意ZIP负控和合法CSV/XLS路由均覆盖。",
+      "follow_up": "这是用户要求将3695集成后合入main所需的精确源码增长评审请求；提交后继续核对当前base/head/blob及正式CI。记录不是人工评审通过，后续同责变动继续归现役模块。",
       "review_owner": "@42433422"
     }
   }

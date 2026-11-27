@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import column_index_from_string
 from openpyxl.utils.cell import coordinate_from_string
 
+from app.infrastructure.document_parsing.archive_safety import inspect_office_archive
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 FormulaFacts = dict[tuple[str, str], dict[str, Any]]
@@ -51,6 +52,7 @@ def formula_facts(body: bytes) -> FormulaFacts:
     """XML formula text and cached `<v>`, including cells openpyxl drops."""
     from defusedxml import ElementTree as SafeET
 
+    inspect_office_archive(body)
     ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
     rid_attr = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
     facts: FormulaFacts = {}
@@ -134,6 +136,7 @@ from app.application.reviewed_excel_io_lock import serialize_workbook_io
 
 @serialize_workbook_io
 def load_cached_workbook(body: bytes):
+    inspect_office_archive(body)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:

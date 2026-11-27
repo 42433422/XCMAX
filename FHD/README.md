@@ -105,6 +105,29 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 
 ELT 仍沿原 `EltRun` / `EltRunRow` 与 Codex、LangGraph 的批准任务执行，不新增调度器或状态账本。重复表头和天然后缀碰撞由现有表头生成器消歧，原标签、列坐标和表头行保存在来源信息中，字段含义继续由模型判断。SQL 保存点、加密、文件锁、表格解析和重试均来自上述固定组件；保留的产品适配只负责原租户/账号、审批版本、行数守恒和业务回执，通用库不能替代这些产品事实。
 
+### 通用表格事实与读取支持
+
+`app.domain.tabular_facts` 定义 `tabular-facts-v1`；`app.application.tabular_workbook` 编排已授权 Excel 快照，格式读取器归 `infrastructure`，员工经 `host_services` 薄适配。文档与位置 ID 绑定原件 SHA256、解析器版本和授权作用域，ID 本身不授予读取权限。原 `ParsedDataset`、`workbook.json` 和 Office 工具返回继续提供兼容投影，原始事实与模型推断分别保留。
+
+| 输入 | 复用来源、现有 uv.lock 版本与许可 | 本次读取范围与明确限制 |
+|---|---|---|
+| XLSX / XLSM | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)（MIT）及标准库 OOXML ZIP（PSF-2.0） | 实际原生单元格、全部工作表目录、类型、公式/缓存、样式和原生对象；宏和外部链接仅作来源证据，不执行；图表页与未解释对象明确 partial。 |
+| CSV / TSV | Python 标准库 `csv`（PSF-2.0） | 共用流式读取，保留重复/空表头、引号内换行、空白及物理行区间；兼容列名消歧不覆盖原表头。 |
+| JSON / XML | 标准库 `json`（PSF-2.0）、[defusedxml 0.7.1](https://github.com/tiran/defusedxml)（PSF-2.0） | 原生嵌套树、JSON Pointer/XML 节点路径；拒绝重复 JSON 键、非有限数、DTD/外部实体及超预算结构。 |
+| DOCX | [python-docx 1.2.0](https://github.com/python-openxml/python-docx)（MIT） | 段落/表格原顺序、合并、嵌套表格、页眉页脚及 OOXML 来源；绘图与分页渲染不计完整支持。 |
+| PPTX | [python-pptx 1.0.2](https://github.com/scanny/python-pptx)（MIT） | 幻灯片、形状、表格合并、备注及 EMU 坐标；组内坐标保留原坐标系，不声称像素渲染等价。 |
+| 文本 PDF | [pdfplumber 0.11.10](https://github.com/jsvine/pdfplumber)（MIT）、[pypdf 6.21.4](https://github.com/py-pdf/pypdf)（BSD-3-Clause） | 逐页文字/表格几何与原件来源；无文本页要求 OCR，复杂版面识别不以文字提取成功代替。 |
+| HTML | [lxml 6.1.3](https://github.com/lxml/lxml)（BSD-3-Clause） | 静态 DOM、节点路径及 rowspan/colspan；禁网络解析、不执行脚本，动态内容缺失明确 partial。 |
+| 复杂版面 / 扫描 PDF / 图片 | [Docling 2.150.1](https://github.com/docling-project/docling)（MIT）、[RapidOCR 1.4.4](https://github.com/RapidAI/RapidOCR)（Apache-2.0）；PP-StructureV3 准入见下文 | Docling 原生导出与 provenance 保留；混合 PDF 按页路由；缺结构后端不能将文本兜底标为完整表格。真实 OCR 权重与中文标注集尚待资格验证。 |
+| XLS | [xlrd 2.0.2](https://github.com/python-excel/xlrd)（BSD-3-Clause） | 保留既有 ELT 读取/转换入口；尚未证明与 XLSX 原生事实层逐格等价，不能据此宣称统一保真。 |
+| XLSB / ODS / Parquet / Arrow | 本次未引入新依赖 | 新事实读取接口明确 unsupported；Calamine/Arrow 仍为候选，不能把候选或旧 SQL 查询能力计作格式验收。 |
+
+运行库版本保持现有依赖锁；新增 HTML 适配的开发类型检查采用固定 [types-lxml 2026.2.16](https://pypi.org/project/types-lxml/2026.2.16/)（Apache-2.0）及锁定传递类型包，不升级运行库。格式适配只增加来源、预算、完整度与兼容投影，不自行实现计算引擎、调度器或第二业务库。Word/PPT 旧二进制格式沿既有转换能力，缺转换后端须拒绝，不能改后缀冒充新格式。
+
+Excel 原件读取上限 40 MiB，压缩包先检查解压体积、成员、XML 实体与合并物化预算；完整原生事实读取另设 500000 个实际单元格加合并面积的物化上限，预算不足明确拒绝或报告 partial。ELT 仍复用 `ParsedRows` 磁盘分页，远坐标不扫描整片空矩形。导航只用于定位：`excel_analysis.read` 的原生分页/范围回读重新核对当前账号、租户、文件版本与 SHA256，40 KB 导航预算、Office 结果预览预算和业务筛选都不得静默删除原始事实。公式缓存存在只代表原件携带该值，`data_only` 不证明重算，读取不执行公式、宏、DDE 或外部链接。 当前原生分页每页重新读取授权快照，没有持久化事实缓存，因此大文件分页成本随整份原件增长，不能据小型稀疏文件的读取耗时宣称恒定分页延迟。
+
+实际消费者为 ELT 解析、Excel/CSV/Word/PPT/PDF 员工、Office 解析、Agent 附件/本地文件和 RAG 的既有文档路由；模板与 QC 保留原独立核验链。回滚使用原 Git 版本与原入口合同，不修改历史原件、审批或回执。`verify_tabular_migration_evidence.py` 核对迁移证据身份和完整性；合成格式回归只能证明对应代码路径，不能替代客户原件、原考试、实际公式重算、真实模型/权重留出集、正式部署或客户签收。
+
 Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回执，原样携带 `run_id`、`chunk_index`、`idempotency_key`，并返回 `executed_rows` 与该分片行数相同、`committed: true`。202、204、明确失败、无回执或身份/行数不符进入待核对，不根据响应猜测完成或再次发送。回执的 `business_verified: false` 明确表示接收方自报提交尚不等于其业务数据库已独立对账；空分片连接测试只证明连通性。文件回读亦只证明产物字节与批准内容一致，`formulas_recalculated: false` 不冒充公式重算，客户原件 B31 对账与实际部署验收仍需另取证据。
 
 生产稳定性继续使用既有 Prometheus / Grafana 与原发布流程，组件固定如下：
@@ -131,6 +154,8 @@ AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolAct
 桌面语音沿用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.28.1)（BSD-3-Clause）和 websockets 16.1（BSD-3-Clause），由 XCAGI 绑定配置的出站地址。通话断句使用 [Pipecat Smart Turn v3.2 CPU](https://huggingface.co/pipecat-ai/smart-turn-v3/commit/f766f81d3cfdf7737ac64aad813d91bbfd56bf93)（BSD-2-Clause），桌面后端构建校验并打包固定权重。
 
 扫描件与图片兜底复用 [RapidOCR](https://github.com/RapidAI/RapidOCR) `rapidocr-onnxruntime` `1.4.4`（Apache-2.0，ONNX，无 torch）：仅在 pdfplumber 提取不到文本的页面渲染后识别，`XCAGI_PDF_OCR=off` 可关闭，默认最多处理 30 个空页；同时支持直接导入 png/jpg/webp/bmp 图片。文本版 PDF 仍走 pdfplumber 的文本与表格。
+
+ELT 图片表格候选复用 [PaddleOCR PP-StructureV3](https://github.com/PaddlePaddle/PaddleOCR)（Apache-2.0；模型许可须另验）。默认离线初始化要求 `FHD_ETL_TABLE_STRUCTURE_MODEL_MANIFEST`，JSON 包含 `paddleocr_version` 与 `models`（键为 `table_structure_ocr._MODEL_ENV` 的模型参数名，每项含来源 `source` 和目录 `sha256`）。目录摘要为排序后相对路径及各文件 SHA256 二元组的紧凑 UTF-8 JSON 再取 SHA256；缺少任何目录、版本不符或摘要不符时不启用结构模型。只有运维显式设置 `FHD_ETL_TABLE_STRUCTURE_ALLOW_DOWNLOAD=1` 才允许供应方下载模型，不属于已验收离线配置。实际 PaddleOCR/PaddleX/权重版本仍须按部署资格锁定。RapidOCR 只提供文本证据，结构降级结果需人工确认；不把候选标为已验证表格。
 
 知识库网页导入复用 [trafilatura](https://github.com/adbar/trafilatura) `2.3.1`（Apache-2.0，纯 Python）提取正文与标题，URL 导入与本地 `.html/.htm` 文件共用同一实现；联网复用锁定的 [urllib3](https://github.com/urllib3/urllib3/tree/2.8.0) `2.8.0`（MIT）连接池，把经全部 DNS 结果校验的数字 IP 作为连接目标，保留原域名的 Host、TLS SNI 与证书校验，不继承环境代理。产品侧只保留 SSRF 防护（拒绝内网/回环/保留地址、逐跳校验重定向、5MB/15s 限制）与租户隔离胶水；真实传输层回归确认路径中的地址不能更改连接目标。`XCAGI_KB_ALLOW_PRIVATE_URLS=1` 仅用于受控内网调试。
 

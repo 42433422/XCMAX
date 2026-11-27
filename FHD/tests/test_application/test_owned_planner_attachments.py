@@ -104,6 +104,38 @@ def test_rejects_expired_session_and_byte_tampering(owned):
         resolve_attachment_inputs(context)
 
 
+def test_native_fact_next_page_rechecks_original_account_ownership(owned):
+    from openpyxl import Workbook
+
+    from app.db.session import get_db
+    from app.domain.shared_services.tools_workflow_excel_ocr import (
+        _registered_router_excel_analysis,
+    )
+
+    context, csv_file = owned
+    file = csv_file.with_suffix(".xlsx")
+    workbook = Workbook()
+    workbook.active.append([0, False, "last"])
+    workbook.save(file)
+    body = file.read_bytes()
+    tenant = int(context["tenant_id"])
+    with tenant_scope(tenant), get_db() as db:
+        upload = db.query(EltUpload).filter(EltUpload.id == "owned-file").one()
+        upload.storage_path, upload.file_name, upload.suffix = str(file), "facts.xlsx", ".xlsx"
+        upload.size_bytes, upload.sha256 = len(body), hashlib.sha256(body).hexdigest()
+    args = {"file_path": "owned-file", "view": "cells", "sheet_name": "Sheet", "max_rows": 1}
+    with tenant_scope(tenant):
+        first = _registered_router_excel_analysis("read", args, context, "shared", "")
+    assert first["success"] is True and first["cells"][0]["value"] == 0
+    args.update(offset=first["next_offset"], expected_sha256=first["source_sha256"])
+    with tenant_scope(tenant), get_db() as db:
+        db.query(EltUpload).filter(EltUpload.id == "owned-file").one().owner_user_id = 99
+    with tenant_scope(tenant):
+        denied = _registered_router_excel_analysis("read", args, context, "shared", "")
+    assert denied["success"] is False
+    assert denied["error_code"] == "spreadsheet_access_denied"
+
+
 def test_legacy_paths_never_become_owned_artifacts():
     assert (
         resolve_attachment_inputs(

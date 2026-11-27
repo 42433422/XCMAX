@@ -128,7 +128,7 @@ async def _vlm_describe_image(
         res = await asyncio.wait_for(
             call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - employee LLM adapters expose provider-specific errors
+    except RECOVERABLE_ERRORS:
         return None
     if not isinstance(res, dict) or not res.get("ok"):
         return None
@@ -157,6 +157,9 @@ async def convert_file(
     if suffix != ".pdf":
         raise ValueError(f"不支持的文件类型：{suffix or '(无后缀)'}，仅支持 .pdf")
 
+    from app.infrastructure.document_parsing.native import read_native_document
+
+    document_facts = read_native_document(src_path)
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     txt_path = output_dir / "document_full.txt"
@@ -227,6 +230,7 @@ async def convert_file(
         },
         "images_index": str(images_index_path.name),
     }
+    meta["document_facts"] = document_facts
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     if output_path.suffix.lower() == ".json" and output_path != meta_path:
         output_path.write_text(meta_path.read_text(encoding="utf-8"), encoding="utf-8")

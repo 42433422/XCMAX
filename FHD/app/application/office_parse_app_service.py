@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import codecs
 import logging
+import os
 import re
 import time
 from pathlib import Path
@@ -13,7 +15,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 OFFICE_UPLOAD_SUFFIXES = frozenset(
-    {".xlsx", ".xlsm", ".xls", ".csv", ".docx", ".doc", ".pdf", ".pptx", ".ppt"}
+    {".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".docx", ".doc", ".pdf", ".pptx", ".ppt"}
 )
 
 EMPLOYEE_BY_SUFFIX: dict[str, str] = {
@@ -21,6 +23,7 @@ EMPLOYEE_BY_SUFFIX: dict[str, str] = {
     ".xlsm": "excel-full-read-employee",
     ".xls": "excel-full-read-employee",
     ".csv": "csv-full-read-employee",
+    ".tsv": "csv-full-read-employee",
     ".docx": "word-full-read-employee",
     ".doc": "word-full-read-employee",
     ".pdf": "pdf-full-read-employee",
@@ -105,6 +108,8 @@ def read_workspace_output_files(
         workspace_root as configured_workspace_root,
     )
 
+    if type(max_bytes) is not int or not 0 < max_bytes <= 2_097_152:
+        raise ValueError("Office output preview budget must be between 1 and 2097152 bytes")
     base = configured_workspace_root()
     out: list[dict[str, Any]] = []
     for raw in file_paths:
@@ -129,12 +134,27 @@ def read_workspace_output_files(
             out.append({"path": rel, "kind": "text", "error": "invalid_path"})
             continue
         try:
-            blob = path.read_bytes()[:max_bytes]
+            with path.open("rb") as handle:
+                before = os.fstat(handle.fileno())
+                sampled = handle.read(max_bytes + 1)
+                after = os.fstat(handle.fileno())
         except OSError:
             out.append({"path": rel, "kind": "text", "error": "read_failed"})
             continue
+        if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            out.append({"path": rel, "kind": "text", "error": "output_changed_during_read"})
+            continue
+        truncated = len(sampled) > max_bytes
+        blob = sampled[:max_bytes]
+        evidence = {
+            "byte_size": after.st_size,
+            "read_bytes": len(blob),
+            "truncated": truncated,
+            "complete": not truncated,
+            "status": "partial" if truncated else "complete",
+        }
         suffix = path.suffix.lower()
-        if suffix == ".json":
+        if suffix == ".json" and not truncated:
             import json
 
             try:
@@ -144,19 +164,35 @@ def read_workspace_output_files(
                         "path": rel,
                         "kind": "json",
                         "json": parsed if isinstance(parsed, dict) else {"value": parsed},
+                        **evidence,
                     }
                 )
                 continue
             except json.JSONDecodeError:
                 pass
-        text = blob.decode("utf-8", errors="replace")
-        out.append({"path": rel, "kind": "text", "text": text})
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        text = decoder.decode(blob, final=not truncated)
+        item = {"path": rel, "kind": "text", "text": text, **evidence}
+        if truncated:
+            item.update(
+                {
+                    "error": "output_truncated",
+                    "readback_required": True,
+                    "readback_path": rel,
+                    "next_byte_offset": len(blob) - len(decoder.getstate()[0]),
+                    "source_format": suffix.lstrip("."),
+                    "json_parse_status": "not_attempted_truncated"
+                    if suffix == ".json"
+                    else "not_applicable",
+                }
+            )
+        out.append(item)
     return out
 
 
 _OFFICE_ACTION_RE = re.compile(r"导入|入库|解析办公")
 _OFFICE_PATH_RE = re.compile(
-    r"@?((?:[^\s'\"<>])+?\.(?:xlsx|xlsm|xls|csv|docx|doc|pdf|pptx|ppt))"
+    r"@?((?:[^\s'\"<>])+?\.(?:xlsx|xlsm|xls|csv|tsv|docx|doc|pdf|pptx|ppt))"
     r"(?=$|[\s,，。.!！?？]|导入|入库)",
     re.IGNORECASE,
 )
