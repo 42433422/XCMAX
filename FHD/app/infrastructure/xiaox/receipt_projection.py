@@ -189,7 +189,7 @@ def refresh_xiaox_receipts(
         return current or run
     execution = queue.get(run.run_id)
     if execution is not None and (
-        execution.state not in {"waiting_approval", "paused", "blocked"}
+        execution.state not in {"waiting_approval", "waiting_input", "waiting_auth", "paused", "blocked"}
         or execution.lease_owner
         or execution.lease_expires_at
     ):

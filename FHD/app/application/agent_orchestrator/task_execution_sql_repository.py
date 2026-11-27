@@ -18,6 +18,7 @@ from app.application.agent_orchestrator.task_execution_models import (
     ExecutionState,
     _deadline,
     _task_id_of,
+    xiaox_queue_outcome,
 )
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.domain.task_lifecycle.adapters import (
@@ -504,14 +505,8 @@ class SQLAlchemyTaskExecutionRepository:
             and (result.get("goal_coverage") or {}).get("completed") is True
         ):
             return None
-        target = {"completed": "succeeded", "failed": "failed", "blocked": "failed"}.get(
-            projected.status, "waiting_approval"
-        )
-        code = (
-            "needs_verification"
-            if result.get("reconciliation_required")
-            else "xiaox_receipt_projection"
-        )
+        target, code = xiaox_queue_outcome(result)
+        code = code or "xiaox_receipt_projection"
         now = utc_now_iso()
         with self.transaction() as db, run_repository.transaction(read_only=True) as runs:
             if db.get_bind() is not runs.get_bind():

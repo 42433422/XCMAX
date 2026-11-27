@@ -437,3 +437,33 @@ def test_real_step_preserves_accepted_wait_without_inventing_unknown(actor, stat
     ) is uncertain
     assert len(calls) == 1
     assert queue.claim("another-worker", lease_seconds=30) is None
+
+
+@pytest.mark.parametrize(
+    ("receipt", "expected"),
+    [
+        ({"execution_state": "paused"}, ("paused", "")),
+        ({"execution_state": "blocked"}, ("blocked", "")),
+        ({"execution_state": "waiting_user", "needs_user_input": True}, ("waiting_input", "")),
+        ({"execution_state": "waiting_user", "requires_token": True}, ("waiting_auth", "")),
+        ({"execution_state": "waiting_user", "pending_approval": True}, ("waiting_approval", "")),
+        ({"execution_state": "waiting_input"}, ("waiting_input", "")),
+        ({"execution_state": "waiting_auth"}, ("waiting_auth", "")),
+        ({"execution_state": "waiting_approval"}, ("waiting_approval", "")),
+        ({"execution_state": "running"}, ("waiting_approval", "")),
+        ({"execution_state": "cancelled"}, ("cancelled", "")),
+        ({"execution_state": "rejected"}, ("rejected", "")),
+        ({"execution_state": "unknown"}, ("unknown", "needs_verification")),
+        ({"execution_state": "partial"}, ("unknown", "needs_verification")),
+        ({"execution_state": "blocked", "reconciliation_required": True}, ("unknown", "needs_verification")),
+        ({"execution_state": "completed", "ok": False}, ("unknown", "needs_verification")),
+        ({"execution_state": "completed", "ok": True, "reconciliation_required": True}, ("unknown", "needs_verification")),
+        ({"execution_state": "completed", "ok": True}, ("succeeded", "")),
+        ({"execution_state": "failed", "error_code": "model_error"}, ("failed", "model_error")),
+        ({"execution_state": "unexpected"}, ("unknown", "needs_verification")),
+    ],
+)
+def test_xiaox_queue_outcome_preserves_receipt_state(receipt, expected):
+    from app.application.agent_orchestrator.task_execution_models import xiaox_queue_outcome
+
+    assert xiaox_queue_outcome(receipt) == expected
