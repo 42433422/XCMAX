@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { nextTick, ref } from 'vue'
@@ -8,6 +9,12 @@ import AgentRunTrace from './AgentRunTrace.vue'
 import { proactiveReplyMessageId } from '@/composables/useProactiveReplySuggestions'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import type { AgentStepView } from '@/utils/agentStepChain'
+import agentRunsApi from '@/api/agentRuns'
+import * as downloadUtilities from '@/utils'
+import { chatMessageExtrasFromServerRow } from '@/composables/useChatMessages'
+import { readRuntimeOutputDownloads } from '@/utils/agentArtifactDownloads'
+import { readRuntimeFileSources } from '@/utils/chatFileSources'
+import { normalizeServerContentToHtml } from '@/utils/sanitizeHtml'
 
 const defaultProps = {
   isLoading: false, isStreamingReply: false, loadingProgressText: '',
@@ -56,6 +63,63 @@ function runningStep(overrides: Partial<AgentStepView> = {}): AgentStepView {
 }
 
 describe('ChatMessageList', () => {
+  it('restores source excerpts outside the JSON body copied from a completed reply', async () => {
+    const source = { name: '原件.docx', excerpts: ['[表格 1 行 3 列 2] 原始数据 <b>原文</b>'] }
+    const payload = { success: true, runtime: 'xiaox', data: { action: 'runtime_reply',
+      execution_state: 'completed', file_sources: [source, { ...source, name: '/tmp/source.docx' }] } }
+    expect(readRuntimeFileSources({ ...payload, success: false })).toEqual([])
+    const sources = readRuntimeFileSources(payload)
+    expect(sources).toEqual([source])
+    const extras = chatMessageExtrasFromServerRow({ role: 'assistant', id: 32,
+      metadata: { ui: { fileSources: sources } } })
+    const visible = '{"total":42}'
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+      { role: 'ai', content: normalizeServerContentToHtml(visible), time: '12:00', ...extras },
+    ] } })
+    await wrapper.get('.message-file-sources button').trigger('click')
+    expect(wrapper.get('.message-file-sources').text()).toContain(source.name)
+    expect(wrapper.get('.message-file-sources q').text()).toBe(source.excerpts[0])
+    expect(wrapper.find('.message-file-sources q b').exists()).toBe(false)
+    expect(wrapper.get('.message-html').text()).toBe(visible)
+    await wrapper.get('.message-copy-btn').trigger('click')
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(visible)
+  })
+
+  it.each(['completed', 'unknown'])('downloads the original child file from %s history', async (status) => {
+    const content = 'verified result'
+    const metadata = { sha256: createHash('sha256').update(content).digest('hex'), size_bytes: content.length }
+    const file = { artifact_type: 'file', name: '明细.xlsx', artifact_id: 'verified-xlsx',
+      run_id: 'run-child', uri: '/api/agent/runs/run-child/artifacts/verified-xlsx', metadata }
+    const unsafe = { ...file, uri: '/api/agent/runs/run-parent/artifacts/verified-xlsx' }
+    const outputArtifacts = readRuntimeOutputDownloads({ success: true, data: { output_artifacts: [file, unsafe],
+      artifacts: [{ artifact_type: 'file_analysis', name: '原始附件.xlsx' }] } })
+    expect(outputArtifacts).toEqual([file])
+    const extras = chatMessageExtrasFromServerRow({ role: 'assistant', id: 31, metadata: {
+      summary: { status, success: status === 'completed', turn_id: 'original-turn' },
+      ui: { outputArtifacts, ...(status === 'unknown' ? { execution: { effect: 'unknown', outcome: 'unknown' } } : {}) },
+    } })
+    const download = vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue(new Response(content, {
+      headers: { 'X-Artifact-SHA256': metadata.sha256, 'X-Artifact-Size': String(metadata.size_bytes) },
+    }))
+    const save = vi.spyOn(downloadUtilities, 'downloadBlob').mockImplementation(() => {})
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+      { role: 'ai', content: '明细.xlsx', time: '12:00', ...extras },
+    ] } })
+    const button = wrapper.get('.agent-artifact-downloads button')
+    expect(button.text()).toBe('下载 明细.xlsx')
+    expect(wrapper.text().includes('已核验文件可下载供核对。')).toBe(status === 'unknown')
+    expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
+    await button.trigger('click')
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(download).toHaveBeenCalledExactlyOnceWith('run-child', 'verified-xlsx')
+    expect(save.mock.calls[0]?.[0].size).toBe(metadata.size_bytes)
+    expect(save.mock.calls[0]?.[1]).toBe('明细.xlsx')
+    download.mockRestore()
+    save.mockRestore()
+  })
+
   it('keeps distinct legacy rows mounted while streaming changes their length', async () => {
     const messages = ref([
       { role: 'ai' as const, content: 'first', time: '12:00', turnId: 'same-turn' },
@@ -168,6 +232,18 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.message-receipt__status').text()).toBe(unknown ? '待核对' : '等待授权')
     expect(wrapper.text()).not.toContain('已完成')
     expect(wrapper.find('[data-testid="chat-run-approve"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
+  })
+
+  it.each([false, true])('only presents blocked work as unknown if effects are uncertain (%s)', unknown => {
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [{
+      role: 'ai', content: '模型尚未通过运行验收。', time: '12:00', streamStatus: 'ready', workflowAction: 'blocked',
+      toolProgressLabel: '运行验收',
+      execution: { idempotencyKey: '', intent: '', committed: false, effect: unknown ? 'unknown' : 'none',
+        outcome: unknown ? 'unknown' : 'not_executed' },
+    }] } })
+    expect(wrapper.get('.message-receipt__status').text()).toBe(unknown ? '待核对' : '未开始')
+    expect(wrapper.find('[data-testid="chat-unknown-recovery"]').exists()).toBe(unknown)
     expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
   })
 
@@ -379,6 +455,26 @@ describe('ChatMessageList', () => {
     const wrapper = mountList()
     expect(wrapper.get('.message-html').text()).toContain('"正常"')
     expect(wrapper.get('.message-html').text()).not.toContain('&quot;')
+  })
+
+  it.each([true, false])('renders and copies the exact C++ history block with collapsed=%s', async collapsed => {
+    const code = '#include <iostream>\nint main() {\n  const auto& value = "<p> &lt;code&gt;";\n  return value && true;\n}'
+    const stored = normalizeServerContentToHtml('示例\n\n```cpp\n' + code + '\n```')
+    const original = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
+    const nativeWrite = vi.fn().mockResolvedValue({ ok: true })
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: { clipboardWriteText: nativeWrite } })
+    try {
+      const wrapper = mount(ChatMessageList, { props: { ...defaultProps, isMessageCollapsed: () => collapsed,
+        messages: [{ role: 'ai', content: stored, time: '12:00' }] } })
+      expect(wrapper.get('.md-code__body').element.textContent).toBe(code)
+      expect(wrapper.find('iostream').exists()).toBe(false)
+      await wrapper.get('.md-code__copy').trigger('click')
+      expect(nativeWrite).toHaveBeenCalledWith(code)
+      expect(wrapper.get('.md-code__copy').text()).toBe('已复制')
+    } finally {
+      if (original) Object.defineProperty(window, 'xcagiDesktop', original)
+      else delete window.xcagiDesktop
+    }
   })
 
   it('hides internal context counters by default but keeps legacy activity in the execution chain', async () => {

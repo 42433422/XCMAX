@@ -5,6 +5,7 @@ import { asArray, asRecord, asString } from './typeGuards'
 export type DroppedRoundStatus =
   | 'completed'
   | 'failed'
+  | 'blocked'
   | 'interrupted'
   | 'unknown'
   | 'running'
@@ -24,6 +25,7 @@ interface DroppedRoundPresentation {
   text: string
   workflowAction: string
   activeTurn?: ActiveChatTurn
+  savedMessage?: Record<string, unknown>
 }
 
 export function activeChatTurnStatus(raw: string): ActiveChatTurn['status'] | undefined {
@@ -86,6 +88,9 @@ export function droppedRoundPresentation(input: {
   if (status === 'failed') {
     return { status: 'failed', workflowAction: 'failed', text: text || '服务端确认本轮失败。' }
   }
+  if (status === 'blocked') {
+    return { status: 'blocked', workflowAction: 'blocked', text: text || '原任务已阻断，请核对回执。' }
+  }
   return {
     status: 'unknown',
     workflowAction: 'unknown',
@@ -96,19 +101,25 @@ export function droppedRoundPresentation(input: {
 export function droppedRoundFromHistory(conversation: unknown, turnId: string): DroppedRoundPresentation {
   const body = asRecord(conversation)
   const activeTurn = readActiveChatTurn(body)
-  if (activeTurn?.turnId === turnId) {
+  const receipt = asRecord(body.turn_receipt)
+  const rows = asArray(body.messages ?? asRecord(body.data).messages)
+  const savedBlockedReceipt = activeTurn?.status === 'blocked' && receipt.turn_id === turnId
+    && typeof receipt.message_id === 'number' && body.durable === true
+    && rows.some(row => asRecord(row).id === receipt.message_id && asString(asRecord(row).content).trim())
+  if (activeTurn?.turnId === turnId && !savedBlockedReceipt) {
     const status = activeTurn.status === 'blocked' ? 'unknown' : activeTurn.status === 'paused' ? 'waiting_approval' : activeTurn.status
     return { status, workflowAction: activeTurn.status, text: activeChatTurnMessage(activeTurn), activeTurn }
   }
-  const receipt = asRecord(body.turn_receipt)
   if (turnId && asString(receipt.turn_id) === turnId && (asString(receipt.run_id)
     || (receipt.receipt_kind === 'turn' && receipt.durable === true))) {
     const uncertain = receipt.requires_reconciliation === true || receipt.reconciliation_required === true || receipt.outcome_unknown === true
-    return droppedRoundPresentation({
+    const presentation = droppedRoundPresentation({
       reachable: true, serverStatus: uncertain ? 'unknown' : asString(receipt.execution_state || receipt.status), serverText: asString(receipt.message),
     })
+    const savedMessage = typeof receipt.message_id === 'number' && body.durable === true
+      ? rows.map(asRecord).find(row => row.id === receipt.message_id && ['assistant', 'ai'].includes(asString(row.role))) : undefined
+    return { ...presentation, ...(savedMessage && !uncertain ? { savedMessage: { ...savedMessage, durable: true } } : {}) }
   }
-  const rows = asArray(body.messages ?? asRecord(body.data).messages)
   if (turnId && body.success !== false) {
     for (const raw of [...rows].reverse()) {
       const row = asRecord(raw)
@@ -127,7 +138,8 @@ export function droppedRoundFromHistory(conversation: unknown, turnId: string): 
         : ['completed', 'succeeded', 'failed', 'interrupted', 'running', 'queued', 'waiting_approval', 'unknown'].includes(state) ? state
         : summary.success === false ? 'failed'
           : summary.success === true && !summary.status && !row.status ? 'completed' : 'unknown'
-      return droppedRoundPresentation({ reachable: true, serverStatus, serverText: asString(row.content) })
+      return { ...droppedRoundPresentation({ reachable: true, serverStatus, serverText: asString(row.content) }),
+        ...(body.durable === true ? { savedMessage: { ...row, durable: true } } : {}) }
     }
   }
   return droppedRoundPresentation({ reachable: true })

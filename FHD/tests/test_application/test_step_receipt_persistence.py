@@ -51,6 +51,22 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
     verified_calls = []
     dispatched = []
 
+    def assert_events(payload, expected_business_events):
+        events = payload["events"]
+        audits = [event for event in events if event["event_type"] == "run.state_changed"]
+        assert [
+            event["event_type"] for event in events if event["event_type"] != "run.state_changed"
+        ] == expected_business_events
+        expected_transitions = [(None, "running")]
+        if result_state == "waiting_user":
+            expected_transitions.append(("running", "waiting_user"))
+        assert [
+            (event["data"]["from_status"], event["data"]["to_status"]) for event in audits
+        ] == expected_transitions
+        assert [event["data"]["sequence"] for event in audits] == list(range(1, len(audits) + 1))
+        assert events[0]["event_type"] == "tool.started"
+        assert events[1 : 1 + len(audits)] == audits
+
     def readback():
         with sqlite3.connect(path) as reopened:
             payload = json.loads(
@@ -93,7 +109,7 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         assert output == original_receipt
         payload = readback()
         assert payload["tool_calls"][0]["metadata"]["verification"]["status"] == "pending"
-        assert [event["event_type"] for event in payload["events"]] == ["tool.started"]
+        assert_events(payload, ["tool.started"])
         with sqlite3.connect(path) as independent:
             row = independent.execute("SELECT id, receipt FROM synthetic_effects").fetchone()
         assert row == (1, output["receipt_id"])
@@ -166,13 +182,12 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         assert dispatched == [1]
         assert receipt == original_receipt
         assert verified_calls == ([] if unknown else [run.tool_calls[0].call_id])
-        events = [event["event_type"] for event in persisted["events"]]
         expected_events = ["tool.started"]
         if unknown or failed_sink != "artifacts":
             expected_events.append("verification.failed" if unknown else "verification.verified")
         if not sink_reached:
             expected_events.append("tool.failed" if unknown else "tool.completed")
-        assert events == expected_events
+        assert_events(persisted, expected_events)
         reopened_repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
         assert reopened_repo.get(run.run_id).to_dict() == persisted
     finally:

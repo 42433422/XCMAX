@@ -188,7 +188,10 @@ def test_agent_tool_executor_restores_durable_purchase_tenant_scope():
         "app.application.facades.tools_facade.execute_registered_workflow_tool",
         side_effect=_execute,
     ) as mock_execute:
-        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "7"})
+        result = AgentToolExecutor().execute(
+            step,
+            runtime_context={"tenant_id": "7", "idempotency_key": f"purchase:{step.step_id}"},
+        )
 
     assert result["success"] is True
     assert observed_tenant_ids == [7]
@@ -240,7 +243,13 @@ def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
     with patch(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", side_effect=execute
     ):
-        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": tenant_id})
+        result = AgentToolExecutor().execute(
+            step,
+            runtime_context={
+                "tenant_id": tenant_id,
+                "idempotency_key": f"inventory:{step.step_id}",
+            },
+        )
     valid = tenant_id in (7, "7")
     assert result["success"] is valid
     assert seen == ([7] if valid else [])

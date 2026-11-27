@@ -200,6 +200,8 @@ class XiaoxTransport:
             f"model = {q(cfg.model)}",
             f"model_provider = {q(_PROVIDER)}",
             f"model_context_window = {cfg.context_window}",
+            # Keep the largest core tool contract visible without unbounding other outputs.
+            "tool_output_token_limit = 4096",
             'approval_policy = "never"',
             'sandbox_mode = "read-only"',
             "project_doc_max_bytes = 0",
@@ -428,7 +430,9 @@ class XiaoxTransport:
                 "xiaox_policy_mismatch", "Runtime did not retain the scoped policy"
             )
 
-    async def start_thread(self, *, developer_instructions: str = "") -> str:
+    async def start_thread(
+        self, *, developer_instructions: str = "", history: list[dict[str, str]] | None = None
+    ) -> str:
         params = self._thread_params(developer_instructions)
         if (self.runtime_dir / "binding.json").exists():
             raise XiaoxTransportError(
@@ -436,6 +440,34 @@ class XiaoxTransport:
             )
         result = await self._call(self._client.thread_start, params)
         self._validate_thread(result)
+        if history:
+            from openai_codex.generated.v2_all import (
+                ThreadInjectItemsParams,
+                ThreadInjectItemsResponse,
+            )
+
+            items = [
+                {
+                    "type": "message",
+                    "role": row["role"],
+                    "content": [
+                        {
+                            "type": "input_text" if row["role"] == "user" else "output_text",
+                            "text": row["content"],
+                        }
+                    ],
+                }
+                for row in history
+                if row["role"] in {"user", "assistant"}
+            ]
+            await self._call(
+                self._client.request,
+                "thread/inject_items",
+                ThreadInjectItemsParams(thread_id=result.thread.id, items=items).model_dump(
+                    by_alias=True
+                ),
+                response_model=ThreadInjectItemsResponse,
+            )
         self.thread_id = result.thread.id
         _write_private(self.runtime_dir / "binding.json", json.dumps(self._binding(self.thread_id)))
         return self.thread_id
@@ -478,8 +510,22 @@ class XiaoxTransport:
         try:
             async with asyncio.timeout(self.config.turn_timeout_seconds):
                 if goal_feedback is None:
+                    from openai_codex.generated.v2_all import TurnStartParams
+
+                    params = (
+                        TurnStartParams(
+                            thread_id=self.thread_id, input=[], output_schema=output_schema
+                        )
+                        if output_schema
+                        else None
+                    )
+                    start_options: dict[str, Any] = {"params": params} if params else {}
                     result = await self._call(
-                        client.turn_start, self.thread_id, text, outcome_unknown=True
+                        client.turn_start,
+                        self.thread_id,
+                        text,
+                        **start_options,
+                        outcome_unknown=True,
                     )
                 else:
                     from openai_codex.generated.v2_all import (

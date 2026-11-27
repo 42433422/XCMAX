@@ -675,6 +675,7 @@ class TestMain:
         "source,rule",
         [
             ("for user in users: db.query(User).get(user.id)", "n-plus-one-inline"),
+            ("while True:\n    await poll()", "unbounded-while-true"),
             (
                 'rows = db.execute(\n    "SELECT payload FROM events"\n).fetchall()',
                 "fetchall-unbounded",

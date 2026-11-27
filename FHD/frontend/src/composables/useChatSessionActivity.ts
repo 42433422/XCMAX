@@ -4,7 +4,7 @@ import agentRunsApi from '@/api/agentRuns'
 import type { ChatPlannerPayload } from '@/types/chat'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { isRuntimeWaiting, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { isRuntimeQueued, isRuntimeWaiting, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 import { plannerExecutionState } from './chat-orchestration/chatOrchestrationShared'
 
 export type ChatConversationStatus = ChatStatus | 'waiting' | 'review' | 'stopped'
@@ -98,6 +98,7 @@ export async function persistDetachedPlannerResult(
 ): Promise<void> {
   const parts = data.batch && Array.isArray(data.results) ? data.results.map((item) => item as ChatPlannerPayload) : [data]
   for (const part of parts) {
+    if (isRuntimeQueued(part)) continue
     const text = part.success || isRuntimeWaiting(part) ? String(part.response || part.message || '') : `处理失败: ${part.message || '未知错误'}`
     const continuation = runtimeContinuationFromPayload(part)
     const approvalCard = continuation ? parseApprovalCardFromPayload(part) : null

@@ -1,6 +1,5 @@
 <template>
-  <div class="page-view mp-root" id="view-model-payment">
-    <!-- 离线/数据来源提示条 -->
+  <div class="page-view mp-root" :class="{ 'mp-root--embedded': embedded }" id="view-model-payment">
     <div v-if="isOffline" class="mp-status-banner mp-status-banner--offline">
       <span class="mp-status-dot"></span>
       <span class="mp-status-text">离线模式 - 显示本地缓存数据</span>
@@ -11,23 +10,16 @@
       <span class="mp-status-text">缓存模式 - {{ cacheAgeText }}</span>
     </div>
 
-    <div class="page-content">
+    <div class="page-content" :class="{ 'mp-page-content--embedded': embedded }">
       <div class="page-header mp-hero">
-        <div class="mp-hero-text">
+        <div v-if="!embedded" class="mp-hero-text">
           <h2>模型服务</h2>
-          <p class="muted header-sub">
-            余额与充值走修茈市场；本页汇总展示，支付在
-            <a :href="walletUrl" @click.prevent="openMarketUrl(walletUrl)" target="_blank" rel="noopener noreferrer">钱包</a>
-            /
-            <a :href="plansUrl" @click.prevent="openMarketUrl(plansUrl)" target="_blank" rel="noopener noreferrer">套餐</a>
-            完成。
-          </p>
         </div>
-        <div class="mp-hero-actions">
+        <div class="mp-hero-actions" :class="{ 'mp-hero-actions--embedded': embedded }">
           <a class="mp-hero-btn mp-hero-btn--primary" :href="walletUrl" @click.prevent="openMarketUrl(walletUrl)" target="_blank" rel="noopener noreferrer">
-            打开修茈钱包
+            {{ MODEL_SERVICE_WALLET.label }}
           </a>
-          <a class="mp-hero-btn" :href="plansUrl" @click.prevent="openMarketUrl(plansUrl)" target="_blank" rel="noopener noreferrer">会员套餐</a>
+          <a class="mp-hero-btn" :href="plansUrl" @click.prevent="openMarketUrl(plansUrl)" target="_blank" rel="noopener noreferrer">{{ MODEL_SERVICE_PLANS.label }}</a>
           <button type="button" class="mp-hero-btn" :disabled="isRefreshing" @click="forceRefreshAll()">
             {{ isRefreshing ? '同步中…' : '刷新' }}
           </button>
@@ -41,7 +33,7 @@
       <MpBalanceFold :tm="mp" />
 
       <details class="mp-fold">
-        <summary class="mp-fold-title">快捷充值（跳转修茈钱包）</summary>
+        <summary class="mp-fold-title">{{ MODEL_PAYMENT_SECTIONS.recharge.label }}</summary>
         <div class="mp-recharge-grid mp-recharge-grid--compact">
           <a
             v-for="item in rechargeLinks"
@@ -65,15 +57,13 @@
 </template>
 
 <script setup lang="ts">
-// 原超大 SFC 已拆分至 ./model-payment/（子组件 + composables + 独立 CSS）；
-// 入口保持对外路径/默认导出不变，仅做组装。
-import { useRouter } from 'vue-router';
+import { MODEL_PAYMENT_SECTIONS, MODEL_SERVICE_PLANS, MODEL_SERVICE_WALLET } from '@/constants/modelServiceNavigation'
 import MpBalanceFold from './model-payment/MpBalanceFold.vue'
 import MpPlansFold from './model-payment/MpPlansFold.vue'
 import MpCatalogFold from './model-payment/MpCatalogFold.vue'
 import { assembleMpModelPayment } from './model-payment/assemble'
 
-const router = useRouter();
+defineProps<{ embedded?: boolean }>()
 
 const mp = assembleMpModelPayment()
 

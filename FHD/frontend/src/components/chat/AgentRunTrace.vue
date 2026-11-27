@@ -14,7 +14,7 @@
     </summary>
 
     <div class="art-body">
-      <details v-if="trace.trace_id" class="art-tool-meta">
+      <details v-if="showDiagnosticMetadata && trace.trace_id" class="art-tool-meta">
         <summary>诊断信息</summary>
         <pre>{{ executionObservationDetails(trace) }}</pre>
       </details>
@@ -88,7 +88,7 @@
             </template>
             <pre v-else-if="isRun(phase) && phase.final_output_preview" class="art-final-output">{{ phase.final_output_preview }}</pre>
             <pre v-else-if="phase.detail || phase.error" class="art-final-output is-error">{{ phase.detail || phase.error }}</pre>
-            <details v-if="phase.trace_id || phase.error_code" class="art-tool-meta">
+            <details v-if="showDiagnosticMetadata && (phase.trace_id || phase.error_code)" class="art-tool-meta">
               <summary>诊断信息</summary>
               <pre>{{ executionObservationDetails(phase) }}</pre>
             </details>
@@ -96,17 +96,12 @@
         </details>
       </div>
 
-      <details v-if="showPlanGraph && mermaidSource" class="art-plan-graph" @toggle="onMermaidToggle">
-        <summary><i class="fa fa-share-alt" aria-hidden="true"></i>查看执行关系图</summary>
-        <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
-      </details>
     </div>
   </details>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { escapeHtml } from '@/utils'
 import type {
   AgentRunTraceData,
   TracePhase,
@@ -114,12 +109,12 @@ import type {
   TraceRunPhase,
   TraceToolPhase,
 } from '@/utils/agentRunTraceModel'
-import { executionObservationDetails, shouldShowAgentRunPlanGraph } from '@/utils/agentRunTraceModel'
-import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
+import { executionObservationDetails } from '@/utils/agentRunTraceModel'
 import { getToolPermission, setToolPermission, type ToolPermissionScope } from '@/utils/toolPermissionCache'
 
 const props = defineProps<{
   trace: AgentRunTraceData
+  showDiagnosticMetadata?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -178,7 +173,6 @@ const defaultOpen = computed(() => props.trace.status === 'waiting')
 const userOpen = ref<boolean>()
 const phaseOpen = ref<Record<string, boolean>>({})
 watch(() => props.trace.run_id, () => { userOpen.value = undefined; phaseOpen.value = {} })
-const showPlanGraph = computed(() => shouldShowAgentRunPlanGraph(props.trace))
 const toolPhases = computed(() => props.trace.phases.filter((phase): phase is TraceToolPhase => phase.kind === 'tool'))
 const toolCount = computed(() => toolPhases.value.length)
 
@@ -273,7 +267,7 @@ function phaseDisplaySubtitle(phase: TracePhase): string {
 }
 
 function hasPhaseDetails(phase: TracePhase): boolean {
-  if (phase.trace_id || phase.error_code || phase.error || phase.detail) return true
+  if ((props.showDiagnosticMetadata && (phase.trace_id || phase.error_code)) || phase.error || phase.detail) return true
   if (isTool(phase)) {
     return Boolean(
       phase.params_json ||
@@ -291,58 +285,6 @@ function hasPhaseDetails(phase: TracePhase): boolean {
 function shouldOpenPhase(phase: TracePhase): boolean {
   return phase.status === 'failed' || phase.status === 'blocked' || phase.status === 'waiting'
 }
-
-const mermaidSource = computed(() => traceToMermaid(props.trace))
-const mermaidHostRef = ref<HTMLDivElement | null>(null)
-const mermaidSvg = ref('')
-
-let mermaidApi: { render: (id: string, text: string) => Promise<{ svg: string }> } | null = null
-let mermaidInit = false
-
-async function getMermaid() {
-  if (!mermaidApi) {
-    const mod = await import('mermaid')
-    mermaidApi = mod.default as never
-  }
-  if (!mermaidInit) {
-    ;(mermaidApi as never as { initialize: (config: Record<string, unknown>) => void }).initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'neutral',
-      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-    })
-    mermaidInit = true
-  }
-  return mermaidApi
-}
-
-async function renderMermaid() {
-  const source = mermaidSource.value
-  if (!source) {
-    mermaidSvg.value = ''
-    return
-  }
-  try {
-    const mermaid = await getMermaid()
-    const id = `trace_graph_${props.trace.run_id.replace(/[^a-zA-Z0-9]/g, '')}`.slice(0, 40)
-    const { svg } = await mermaid.render(id, source)
-    mermaidSvg.value = svg
-  } catch (error) {
-    mermaidSvg.value = `<div class="mermaid-fail">流程图解析失败：${escapeHtml((error as Error)?.message || error)}</div>`
-  }
-}
-
-async function onMermaidToggle(event: Event) {
-  if (!(event.target as HTMLDetailsElement).open || mermaidSvg.value) return
-  await renderMermaid()
-}
-
-watch(
-  () => mermaidSource.value,
-  async (source, previous) => {
-    if (source && source !== previous && mermaidSvg.value) await renderMermaid()
-  },
-)
 
 function getPermissionBadge(toolId: string): ToolPermissionScope | null {
   return toolId ? getToolPermission(toolId) : null

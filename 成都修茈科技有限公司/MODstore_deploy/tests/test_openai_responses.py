@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
+from modstore_server import llm_billing as billing
 from modstore_server import llm_billing_recovery as recovery
 from modstore_server import llm_client_requests as ledger
 from modstore_server import llm_responses as responses
@@ -448,6 +449,19 @@ async def test_definite_wallet_rejection_is_not_an_unknown_paid_attempt(billed, 
 
 
 CONCURRENCY_KEY = concurrency_key("litellm", "account-model", config_revision="revision-a")
+
+
+async def test_platform_rate_limit_returns_window_reset_before_reservation(billed, db, monkeypatch):
+    monkeypatch.setattr(responses, "enforce_risk_limits", billing.enforce_risk_limits)
+    monkeypatch.setattr(billing, "time", SimpleNamespace(monotonic=lambda: 140.25))
+    monkeypatch.setattr(billing, "_WINDOWS", {"llm_user_minute:7": [100.0, 121.0]})
+    monkeypatch.setenv("COSER_USER_LLM_RPM", "2")
+    with pytest.raises(HTTPException) as error:
+        await billed["call"]()
+    assert error.value.status_code == 429 and error.value.headers["Retry-After"] == "20"
+    assert ledger.lookup(db, 7, KEY, 90) == "not_found"
+    billed["wallet"].preauthorize.assert_not_awaited()
+    assert billed["requests"] == []
 
 
 async def test_saturated_model_concurrency_rejects_before_journal_or_wallet(

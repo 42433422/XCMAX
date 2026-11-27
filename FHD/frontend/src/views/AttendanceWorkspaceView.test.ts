@@ -80,6 +80,6 @@ describe('AttendanceWorkspaceView', () => {
     })
     await flushPromises()
     expect(wrapper.find('home-view-stub').exists()).toBe(false)
-    expect(wrapper.text()).toContain('未开通')
+    expect(wrapper.get('[role="alert"]').text()).toContain('无法核验转换权限')
   })
 })

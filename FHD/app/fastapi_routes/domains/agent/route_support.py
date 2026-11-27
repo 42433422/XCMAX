@@ -60,6 +60,7 @@ _XIAOX_CONTROL_MESSAGES = {
 }
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
 _XIAOX_PUBLIC_CONTROL_CODES = {
+    "autonomy_level_denied": "autonomy_level_denied",
     "binding_conflict": "binding_conflict",
     "binding_missing": "binding_missing",
     "budget_exceeded": "budget_exceeded",
@@ -148,6 +149,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "node_outputs",
         "active_skills",
         "tenant_id",
+        "execution_autonomy_level",
         "user_id",
         "actor_id",
         "local_user_id",
@@ -156,6 +158,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "_actor_authorization",
         "_credential_authorization",
         "_tool_approval_scope",
+        "_workbook_write_review",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "mutation_policy",
@@ -456,9 +459,13 @@ def control_xiaox_run(
             # revoke the grant before stopping any already-published child.
             method = orchestrator.pause_run if action == "pause" else orchestrator.cancel_run
             controlled = method(run.run_id, requested_by=principal.user_id)
+            if controlled is not None:
+                sync_execution_terminal_state(controlled)
             store.close(run.run_id, "paused" if action == "pause" else "cancelled")
             for child in _children(store, store.repository.get(run.run_id)):
-                method(child.run_id, requested_by=principal.user_id)
+                controlled_child = method(child.run_id, requested_by=principal.user_id)
+                if controlled_child is not None:
+                    sync_execution_terminal_state(controlled_child)
             if (controlled.metadata.get("xiaox_runtime") or {}).get("calls"):
                 store.receipt_snapshot(run.run_id)
             return JSONResponse(run_response(store.repository.get(run.run_id), principal=principal))

@@ -246,8 +246,10 @@ def test_create_parks_a_real_queue_row_before_approval(tmp_path, monkeypatch):
         assert execution["requested_by"] == "agent-task-queue"
         assert execution["priority"] == 1
         history = env["queue"].lifecycle(data["run_id"])["history"]
-        assert history[0]["from"] == "queued"
-        assert history[0]["to"] == "waiting_approval"
+        assert [(event["from"], event["to"]) for event in history] == [
+            ("created", "queued"),
+            ("queued", "waiting_approval"),
+        ]
         assert _product_models(env) == []
         duplicate = env["client"].post(
             "/api/agent/tasks",
@@ -395,6 +397,7 @@ def test_interrupted_commit_rolls_back_and_recovery_inserts_once(tmp_path, monke
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claimed,
             )
         assert _product_models(env) == []
         assert env["queue"].get(run.run_id).state == "running"
@@ -415,6 +418,7 @@ def test_interrupted_commit_rolls_back_and_recovery_inserts_once(tmp_path, monke
             queue=env["queue"],
             request_id=str(run.metadata["approval_request_id"]),
             finish=True,
+            execution=expired,
         )
         assert receipt["success"] is True
         assert receipt["replayed"] is False
@@ -462,6 +466,7 @@ def test_crash_after_commit_replays_the_stored_body_without_a_second_insert(tmp_
                 queue=env["queue"],
                 request_id=str(run.metadata["approval_request_id"]),
                 finish=True,
+                execution=claimed,
             )
         assert _product_models(env) == ["CRASH-1", "CRASH-2"]
         checkpoint = run.metadata["runtime_context"]["cross_module_checkpoint"]
@@ -488,6 +493,7 @@ def test_crash_after_commit_replays_the_stored_body_without_a_second_insert(tmp_
             queue=env["queue"],
             request_id=str(run.metadata["approval_request_id"]),
             finish=True,
+            execution=recovered,
         )
         assert receipt["replayed"] is True
         assert receipt["stored_count"] == 2

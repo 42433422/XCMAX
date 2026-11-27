@@ -29,7 +29,9 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     classify_runtime_result,
     failure_diagnostics,
     model_unsettled,
+    receipt_settled_failure,
     receipt_state,
+    receipt_verified,
 )
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
 from app.infrastructure.xiaox.receipts import project_child_calls, resume_error
@@ -42,35 +44,20 @@ def projection_allowed(run: AgentRun) -> bool:
     queued = run.metadata.get("_xiaox_queued_request") or {}
     return bool(
         run.metadata.get("runtime_type") == "xiaox"
-        and run.status in {"waiting_user", "running", "blocked"}
+        and run.status in {"waiting_user", "running", "blocked", "unknown"}
         and run.metadata.get("runtime_goal_contract")
         and metadata.get("calls")
         and not metadata.get("coordinator_active")
         and metadata.get("revoked") is True
+        and metadata.get("close_reason") not in {"cancelled", "paused"}
         and not model_unsettled(metadata)
         and queued.get("state") != "queued"
     )
 
 
 def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
-    """Resume new approved evidence; settled failed exploration is not a new effect."""
-    completed = []
-    for row in rows:
-        receipt = row.get("receipt") or {}
-        state = receipt_state(row)
-        if (
-            state == "completed"
-            and receipt.get("verified") is True
-            and receipt.get("success") is True
-        ):
-            completed.append(row)
-        elif not (
-            state in {"failed", "not_started", "not_executed"}
-            and row.get("read_only") is True
-            and receipt.get("success") is False
-        ):
-            return False
-    if not completed:
+    """Resume once on new settled child evidence; never replay the child itself."""
+    if not rows or not all(receipt_verified(row) or receipt_settled_failure(row) for row in rows):
         return False
     previous = run.final_output.get("xiaox_result") or {}
     if previous.get("exit_status") == "continuation_pending":
@@ -78,17 +65,24 @@ def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
     prior = {str(row.get("call_id")): row for row in previous.get("business_receipts") or []}
     return any(
         receipt_state(prior[str(row["call_id"])]) in WAITING_STATES | ACTIVE_STATES
-        for row in completed
+        for row in rows
         if str(row.get("call_id")) in prior
     )
 
 
-def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun | None:
+def project_receipt_state(
+    run: AgentRun,
+    rows: list[dict[str, Any]],
+    *,
+    verified_child_recovery: bool = False,
+) -> AgentRun | None:
     """Build a projection; the SQL queue boundary independently verifies its inputs."""
     if not projection_allowed(run):
         return None
-    if requires_retry_reconciliation(run) and not any(
-        receipt_state(row) == "unknown" for row in rows
+    if (
+        requires_retry_reconciliation(run)
+        and not verified_child_recovery
+        and not any(receipt_state(row) == "unknown" for row in rows)
     ):
         return None  # Later receipts cannot silently clear an earlier unknown outcome.
     metadata = run.metadata["xiaox_runtime"]
@@ -116,7 +110,10 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
         str(run.metadata.get("runtime_completion_mode") or "auto"),
         str(metadata.get("runtime_status") or "interrupted"),
     )
-    if result.get("exit_status") == "goal_verification_required" and _continuation_ready(run, rows):
+    if result.get("exit_status") in {
+        "goal_verification_required",
+        "partial",
+    } and _continuation_ready(run, rows):
         # A completed child is new evidence for the same runtime, never proof
         # that every original goal is complete. The dispatcher owns continuation.
         status = "running"
@@ -124,6 +121,7 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
             execution_state="running",
             exit_status="continuation_pending",
             resume_required=True,
+            reconciliation_required=False,
             output="已核对原业务回执，正在继续完成和核验原任务。",
             error="",
         )
@@ -145,6 +143,14 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
     projected.error = str(result.get("error") or "")
     projected.final_output["xiaox_result"] = result
     projected.metadata["runtime_receipt_projection"] = fingerprint
+    if verified_child_recovery:
+        projected.metadata.pop("non_retryable", None)
+        projected.metadata.pop("recovery", None)
+        projected.add_event(
+            "runtime.reconciliation.verified",
+            "原子任务已由独立回执核实，无需重放写入",
+            {"child_run_ids": sorted({str(row["child_run_id"]) for row in rows})},
+        )
     if result.get("reconciliation_required"):
         projected.metadata.update(
             non_retryable=True, recovery={"state": "manual_reconciliation_required"}
@@ -176,7 +182,8 @@ def refresh_xiaox_receipts(
         return current or run
     execution = queue.get(run.run_id)
     if execution is not None and (
-        execution.state not in {"waiting_approval", "paused", "blocked"}
+        execution.state
+        not in {"waiting_approval", "waiting_input", "waiting_auth", "paused", "blocked"}
         or execution.lease_owner
         or execution.lease_expires_at
     ):
@@ -217,7 +224,7 @@ def resume_ready_xiaox_runs(
     with repository.transaction(read_only=True) as db:
         query = db.query(AgentRunRecord).filter(
             AgentRunRecord.intent == "xiaox.runtime",
-            AgentRunRecord.status.in_(("waiting_user", "running")),
+            AgentRunRecord.status.in_(("waiting_user", "running", "unknown")),
         )
         if cursor:
             query = query.filter(

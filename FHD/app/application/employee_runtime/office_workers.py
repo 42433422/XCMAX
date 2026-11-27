@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+from app.application.employee_runtime.loader import (
+    manifest_actions_handlers,
+    verify_direct_python_pack_trust,
+)
 from app.domain.workbook_write_contract import WORKBOOK_QC, WORKBOOK_WRITER
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+
+def is_trusted_workbook_pack(employee_id: str, pack: dict) -> bool:
+    return (
+        pack["pack_id"] == employee_id
+        and manifest_actions_handlers(pack["manifest"]) == ["direct_python"]
+        and verify_direct_python_pack_trust(pack["pack_dir"])[0]
+    )
 
 
 def is_deterministic_office_worker(employee_id: str, handler_list: list[str]) -> bool:

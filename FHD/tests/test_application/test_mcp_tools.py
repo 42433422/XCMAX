@@ -122,6 +122,114 @@ def test_merge_without_config_keeps_registry(monkeypatch) -> None:
     assert mcp_registry.merge_mcp_tools(original) == original
 
 
+@pytest.mark.parametrize(
+    "business,state",
+    [
+        ({"success": True, "outcome": "unknown"}, "unknown"),
+        ({"success": True, "output": {"requires_reconciliation": True}}, "unknown"),
+        ({"success": True, "execution_state": "queued"}, "queued"),
+        ({"success": True, "output": {"execution_accepted": True}}, "queued"),
+        ({"success": True, "execution_state": "failed"}, "failed"),
+        ({"success": False, "message": "business rejected"}, "failed"),
+        ({"status": "cancelled", "order_id": "customer-order"}, "completed"),
+        ({"success": True, "data": {"status": "cancelled", "order_id": "A"}}, "completed"),
+    ],
+)
+@pytest.mark.parametrize("wire_key", ["structured_content", "structuredContent"])
+def test_mcp_adapter_uses_shared_business_result_contract(monkeypatch, business, state, wire_key):
+    from copy import deepcopy
+
+    config = mcp_config.McpServerConfig(name="demo", command="x")
+    raw = {"success": True, "server": "demo", wire_key: deepcopy(business)}
+    before = deepcopy(raw)
+    monkeypatch.setattr(mcp_registry, "mcp_enabled", lambda: True)
+    monkeypatch.setattr(
+        mcp_registry,
+        "_snapshot",
+        lambda: ({"mcp__demo": {"actions": {"write": {}}}}, {"mcp__demo": config}),
+    )
+    monkeypatch.setattr(mcp_registry, "call_tool", lambda *_args, **_kwargs: raw)
+    result = mcp_registry.call_mcp_tool("mcp__demo", "write", {})
+    assert raw == before and result[wire_key] == business
+    assert result["success"] is (state == "completed")
+    if state == "unknown":
+        assert result["outcome"] == "unknown" and result["reconciliation_required"] is True
+        assert result["retryable"] is False
+    elif state == "queued":
+        assert result["execution_state"] == "queued" and result["retryable"] is False
+        assert result.get("outcome") != "unknown" and not result.get("reconciliation_required")
+
+
+@pytest.mark.parametrize("action", ["mcp_read_resource", "mcp_get_prompt"])
+def test_mcp_resource_and_prompt_content_is_not_a_business_receipt(monkeypatch, action):
+    config = mcp_config.McpServerConfig(name="demo", command="x")
+    raw = {
+        "success": True,
+        "structuredContent": {"success": False, "outcome": "unknown", "status": "queued"},
+    }
+    monkeypatch.setattr(mcp_registry, "mcp_enabled", lambda: True)
+    monkeypatch.setattr(
+        mcp_registry,
+        "_snapshot",
+        lambda: ({"mcp__demo": {"actions": {action: {}}}}, {"mcp__demo": config}),
+    )
+    monkeypatch.setattr(mcp_registry, "call_tool", lambda *_args, **_kwargs: raw)
+    assert mcp_registry.call_mcp_tool("mcp__demo", action, {}) == raw
+
+
+@pytest.mark.parametrize(
+    "action,collection", [("mcp_read_resource", "contents"), ("mcp_get_prompt", "messages")]
+)
+@pytest.mark.parametrize("protocol_error", [False, True, "invalid"])
+def test_mcp_resource_wire_metadata_cannot_override_protocol_envelope(
+    monkeypatch, action, collection, protocol_error
+):
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp import client
+
+    wire = SimpleNamespace(
+        **{
+            collection: [],
+            "isError": protocol_error,
+            "structuredContent": {"success": False, "status": "unknown"},
+        }
+    )
+    monkeypatch.setattr(client, "_run_with_reconnect", lambda *_a, **_kw: wire)
+    result = client.call_tool(mcp_config.McpServerConfig(name="demo", command="x"), action, {})
+    assert result["success"] is (protocol_error is False)
+    if protocol_error is not False:
+        assert result["error_code"] == (
+            "mcp_tool_error" if protocol_error is True else "mcp_result_invalid"
+        )
+
+
+@pytest.mark.parametrize("action", ["mcp_read_resource", "mcp_get_prompt"])
+def test_official_mcp_resource_and_prompt_json_is_preserved_as_content(monkeypatch, action):
+    from mcp import types
+
+    from app.infrastructure.mcp import client
+
+    content = '{"success": false, "status": "unknown"}'
+    result = (
+        types.ReadResourceResult(
+            contents=[types.TextResourceContents(uri="fixture://one", text=content)]
+        )
+        if action == "mcp_read_resource"
+        else types.GetPromptResult(
+            messages=[
+                types.PromptMessage(
+                    role="assistant", content=types.TextContent(type="text", text=content)
+                )
+            ]
+        )
+    )
+    monkeypatch.setattr(client, "_run_with_reconnect", lambda *_a, **_kw: result)
+    output = client.call_tool(mcp_config.McpServerConfig(name="demo", command="x"), action, {})
+    assert output["success"] is True and output["content"] == content
+    assert not output.get("reconciliation_required")
+
+
 def test_call_mcp_tool_strips_internal_params(monkeypatch) -> None:
     monkeypatch.setattr(
         mcp_registry,
@@ -220,7 +328,35 @@ async def test_list_all_tools_follows_pagination() -> None:
     assert session.cursors[1].cursor == "page-2"
 
 
-def test_resource_actions_are_registered(monkeypatch) -> None:
+@pytest.mark.asyncio
+@pytest.mark.parametrize("repeat", [False, True])
+async def test_discovery_never_publishes_truncated_or_cyclic_tool_pages(repeat):
+    from mcp.types import ListToolsResult, Tool
+
+    from app.infrastructure.mcp.client import McpClientError, _list_all_tools
+
+    class Session:
+        count = 0
+
+        async def list_tools(self, params=None):
+            self.count += 1
+            return ListToolsResult(
+                tools=[Tool(name=f"tool_{self.count}", input_schema={})],
+                next_cursor="same" if repeat else f"page-{self.count}",
+            )
+
+    session = Session()
+    with pytest.raises(McpClientError, match="未发布不完整目录"):
+        await _list_all_tools(session, max_pages=3)
+    assert session.count == (2 if repeat else 3)
+
+
+@pytest.mark.parametrize(
+    "resource_actions",
+    [(), ("mcp_list_resources", "mcp_read_resource"), ("mcp_list_prompts", "mcp_get_prompt")],
+)
+def test_only_negotiated_resource_actions_are_registered(monkeypatch, resource_actions) -> None:
+    from app.infrastructure.mcp.client import McpToolList
     from app.infrastructure.mcp.config import McpServerConfig
 
     monkeypatch.setattr(
@@ -228,22 +364,24 @@ def test_resource_actions_are_registered(monkeypatch) -> None:
         "load_server_configs",
         lambda *a, **k: [McpServerConfig(name="demo", command="x")],
     )
-    monkeypatch.setattr(
-        mcp_registry,
-        "list_tools",
-        lambda config: [
-            McpToolInfo(name="search", description="", input_schema={}, read_only=True)
-        ],
+    tools = McpToolList(
+        [McpToolInfo(name="search", description="", input_schema={}, read_only=True)]
     )
+    tools.resource_actions = resource_actions
+    monkeypatch.setattr(mcp_registry, "list_tools", lambda config: tools)
     monkeypatch.setattr(
         "app.domain.autonomy.autonomy_guard.get_autonomy_guard",
         lambda: type("G", (), {"register_actions": lambda *a, **k: None})(),
     )
     merged = mcp_registry.merge_mcp_tools({})
     actions = merged["mcp__demo"]["actions"]
-    assert actions["mcp_list_resources"]["risk"] == "low"
-    assert actions["mcp_read_resource"]["required_params"] == ["uri"]
-    assert actions["mcp_get_prompt"]["required_params"] == ["name"]
+    assert set(actions) == {"search", *resource_actions}
+    for action in resource_actions:
+        assert actions[action]["risk"] == "low"
+    if "mcp_read_resource" in actions:
+        assert actions["mcp_read_resource"]["required_params"] == ["uri"]
+    if "mcp_get_prompt" in actions:
+        assert actions["mcp_get_prompt"]["required_params"] == ["name"]
 
 
 @pytest.mark.asyncio
@@ -769,63 +907,3 @@ def test_mcp_sdk_structured_data_is_preserved_without_inventing_business_fields(
     output = client.call_tool(mcp_config.McpServerConfig(name="demo", command="x"), "read", {})
     assert output["success"] is True and output["structuredContent"] == structured
     assert output["structuredContent"] is not structured
-
-
-def test_real_mcp_stdio_preserves_structured_receipts_and_business_failure(tmp_path):
-    import sys
-
-    from app.infrastructure.mcp import client
-
-    server = tmp_path / "receipt_server.py"
-    server.write_text(
-        """import asyncio
-from mcp import types
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-
-async def list_tools(context, params):
-    return types.ListToolsResult(tools=[types.Tool(
-        name="submit", description="Synthetic form submission",
-        inputSchema={"type": "object", "required": ["commit"],
-                     "properties": {"commit": {"type": "boolean"}}},
-        annotations=types.ToolAnnotations(readOnlyHint=False)), types.Tool(
-        name="inspect", inputSchema={"type": "object"},
-        annotations=types.ToolAnnotations(readOnlyHint=True))])
-
-async def call_tool(context, params):
-    return types.CallToolResult(
-        content=[types.TextContent(type="text", text="transport delivered")],
-        isError=bool(params.arguments.get("protocol_error")),
-        structuredContent={"success": params.arguments["commit"],
-                           "receipt": {"form_id": "synthetic-form-1"}})
-
-async def main():
-    server = Server("receipt-test", on_list_tools=list_tools, on_call_tool=call_tool)
-    async with stdio_server() as (read, write):
-        await server.run(read, write, server.create_initialization_options())
-
-asyncio.run(main())
-""",
-        encoding="utf-8",
-    )
-    config = mcp_config.McpServerConfig(
-        name="receipt-test", command=sys.executable, args=(str(server),), timeout_seconds=10
-    )
-    tools = client.list_tools(config)
-    assert len(tools) == 2 and tools[0].name == "submit"
-    assert tools[0].input_schema["properties"]["commit"] == {"type": "boolean"}
-    assert tools[0].read_only is False and tools[1].read_only is True
-    for committed, protocol_error in ((False, False), (True, False), (True, True)):
-        output = client.call_tool(
-            config, "submit", {"commit": committed, "protocol_error": protocol_error}
-        )
-        assert output["success"] is (committed and not protocol_error), output
-        assert output["structuredContent"] == {
-            "success": committed,
-            "receipt": {"form_id": "synthetic-form-1"},
-        }
-        if not committed or protocol_error:
-            assert output["outcome"] == "unknown" and output["retryable"] is False
-            assert output["error_code"] == (
-                "mcp_tool_error" if protocol_error else "mcp_business_error"
-            )

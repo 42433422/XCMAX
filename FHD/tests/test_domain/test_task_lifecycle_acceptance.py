@@ -70,12 +70,19 @@ def test_completed_execution_cannot_be_reopened_or_rewritten() -> None:
     repo.enqueue(run)
     claimed = repo.claim("worker", lease_seconds=30)
     assert claimed is not None
-    assert repo.mark_open_effect(run.run_id, "confirmed-write", owner_id="worker")
-    assert repo.finish(run.run_id, "worker", "completed") is not None
+    assert repo.mark_open_effect(
+        run.run_id, "confirmed-write", owner_id="worker", execution_count=claimed.execution_count
+    )
+    assert (
+        repo.finish(run.run_id, "worker", "completed", execution_count=claimed.execution_count)
+        is not None
+    )
     assert repo.lifecycle(run.run_id)["effects"] == []
     assert repo.transition(run.run_id, "queued") is None
     assert repo.transition(run.run_id, "failed") is None
-    assert repo.finish(run.run_id, "worker", "failed") is None
+    assert (
+        repo.finish(run.run_id, "worker", "failed", execution_count=claimed.execution_count) is None
+    )
     again = repo.enqueue(run, requested_by="late")
     assert again.state == "succeeded"
     assert again.last_error_code == ""
@@ -124,7 +131,10 @@ def test_sql_queue_keeps_the_same_terminal_guard(tmp_path) -> None:
     repo.enqueue(run)
     claimed = repo.claim("worker", lease_seconds=30)
     assert claimed is not None
-    assert repo.finish(run.run_id, "worker", "completed") is not None
+    assert (
+        repo.finish(run.run_id, "worker", "completed", execution_count=claimed.execution_count)
+        is not None
+    )
     assert repo.transition(run.run_id, "queued") is None
     reopened = repo.enqueue(run)
     assert reopened.state == "succeeded"
@@ -198,12 +208,20 @@ def test_sql_queue_retries_open_effect_and_idempotency(tmp_path) -> None:
     )
     claimed = repo.claim("worker", lease_seconds=30)
     assert claimed is not None
-    retried = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    retried = repo.finish(
+        run.run_id,
+        "worker",
+        "failed",
+        error_code="timeout",
+        execution_count=claimed.execution_count,
+    )
     assert retried is not None and retried.state == "queued"
     assert repo.claim("worker", lease_seconds=5, now=claimed.updated_at) is None
     again = repo.claim("worker", lease_seconds=5, now=retried.available_at)
     assert again is not None and again.execution_count == 2
-    repo.mark_open_effect(run.run_id, "write-order")
+    repo.mark_open_effect(
+        run.run_id, "write-order", execution_count=again.execution_count, owner_id="worker"
+    )
     start = datetime.fromisoformat(again.updated_at.replace("Z", "+00:00"))
     assert (
         repo.claim("other", lease_seconds=5, now=(start + timedelta(seconds=30)).isoformat())
@@ -221,16 +239,26 @@ def test_queue_retries_with_backoff_then_stops() -> None:
     start = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
     claimed = repo.claim("worker", lease_seconds=30, now=start.isoformat())
     assert claimed is not None
-    retried = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    retried = repo.finish(
+        run.run_id,
+        "worker",
+        "failed",
+        error_code="timeout",
+        execution_count=claimed.execution_count,
+    )
     assert retried is not None and retried.state == "queued"
     assert retried.available_at > start.isoformat()
     assert repo.claim("worker", lease_seconds=30, now=start.isoformat()) is None
     again = repo.claim("worker", lease_seconds=30, now=(start + timedelta(seconds=2)).isoformat())
     assert again is not None and again.execution_count == 2
-    repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    repo.finish(
+        run.run_id, "worker", "failed", error_code="timeout", execution_count=again.execution_count
+    )
     third = repo.claim("worker", lease_seconds=30, now=(start + timedelta(seconds=10)).isoformat())
     assert third is not None and third.execution_count == 3
-    stopped = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    stopped = repo.finish(
+        run.run_id, "worker", "failed", error_code="timeout", execution_count=third.execution_count
+    )
     assert stopped is not None and stopped.state == "timed_out"
     assert [event["to"] for event in repo.lifecycle(run.run_id)["history"]][-1] == "timed_out"
 
@@ -240,8 +268,10 @@ def test_open_effect_is_verified_instead_of_replayed() -> None:
     run = _run("effect")
     queued = repo.enqueue(run)
     start = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
-    assert repo.claim("worker", lease_seconds=5, now=start.isoformat()) is not None
-    repo.mark_open_effect(run.run_id, "write-order")
+    assert (claim := repo.claim("worker", lease_seconds=5, now=start.isoformat())) is not None
+    repo.mark_open_effect(
+        run.run_id, "write-order", execution_count=claim.execution_count, owner_id="worker"
+    )
     assert (
         repo.claim("other", lease_seconds=5, now=(start + timedelta(seconds=30)).isoformat())
         is None

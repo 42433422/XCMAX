@@ -383,3 +383,30 @@ def test_spawned_deltas_keep_whitespace_through_sse_queue_and_final_deduplicatio
     ]
     remaining = list(_token_events(encode, "已读取 第一行\n导入完成", already="".join(streamed)))
     assert [json.loads(event)["text"] for event in remaining] == ["导入完成"]
+
+
+def test_model_activity_reaches_existing_chat_sse():
+    from app.fastapi_routes.xcagi_compat_chat_stream import _heartbeats, _StreamNoteQueue
+
+    lifetime = StreamLifetime()
+    activity = _StreamNoteQueue()
+    lifetime.observe_model_activity(lambda: activity.push("active"))
+    sink = {}
+
+    def run():
+        lifetime.publish_model_activity()
+        return {"success": True}
+
+    events = [
+        json.loads(row)
+        for row in _heartbeats(
+            run,
+            "正在处理任务",
+            sink,
+            lambda event: json.dumps(event).encode(),
+            model_activity=activity,
+        )
+    ]
+    assert [row for row in events if row["type"] == "model_activity"] == [
+        {"type": "model_activity"}
+    ]

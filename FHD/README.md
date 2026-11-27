@@ -34,11 +34,21 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+Agent 持久化与生命连续性继续复用 Xiaox Runtime、固定 Codex SDK、[LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT；checkpoint 4.3.0、SQLite 3.1.2、仓内 PostgreSQL 3.1.1+xcagi.1）和 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT）。原 SQL 任务、执行队列与事件账本保存状态和父子关系，LangGraph 同步保存检查点；已完成步骤按原业务回执恢复，未知副作用先对账。新增适配仅约束产品的租约代际、控制状态与回执身份，不新增调度器或检查点存储。
+
+Worker 的心跳、副作用登记与完成回执必须携带首次认领的 owner 和 execution_count；过期或被接管的执行者不得更新新租约或提交业务。入队、认领、接管与重启中断事件同原 SQL 事务提交。重启保留合法父子等待，只恢复原任务可证明安全的余步；取消、暂停及旧回执不能自动重新唤醒任务。回归入口为 `test_task_event_durability.py`、`test_stale_run_reconciler.py`、`test_task_execution_repository.py`、`test_worker_repository.py`、`test_native_task_recovery*.py` 与 `test_xiaox_receipt_projection.py`；原 PostgreSQL 事务 CI 同时执行新增账本用例。本地文件库、真实 PostgreSQL 和进程中断回归只证明相应恢复边界，真实模型及长时生产验收另行取证。
+
+独立目标核验沿用固定 Codex SDK `0.171.0`、仓库内 LangGraph 检查点及现有 SQLAlchemy 任务、租约、请求和计费账本。产品适配只保存原目标、完整回执、候选回复、模型路由和核验器版本的摘要，以及已结算模型响应与未完成目标；通用编排组件不掌握这些宿主授权与业务证据，因此在原运行时增加适配，不另建 Agent Runtime。执行阶段从原调用、费用和活跃时长预算中预留核验资源；调用和费用通常保留四分之一、至少一次完整核验，核验总调用上限至多三次。补偿前仍须留出下一次核验资源，所有请求消耗原账本，不补充原总预算；同一核验检查点最多尝试三次（含首次）。未决副作用或模型费用继续等待原账本对账；核验恢复不启动 SDK 执行，缺口补偿仍经过原工具权限、审批与幂等入口。
+
+Excel 公式复用 [LibreOffice Calc](https://github.com/LibreOffice/core)（MPL-2.0，发行版附带第三方许可）真实计算，现有 [openpyxl 3.1.5](https://foss.heptapod.net/openpyxl/openpyxl/-/tags/3.1.5)（MIT）及 [defusedxml 0.7.1](https://github.com/tiran/defusedxml/tree/v0.7.1)（PSF-2.0）负责读取、结构核对和安全 XML 解析。部署须配置 `LIBREOFFICE_PATH` 与完整 `LIBREOFFICE_EXPECTED_VERSION`，执行器版本不匹配即待核对。Linux 通过现有进程等待器和 `prlimit` 在启动前限制单进程 CPU 60 秒、地址空间 2 GiB、单文件 64 MiB 及文件描述符 256 个，并保留宿主更严格的既有限额；缺少限额机制即拒绝启动。共享应用数据目录的文件锁只允许一个 Calc 调用，等锁和执行共用原截止时间；这些限制不声称提供进程树总内存、PID 或文件系统沙箱。每次只在隔离副本和独立 profile 强制 OOXML 重算，保留原交付文件及 SHA，证据记录计算器版本、源/计算副本摘要和公式值摘要；宏、外链、外部函数及不支持的公式形态拒绝计算。原请求冻结的 `plan.expected.formula_values` 可声明独立预期值与数值容差；写入公式文本本身不构成计算或业务正确性证据。
+
+历史 Linux 资格探测记录（以下是第三方引擎身份，不是产品发布版本）：开发版为 `LibreOfficeDev 26.8.0.0.alpha0 2c87e51eeaa2b413ff4ae097b2705eea1995d8e5`，连续复验出现退出 137 及系统 OOM 事件；可信发行包 `4:25.2.3-2+deb13u12` 的完整身份为 `LibreOffice 25.2.3.2 520(Build:2)`，真实启动受本地 IPC 权限阻断。这些历史探测未通过公式引擎验收；固定稳定版实算、Excel/跨平台兼容及客户原题完整执行仍须独立验收，不以本地合成回归替代。
+
 业务导入边界复用现有 [Import Linter 2.15](https://github.com/seddonym/import-linter/) 与 [Grimp 3.17](https://github.com/python-grimp/grimp/)（均为 BSD-2-Clause），CI 从 `uv.lock` 安装精确版本。12 条合同统一在 `pyproject.toml`，覆盖领域纯度、工作流端口、LangGraph 接入和回执读取边界；已清退旧 AST 扫描器及其 YAML 规则副本。LangGraph 由原 `ServiceContainer` 组装，缓存失效、聊天显示与流式取消分别复用原工具注册表、显示规则和 `StreamWorker`；回执分类与投影由原领域结果模块和基础设施回执模块共同承接。边界检查及其负例沿用现有 arch-fitness 门禁，运行时改动由原变更分类器触发业务合同测试。
 
 软件购买继续复用 lockfile 固定的 [Vue 3.5.45](https://github.com/vuejs/core)、[Vue Router 5.5.1](https://github.com/vuejs/router) 与 [Element Plus 2.14.8](https://github.com/element-plus/element-plus)（均为 MIT），沿原组件、登录回跳、订单与支付结果页面展示一个软件买断选项。支付履约复用 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT）的事务和已有订单幂等机制；独立支付服务沿用 [Spring Boot 4.0.8](https://github.com/spring-projects/spring-boot) 与 [WeChat Pay Java 0.2.17](https://github.com/wechatpay-apiv3/wechatpay-java)（Apache-2.0，版本见 `java_payment_service/pom.xml`）。新增适配只处理标准 SKU、历史授权兼容、固定试用到期和商业条款镜像；定制仍走确认报价后的原订单，AI 仍走原钱包，不新增计费框架。当前价格与交付边界见[账号 SSOT](docs/account_system_ssot.md#221-企业购买形态)；受控测试支付不代表生产验收。
 
-企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK/App Server 负责唯一通用模型工具循环、会话与事件；XCMAX 负责身份、额度、工具权限、持久任务与独立结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI，已移除旧 `codex-runtime` 空 extra。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
+企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex/tree/ccf9be8cc458bd6b8336fe84d68d8893f2691a5e) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK/App Server 负责模型工具循环、会话与事件，使用 `thread/inject_items` 将同会话已核验的历史消息按原角色导入新任务。XCMAX 负责身份、额度、工具权限、持久任务与独立结果核验。受控工具使用已锁定的 [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/77001c96f9507be0f4d009b83210a384a5e08bda) `2.3.0`（MIT）；原动作工具在员工执行时发布该能力的嵌套输入 Schema，权限和回执仍由原宿主校验。模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI，已移除旧 `codex-runtime` 空 extra。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
 
 CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。后端质量检查、全部分片和发布验证从现有 `uv.lock` 同时读取 pytest、pytest-cov、coverage 的精确版本；锁缺失或歧义时在安装前停止，避免排队期间工具发版造成报告工具链漂移。
 
@@ -48,7 +58,7 @@ Smoke 与真实 API E2E 使用官方 [setup-uv 6.8.0](https://github.com/astral-
 
 Para 首次派工先核对 `/api/health` 的 `task_request_recovery_version=1`，冻结全部设备计划和每次原请求正文。`POST /api/tasks` 与 `GET /api/tasks/by-request/:client_request_id` 都核对服务端计算的正文 SHA-256、原 task/subtask/device；消息轮询只读恢复，获授权的原调用续接只派发尚未发送的设备。配套服务 `42433422/devfleet-private` 沿用 SQLite 原生事务、唯一约束和既有重连调度，不能只升级客户端。客户端复用已固定的 [filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT）单例可重入文件锁，保留跨进程原请求互斥；未知结果不切换 webhook/CLI 重做。新任务须配置原 Para 地址、账号令牌、仓库与在线设备，旧服务在创建前停止；历史已知 task 仍可读取。
 
-工具回执复用现有 `app/domain/task_lifecycle/results.py`、SQL 幂等账本及 LangGraph，统一首次执行、已观察工具记录、后继节点与历史恢复的 unknown 语义；普通业务 `data.status` 不冒充执行状态。LangGraph 检查点包使用仓库带回补的版本，源码基线与补丁见 `packages/xcagi_langgraph_*/PROVENANCE.json`，不是声明上游发行了同名 fork 版本。[MCP Python SDK 2.3.0](https://github.com/modelcontextprotocol/python-sdk/tree/v2.3.0)（MIT）沿用原适配器及 `isError` 语义。账号、审批、原任务身份和副作用核对属于产品适配，不重建通用代理或编排引擎。完整缺口及验收边界见 [自治手册](../docs/autonomy.md#自主编程与工具执行)。
+工具回执复用现有 `app/domain/task_lifecycle/results.py`、SQL 幂等账本及 LangGraph，统一首次执行、已观察工具记录、后继节点与历史恢复的 unknown 语义；普通业务 `data.status` 不冒充执行状态。LangGraph 检查点包使用仓库带回补的版本，源码基线与补丁见 `packages/xcagi_langgraph_*/PROVENANCE.json`，不是声明上游发行了同名 fork 版本。[MCP Python SDK 2.3.0](https://github.com/modelcontextprotocol/python-sdk/tree/77001c96f9507be0f4d009b83210a384a5e08bda) 与 [jsonschema 4.26.0](https://github.com/python-jsonschema/jsonschema/tree/v4.26.0)（均为 MIT）承接工具参数校验和 `isError` 回执，校验详情只返回字段路径、约束和缺少的字段名。账号、审批、原任务身份和副作用核对属于产品适配，不重建通用代理或编排引擎。完整缺口及验收边界见 [自治手册](../docs/autonomy.md#自主编程与工具执行)。
 
 客来来工作区复用前端 lockfile 已固定的 [Vue 3.5.45](https://github.com/vuejs/core/tree/v3.5.45)、[Pinia 4.1.0](https://github.com/vuejs/pinia/tree/v4.1.0)、[Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（均为 MIT）。采用现有 tabs、table、switch、状态 store 和请求工具，不搬入 React/Tauri 页面或新增渠道 SDK；渠道协议仍由客来来统一负责。
 
@@ -90,13 +100,15 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | 执行卡片 | [shadcn-vue v2.9.0](https://github.com/unovue/shadcn-vue/tree/39cb0b277f009e47de2dc62c4217755fb9a27eec/apps/v4/registry/bases/reka/ui/trace)，MIT | `frontend/src/components/ui/trace/` 保留上游 Trace / Collapsible 结构及许可；仅替换样式、图标和 Vue getter，使用已有 Reka UI 2.11.0，无额外 CSS 框架。 |
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装文本和工具事件，`ChatStatus` 提供会话状态。参考 [Open WebUI 的会话任务事件](https://docs.openwebui.com/features/extensibility/plugin/development/events/) 按会话分发，产品层只绑定账号、Mod、会话和审批回执。 |
 | SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
+| 文件下载完整性 | [@noble/hashes 2.4.0](https://github.com/paulmillr/noble-hashes)，MIT，精确版本固定于前端 package 和 lockfile | 复用 SHA-256 核对原文件回执与实际下载字节；HTTPS、桌面和局域网 HTTP 使用同一校验，不依赖安全上下文专属 WebCrypto。 |
 | 员工办公室 | [Pixel Agents v1.6.0](https://github.com/pixel-agents-hq/pixel-agents/tree/4dd14d612fd37d89ffbbc977959f572395c4eec8)，MIT | 固定提交 `4dd14d612fd37d89ffbbc977959f572395c4eec8` 的 Canvas 2D 渲染、工位、精灵与动画核心；仅加 Vue/部门/任务胶水，异步加载，无新增运行时依赖。角色来源为 MetroCity CC0，原许可、源文件校验和可复现导入脚本见 [third_party/pixel-agents](third_party/pixel-agents/README.md)。 |
-| 员工任务与图谱 | [Vue Flow 1.48.2](https://github.com/bcakmakoglu/vue-flow) / [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)，MIT，已有 lockfile 固定 | 复用现有流程图、表单、对话框、执行记录与产物面板；空间、工作台和图谱共同读取原任务账本及认证事件流，不引入上游独立执行器。 |
+| 员工任务与图谱 | [Vue Flow 1.48.2](https://github.com/bcakmakoglu/vue-flow) / [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8) / [Element-Plus-X Sender 1.3.98](https://github.com/element-plus-x/Element-Plus-X/tree/ac84d0820afe2ccbc2ce515750bca0a61bb82fb9/packages/core/src/components/Sender) / [noUiSlider 15.8.1](https://github.com/leongersen/noUiSlider/tree/15.8.1)，MIT | Dialog 展示工位详情，ElSelect 选择企业模型，Sender 接入对话，noUiSlider 提供跟手拖动、档位吸附及键盘操作。 |
 | 执行链观测 | [OpenTelemetry Python v1.45.2](https://github.com/open-telemetry/opentelemetry-python/tree/v1.45.2)，Apache-2.0；SDK/API 1.45.2、OTLP exporter 1.45.1 由现有 `uv.lock` 固定 | W3C 身份、工具/NeuroBus span、批处理队列和关闭复用 SDK；排队属性由原生 `BoundedAttributes` 递归冻结，不增加容量或截断策略。既有 GenAI JSONL 只保留属性适配与文件 sink，共用同一 provider 生命周期。 |
+| 审批队列 | [Reka UI 2.11.0](https://github.com/unovue/reka-ui)，MIT，版本由现有前端 lockfile 固定 | Tabs 处理键盘导航与可访问性，审批 Mod 绑定队列、数据和分页。 |
 | SLO 错误预算候选规则 | [Sloth v0.16.0](https://github.com/slok/sloth/releases/tag/v0.16.0)，Apache-2.0，CI 镜像固定 `ghcr.io/slok/sloth:v0.16.0` | 复用 Sloth 的多窗口燃烧率规则生成器，针对现有 Prometheus 业务事件指标生成候选告警；不新增第二套 SLO 事实源，不自动替换线上告警。原采集器仍核对样本下限、24h 抓取率和正式发布身份，规则生成/合成测试不代表现场已启用或业务指标达标。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
 | ELT 预演续租 | [CPython 3.12.13 threading](https://github.com/python/cpython/blob/v3.12.13/Lib/threading.py)，PSF-2.0 | 阻塞解析和字段映射期间使用线程及 Event，在独立短事务校验原租户和租约令牌。 |
-| 工作簿原生校验与打印 | [openpyxl 3.1.5](https://foss.heptapod.net/openpyxl/openpyxl/-/tags/3.1.5)，MIT | 复用条件格式、数据验证、定义名称和页面布置对象，沿既有写入员和独立质检员按计划写入及重开核验。 |
+| 工作簿原生格式、校验与打印 | [openpyxl 3.1.5](https://foss.heptapod.net/openpyxl/openpyxl/-/tags/3.1.5)，MIT | 复用列宽、表格及其可选计算列和合计行、条件格式、数据验证、定义名称和页面布置对象，由写入员写入和独立质检员重开核验。 |
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
 | ELT 事务与提交恢复 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy)，MIT；服务端与桌面锁 `2.0.52`，开发 `uv.lock` 为 `2.0.51` | 使用 `Session.begin_nested()` 保存点隔离失败行，既有租约 UPDATE 建立外层事务；提交应答丢失只在独立 Session 核对原行回执和计数。移除先回滚再重写已成功行的逻辑；知识库独立写入前释放 SQL 写锁，逐行记录回执。 |
 | ELT 归档并发 | [filelock 4.2.4](https://github.com/tox-dev/filelock)，MIT；[cryptography](https://github.com/pyca/cryptography)，Apache-2.0/BSD-3-Clause，`uv.lock` 为 `50.0.0`、桌面锁为 `50.0.1` | 复用跨进程文件锁与 Fernet；首次生成密钥互斥且独占创建，已有无效密钥拒绝替换；密文限额按编码开销计算，解密后核对原长度和摘要。 |
@@ -154,15 +166,41 @@ Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回�
 |---|---|---|
 | SLO 采集与告警 | [Prometheus 3.14.0](https://github.com/prometheus/prometheus/tree/v3.14.0)（Apache-2.0）；现有锁中的 [Tenacity 9.1.4](https://github.com/jd/tenacity/tree/9.1.4)（Apache-2.0）、[filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT） | promtool 执行真实规则；安全 GET 有界重试、证据跨进程互斥追加。按固定目标、实际采样数、完整指标和摘要核对；正式 90 天 / 99% 覆盖与近期 7 天观察保持原要求。 |
 | 压力与网络故障验收 | [k6 0.54.0](https://github.com/grafana/k6/tree/v0.54.0)（AGPL-3.0，沿用现有性能流水线版本）、[Toxiproxy 2.12.0](https://github.com/Shopify/toxiproxy/tree/v2.12.0)（MIT） | CI 校验官方二进制摘要；真实 TCP 故障接入原执行器和 SQLite 幂等账本，k6 独立回读同一持久轮次。缺工具、版本不符、未知结果和未完成时长均不能通过。 |
+| Agent 状态随机回归 | [Hypothesis 6.170.17](https://github.com/HypothesisWorks/hypothesis/tree/hypothesis-python-6.170.17)（MPL-2.0，开发依赖精确锁定） | 复用 `RuleBasedStateMachine` 生成操作序列与缩减失败案例；生产 SQL 队列、控制命令与任务账本执行实际状态变化。测试入口只编排已有 pytest 场景和证据核验，不增加 Agent Runtime。 |
 | 在线备份与发布恢复 | [SQLite 在线备份 API](https://www.sqlite.org/backup.html)（Public Domain），经现有 Python 标准库 `sqlite3` 调用；原生 systemd / 原子文件替换沿用部署宿主版本 | 备份包含已提交 WAL 并检查完整性。候选发布核对原归档摘要、运行 SHA 和发布身份，失败恢复旧指针及服务；产品版本、授权和数据库模式边界由既有发布清单决定。 |
 
 遥测队列有界，退出时由 SDK 排空并关闭 exporter；短暂导出失败不永久关闭后续批次。本地查询逐行读取并只保留所需最新记录，持续运行时按日清理过期数据。遥测仍是观察数据，不能替代业务账本；强制结束进程、磁盘故障或队列溢出不承诺零丢失。网络故障与备份回归证明限定代码路径；真实生产 90 天、7 天 staging 压测及 Windows/macOS 安装恢复须提供对应原始证据，短时本地回归不能代替。
+
+工作组10统一入口（从 `FHD/` 执行）：
+
+```bash
+# PR 工程回归；须安装上表固定版本 Toxiproxy，可用 TOXIPROXY_SERVER_BIN 指定路径。
+python scripts/dev/run_agent_fault_regression.py --faults-only
+# 完整 WG10 验收：同时重验已有真实模型流水线的原始报告和全部三轮 JSONL。
+python scripts/dev/run_agent_fault_regression.py --model-reports test_reports
+```
+
+`faults-junit.xml` 与 `wg10.json` 记录当前 SHA、源码是否修改、依赖版本和逐项结果。缺用例、skip/xfail、失败、未生成报告均不算通过；`--faults-only` 成功只表示 J01–J09 工程场景通过，`wg10_accepted` 仍为 false。完整验收复用 `verify_task_benchmark_evidence.py`，拒绝旧 SHA、脏源码、缺失或改动的原始回执、规则兜底和观察模式；J10 沿用现有 13×3 留出集及 0.4 门槛，不冒充工作组11的 99% / 长周期目标。
+
+| 项目 | 固定回归入口与真实边界 |
+|---|---|
+| J01–J02 | 模型网关真实响应头/响应体超时、SSE 断流；Toxiproxy 超时、断连与延迟。合成服务端沿真实 TCP、SQL 和 LangGraph 检查点执行，不算真实模型验收。 |
+| J03–J06 | 随机种子决定持久化后终止点、原生检查点恢复、真实 SQLite 写锁、E23/E24 提交后回执丢失、四个进程并发接管；保留成功步骤、原业务行与唯一有效租约。 |
+| J07–J08 | Hypothesis 30 组、每组最多 40 步；取消前后的 CAS/整条保存与迟到状态交错。生成序列不计作独立业务验收轮次。 |
+| J09 | 保留原运行仓储、对话中断、核验、队列、交付回执与重启清扫回归；包括 #3682 等待子任务父任务被清扫，以及取消后迟到保存丢失控制指令。 |
+| J10 | 既有 `task-holdout-real-model.yml` 在受保护 main 推送时自动执行。原账号、模型授权、运行资格、完整三轮回执及独立业务核验均必需；缺证据为 BLOCKED。 |
 
 对话执行卡复用同一套 Trace 组件展示规划、附件读取、工具节点、确认和回执。规划占用状态栏，步骤数来自真实工具事件或运行回执。ELT 进度直接读取已持久化的阶段数据；流结束且缺少工具回执时显示“待核对”。正文和执行进度独立更新。
 
 员工办公室遵循 `config/duty_roster.json` 的企业四部门和管理六部门，安装包显式 `enterprise_layer` 优先，部门 ID 与原成员关系保持一致。当前任务和多员工步骤由服务端投影身份、步骤状态及待核对回执；断流保留上次结果并标为过期，慢请求不覆盖较新事件，账号切换丢弃旧响应。派发、审批、暂停、恢复、取消和结果查看沿用原 API；托管开关只控制自动接单。完成数只统计当前可见服务端任务并按任务 ID 去重；地图动画不产生任务、交接或完成回执。
 
-执行链统一传递 `trace_id/span_id/parent_span_id`，保留独立 `request_id/task_id/run_id/call_id/attempt`。HTTP/SSE、后台恢复、工具子进程、结构化日志和模型 OTLP 使用原关联；历史回放不重新生成 ID。错误使用 `error_code/error_type`，业务失败回执也标记失败，重试恢复后保留各次尝试而不污染成功终态。`duration_ms` 使用单调时钟：HTTP 记录完整响应，`run.observed` 的 `duration_scope=active` 累计规划和执行段，审批等待不计入；工具累计与任务执行耗时分开，缺失测量不写零。流结束只表示传输结束。旧任务在观测增量中只派生稳定关联，不改原账本快照或放宽恢复 CAS。
+执行链统一传递 `trace_id/span_id/parent_span_id`，保留独立 `request_id/task_id/run_id/call_id/attempt`。HTTP/SSE、后台恢复、工具子进程、结构化日志和模型 OTLP 使用原关联；历史回放不重新生成 ID。Xiaox Responses 沿原绑定账本的父 Trace 输出真实 OTel span，并在原 `model_requests` 保存观测；`final=false` 为在途快照，`final=true` 标明同一请求组的最终观测，不改计费、控制或业务回执。复用锁定的 HTTPX `0.28.1` / HTTPcore trace 扩展测量准入、连接、发送、等待响应和读取；网络与服务端工作混合的等待不冒称纯推理，缺少供应商证据的 `remote_queue_ms/inference_ms` 保持 `null`。
+
+`duration_ms` 使用单调时钟，`run.observed` 的 `duration_scope=active` 累计规划和执行段，审批等待不计入。工具总耗时保留原指标，`xcagi_tool_duration_ms` 以宿主能力注册表内的工具名和结果分类；动态工具只在有权限的 Trace 查看精确身份，避免无限指标标签。正式 `/metrics` 聚合默认和既有 Agent registry；原 Grafana `fhd-performance` 面板单独选择 production/staging 抓取任务。成功率为已观测的 `completed/(completed+failed+cancelled+rejected)`，等待、blocked、unknown 单列，无样本保持未知。它是运行监控，不是全队列完成率或真实模型验收分数。
+
+`run.state_changed` 与原任务同事务保存 `from_status/to_status`、原因事件引用、序号和保存进程的来源 SHA；未提供原因的旧写入显式 `reason_not_recorded`，不从异常正文猜测。仓储并发保护和业务核验先决定实际状态，再记录转换；失败 CAS、回滚与重复保存不制造持久审计，保存点撤销不会吞掉外层已提交终态指标。执行事件、持久化事件和观察器各自记录观测到的构建/提交身份，不能相互追认历史版本，也不证明未提交工作树的内容。观测失败只留下安全告警，不触发业务重试。
+
+工作组09 的诊断观察随原 dispatcher 生命周期启停，以独立线程每30秒开始读取原 SQL 任务/队列；未完成且有进展的扫描每1秒继续有界批次，按现有期限、租约及结构化故障判断架构层；超时只表示疑似卡住，合法审批、子回执和核验等待单独处理。完整扫描结束才更新故障快照和新鲜度，未完成扫描不伪装实时数据。故障候选复用既有工单 SSOT 的持久去重与文件锁，在原不可变创建事件中保存脱敏引用及 `diagnostic_classification` 快照；校验协议与摘要后，可用原分类器复演当时结论，原任务后续变化不影响复演。快照不保存原始提示词、参数或业务输出，原 payload 摘要仅为引用；诊断复演不是业务重放，缺失历史来源保持未知。观察器不认领任务、不改业务状态、不重发动作、不直接外发 GitHub 修复。所有这些薄适配复用上述 OpenTelemetry、Prometheus、SQLAlchemy 和原工单协议；通用监控组件不能替代产品租户、回执和生命周期事实，未增加竞争性 Runtime。
 
 
 AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolActionSpecV2`，内置动作仍在 `risk_actions.registry.json` 定义，MCP 动态动作沿用现有注册器；重复身份直接拒绝。FastAPI OpenAPI 只提供非执行 HTTP 资源和字段元数据。目录检索复用已锁定依赖 [scikit-learn](https://github.com/scikit-learn/scikit-learn)（BSD-3-Clause）的 TF-IDF 向量化与余弦相似度，语义 overlay 由已有 PyYAML（MIT）读取，不改变契约授权。MCP 协议层沿用官方 Python SDK（`mcp==2.3.0`，MIT）同一生态的 JSON-RPC 约定，未替换现有传输实现。
@@ -316,6 +354,23 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 部署方仍可显式设置 `XCAGI_AGENT_RUNTIME_CONFIG` 使用原独立网关合同；无效显式配置不会改走账号默认路由。该 JSON 包含 `engine=codex`、两种 `surfaces`、绝对私有 `runtime_root`、根目录内的 `qualification_file` 及 `route`；路由明确独立 `base_url`、`model`、`response_model`、`provider_id`、`upstream_vendor`、`api_key_env`、容量和调用上限。请求不能选择凭据或引擎。Codex 使用短期模型/工具令牌及本地 MCP/Responses 代理，不继承个人 Codex 配置、ChatGPT 登录或额外插件；仅开启受控业务工具，禁止 shell、文件修改及托管搜索。既有开发超级员工的 CLI 调度保持原路径。
 
+模型稳定性继续使用上述网关、原任务 SQL 账本和计费记录。退避复用 [Tenacity 9.1.4](https://github.com/jd/tenacity/tree/9.1.4)（Apache-2.0），传输分阶段限时复用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.28.1)（BSD-3-Clause）和现有 AnyIO；结构校验复用已锁定的 jsonschema 4.26.0 / referencing 0.37.0（MIT），不取回远程 Schema。保留现有异步模型准入层的原子半开探测、代际及流式资源所有权；同步 `CircuitBreaker.call()` 无法直接承接这些生命周期，未新建第二套执行器。请求、物理尝试、实际模型、供应商响应 ID、原任务 Trace 和已知用量在同一链路对齐；模型耗时为宿主观测，不能当作供应商内部推理计时。
+
+| 模型等待与隔离配置 | 默认及范围 |
+| --- | --- |
+| `XCAGI_MODEL_REQUEST_TIMEOUT_SEC` | 单请求绝对预算 180 秒，范围 30–600 秒，受原任务截止时间限制；重试不重置。 |
+| `XCAGI_MODEL_CONNECT_TIMEOUT_SEC` / `POOL_TIMEOUT_SEC` / `WRITE_TIMEOUT_SEC`（均以 `XCAGI_MODEL_` 开头） | 各 15 秒；每项不超过请求剩余预算。 |
+| `XCAGI_MODEL_RESPONSE_TIMEOUT_SEC` | 等待响应头的上限，默认沿用单请求预算。 |
+| `XCAGI_MODEL_INFERENCE_TIMEOUT_SEC` / `READ_TIMEOUT_SEC`（均以 `XCAGI_MODEL_` 开头） | 返回体/推理阶段总时限及读取空闲时限，默认沿用单请求预算；持续吐字节不能延长总时限。 |
+| `XCAGI_MODEL_CLEANUP_TIMEOUT_SEC` | 传输清理共享 2 秒宽限；关闭卡死不能永久占用模型槽位。 |
+| `XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL` | 每个端点/模型默认 8 个并发，受现有全局上限（默认 32）约束；进程内控制，不冒充多 Worker 共享熔断。 |
+| `XCAGI_MODEL_MAX_INFLIGHT_PER_ACTOR` | 同一可信账号跨模型默认最多 4 个并发；全局及当前路线容量大于 1 时至少给其他账号留 1 个槽位。无可信身份的请求共用匿名额度，自报账号字段不能换桶；容量为 1 时不声明并行公平。 |
+| `XCAGI_STRUCTURED_OUTPUT_MAX_REPAIRS` | 最多 2 次格式修复；安全传输重试全程最多 2 次，共享结构化调用总截止时间。 |
+
+显式部署配置可增设 `authorized_fallbacks` 数组（最多两个 `{ "route": { ... }, "qualification_file": "/原runtime_root内/独立资格.json" }`）。每个候选沿用完整 `ModelRoute` 字段及单路真实资格，容量不得低于主路由；缺资格不启动、不会自动购买探测。候选列表及顺序绑定原任务，恢复不能增删或换序。账号市场路由当前没有已签发的备用授权快照，仍保持单路；公开模型目录不会产生换模授权。上游 `failover_policy` 继续为 `disabled`，SDK 不自行重试/换模。只有明确未发出或 HTTP 429 拒绝、原尝试已零用量结算且没有输出时，宿主才在原三次物理尝试及截止时间内考虑下一候选；原文字、完整函数调用及结果不改变，原线程和任务不重建。包含加密推理、压缩、远程模板/文件引用或未验收模态的现场禁止跨路由传递；已选中的实际路由持久化，后续请求及恢复不把其历史发送回旧模型。组合切换的真实模型、压缩与重启验收尚需实际部署取证，单路资格不能替代这项生产证据。
+
+读写超时、5xx、响应丢失、取消及结算不明不授权重发。带 `client_request_id` 的同步/流式聊天共用原请求账本，自带 Key 与不启用钱包的请求也保存原回执；未知状态有平台资金预留时保留原 hold，先核对原请求，再决定释放或结算。BYOK 只恢复已持久化的终态回执；未收到终态仍返回待核对，不能重新调用供应商。幂等键在任何待恢复扣款前核对账号、任务、模型和额度，SQLite 认领及迟到处理使用原写锁和尝试代际。旧客户端没有请求幂等键时不能声称跨请求恰好一次，供应商实际费用仍必须用原账单核对。
+
 显式部署的首次资格或旧资格升级由部署方在运行主机执行 `xcagi-brain --json runtime-check --deployment`，使用该主机原有的 `XCAGI_AGENT_RUNTIME_CONFIG` 和其指定的密钥环境变量。该入口在本机复用同一资格探针、配置锁及尝试记录，可能产生模型费用；已有完整资格时只读复用，失败或中断后须修复配置并加 `--retry` 才再次取证。旧证据缺少宿主绑定或可核验摘要时不自动认定升级资格，部署方核对后使用 `--retry` 重新取证。`--deployment` 采用运行配置中的 `turn_timeout_seconds` 与原调用预算，`--timeout` 只影响 HTTP 命令。验收通过后重新读取原配置和新资格，配置漂移继续阻断；原任务按原编号恢复。账号模型设置与不带 `--deployment` 的 HTTP 命令仍只读检查共享部署资格，不能代替部署方写入，也不能沿用旧 PASS 补齐新检查。
 
 Responses 多轮工具协议由固定 SDK 处理：LiteLLM 代理保留真实原生 Responses 流，直连兼容模型使用 LiteLLM 的成熟适配，并在原始 HTTP 响应边界核对实际模型、实际用量和单次请求。适配器自行补出的用量不能作为结算或资格证据；平台聊天接口健康也不代表工具、压缩和恢复验收已通过。已发布的厂商总窗口声明沿用既有模型目录并标明来源（例如 [MiMo V2.6 Flash](https://mimo.mi.com/models/en-US/mimo-v2.6-flash)）；输入上限、输出上限和总窗口保持独立，不能从别名或 max_tokens 猜测总容量。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和实际出站拒绝证据。宿主出站传输仅允许已绑定的 Responses 地址，在建立连接前拒绝 OpenAI 地址、其他端点和非 POST 请求，并禁用环境代理与重定向；资格证据明确记录范围为 `host_model_egress`，不声称完成操作系统级防火墙隔离。`response_model` 是已验收的单个实际响应 ID，省略时等于请求 `model`；别名解析到快照时须由宿主显式绑定，不能由响应自行扩充允许列表。`gateway_kind=responses` 只发送标准 Responses 字段；明确验收为 `litellm` 时才由宿主下发 `num_retries=0`、`disable_fallbacks=true`，并检查原始 HTTP 两项 attempted-retries/fallbacks 头唯一且均为零。缺头、重复或非零保留未知用量，不结算为一次成功。通用 Responses 没有标准关闭换模参数，上游固定路由仍须实际资格证据；网关计数头是其协议声明，不能替代实际路由验收。
@@ -328,9 +383,11 @@ Responses 多轮工具协议由固定 SDK 处理：LiteLLM 代理保留真实原
 
 Codex 在同一 thread 内发现能力、读取完整 JSON Schema 和 `schema_digest`，通过 `execute_action` 发起当前合法动作，再根据真实结果继续。每个写动作创建原 SQL 子任务并绑定精确参数、工具合同及独立审批；执行前和审批后都重核身份与合同。浏览器、AIOPEN 和 Excel 也走此链：共享原父任务的浏览器会话，写前封存可核对条件，写后独立读回；工作簿只接受原授权附件或同一父任务的受验证产物。公式已写入与数值已重新计算分别记录，不能把 openpyxl 写入当作完成重算。正式业务流程继续由 LangGraph 执行依赖与分支。
 
-每轮动作结束后，宿主先读回 SQL/文件/页面事实，再经同一计费模型网关执行无工具的独立目标核验。核验将原请求、全部补答、约束与当前证据逐项对应，报告必须绑定原目标及当前证据摘要；自报成功不算证据。输出预算按目标与证据规模调整，受已验收路由容量限制；同一任务中的非法 JSON 或结构不符共用一次持久化的格式重试；模型拒绝、截断或工具调用回复立即停止核验，不能改称格式错误重试。完整报告为 `needs_work` 时将缺口交回同一 Codex thread，最多三轮执行—核验；未知写入、未决审批或计量不明优先暂停，不能被审计文字提升为完成。全部报告通过才结束原父任务，只有动作回执或丢失最终回复不能代替完整目标核验。
+每轮动作结束后，宿主先读回 SQL/文件/页面事实，再经同一计费模型网关执行无工具的独立目标核验。核验将原请求、全部补答、约束与当前证据逐项对应，报告必须绑定原目标及当前证据摘要；自报成功不算证据。`source_catalogue` 从同一冻结合同派生，Schema、指令和宿主共用 `request`、`answer:`、`objective` 与 `history:序号:user`；历史用户要求仅承接仍有效的文字条件，助手成稿用于解释指代，历史工具文字不能授权或证明业务。文字与 JSON 修订以当前正文为交付，真实读写仍逐项绑定独立回执。
 
-模型请求和子任务统一记录在原任务调用与费用账本。Codex 推理、独立目标核验和当轮同步工具调用共享原任务累计活跃时限；等待审批不计入该时限，获批后由后台执行的业务子任务继续使用自身 ToolSpec 超时、ELT 文件 watchdog 和执行租约。每次物理模型请求先预留、后按真实 usage 结算；用量未知保留预留并禁止重放。Codex 网关仅对确定未发送的连接故障和明确 429 拒绝做有限退避，每次尝试独立记账，本地不切换原路由。请求只接受官方 SDK 定义的 Responses 字段，不能携带调用者自定换模或重试参数；实际响应模型逐次核对并写入原台账。流式工具提议从出现起有界暂存，直到最终身份、usage、当前授权与剩余时限核验通过才交给 Codex，非流式结果使用相同放行边界。已知截断或失败且 usage 完整时按失败结算并保留原终态供有限恢复，不释放缓存的工具提议；缺 usage 才保留计费未知。宿主既有平台调用严格执行关闭故障转移的设置。Codex 默认累计活跃预算为 180 秒；模型重试、核验与恢复 thread 使用原剩余预算，不因新轮次重置。阶段、失败分类、原因、尝试和耗时进入原事件/模型账本，旧历史缺失值保持未知。
+输出预算按目标与证据规模调整，受已验收路由容量限制。同一任务的非法 JSON、结构或来源绑定错误共用原有一次持久化修复额度；来源修复只允许修正目标 ID 和错误引文绑定，保留目标数量、顺序、判断、证据及全部缺口，已正确的来源不可改绑，不能重跑业务。修正请求发出前在原 SQL 作业保存首次判断及其摘要；进程重启后的已结算响应沿用同一限制，不能改判或追加第三次请求。原输入变化即停止，核验器版本更新不补充预算；模型拒绝、截断、工具请求、历史授权越界与无效业务回执不能当成来源修复。文档引文采用[原生块位置引文](https://platform.claude.com/docs/en/build-with-claude/citations)的来源块引用方式，复用 [jsonschema 4.26.0](https://github.com/python-jsonschema/jsonschema/tree/v4.26.0)（MIT）校验当前正文、回执和文档可选 ID，由宿主还原引文。完整且来源有效的 `needs_work` 报告才可将缺口交回同一 Codex thread，最多三轮执行—核验；未知写入、未决审批或计量不明优先暂停。全部报告通过才结束原父任务，只有动作回执或丢失最终回复不能代替完整目标核验。
+
+模型请求和子任务统一记录在原任务调用与费用账本。Codex 推理、独立目标核验和当轮同步工具调用共享原任务累计活跃时限；等待审批不计入该时限，获批后由后台执行的业务子任务继续使用自身 ToolSpec 超时、ELT 文件 watchdog 和执行租约。每次物理模型请求先预留、后按真实 usage 结算；用量未知保留预留并禁止重放。Codex 网关仅对确定未发送的连接故障和明确 429 拒绝做有限退避，每次尝试独立记账；换模仅限上文显式授权且现场可迁移的备用路线。请求只接受官方 SDK 定义的 Responses 字段，不能携带调用者自定换模或重试参数；实际响应模型逐次核对并写入原台账。流式工具提议从出现起有界暂存，直到最终身份、usage、当前授权与剩余时限核验通过才交给 Codex，非流式结果使用相同放行边界。已知截断或失败且 usage 完整时按失败结算并保留原终态供有限恢复，不释放缓存的工具提议；缺 usage 才保留计费未知。宿主既有平台调用严格执行关闭故障转移的设置。Codex 默认累计活跃预算为 180 秒；模型重试、核验与恢复 thread 使用原剩余预算，不因新轮次重置。阶段、失败分类、原因、尝试和耗时进入原事件/模型账本，旧历史缺失值保持未知。
 
 自然语言 Agent API 默认以 `202` 在原 SQL 队列持久受理。审批后原子任务完成，由后台 dispatcher 只为证据齐全的原父任务登记唯一续接请求，恢复原 thread 再核验；结果 GET 只读回执，不运行模型或业务。候选选择通过原父任务补答继续，普通“确认”不会授权写入。活动租约、未决副作用、撤权、取消和跨主体绑定阻止续接。
 
@@ -451,7 +508,9 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 
 原管理任务取消沿 Para 同一个 task/subtask/device/attempt 登记持久意图，经设备 WebSocket 中断实际 Codex 子进程，并通过原 outbox 回报进程停止证明；重连只重送同一停止意图。状态等待原回执，停止进程不撤销已经发生的业务效果，未知用量仍占用原预算。OpenCode 设备使用独立工具身份，仅在原生隔离、精确源码支持和当前预检均有效时派发；旧设备不能通过工具名称或桌面启动入口冒充原生隔离执行器。
 
-正式工作流的参数澄清继续复用 [LangChain Core 1.5.3](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/core)（MIT）的有序消息窗口和 PydanticOutputParser，以及已吸收的 LangGraph 1.2.10。通用任务的补答改由 Codex request_input 和宿主持久答案事件承接，不再生成一张提问计划后重新规划。完整工具输入输出合同以 ToolSpec 为准，复用 [python-jsonschema](https://github.com/python-jsonschema/jsonschema) 4.26.0 与 [referencing](https://github.com/python-jsonschema/referencing) 0.37.0（MIT）核对本地 Schema 引用和嵌套约束；执行与审批恢复共用该合同。服务端安装沿用 `ops/deploy/requirements-langgraph-runtime.txt` 和原 bootstrap；业务导入仍通过 ELT 预演、审批与执行。执行后独立目标核验的协议与有界纠正以[固定本地 Agent 执行器](#固定本地-agent-执行器)为准。
+正式工作流的参数澄清继续复用 [LangChain Core 1.5.3](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/core)（MIT）的有序消息窗口和 PydanticOutputParser，以及已吸收的 LangGraph 1.2.10。通用任务的补答改由 Codex request_input 和宿主持久答案事件承接。工具输入合同以 ToolSpec 为准，统一由 [python-jsonschema](https://github.com/python-jsonschema/jsonschema) `4.26.0`（官方 `format-nongpl` extra）与 [referencing](https://github.com/python-jsonschema/referencing) `0.37.0`（MIT）执行；核对本地引用、组合和格式约束，拒绝外部引用检索，超量批次不得静默截断。HTTP 入口仅在原请求包含字段时传递无默认值的可选参数；显式空值按具体合同校验，保留合法清空、零值与布尔值语义。规划仅延期已声明的前序引用和待补字段，解析后在实际派发前再次严格校验。MCP Python SDK `2.3.0` 的协商结果决定资源/提示词能力是否可见，发现分页不完整不发布目录；执行和续跑使用同一实时权限/资源目录，保留原结构化权限拒绝回执，并在契约归一化后复核审批风险与幂等属性。服务端安装沿用 `ops/deploy/requirements-langgraph-runtime.txt` 和原 bootstrap，正式发布仍须精确提交及制品验收。
+
+任务图的依赖、条件分支和默认后继共用 [CPython graphlib](https://github.com/python/cpython/blob/v3.11.5/Lib/graphlib.py)（PSF-2.0，随项目既有 Python 3.11.5+ 运行时）校验和排序，保留同层声明顺序；LangGraph 与原 SQL 回执继续负责执行和恢复。Xiaox 宿主仅在原 SQL CAS 绑定增加产品控制约束：全部 MCP 操作每任务最多 1024 次；最多 32 条语义摘要识别连续 8 次、周期 1–4 的重复调用与相同结果。新的业务结果或原异步回执进展打断循环，重复轮询不算进展也不被误判为循环。触发后停止新规划、保留在途/审批等待/未知结果和原完成回执；重新授权不重置次数或已触发的停止原因。费用预算的各来源及别名取最小值，普通批准、澄清和恢复不能扩额，非法显式额度拒绝执行。以上是依附 Codex、LangGraph 和任务账本的产品约束，没有新增规划器或运行时；本地受控回归不能替代真实模型、生产并发和长周期验收。
 
 会话连续性复用 [LangChain 1.3.14 SummarizationMiddleware](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/langchain_v1)（MIT）及上述 Core 1.5.3，宿主压缩入口覆盖普通及流式模型调用，预留输出和工具 schema，保存完整原文的已覆盖游标；摘要失败不伪造覆盖。跨进程文件互斥使用 [filelock 4.2.4](https://github.com/tox-dev/filelock/tree/4.2.4)（MIT，统一跨进程锁依赖版本）。SQLAlchemy 事务管理会话 revision、删除标记和整轮回执，JSON 只作为可重建投影；历史通过授权游标分页读取，保存失败仅重试原回执。
 
@@ -466,6 +525,7 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 | thread/turn/item 状态和只读恢复语义 | [OpenAI Codex](https://github.com/openai/codex/tree/1145028ae47e8119955323d38ce34122d418f951)，Apache-2.0，固定提交 `1145028ae47e8119955323d38ce34122d418f951` | 通用 Agent 直接运行固定 SDK/CLI 0.171.0；本表所列旧提交仅为其他消费者的语义对照。item 结束不等于业务目标完成。 |
 | 外部副作用重试与未知结果边界 | [Temporal Python SDK 1.36.1](https://github.com/temporalio/sdk-python/tree/1.36.1)，MIT | 参考持久活动和幂等约束，继续使用现有执行队列；不引入 Temporal 服务或声称复用了其完整服务端能力。 |
 | Web 流式解析和原回执展示 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT，`frontend/package-lock.json` | 继续使用现有 SSE 组件；修正消费侧的受理、等待、未知和完成判断。 |
+| Redis 回放与租约协议回归 | [fakeredis 2.41.0](https://github.com/cunla/fakeredis-py)，BSD-3-Clause，开发依赖固定 `fakeredis[lua]` | Lua extra 执行现有租约脚本；CI 必须安装，缺失时报错而非跳过。仅用于协议回归，不代替真实 Redis 服务的恢复验收。 |
 | 手机离线队列和请求身份恢复 | [Drift 2.35.4](https://github.com/simolus3/drift)，MIT，`mobile-flutter-poc/pubspec.lock` | 复用现有 SQLite/outbox 及迁移机制保存原 turn；已发送任务只能读取原回执。 |
 
 通用开源运行时不能替本仓决定授权主体、审批计划指纹、父子任务归属或业务写回凭证，因此这些校验保留在现有接缝中。缺少原回执时保留 `unknown`；本地测试不代表真实模型、移动端构建、生产 PostgreSQL 或已部署产品验收。

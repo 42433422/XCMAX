@@ -1,159 +1,206 @@
 {
-  "dashboard": {
-    "id": null,
-    "uid": "fhd-performance",
-    "title": "FHD 后端性能监控",
-    "tags": ["xcagi", "fhd", "performance"],
-    "timezone": "browser",
-    "schemaVersion": 16,
-    "version": 0,
-    "refresh": "10s",
-    "panels": [
-      {
-        "id": 1,
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-        "type": "graph",
-        "title": "全局 P95 响应时间趋势",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
-            "legendFormat": "P95",
-            "refId": "A"
-          }
-        ],
-        "yaxes": [
-          {"label": "毫秒", "format": "ms"},
-          {"format": "short"}
-        ],
-        "thresholds": [
-          {"value": 500, "color": "red"},
-          {"value": 300, "color": "yellow"}
-        ]
-      },
-      {
-        "id": 2,
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-        "type": "graph",
-        "title": "请求速率（按状态码）",
-        "targets": [
-          {
-            "expr": "sum(rate(api_requests_total[5m])) by (status)",
-            "legendFormat": "{{status}}",
-            "refId": "A"
-          }
-        ],
-        "yaxes": [
-          {"label": "请求/秒", "format": "reqps"},
-          {"format": "short"}
-        ]
-      },
-      {
-        "id": 3,
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-        "type": "graph",
-        "title": "错误率（5xx 占比）",
-        "targets": [
-          {
-            "expr": "sum(rate(api_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(api_requests_total[5m])), 1)",
-            "legendFormat": "5xx 占比",
-            "refId": "A"
-          }
-        ],
-        "yaxes": [
-          {"label": "百分比", "format": "percentunit"},
-          {"format": "short"}
-        ],
-        "thresholds": [
-          {"value": 0.01, "color": "green"},
-          {"value": 0.05, "color": "red"}
-        ]
-      },
-      {
-        "id": 4,
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-        "type": "graph",
-        "title": "AI 请求速率（按状态）",
-        "targets": [
-          {
-            "expr": "sum(rate(ai_requests_total[5m])) by (status)",
-            "legendFormat": "{{status}}",
-            "refId": "A"
-          }
-        ],
-        "yaxes": [
-          {"label": "请求/秒", "format": "reqps"},
-          {"format": "short"}
-        ]
-      },
-      {
-        "id": 5,
-        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16},
-        "type": "singlestat",
-        "title": "活跃请求数",
-        "targets": [
-          {
-            "expr": "active_requests",
-            "legendFormat": "",
-            "refId": "A"
-          }
-        ],
-        "format": "short",
-        "valueName": "current",
-        "colorBackground": true,
-        "thresholds": "300,500"
-      },
-      {
-        "id": 6,
-        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 16},
-        "type": "singlestat",
-        "title": "熔断器状态 (0=关 1=半开 2=开)",
-        "targets": [
-          {
-            "expr": "max(circuit_breaker_state)",
-            "legendFormat": "",
-            "refId": "A"
-          }
-        ],
-        "format": "short",
-        "valueName": "current"
-      },
-      {
-        "id": 7,
-        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 16},
-        "type": "singlestat",
-        "title": "进程运行时间",
-        "targets": [
-          {
-            "expr": "time() - process_start_time_seconds{job=\"fhd-backend\"}",
-            "legendFormat": "",
-            "refId": "A"
-          }
-        ],
-        "format": "s",
-        "valueName": "current"
-      },
-      {
-        "id": 8,
-        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 16},
-        "type": "singlestat",
-        "title": "NeuroBus 事件发布总数",
-        "targets": [
-          {
-            "expr": "sum(neurobus_events_published_total)",
-            "legendFormat": "",
-            "refId": "A"
-          }
-        ],
-        "format": "short",
-        "valueName": "current"
-      }
-    ],
-    "templating": {
-      "list": []
+  "id": null,
+  "uid": "fhd-performance",
+  "title": "XCMAX Agent 稳定性与后端监控",
+  "description": "每次仅选择一个抓取任务，隔离生产、staging与本地数据。指标缺失保持未知，图表不代替真实模型及长期稳定性验收。",
+  "tags": ["xcagi", "fhd", "agent", "stability"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 9,
+      "title": "Agent 已观测终态成功率 · 15分钟",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 0},
+      "datasource": "Prometheus",
+      "description": "已提交 completed / (completed + failed + cancelled + rejected)。取消、拒绝计为未成功；合法等待、blocked、unknown 不进入终态分母。此图不代表全任务队列完成率，结合待核对与卡死面板阅读。跨进程崩溃后未采集的增量不构成验收证据。",
+      "targets": [{"expr": "(sum(increase(xcagi_run_terminal_total{job=\"$job\",status=\"completed\"}[15m])) or vector(0)) / (sum(increase(xcagi_run_terminal_total{job=\"$job\",status=~\"completed|failed|cancelled|rejected\"}[15m])) > 0)", "legendFormat": "", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "noValue": "无已观测终态样本"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
     },
-    "time": {"from": "now-1h", "to": "now"},
-    "timepicker": {
-      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    {
+      "id": 10,
+      "title": "Agent 已观测终态量 · 15分钟",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 0},
+      "datasource": "Prometheus",
+      "description": "事务提交后计数，重复保存和回滚不增加样本。终态量随成功率一起展示，禁止无样本宣称通过。",
+      "targets": [{"expr": "sum by (status) (increase(xcagi_run_terminal_total{job=\"$job\"}[15m]))", "legendFormat": "{{status}}", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 17,
+      "title": "抓取目标状态",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 0},
+      "datasource": "Prometheus",
+      "description": "1=本次抓取成功，0=抓取失败，无样本=未知。抓取正常不代表 Agent 业务成功。",
+      "targets": [{"expr": "up{job=\"$job\"}", "legendFormat": "{{instance}}", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 11,
+      "title": "模型可测阶段 P95 · 15分钟",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 7},
+      "datasource": "Prometheus",
+      "description": "admission 为本地准入等待；connect、request_send、response_wait、response_read 为实际传输阶段，total 为调用整体耗时。response_wait 包含网络和服务端处理；服务端排队与推理暂无独立测量，未测阶段不补零。",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, source, phase) (rate(xcagi_model_phase_duration_ms_bucket{job=\"$job\"}[15m])))", "legendFormat": "{{source}} / {{phase}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 12,
+      "title": "工具调用 P95 · 15分钟",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 7},
+      "datasource": "Prometheus",
+      "description": "按受控工具标识和真实回执结果区分耗时。慢工具保留失败样本，不按任务ID、参数或用户产生标签。",
+      "targets": [{"expr": "topk(10, histogram_quantile(0.95, sum by (le, tool, status) (rate(xcagi_tool_duration_ms_bucket{job=\"$job\"}[15m]))))", "legendFormat": "{{tool}} / {{status}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 13,
+      "title": "最近完整扫描的故障发现",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 14},
+      "datasource": "Prometheus",
+      "description": "只显示最近完整扫描快照；不汇总不同进度的半轮扫描。合法审批、子任务和质检等待不视作卡死。结合扫描陈旧时长判断，不能把旧快照当实时事实。",
+      "targets": [{"expr": "max by (layer, kind) (xcagi_agent_diagnostic_findings{job=\"$job\"})", "legendFormat": "{{layer}} / {{kind}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 14,
+      "title": "新增诊断修复候选 · 15分钟",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 14},
+      "datasource": "Prometheus",
+      "description": "仅在现有修复候选工单首次建档时计数；重复扫描不重复开单。工单不等于已修复，也不授予自动执行权限。",
+      "targets": [{"expr": "sum by (layer, kind) (increase(xcagi_agent_diagnostic_faults_total{job=\"$job\"}[15m]))", "legendFormat": "{{layer}} / {{kind}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 15,
+      "title": "完整诊断扫描陈旧时长",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 21},
+      "datasource": "Prometheus",
+      "description": "距上次完整扫描的秒数。超过5分钟表示观测陈旧，不是任务故障；有界扫描耗时随账本大小增长。首次尚无完整扫描显示未知。",
+      "targets": [{"expr": "time() - (xcagi_agent_diagnostic_last_complete_scan_timestamp_seconds{job=\"$job\"} > 0)", "legendFormat": "{{instance}}", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "s", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 16,
+      "title": "待核对未知结果 · 最近完整扫描",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 21},
+      "datasource": "Prometheus",
+      "description": "未知业务效果和模型用量保持待核对，不计为成功；显示最近完整扫描，结合陈旧时长阅读。",
+      "targets": [{"expr": "max by (layer, kind) (xcagi_agent_diagnostic_findings{job=\"$job\",kind=~\"business_outcome_unknown|model_usage_unknown\"})", "legendFormat": "{{layer}} / {{kind}}", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 18,
+      "title": "模型调用结果 · 15分钟",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 21},
+      "datasource": "Prometheus",
+      "description": "xiaox 为宿主运行时观测边界，provider 为直接模型请求边界，不把两类样本相加冒称独立模型请求数。",
+      "targets": [{"expr": "sum by (source, status) (increase(xcagi_model_call_total{job=\"$job\"}[15m]))", "legendFormat": "{{source}} / {{status}}", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 1,
+      "title": "HTTP P95 响应时间",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 28},
+      "datasource": "Prometheus",
+      "description": "",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{job=\"$job\"}[5m]))) * 1000", "legendFormat": "P95", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "title": "HTTP 请求速率（按状态码）",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 28},
+      "datasource": "Prometheus",
+      "description": "",
+      "targets": [{"expr": "sum by (status) (rate(api_requests_total{job=\"$job\"}[5m]))", "legendFormat": "{{status}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "title": "HTTP 错误率（5xx 占比）",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 35},
+      "datasource": "Prometheus",
+      "description": "按实际请求速率相除，低QPS不抬高分母；无请求样本显示未知。",
+      "targets": [{"expr": "(sum(rate(api_requests_total{job=\"$job\",status=~\"5..\"}[5m])) or vector(0)) / (sum(rate(api_requests_total{job=\"$job\"}[5m])) > 0)", "legendFormat": "5xx 占比", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "title": "AI 请求速率（按状态）",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 35},
+      "datasource": "Prometheus",
+      "description": "",
+      "targets": [{"expr": "sum by (status) (rate(ai_requests_total{job=\"$job\"}[5m]))", "legendFormat": "{{status}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "noValue": "无观测数据"}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "title": "活跃 HTTP 请求数",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 6, "x": 0, "y": 42},
+      "datasource": "Prometheus",
+      "description": "",
+      "targets": [{"expr": "sum(active_requests{job=\"$job\"})", "legendFormat": "", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 6,
+      "title": "熔断器状态（0关／1半开／2开）",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 6, "x": 6, "y": 42},
+      "datasource": "Prometheus",
+      "description": "",
+      "targets": [{"expr": "max(circuit_breaker_state{job=\"$job\"})", "legendFormat": "", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 7,
+      "title": "进程运行时间",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 42},
+      "datasource": "Prometheus",
+      "description": "进程重启会重置进程内计数；该时长不是 Agent 长期连续性验收。",
+      "targets": [{"expr": "time() - process_start_time_seconds{job=\"$job\"}", "legendFormat": "{{instance}}", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "s", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
+    },
+    {
+      "id": 8,
+      "title": "NeuroBus 已发布事件总数",
+      "type": "stat",
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 42},
+      "datasource": "Prometheus",
+      "description": "",
+      "targets": [{"expr": "sum(neurobus_events_published_total{job=\"$job\"})", "legendFormat": "", "refId": "A", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "无观测数据"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto"}
     }
-  }
+  ],
+  "templating": {"list": [{"name": "job", "label": "抓取任务", "type": "query", "datasource": "Prometheus", "query": "label_values(up{job=~\"fhd-api-stable|fhd-api-staging|fhd-backend\"}, job)", "refresh": 1, "multi": false, "includeAll": false, "current": {"text": "fhd-api-stable", "value": "fhd-api-stable"}}]},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["15s", "30s", "1m", "5m"]}
 }

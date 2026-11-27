@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from importlib import import_module
 from typing import Any
@@ -15,6 +16,8 @@ from app.infrastructure.llm.providers.openai_compatible_provider import (
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
 from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 # CPython's import-lock exception is not exposed by importlib's public stubs.
 _IMPORT_LOCK_ERRORS = RECOVERABLE_ERRORS + (import_module("importlib._bootstrap")._DeadlockError,)
@@ -170,6 +173,27 @@ def _initialized_market_token_reader():
     return reader if callable(reader) else None
 
 
+async def _complete_structured_for_domain(
+    messages: list[dict[str, str]], **kwargs: Any
+) -> dict[str, Any] | None:
+    """Keep provider exceptions and retry classification out of domain services."""
+    import httpx
+    from openai import APIConnectionError
+
+    from app.infrastructure.llm.retry_policy import is_safe_transport_retry
+    from app.infrastructure.llm.structured_output import StructuredOutputError, complete_structured
+
+    try:
+        return (await complete_structured(messages, **kwargs)).data
+    except (StructuredOutputError, httpx.TransportError, APIConnectionError, ValueError) as exc:
+        if not isinstance(exc, (StructuredOutputError, ValueError)) and not is_safe_transport_retry(
+            exc
+        ):
+            raise
+        logger.warning("Structured domain completion unavailable: %s", type(exc).__name__)
+        return None
+
+
 def _register_llm_port_source() -> None:
     """把本 registry 组装进 domain 层 ``LLMPort``（infrastructure→domain 为合法方向）。
 
@@ -227,6 +251,7 @@ def _register_llm_port_source() -> None:
             LLMProviderSource(
                 get_by_id=lambda provider_id: _self.get_llm_registry().get(provider_id),
                 get_active=_active_with_conversation,
+                complete_structured=_complete_structured_for_domain,
             )
         )
     except RECOVERABLE_ERRORS:

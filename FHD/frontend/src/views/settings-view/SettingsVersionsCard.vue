@@ -4,7 +4,7 @@
       <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
         <img class="settings-row__icon-art" :src="versionsArtSrc" alt="" />
       </span>
-      <span class="settings-row__label">{{ $t('settings.distillationVersions') }}</span>
+      <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.versions.labelKey) }}</span>
       <span class="settings-row__meta">{{ $t('settings.trainingArtifacts') }}</span>
       <span class="settings-row__arrow" aria-hidden="true"></span>
     </summary>
@@ -45,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import { SETTINGS_ENTRIES } from './settingsNavigation'
 import type { DistillationVersion } from '@/composables/settings/utils'
 import versionsArtSrc from '@/assets/icons/settings/r4c3.png'
 

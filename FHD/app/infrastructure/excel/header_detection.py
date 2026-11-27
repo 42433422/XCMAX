@@ -8,6 +8,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from openai import AuthenticationError, PermissionDeniedError
+
 from app.infrastructure.llm.providers.registry import get_active_provider
 from app.infrastructure.llm.structured_output import StructuredOutputError, complete_structured_sync
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -135,7 +137,7 @@ def detect_header_row_1based(
                     max_repairs=1,
                     timeout_seconds=30,
                 )
-            except StructuredOutputError as exc:
+            except (StructuredOutputError, AuthenticationError, PermissionDeniedError) as exc:
                 # A configured model's failed/invalid judgement must not silently
                 # become a conflicting heuristic choice.
                 raise HeaderDetectionFailed("模型未能完成表头识别。") from exc

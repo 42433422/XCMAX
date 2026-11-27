@@ -24,6 +24,7 @@ from app.application.agent_runtime.runtime_error_surface import (
 from app.application.market_llm.authentication import validate_demo_destination
 from app.application.market_llm.protocols import Connection, PreparedChatRoute
 from app.application.market_llm.routing import resolve_account_route
+from app.application.tenant_workspace_prefs import enterprise_model_for_actor
 from app.infrastructure.modstore_transport import MarketModelError, httpx_sync_client
 from app.infrastructure.xiaox.policy import (
     CODEX_VERSION,
@@ -403,16 +404,26 @@ def _prepared_route(connection: Connection, selected: tuple[str, str] | None) ->
                     "runtime_platform_unavailable", "平台模型配置暂时无法读取，请检查网络后重试。"
                 ) from exc
             time.sleep(0.4 * (attempt + 1))
-    return PreparedChatRoute(connection, (snapshot["provider"], snapshot["model"]), snapshot)
+    resolved = snapshot["provider"], snapshot["model"]
+    if selected is not None and resolved != selected:
+        raise RuntimeSetupError("runtime_changed", "平台未返回所选模型的精确路由。")
+    return PreparedChatRoute(connection, resolved, snapshot)
+
+
+def validate_account_model_choice(owner: str, selected: tuple[str, str]) -> str:
+    """Validate signed route metadata and return the credential class without model usage."""
+    connection = _account_connection(owner)
+    validate_demo_destination(connection)
+    return _model_route(_prepared_route(connection, selected)).key_source
 
 
 def _turn_timeout_seconds() -> int:
-    """单轮预算；默认 300 秒，可通过环境变量放宽但不得超过对话总预算。"""
-    raw = os.environ.get("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "300").strip()
+    """单轮预算；默认 540 秒，保留对话总预算的收尾时间。"""
+    raw = os.environ.get("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "540").strip()
     try:
         value = int(float(raw))
     except ValueError:
-        value = 300
+        value = 540
     return max(60, min(value, 570))
 
 
@@ -422,6 +433,7 @@ def _account_runtime_inputs(
     """Resolve the authoritative account route without writing local state."""
     connection = _account_connection(owner)
     validate_demo_destination(connection)
+    preference = None if previous else enterprise_model_for_actor(owner)
     selected = None
     if previous:
         provider, model = previous.get("provider_id"), previous.get("model")
@@ -434,8 +446,14 @@ def _account_runtime_inputs(
                 "runtime_changed", "原任务的模型路由不能改变，请恢复原部署配置。"
             )
         selected = provider, model.removeprefix(provider + "/")
+    elif preference:
+        selected = preference[0], preference[1]
     prepared = _prepared_route(connection, selected)
     route = _model_route(prepared)
+    if preference and route.key_source != preference[2]:
+        raise RuntimeSetupError(
+            "runtime_configuration_required", "所选企业模型的密钥来源已变化，请重新确认模型。"
+        )
     if previous and previous.get("route_identity") != route.identity:
         raise RuntimeSetupError(
             "runtime_changed", "原任务的模型配置已变化，请恢复原路由后继续；任务和回执已保留。"

@@ -1,6 +1,6 @@
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import type { TutorialBuildContext, TutorialStep } from '../types'
-import { createStep } from '../stepFactory'
+import { chatUploadAttachmentSelector, createStep } from '../stepFactory'
 
 export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
   const { industryId, mods } = ctx
@@ -136,20 +136,10 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
       routeQuery: { workspace: 'connections' },
     }),
     createStep({
-      id: 'chat-star-auto-refresh',
-      title: '主动意识启用',
-      description: `请先点击左侧「${chatLabel}」回到本页（若已在对话页可忽略）。勾选「主动意识启用」后，小C才会感知星标会话新消息。`,
-      targetSelector: '#view-chat label[data-tutorial-id="star-auto-refresh-toggle"]',
-      highlightSelector: '#view-chat label[data-tutorial-id="star-auto-refresh-toggle"]',
-      actionType: 'click',
-      routeName: 'chat',
-    }),
-    createStep({
       id: 'chat-excel-analyze-toolbar',
       title: '分析 Excel',
-      description: '微信与星标相关流程后，可在智能对话输入区上方使用「分析Excel」：上传工作…',
-      targetSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
-      highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
+      description: '点击输入框内的「上传附件」图标，选择要分析的 Excel 工作表。',
+      targetSelector: chatUploadAttachmentSelector,
       actionType: 'click',
       allowCardNext: true,
       routeName: 'chat',

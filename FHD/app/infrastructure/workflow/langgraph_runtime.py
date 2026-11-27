@@ -89,8 +89,8 @@ def _summarize_output(output: dict[str, Any]) -> str:
 class _ReadersWriterGate:
     """Readers–writer execution gate controlling node concurrency.
 
-    Readers — nodes that are **low-risk AND idempotent** — may run concurrently
-    with one another. Writers — any high-risk or non-idempotent node — hold
+    Readers — host-verified, low-risk, idempotent read-only calls — may run concurrently
+    with one another. Writers — every other call — hold
     exclusive access and never overlap any other node. When ``parallel=False``
     every node is treated as a writer so the whole graph is serialized.
     """
@@ -119,6 +119,7 @@ class _ReadersWriterGate:
             and spec is not None
             and spec.idempotent is True
             and spec.risk == "low"
+            and spec.is_read_only_call(node.params)
         )
 
     def _is_exclusive(self, node: WorkflowNode) -> bool:

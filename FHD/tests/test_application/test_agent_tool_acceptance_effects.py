@@ -773,7 +773,7 @@ def test_errors_are_not_reported_as_success(business, local_tools, monkeypatch):
                 "payload": {"customer_name": "EMPTY"},
             },
         ),
-        runtime_context=_ctx(actor, task_id="empty"),
+        runtime_context=_ctx(actor, task_id="empty", idempotency_key="empty-result"),
     )
     assert empty["success"] is False and empty["error_code"] == "empty_business_result"
 

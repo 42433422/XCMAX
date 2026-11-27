@@ -2,8 +2,8 @@
   flex: 1 1 auto;
   min-height: 0;
   padding: 16px 20px max(24px, env(safe-area-inset-bottom));
-  color: #172033;
-  background: #f5f7fb;
+  color: var(--xc-color-text);
+  background: var(--xc-color-page-bg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -15,50 +15,24 @@
 .elt-chat-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  padding: 14px 18px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #16355f, #235d8c 58%, #168294);
-  color: #fff;
+  padding: 12px 16px;
+  border-radius: var(--xc-radius-lg);
+  background: var(--xc-color-surface);
   box-shadow: 0 10px 28px rgb(22 53 95 / 14%);
   flex: 0 0 auto;
 }
 .elt-chat-header h1 {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 22px;
 }
-.elt-chat-header p {
-  margin: 0;
-  opacity: 0.86;
-  font-size: 13px;
-}
 .elt-chat-header__link {
-  color: #fff;
+  color: var(--xc-color-primary);
   text-decoration: underline;
   text-underline-offset: 3px;
   font-size: 13px;
-}
-.elt-workspaces {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  margin: 0;
-  padding: 0;
-  align-items: center;
-  flex: 0 0 auto;
-}
-.elt-workspaces button {
-  padding: 0.55rem 0.85rem;
-  border: 1px solid #d5deea;
-  border-radius: 8px;
-  background: #fff;
-  color: #31506d;
-}
-.elt-workspaces button.active {
-  color: #fff;
-  background: #235d8c;
-  border-color: #235d8c;
+  white-space: nowrap;
 }
 .elt-intake-shell {
   flex: 1 1 auto;
@@ -70,20 +44,18 @@
 .elt-workflow-steps {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  margin: 0 0 0.5rem;
-  padding: 0;
+  gap: 0.65rem 1rem;
+  margin: 0 0 0.75rem;
+  padding: 0 0 0.75rem;
+  border-block-end: 1px solid var(--xc-color-border);
   list-style: none;
   flex: 0 0 auto;
-}
-.elt-workflow-steps--quiet {
-  opacity: 0.72;
 }
 .elt-workflow-steps li {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  color: #5f6f7e;
+  color: var(--xc-color-text-secondary);
   font-size: 12px;
 }
 .elt-workflow-steps li span {
@@ -92,18 +64,16 @@
   width: 1.35rem;
   height: 1.35rem;
   border-radius: 50%;
-  background: #e4ebf3;
+  background: var(--xc-color-surface-3);
   font-size: 11px;
 }
 .elt-workflow-steps li.active {
-  color: #16355f;
+  color: var(--xc-color-primary);
   font-weight: 600;
 }
 .elt-workflow-steps li.active span {
-  background: #235d8c;
-  color: #fff;
+  background: var(--xc-color-primary-soft);
 }
 @media (max-width: 900px) {
   .elt-center { padding: 10px; }
-  .elt-chat-header { flex-direction: column; gap: 10px; padding: 14px; }
 }

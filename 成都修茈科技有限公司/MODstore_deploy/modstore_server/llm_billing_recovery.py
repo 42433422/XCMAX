@@ -134,10 +134,17 @@ async def recover_receipt(
     is_pat = pat_user_id is not None
     if is_pat and pat_user_id != user_id:
         return None
-    # BYOK Responses have exact provider usage but no platform wallet charge.
-    # The pending receipt was persisted only after the original stream ended.
-    if receipt["operation"] == "responses" and receipt.get("key_source") == "user_override":
-        if receipt.get("billed") is not False or receipt.get("charge_amount") != "0.00":
+    # A persisted terminal BYOK receipt has no platform wallet to read back.
+    # Recover the original receipt, never repeat the provider request.
+    if (
+        receipt["operation"] in {"chat", "responses"}
+        and receipt.get("key_source") == "user_override"
+    ):
+        try:
+            amount = Decimal(str(receipt.get("charge_amount")))
+        except (InvalidOperation, ValueError, TypeError):
+            return None
+        if receipt.get("billed") is not False or not amount.is_finite() or amount != 0:
             return None
         if is_pat:
             JavaWalletClient(request=request).validate_pat(authorization)

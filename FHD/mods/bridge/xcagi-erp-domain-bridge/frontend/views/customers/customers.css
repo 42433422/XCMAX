@@ -9,15 +9,21 @@
   min-width: 0;
 }
 
-.customers-header-main h2 {
-  margin: 0 0 6px;
+.customers-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-block-end: 10px;
 }
 
-.customers-header-desc {
-  margin: 0 0 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  max-width: 42em;
+.customers-count {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0;
+  color: var(--xc-color-text-secondary);
+  font-size: var(--app-font-size-caption);
+  font-variant-numeric: tabular-nums;
 }
 
 .customers-unit-filter {

@@ -313,6 +313,7 @@ def create_unified_task(
     action: str,
     params: dict[str, Any],
     runtime_context: dict[str, Any] | None = None,
+    approval_preview: str = "",
 ) -> UnifiedTaskResult:
     normalized_task_id = str(task_id or "").strip()
     if not normalized_task_id or len(normalized_task_id) > 160 or "/" in normalized_task_id:
@@ -407,7 +408,7 @@ def create_unified_task(
                 params=dict(params),
                 risk=spec.risk,
                 idempotent=spec.idempotent,
-                description=normalized_title,
+                description=approval_preview or normalized_title,
             )
         ],
         risk_level=spec.risk,

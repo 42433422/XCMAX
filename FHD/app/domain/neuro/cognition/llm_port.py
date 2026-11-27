@@ -13,7 +13,7 @@ Phase 2 的核心目标之一是"不限制 LLM"——本端口通过 ``get_activ
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,12 +26,13 @@ logger = logging.getLogger(__name__)
 class LLMProviderSource:
     """LLM provider 解析源（由 infrastructure 组装注入，避免 domain→infrastructure 反向依赖）。
 
-    两个 callable 均晚绑定到具体实现模块（当前为
+    callable 均晚绑定到具体实现模块（当前为
     ``app.infrastructure.llm.providers.registry``，在模块导入时自注册）。
     """
 
     get_by_id: Callable[[str], Any]
     get_active: Callable[[], Any]
+    complete_structured: Callable[..., Awaitable[dict[str, Any] | None]] | None = None
 
 
 _source: LLMProviderSource | None = None
@@ -47,11 +48,20 @@ class LLMPort:
     """Conscious 处理器使用的 LLM 端口。
 
     封装 ``LLMProviderRegistry``，提供简化的 ``chat`` 接口。
-    所有调用 best-effort：失败返回 ``None``，不抛异常。
+    文本调用 best-effort；结构化调用保留拒绝和请求结果未知的异常。
     """
 
     def __init__(self, default_provider: str | None = None) -> None:
         self._default_provider = default_provider
+
+    async def complete_structured(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """Use the wired schema/repair adapter without hiding uncertain requests."""
+        source = _source
+        if source is None or source.complete_structured is None:
+            raise RuntimeError("Structured LLM completion source is not wired")
+        return await source.complete_structured(messages, **kwargs)
 
     async def chat(
         self,

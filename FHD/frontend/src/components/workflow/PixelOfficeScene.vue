@@ -147,6 +147,7 @@ onBeforeUnmount(() => {
         <button type="button" aria-label="放大办公室" :disabled="zoom >= 2" @click="zoom = Math.min(2, zoom + .25)">+</button>
       </div>
     </div>
+    <slot />
     <div v-if="error" class="pixel-office-error" role="alert">{{ error }} <button type="button" @click="initialize">重新加载画面</button></div>
     <div ref="viewport" class="pixel-office-viewport" tabindex="0" aria-label="办公室地图，可滚动查看各部门">
       <p v-if="!ready && !error" class="pixel-office-loading" role="status">正在布置办公室…</p>
@@ -159,7 +160,7 @@ onBeforeUnmount(() => {
         <button v-for="seat in model.seats" :key="seat.empId" type="button" class="pixel-office-employee"
           :class="['pixel-office-employee--' + stateOf(seat.empId), { 'is-selected': selectedEmpId === seat.empId }]"
           :style="{ left: (seat.col - .5) * cssUnit + 'px', top: (seat.row - 1) * cssUnit + 'px', width: 3 * cssUnit + 'px', height: 3.9 * cssUnit + 'px' }"
-          :aria-pressed="selectedEmpId === seat.empId" :aria-label="`${rowById.get(seat.empId)?.shortName}：${statusOf(seat.empId)}`"
+          aria-haspopup="dialog" :aria-pressed="selectedEmpId === seat.empId" :aria-label="`${rowById.get(seat.empId)?.shortName}：${statusOf(seat.empId)}`"
           :data-employee-id="seat.empId" :data-office-state="stateOf(seat.empId)" :title="statusOf(seat.empId)" @click="emit('select', seat.empId)">
           <span class="pixel-office-activity">{{ stateLabel[stateOf(seat.empId)] }}</span>
           <span class="pixel-office-name">{{ rowById.get(seat.empId)?.shortName }}</span>
@@ -169,9 +170,8 @@ onBeforeUnmount(() => {
     </div>
     <div class="pixel-office-legend" aria-label="工位状态说明">
       <span><i class="working" />执行 / 分析</span><span><i class="waiting" />待审批 / 待处理</span><span><i class="done" />已完成</span><span><i class="error" />需关注</span><span><i class="offline" />状态待核实</span>
-      <span class="pixel-office-hint">点击员工查看任务 · 部门筛选可放大查看</span>
     </div>
-    <p v-if="!selectedZone && model.unassigned.length" class="pixel-office-unassigned">{{ model.unassigned.length }} 位员工尚未关联部门，可在右侧员工列表查看。</p>
+    <p v-if="!selectedZone && model.unassigned.length" class="pixel-office-unassigned">{{ model.unassigned.length }} 位员工尚未关联部门。</p>
   </section>
 </template>
 
@@ -203,9 +203,9 @@ onBeforeUnmount(() => {
 .pixel-office-legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 16px; color: #657466; background: #fff; font-size: 10px; }
 .pixel-office-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .pixel-office-legend .working { background: #4b9fc6; }.pixel-office-legend .waiting { background: #d6a44b; }.pixel-office-legend .done { background: #65a475; }.pixel-office-legend .error { background: #c86d61; }.pixel-office-legend .offline { background: #a4afa2; }
-.pixel-office-hint { margin-left: auto; }.pixel-office-loading { padding: 80px 20px; text-align: center; color: #6c7b65; font-size: 13px; }
+.pixel-office-loading { padding: 80px 20px; text-align: center; color: #6c7b65; font-size: 13px; }
 .pixel-office-error { padding: 16px; color: #a33f35; background: #fff0eb; font-size: 13px; }.pixel-office-error button { margin-left: 12px; cursor: pointer; }
 .pixel-office-unassigned { margin: 0; padding: 0 16px 12px; color: #8a774a; background: #fff; font-size: 11px; }
 button:focus-visible, .pixel-office-viewport:focus-visible { outline: 2px solid #176a50; outline-offset: 2px; }
-@media (max-width: 600px) { .pixel-office-viewport { max-height: 500px; } .pixel-office-toolbar { padding: 10px; }.pixel-office-hint { display: none; } }
+@media (max-width: 600px) { .pixel-office-viewport { max-height: 500px; } .pixel-office-toolbar { padding: 10px; } }
 </style>

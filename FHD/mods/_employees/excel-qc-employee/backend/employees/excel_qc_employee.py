@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.mod_sdk.errors import BOUNDARY_ERRORS
+from app.mod_sdk.file_employee_support import FileEmployeeSupport
 
 EMPLOYEE_ID = "excel-qc-employee"
 EMPLOYEE_LABEL = "Excel 质检员"
@@ -42,48 +43,31 @@ RULE_SPEC = {
 }
 
 
+_file_support = FileEmployeeSupport(__file__, RULE_SPEC)
+_err = _file_support._err
+_pack_root = _file_support._pack_root
+_workspace_root = _file_support._workspace_root
+_resolve_output = _file_support._resolve_output
+
+
 def _ok(
     data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
+    if isinstance(data, str):
+        summary = data[:4000]
+    else:
+        try:
+            summary = json.dumps(data, ensure_ascii=False)[:4000]
+        except TypeError:
+            summary = str(data)[:4000]
     return {
         "ok": True,
-        "summary": _summary(data),
+        "summary": summary,
         "items": data if isinstance(data, list) else [data],
         "warnings": list(warnings or []),
         "error": "",
         "meta": dict(meta or {}),
     }
-
-
-def _err(
-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    return {
-        "ok": False,
-        "summary": msg[:400],
-        "items": [],
-        "warnings": list(warnings or []),
-        "error": msg[:1000],
-        "meta": dict(meta or {}),
-    }
-
-
-def _summary(data: Any) -> str:
-    if isinstance(data, str):
-        return data[:4000]
-    try:
-        return json.dumps(data, ensure_ascii=False)[:4000]
-    except TypeError:
-        return str(data)[:4000]
-
-
-def _pack_root() -> Path:
-    return Path(__file__).resolve().parents[1]
-
-
-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
-    return Path(str(raw)).expanduser()
 
 
 def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
@@ -97,19 +81,6 @@ def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
         p = _workspace_root(ctx, payload) / raw
     if not p.is_file():
         raise FileNotFoundError(f"文件不存在：{p}")
-    return p
-
-
-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
-    rel = str(
-        payload.get("output_relpath")
-        or RULE_SPEC.get("default_output_relpath")
-        or "outputs/qc_report.json"
-    ).strip()
-    p = Path(rel).expanduser()
-    if not p.is_absolute():
-        p = _workspace_root(ctx, payload) / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
 
@@ -153,7 +124,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             run_warnings.append(f"质检不通过：blame={result.get('blame')}（详见 qc_report.json）")
         elif verdict == "WARN":
             run_warnings.append("质检有警告（详见 qc_report.json）")
-        normalized = _ok(
+        return _ok(
             result,
             warnings=run_warnings,
             meta={
@@ -163,15 +134,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
                 "verdict": verdict,
             },
         )
-        return {
-            "ok": normalized["ok"],
-            "summary": normalized["summary"],
-            "items": normalized["items"],
-            "warnings": normalized["warnings"],
-            "error": normalized["error"],
-            "meta": normalized["meta"],
-        }
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         return _err(
             str(exc),
             warnings=[

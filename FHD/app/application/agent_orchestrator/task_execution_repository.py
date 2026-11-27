@@ -70,6 +70,7 @@ class InMemoryTaskExecutionRepository:
                 if prior and prior in self._rows:
                     return copy.deepcopy(self._rows[prior])
             row = self._rows.get(run.run_id)
+            previous = row.state if row is not None else "created"
             if row is None:
                 row = AgentTaskExecution(
                     run_id=run.run_id,
@@ -104,6 +105,19 @@ class InMemoryTaskExecutionRepository:
             row.requested_by = str(requested_by or "")
             row.last_error_code = ""
             row.updated_at = now
+            if previous != row.state:
+                from app.domain.task_lifecycle.control import remember
+
+                body = self._book.get("agent", row.tenant_id, row.run_id)
+                remember(
+                    body,
+                    at=now,
+                    source=previous,
+                    target=row.state,
+                    code="task_enqueued",
+                    actor=str(requested_by or ""),
+                )
+                self._book.put("agent", row.tenant_id, row.run_id, body)
             self._rows[row.run_id] = copy.deepcopy(row)
             return copy.deepcopy(row)
 
@@ -172,18 +186,13 @@ class InMemoryTaskExecutionRepository:
             )
             for row in eligible:
                 recovered = row.state in LEASED_STATES
+                previous = row.state
                 body = self._book.get("agent", row.tenant_id, row.run_id)
                 if recovered and body.get("effects"):
-                    self._stop_locked(row, current, "unknown", "needs_verification")
+                    self._stop_locked(row, current, "unknown", "needs_verification", owner_id)
                     continue
                 if recovered and row.execution_count + 1 > DEFAULT_MAX_ATTEMPTS:
-                    row.state = "failed"
-                    row.lease_owner = ""
-                    row.lease_expires_at = ""
-                    row.last_error_code = "retries_exhausted"
-                    row.finished_at = current
-                    row.updated_at = current
-                    self._rows[row.run_id] = copy.deepcopy(row)
+                    self._stop_locked(row, current, "failed", "retries_exhausted", owner_id)
                     continue
                 row.state = "running"
                 row.lease_owner = str(owner_id or "")
@@ -192,6 +201,18 @@ class InMemoryTaskExecutionRepository:
                 row.execution_count += 1
                 row.recovery_count += int(recovered)
                 row.updated_at = current
+                from app.domain.task_lifecycle.control import remember
+
+                remember(
+                    body,
+                    at=current,
+                    source=previous,
+                    target="running",
+                    code="worker_reclaimed" if recovered else "worker_claimed",
+                    actor=owner_id,
+                )
+                body["history"][-1]["execution_count"] = row.execution_count
+                self._book.put("agent", row.tenant_id, row.run_id, body)
                 self._rows[row.run_id] = copy.deepcopy(row)
                 return copy.deepcopy(row)
             return None
@@ -201,6 +222,7 @@ class InMemoryTaskExecutionRepository:
         run_id: str,
         owner_id: str,
         *,
+        execution_count: int,
         lease_seconds: float,
         now: str | None = None,
     ) -> bool:
@@ -210,7 +232,11 @@ class InMemoryTaskExecutionRepository:
             if (
                 row is None
                 or row.state not in LEASED_STATES
+                or not owner_id
                 or row.lease_owner != owner_id
+                or type(execution_count) is not int
+                or execution_count < 1
+                or row.execution_count != execution_count
                 or not row.lease_expires_at
                 or row.lease_expires_at <= current
             ):
@@ -226,6 +252,7 @@ class InMemoryTaskExecutionRepository:
         owner_id: str,
         state: str,
         *,
+        execution_count: int,
         error_code: str = "",
     ) -> AgentTaskExecution | None:
         with self._lock:
@@ -233,7 +260,11 @@ class InMemoryTaskExecutionRepository:
             if (
                 row is None
                 or row.state not in LEASED_STATES
+                or not owner_id
                 or row.lease_owner != owner_id
+                or type(execution_count) is not int
+                or execution_count < 1
+                or row.execution_count != execution_count
                 or not row.lease_expires_at
                 or row.lease_expires_at <= utc_now_iso()
             ):
@@ -330,13 +361,21 @@ class InMemoryTaskExecutionRepository:
         return copy.deepcopy(row)
 
     def mark_open_effect(
-        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str = ""
+        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str, execution_count: int
     ) -> bool:
         with self._lock:
             row = self._rows.get(str(run_id or ""))
             if row is None or row.state not in LEASED_STATES:
                 return False
-            if owner_id and (row.lease_owner != owner_id or row.lease_expires_at <= utc_now_iso()):
+            if (
+                not owner_id
+                or row.lease_owner != owner_id
+                or type(execution_count) is not int
+                or execution_count < 1
+                or row.execution_count != execution_count
+                or not row.lease_expires_at
+                or row.lease_expires_at <= utc_now_iso()
+            ):
                 return False
             body = self._book.get("agent", row.tenant_id, row.run_id)
             effects = set(body.get("effects") or [])
@@ -401,18 +440,22 @@ class InMemoryTaskExecutionRepository:
             tenant = row.tenant_id if row is not None else ""
             return copy.deepcopy(self._book.get("agent", tenant, str(run_id or "")))
 
-    def _stop_locked(self, row: AgentTaskExecution, current: str, state: str, code: str) -> None:
+    def _stop_locked(
+        self, row: AgentTaskExecution, current: str, state: str, code: str, owner_id: str
+    ) -> None:
         from app.domain.task_lifecycle.control import remember
 
         previous = row.state
         row.state = cast(ExecutionState, state)
         row.lease_owner = ""
         row.lease_expires_at = ""
+        row.heartbeat_at = ""
         row.last_error_code = code
         row.finished_at = "" if state == "unknown" else current
         row.updated_at = current
         body = self._book.get("agent", row.tenant_id, row.run_id)
-        remember(body, at=current, source=previous, target=state, code=code, actor="")
+        remember(body, at=current, source=previous, target=state, code=code, actor=owner_id)
+        body["history"][-1]["execution_count"] = row.execution_count
         self._book.put("agent", row.tenant_id, row.run_id, body)
         self._rows[row.run_id] = copy.deepcopy(row)
 

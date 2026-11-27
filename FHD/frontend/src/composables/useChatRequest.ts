@@ -10,6 +10,7 @@ import { captureChatArtifacts } from '@/utils/chatArtifactContext'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { pendingRuntimeRunId } from '@/utils/chatRuntimeContinuation'
 import { useApprovalMode } from './useApprovalMode'
+import type { DesktopNavigationItem } from './useDesktopNavigationContext'
 export type ChatRequestScope = {
   signal?: AbortSignal
   isCurrent?: () => boolean
@@ -33,6 +34,7 @@ export interface UseChatRequestDeps {
   injectExcelContextPayload: (ctx: Record<string, unknown>, parts: string[]) => boolean
   consumeMultimodalIntoPlannerContext: (ctx: Record<string, unknown>, parts: string[]) => void
   captureArtifacts?: typeof captureChatArtifacts
+  readDesktopNavigation?: () => DesktopNavigationItem[]
 }
 
 export function useChatRequest(deps: UseChatRequestDeps) {
@@ -43,6 +45,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
     captureArtifacts = captureChatArtifacts,
+    readDesktopNavigation,
   } = deps
 
   const progressBySession = ref<Record<string, string>>({})
@@ -58,7 +61,11 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     if (scope?.isCurrent?.() === false || (scope?.identity && scope.identity !== resolveChatIdentity())) return {}
     const history = scope?.messages || (session === String(sessionId?.value || '').trim() ? messages.value : [])
     const runId = pendingRuntimeRunId(history, session)
-    return runId ? { agent_runtime_run_id: runId } : {}
+    const navigation = readDesktopNavigation?.()
+    return {
+      ...(runId ? { agent_runtime_run_id: runId } : {}),
+      ...(navigation?.length ? { desktop_navigation: navigation } : {}),
+    }
   }
 
   // 一个 turn 的首次提交决定附件；同 turn 重连和显式 retry 均复用快照。
@@ -81,7 +88,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     if (!batch) {
       // 找不到原 turn 时不能误拿输入框中新选择的文件。
       batch = retryOf || progressKey() !== progressKey(session)
-        ? { ids: [], complete: () => {} } : captureArtifacts()
+        ? { ids: [], uploadIds: [], complete: () => {} } : captureArtifacts()
       artifactBatches.set(key, batch)
     }
     artifactBatches.set(JSON.stringify([identity, session, turn]), batch)
@@ -122,19 +129,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       ...(plannerOpts?.destructiveConfirmed ? { destructive_confirmed: true, idempotency_key: plannerOpts.idempotencyKey || turnId } : {}),
     }
     // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
-    const contextParts: string[] = []
-    contextParts.push(`最近对话 ${compactHistory.length} 条`)
+    const contextParts = [`最近对话 ${compactHistory.length} 条`]
     const isActive = progressKey() === progressKey(scopedSessionId)
     const includeDraft = isActive && !plannerOpts?.expectedWorkflowPlanId
-    const hasExcelContext = includeDraft && injectExcelContextPayload(contextPayload, contextParts)
-    if (includeDraft) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
-    // 选文件时登记的附件工件：只认本轮上传，失败重试沿用同一批。
     const artifactBatch = artifactsForTurn(scopedSessionId, turnId, plannerOpts?.retryOf, scope)
-    const artifactIds = artifactBatch.ids
-    if (artifactIds.length) {
-      contextPayload.artifact_ids = artifactIds
-      contextParts.push(`后端工件 ${artifactIds.length} 个`)
-    }
+    const hasExcelContext = applyArtifactContext(contextPayload, contextParts, artifactBatch, includeDraft)
+    if (includeDraft) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     if (isActive) lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     return {
@@ -147,6 +147,22 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         context: contextPayload,
       },
     }
+  }
+
+  function applyArtifactContext(
+    context: Record<string, unknown>, parts: string[],
+    { ids, uploadIds }: ReturnType<typeof captureChatArtifacts>, includeLinkedExcel = true,
+  ): boolean {
+    if (ids.length) {
+      context.artifact_ids = ids
+      parts.push(`后端工件 ${ids.length} 个`)
+    }
+    // An explicitly attached workbook supersedes old linked workbook context.
+    if (uploadIds.length) {
+      context.attachment_upload_ids = uploadIds
+      return false
+    }
+    return includeLinkedExcel && injectExcelContextPayload(context, parts)
   }
 
   function resolveChatUserId(scope?: ChatRequestScope): string {
@@ -192,13 +208,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         .trim()
         .slice(0, 80),
     }
-    const contextParts: string[] = []
-    contextParts.push(`最近对话 ${compactHistory.length} 条`)
-    const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
-    consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    const contextParts = [`最近对话 ${compactHistory.length} 条`]
     const artifactBatch = artifactsForTurn(scopedSessionId, turnId, undefined, scope)
-    const artifactIds = artifactBatch.ids
-    if (artifactIds.length) contextPayload.artifact_ids = artifactIds
+    const hasExcelContext = applyArtifactContext(contextPayload, contextParts, artifactBatch)
+    consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     const reqOpts = { signal: fetchOptions.signal }

@@ -256,7 +256,7 @@ def test_real_sdk_header_failure_does_not_become_no_model_fallback(
         )
     assert result["success"] is False and result["error"] == error
     assert "columns" not in result
-    assert create.call_count == (2 if decision == "failure" else 1)
+    assert create.call_count == 1  # An authentication rejection must never replay.
 
 
 def test_read_dataframe_fills_merged_header_columns(tmp_path: Path) -> None:

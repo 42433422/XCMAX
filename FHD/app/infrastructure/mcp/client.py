@@ -31,6 +31,10 @@ from tenacity import (
 )
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
+from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
+    execution_result_pending_state,
+)
 from app.infrastructure.mcp.config import McpServerConfig
 from app.infrastructure.mcp.persistent_sessions import (
     McpSessionError,
@@ -63,6 +67,12 @@ class McpToolInfo:
     description: str
     input_schema: dict[str, Any]
     read_only: bool
+
+
+class McpToolList(list[McpToolInfo]):
+    """Tools and the optional protocol operations negotiated on their same session."""
+
+    resource_actions: tuple[str, ...] = ()
 
 
 class McpClientError(RuntimeError):
@@ -203,27 +213,51 @@ async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
 
     collected: list[Any] = []
     cursor: str | None = None
+    seen_cursors: set[str] = set()
     for _ in range(max_pages):
         params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
         result = await session.list_tools(params=params) if params else await session.list_tools()
         collected.extend(getattr(result, "tools", None) or [])
         cursor = _field(result, "next_cursor", "nextCursor")
         if not cursor:
-            break
-    return collected
+            return collected
+        if cursor in seen_cursors:
+            raise McpClientError("MCP 工具发现分页游标重复，未发布不完整目录")
+        seen_cursors.add(cursor)
+    raise McpClientError("MCP 工具发现超过分页预算，未发布不完整目录")
+
+
+async def _list_discovered_tools(session: Any) -> tuple[list[Any], tuple[str, ...]]:
+    capabilities = getattr(session, "server_capabilities", None)
+    # MCP 2 exposes the initialize result through the official SDK property.
+    raw_tools = (
+        await _list_all_tools(session)
+        if capabilities is None or capabilities.tools is not None
+        else []
+    )
+    actions: tuple[str, ...] = ()
+    if capabilities is not None:
+        if capabilities.resources is not None:
+            actions += RESOURCE_ACTIONS[:2]
+        if capabilities.prompts is not None:
+            actions += RESOURCE_ACTIONS[2:]
+    return raw_tools, actions
 
 
 def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
     """列出一个 MCP 服务器暴露的工具（含分页）；失败时返回空列表。"""
     try:
-        raw_tools = _sync(lambda: _with_session(config, _list_all_tools), config.timeout_seconds)
+        raw_tools, resource_actions = _sync(
+            lambda: _with_session(config, _list_discovered_tools), config.timeout_seconds
+        )
     except McpClientError as exc:
         logger.warning("MCP 服务器 %s 工具发现失败：%s", config.name, exc)
         return []
     except RECOVERABLE_ERRORS as exc:
         logger.warning("MCP 服务器 %s 工具发现异常：%s", config.name, exc)
         return []
-    tools: list[McpToolInfo] = []
+    tools = McpToolList()
+    tools.resource_actions = resource_actions
     for tool in raw_tools:
         name = str(getattr(tool, "name", "") or "").strip()
         if not name:
@@ -293,9 +327,16 @@ def _result_error(result: Any, tool_name: str) -> str:
     # Empty lists are valid MCP results; missing envelopes are not completion.
     if not isinstance(getattr(result, collection, None), list) or type(is_error) is not bool:
         return "mcp_result_invalid"
+    if is_error:
+        return "mcp_tool_error"
     if business.get("success") is False:
-        return "mcp_business_error"
-    return "mcp_tool_error" if is_error else ""
+        envelope = {"data": business}
+        pending = execution_result_pending_state(envelope)
+        if not pending or execution_result_outcome_unknown(envelope, include_execution=True):
+            return "mcp_business_error"
+        # A valid acknowledged wait is delivered successfully by MCP; the
+        # application adapter projects it as pending, never as business success.
+    return ""
 
 
 async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -> Any:
@@ -410,16 +451,8 @@ def call_tool(
                 retry_safe=safe_read,
             )
         text = _result_text(result)
-        is_error = bool(_field(result, "is_error", "isError", False))
         structured = _field(result, "structured_content", "structuredContent")
-        invalid = (
-            isinstance(structured, dict)
-            and "success" in structured
-            and type(structured["success"]) is not bool
-        )
-        business_error = isinstance(structured, dict) and structured.get("success") is False
         result_type = _field(result, "result_type", "resultType", "complete")
-        derived_error = _result_error(result, tool_name)
         blocks = getattr(result, "content", None)
         evidence = {
             **({"result_type": result_type} if result_type != "complete" else {}),
@@ -434,7 +467,7 @@ def call_tool(
                 else {}
             ),
         }
-        derived_error = _result_error(result, tool_name)
+        error_code = _result_error(result, tool_name)
     except McpSessionError as exc:
         lost = exc.code == "mcp_session_lost"
         return {
@@ -467,17 +500,6 @@ def call_tool(
             "retryable": safe_read and _retryable_transport_error(exc),
             **uncertain,
         }
-    error_code = (
-        "mcp_result_invalid"
-        if invalid
-        else "mcp_result_incomplete"
-        if result_type != "complete"
-        else "mcp_business_error"
-        if business_error
-        else "mcp_tool_error"
-        if is_error
-        else derived_error or ""
-    )
     return {
         "success": not bool(error_code),
         "tool": tool_name,

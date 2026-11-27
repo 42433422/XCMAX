@@ -2,6 +2,9 @@
 
 import asyncio
 import json
+import sqlite3
+import time
+from types import SimpleNamespace
 
 import anyio
 import httpx
@@ -253,3 +256,92 @@ def test_original_late_usage_receipt_clears_only_resolved_model_hold(gateway, ot
         _claim(store, "model-secret", app.state.xiaox_model_route, "next-authorized-request")
     else:
         assert post(client).status_code == 409
+
+
+def test_stalled_transport_close_has_a_bounded_grace_and_releases_capacity(gateway, monkeypatch):
+    client, store, calls, _, app = gateway
+    monkeypatch.setenv("XCAGI_MODEL_RESPONSE_TIMEOUT_SEC", "0.1")
+    monkeypatch.setenv("XCAGI_MODEL_CLEANUP_TIMEOUT_SEC", "0.1")
+    closed = []
+
+    class StalledClient(httpx.AsyncClient):
+        async def aclose(self):
+            try:
+                await anyio.sleep_forever()
+            finally:
+                closed.append(True)
+                await super().aclose()
+
+    async def stalled(request):
+        calls.append(request)
+        await anyio.sleep_forever()
+
+    app.state.xiaox_http_client_factory = lambda **kwargs: StalledClient(
+        transport=httpx.MockTransport(stalled), **kwargs
+    )
+    started = time.monotonic()
+    assert post(client).status_code == 504
+    assert time.monotonic() - started < 1
+    assert closed == [True] and len(calls) == 1
+    assert model_admission._MODEL_INFLIGHT == 0
+    assert store.binding.metadata["model_reconciliation_required"]
+
+
+def test_repeated_settlement_projection_failure_preserves_original_safe_refusal(
+    gateway, monkeypatch
+):
+    client, store, calls, _, _ = gateway
+    update = store.update
+
+    def unavailable(run_id, mutation, **kwargs):
+        if mutation.__name__ == "finish":
+            raise sqlite3.OperationalError("secret SQL parameters")
+        return update(run_id, mutation, **kwargs)
+
+    monkeypatch.setattr(store, "update", unavailable)
+    response = post(client)
+    assert response.status_code == 503
+    assert "secret SQL" not in response.text
+    assert len(calls) == 1 and model_admission._MODEL_INFLIGHT == 0
+    row = next(iter(store.binding.metadata["model_requests"].values()))
+    assert row["state"] == "reserved"
+    assert row["diagnostic"]["failure_kind"] == "model_settlement_storage_failed"
+    assert post(client).status_code == 409 and len(calls) == 1
+
+
+@pytest.mark.parametrize("failure", ["connect", "rate_limit"])
+def test_backoff_disconnect_cannot_clear_an_existing_model_failure(gateway, monkeypatch, failure):
+    from app.infrastructure.xiaox import model_gateway
+
+    client, store, calls, _, app = gateway
+    monkeypatch.setenv("XCAGI_MODEL_BREAKER_THRESHOLD", "2")
+    monkeypatch.setattr(model_admission, "_MODEL_BREAKERS", {})
+    route = app.state.xiaox_model_route
+    provider = SimpleNamespace(
+        provider_id=route.provider_id, model=route.model, route_identity=route.identity
+    )
+    with model_admission.model_rate_limit_scope(store.binding.context), pytest.raises(TimeoutError):
+        with model_admission.model_call_slot(provider):
+            raise TimeoutError("prior provider failure")
+
+    def fail(request):
+        calls.append(request)
+        if failure == "connect":
+            raise httpx.ConnectError("not sent", request=request)
+        return httpx.Response(429)
+
+    async def disconnected(*args):
+        return False
+
+    monkeypatch.setattr(model_gateway, "_wait_for_model_retry", disconnected)
+    app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(fail), **kwargs
+    )
+    assert post(client).status_code == 499
+    with (
+        model_admission.model_rate_limit_scope(store.binding.context),
+        pytest.raises(model_admission.ModelCircuitOpenError),
+    ):
+        with model_admission.model_call_slot(provider):
+            pytest.fail("Disconnect is not evidence that the failed provider recovered")
+    assert len(calls) == 1 and model_admission._MODEL_INFLIGHT == 0

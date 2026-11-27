@@ -120,6 +120,10 @@ def test_finance_creation_checks_committed_approved_transaction(trusted_actor):
 
 
 def test_finance_update_and_delete_verify_committed_tenant_state(trusted_actor):
+    from app.application.agent_orchestrator.result_verification import (
+        freeze_verification_contract,
+    )
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.application.finance_app_service import FinanceAppService
     from app.db.models import FinancialTransaction
     from app.infrastructure.tenant_scope import owned_tenant_scope
@@ -162,6 +166,13 @@ def test_finance_update_and_delete_verify_committed_tenant_state(trusted_actor):
 
     delete_params = {"transaction_id": txn_id}
     delete_case = invocation(actor, "finance", "delete_transaction", delete_params)
+    freeze_verification_contract(
+        delete_case.run,
+        delete_case.step,
+        delete_case.call,
+        get_tool_action_spec("finance", "delete_transaction"),
+        delete_case.context,
+    )
     assert verify(delete_case, {"success": True, "message": "spoofed"})["status"] == "failed"
     with owned_tenant_scope(actor.tenant_id):
         deleted = svc.delete_transaction(txn_id)

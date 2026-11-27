@@ -164,11 +164,11 @@ export const approvalApi = {
   /**
    * 获取我发起的审批请求
    */
-  async getMyRequests(userId: number, page = 1, pageSize = 500) {
+  async getMyRequests(userId: number, page = 1, pageSize = 500, status?: 'approved' | 'rejected') {
     try {
       const data = await api.get(
         ap('/api/approval/requests'),
-        { applicant_id: userId, page, page_size: pageSize },
+        { applicant_id: userId, page, page_size: pageSize, ...(status ? { status } : {}) },
         { headers: { 'X-User-ID': userId.toString() } },
       )
       return withRequestList(data as Record<string, unknown>)

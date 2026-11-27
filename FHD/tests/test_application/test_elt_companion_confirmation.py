@@ -468,7 +468,11 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
         AgentStep(
             node_id="review", tool_id="elt_import", action="preview", params={"run_id": child["id"]}
         ),
-        runtime_context={**actor.context, "chat_approval_mode": "auto"},
+        runtime_context={
+            **actor.context,
+            "chat_approval_mode": "auto",
+            "idempotency_key": f"elt:review:{child['id']}:before-confirmation",
+        },
     )
     assert review["success"] is True, review
     assert review["data"]["preview_revision"] == child["preview_revision"]
@@ -484,7 +488,10 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
                     **({"preview_revision": revision} if revision else {}),
                 },
             ),
-            runtime_context=actor.context,
+            runtime_context={
+                **actor.context,
+                "idempotency_key": f"elt:invalid-confirmation:{child['id']}:{revision}",
+            },
         )
         assert denied["error_code"] == (
             "ELT_PREVIEW_CHANGED" if revision else "schema_validation_failed"
@@ -539,7 +546,10 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
             action="preview",
             params={"run_id": parent["id"]},
         ),
-        runtime_context=actor.context,
+        runtime_context={
+            **actor.context,
+            "idempotency_key": f"elt:review:{parent['id']}:after-companion-confirmation",
+        },
     )
     assert refreshed["data"]["customer_products"]["status"] == "completed"
     assert refreshed["data"]["customer_products"]["requires_user_confirmation"] is False

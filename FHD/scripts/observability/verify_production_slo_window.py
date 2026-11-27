@@ -15,7 +15,9 @@ from collect_slo_metrics import (
     QUERIES,
     SAMPLE_MINIMUMS,
     SAMPLE_QUERIES,
+    SCRAPE_INTERVAL_SECONDS,
     SCRAPE_TARGETS,
+    SCRAPE_WINDOW_SECONDS,
     TARGETS,
     _numeric,
     load_evidence_chain,
@@ -29,7 +31,7 @@ def _timestamp(value: Any) -> datetime | None:
     try:
         stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         return stamp.astimezone(UTC) if stamp.tzinfo is not None else None
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -50,7 +52,7 @@ def _audit_summary(epoch: str, audit: dict[str, Any] | None) -> dict[str, Any] |
     }
 
 
-def _metric_errors(payload: dict[str, Any]) -> list[str]:
+def _metric_errors(payload: dict[str, Any], window: str) -> list[str]:
     """Re-evaluate measurements with the collector SSOT, not stored pass flags."""
     errors: list[str] = []
     readings = payload.get("readings")
@@ -63,8 +65,8 @@ def _metric_errors(payload: dict[str, Any]) -> list[str]:
             continue
         value = _numeric(item.get("reading_numeric"))
         if (
-            item.get("promql") != QUERIES[slo_id].format(w="90d")
-            or item.get("sample_promql") != SAMPLE_QUERIES[slo_id].format(w="90d")
+            item.get("promql") != QUERIES[slo_id].format(w=window)
+            or item.get("sample_promql") != SAMPLE_QUERIES[slo_id].format(w=window)
             or _numeric(item.get("reading")) != value
             or meets_target(slo_id, value) is not True
             or (_numeric(item.get("sample_count")) or 0) < SAMPLE_MINIMUMS[slo_id]
@@ -80,11 +82,17 @@ def verify_window(
     required_days: int = 90,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    observed_at = now or datetime.now(UTC)
-    if observed_at.tzinfo is None:
+    observed_at = datetime.now(UTC) if now is None else now
+    if not isinstance(observed_at, datetime) or observed_at.tzinfo is None:
         raise ValueError("verification time must include a timezone")
-    if required_days <= 0 or not release_id:
+    if (
+        type(required_days) is not int
+        or required_days <= 0
+        or not isinstance(release_id, str)
+        or not release_id.strip()
+    ):
         raise ValueError("a release identity and positive observation length are required")
+    window = f"{required_days}d"
     observed_at = observed_at.astimezone(UTC)
     records, blockers, previous_hash, epoch, audit = load_evidence_chain(evidence_dir)
 
@@ -137,11 +145,38 @@ def verify_window(
     if len(continuous) < required_days:
         blockers.append(f"formal_continuous_days:{len(continuous)}/{required_days}")
 
+    # Each admissible record independently measures the preceding fixed scrape
+    # window. Calendar dates alone do not prove elapsed time: samples can overlap
+    # or leave gaps even on consecutive dates. Gaps below the collector's own
+    # scrape resolution are recorded, not treated as a restart of observation.
+    # Waiting after collection cannot extend the measured interval.
+    covered_start = covered_end = None
+    collection_gaps = []
+    for day in continuous:
+        sample_end = _timestamp(formal_by_day[day].get("generated_at"))
+        try:
+            sample_start = sample_end - timedelta(seconds=SCRAPE_WINDOW_SECONDS)
+        except OverflowError:
+            blockers.append("invalid_collection_timestamp")
+            continue
+        gap = (sample_start - covered_end).total_seconds() if covered_end else 0
+        if gap > 0:
+            collection_gaps.append(
+                {"from": covered_end.isoformat(), "to": sample_start.isoformat(), "seconds": gap}
+            )
+        if covered_end is None or gap > SCRAPE_INTERVAL_SECONDS:
+            covered_start = sample_start
+        covered_end = sample_end
+    covered_seconds = (covered_end - covered_start).total_seconds() if covered_start else 0
+    required_seconds = required_days * 86400
+    if covered_seconds < required_seconds:
+        blockers.append(f"formal_continuous_seconds:{covered_seconds:.6f}/{required_seconds}")
+
     final = formal_by_day.get(end) if end is not None else None
-    if final is None or final.get("window") != "90d":
-        blockers.append("final_90d_sample_evidence_missing")
+    if final is None or final.get("window") != window:
+        blockers.append(f"final_{window}_sample_evidence_missing")
     else:
-        blockers.extend(_metric_errors(final))
+        blockers.extend(_metric_errors(final, window))
     return {
         "schema": "xcagi.production_slo_window_verification/v1",
         "passed": not blockers,
@@ -149,7 +184,13 @@ def verify_window(
         "verified_at": observed_at.isoformat(),
         "latest_sample_at": latest_at.isoformat() if latest_at is not None else "",
         "max_sample_age_hours": 24,
+        "required_days": required_days,
+        "window": window,
         "continuous_days": len(continuous),
+        "continuous_seconds": covered_seconds,
+        "observation_start_at": covered_start.isoformat() if covered_start else "",
+        "max_collection_gap_allowed_seconds": SCRAPE_INTERVAL_SECONDS,
+        "collection_gaps": collection_gaps,
         "day_0": continuous[0].isoformat() if continuous else "",
         "day_n": continuous[-1].isoformat() if continuous else "",
         "blockers": blockers,
@@ -236,7 +277,9 @@ def observation_ledger(
     }
 
 
-def compare_error_rate_windows(evidence_dir: Path, *, now: datetime | None = None) -> dict[str, Any]:
+def compare_error_rate_windows(
+    evidence_dir: Path, *, now: datetime | None = None
+) -> dict[str, Any]:
     """Read the two latest independent, comparable production API error-rate windows.
 
     Reuse the original evidence-chain and telemetry contracts. This is a
@@ -309,15 +352,17 @@ def compare_error_rate_windows(evidence_dir: Path, *, now: datetime | None = Non
         ):
             result["blockers"].append(f"{label}:error_rate_or_sample_invalid")
             continue
-        windows.append({
-            "role": label,
-            "start": (end - timedelta(days=1)).isoformat(),
-            "end": end.isoformat(),
-            "rate": value,
-            "sample_count": samples,
-            "evidence_hash": row["evidence_hash"],
-            "chain_hash": row["chain_hash"],
-        })
+        windows.append(
+            {
+                "role": label,
+                "start": (end - timedelta(days=1)).isoformat(),
+                "end": end.isoformat(),
+                "rate": value,
+                "sample_count": samples,
+                "evidence_hash": row["evidence_hash"],
+                "chain_hash": row["chain_hash"],
+            }
+        )
     if result["blockers"]:
         return result
     previous, current = windows

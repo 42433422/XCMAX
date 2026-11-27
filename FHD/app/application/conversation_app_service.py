@@ -9,6 +9,7 @@ from typing import cast
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
+from app.domain.conversation.message_visibility import EMPLOYEE_MEMORY_PREFIX, public_messages
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class ConversationApplicationService:
         with get_db() as db:
             messages = (
                 db.query(AIConversation)
-                .filter(AIConversation.session_id == session_id)
+                .filter(AIConversation.session_id == session_id, public_messages(db))
                 .order_by(AIConversation.created_at.desc())
                 .limit(limit)
                 .all()
@@ -88,7 +89,10 @@ class ConversationApplicationService:
         with get_db() as db:
             session = (
                 db.query(AIConversationSession)
-                .filter(AIConversationSession.user_id == user_id)
+                .filter(
+                    AIConversationSession.user_id == user_id,
+                    ~AIConversationSession.session_id.startswith(EMPLOYEE_MEMORY_PREFIX),
+                )
                 .order_by(AIConversationSession.created_at.desc())
                 .first()
             )
@@ -106,7 +110,10 @@ class ConversationApplicationService:
         with get_db() as db:
             sessions = (
                 db.query(AIConversationSession)
-                .filter(AIConversationSession.user_id == user_id)
+                .filter(
+                    AIConversationSession.user_id == user_id,
+                    ~AIConversationSession.session_id.startswith(EMPLOYEE_MEMORY_PREFIX),
+                )
                 .order_by(AIConversationSession.created_at.desc())
                 .limit(limit)
                 .all()
@@ -123,6 +130,8 @@ class ConversationApplicationService:
             ]
 
     def delete_session(self, session_id: str) -> bool:
+        if session_id.startswith(EMPLOYEE_MEMORY_PREFIX):
+            return False
         with get_db() as db:
             session = (
                 db.query(AIConversationSession)

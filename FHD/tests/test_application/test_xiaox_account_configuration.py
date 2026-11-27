@@ -85,6 +85,7 @@ def account(monkeypatch, tmp_path):
         "_account_connection",
         lambda owner: Connection("https://market.test", f"private-account-{owner}", None, 5),
     )
+    monkeypatch.setattr(configuration, "enterprise_model_for_actor", lambda _owner: None)
     monkeypatch.setattr(configuration, "get_desktop_state_dir", lambda **_kwargs: str(tmp_path))
     monkeypatch.setattr("app.infrastructure.xiaox.qualification.qualify_runtime", qualify)
     monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
@@ -326,10 +327,17 @@ def test_incomplete_platform_contract_does_not_start_a_qualification(account, mi
     assert account.attempts == []
 
 
-def test_resume_pins_original_model_and_rejects_config_change_before_probe(account):
+def test_resume_pins_original_model_and_rejects_config_change_before_probe(account, monkeypatch):
     original = configuration.get_account_runtime_settings("41")
     previous = original.route.runtime_identity()
     account.snapshot["model"] = "new-default"
+    monkeypatch.setattr(
+        configuration,
+        "enterprise_model_for_actor",
+        lambda _: ("litellm", "chosen-model", "platform"),
+    )
+    selected = configuration.get_account_runtime_settings("41", qualify=False)
+    assert selected.route.model == "litellm/chosen-model"
     same = configuration.get_account_runtime_settings("41", previous=previous)
     assert same.route.identity == original.route.identity
     assert account.calls[-1].url.params["provider"] == "litellm"
@@ -339,6 +347,9 @@ def test_resume_pins_original_model_and_rejects_config_change_before_probe(accou
         configuration.get_account_runtime_settings("41", previous=previous)
     assert exc.value.code == "runtime_changed"
     assert len(account.attempts) == 1
+    account.snapshot["key_source"] = "user_override"
+    with pytest.raises(configuration.RuntimeSetupError, match="密钥来源已变化"):
+        configuration.get_account_runtime_settings("41", qualify=False)
 
 
 def test_route_change_during_qualification_blocks_business_without_requalifying(
@@ -672,7 +683,7 @@ def test_incomplete_previous_binding_never_triggers_silent_paid_retry(account, d
 
 def test_turn_timeout_is_bounded_by_chat_budget(monkeypatch):
     monkeypatch.delenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", raising=False)
-    assert configuration._turn_timeout_seconds() == 300
+    assert configuration._turn_timeout_seconds() == 540
     monkeypatch.setenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "540")
     assert configuration._turn_timeout_seconds() == 540
     monkeypatch.setenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "9999")

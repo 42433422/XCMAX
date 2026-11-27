@@ -1,60 +1,87 @@
-"""按声明式 plan.json 填充 XLSX，输出工作簿及独立质检所需的写入报告。
+"""按 WORKBOOK_WRITE_INPUT 声明的顺序写入既有 Excel 模板。
 
-plan_version=1，phases 按顺序执行；顶层 writes 等价于 cell_writes。
-支持清除、值/公式写入、样式、插行、合并、行高、冻结、工作表裁剪及原生表格/图表。
-字段契约见既有 workbook_write_contract.WORKBOOK_WRITE_INPUT；本执行器不推断业务规则。
-
-template.sheet_names 声明必需工作表；protected_ranges 使用带表名的范围。
-保护区违规记录并跳过，strict_protected 模式拒绝输出。清值不清样式；样式只改显式字段。
-插行迁移数据、样式、合并区、行高和目标表引用；合并拒绝覆盖非锚点数据。
-公式文本保存但不求值。expected 原样交给质检员，不作为写入成功依据。
+上游负责选定写入目标和值。写入员保护未指定的内容，只保存公式文本，
+并把 expected 原样带给独立质检。员工包 README 记载直接调用方式。
 """
 
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
-from app.mod_sdk.workbook_controls import WORKBOOK_CONTROL_PHASES, write_control
-
-from .chart_references import ChartReferenceError, validate_chart_insert
-from .conditional_formats import ConditionalFormatError, validate_conditional_insert
-from .references import (
-    XLSX_MAX_COL,
-    XLSX_MAX_ROW,
+from app.mod_sdk.workbook_chart_references import ChartReferenceError, validate_chart_insert
+from app.mod_sdk.workbook_conditional_formats import (
+    ConditionalFormatError,
+    validate_conditional_insert,
+)
+from app.mod_sdk.workbook_controls import (
+    WORKBOOK_CONTROL_PHASES,
+    WORKBOOK_STRUCTURAL_PHASES,
+    write_control,
+)
+from app.mod_sdk.workbook_native_objects import (
+    XLSX_MAX_COL as XLSX_MAX_COL,
+)
+from app.mod_sdk.workbook_native_objects import (
+    XLSX_MAX_ROW as XLSX_MAX_ROW,
+)
+from app.mod_sdk.workbook_native_objects import (
+    PlanError as PlanError,
+)
+from app.mod_sdk.workbook_native_objects import (
+    _bounded_range as _bounded_range,
+)
+from app.mod_sdk.workbook_native_objects import (
+    _native_sheet as _native_sheet,
+)
+from app.mod_sdk.workbook_native_objects import (
+    _overlaps as _overlaps,
+)
+from app.mod_sdk.workbook_native_objects import (
+    _run_create_combo_chart as _run_create_combo_chart,
+)
+from app.mod_sdk.workbook_native_objects import (
+    _run_create_table as _run_create_table,
+)
+from app.mod_sdk.workbook_reference_relocation import (
     DefinedNameError,
     ReferenceOverflowError,
     shifted_defined_names,
     validate_named_control_order,
 )
-from .references import shift_formula_rows as _shift_formula_rows
-from .table_ranges import TableRangeError, apply_table_ranges, shifted_table_ranges
-from .three_dimensional import (
+from app.mod_sdk.workbook_reference_relocation import shift_formula_rows as _shift_formula_rows
+from app.mod_sdk.workbook_table_ranges import (
+    TableRangeError,
+    apply_table_ranges,
+    shifted_table_ranges,
+)
+from app.mod_sdk.workbook_three_dimensional import (
     ThreeDimensionalReferenceError,
     validate_three_dimensional_references,
 )
 
 PLAN_VERSION = 1
 
+# xlsx 规格上限；无界范围（如 ``BR:CC``）在保护区语义下必须覆盖全部行/列。
 
-KNOWN_PHASES = {
-    "clear_ranges",
-    "cell_writes",
-    "formula_writes",
-    "retain_sheets",
-    "remove_sheets",
-    "create_table",
-    "create_combo_chart",
-    "cell_styles",
-    "insert_rows",
-    "merge_cells",
-    "set_row_height",
-    "freeze_panes",
-} | WORKBOOK_CONTROL_PHASES
+KNOWN_PHASES = (
+    {
+        "clear_ranges",
+        "cell_writes",
+        "formula_writes",
+        "retain_sheets",
+        "remove_sheets",
+        "create_table",
+        "create_combo_chart",
+        "cell_styles",
+    }
+    | WORKBOOK_CONTROL_PHASES
+    | WORKBOOK_STRUCTURAL_PHASES
+)
 
 _DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d")
 _DATETIME_FORMATS = (
@@ -64,10 +91,6 @@ _DATETIME_FORMATS = (
     "%Y-%m-%dT%H:%M",
     "%Y/%m/%d %H:%M",
 )
-
-
-class PlanError(ValueError):
-    """plan.json 结构或与模板不匹配的错误（fail-fast）。"""
 
 
 def _load_plan(src_path: Optional[Path], payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -491,6 +514,43 @@ def _run_set_row_height(wb, phase: Dict[str, Any], stats: Dict[str, Any]) -> Non
     stats["row_heights_set"] += 1
 
 
+def _run_set_column_width(wb, phase: Dict[str, Any]) -> None:
+    from copy import copy
+
+    from openpyxl.utils.cell import column_index_from_string, get_column_letter
+
+    ws = _native_sheet(wb, _sheet_of(phase, "set_column_width"))
+    column = str(phase.get("column") or "").strip().upper()
+    try:
+        index = column_index_from_string(column)
+        width = float(phase.get("width"))
+    except (TypeError, ValueError) as exc:
+        raise PlanError("set_column_width 需要 Excel 列名和数值宽度。") from exc
+    if index > XLSX_MAX_COL or not 0 < width <= 255:
+        raise PlanError("set_column_width 的列名或宽度超出 Excel 边界。")
+
+    dimensions = ws.column_dimensions
+    for dimension in dimensions.values():
+        dimension.reindex()
+        if dimension.min <= index <= dimension.max:
+            break
+    else:
+        dimension = dimensions[column]
+        dimension.reindex()
+
+    # An existing grouped dimension can span this column. Preserve its other columns.
+    for start, end in ((dimension.min, index - 1), (index + 1, dimension.max)):
+        if start <= end:
+            sibling = copy(dimension)
+            sibling.index = get_column_letter(start)
+            sibling.min, sibling.max = start, end
+            dimensions[sibling.index] = sibling
+    dimension.index = column
+    dimension.min = dimension.max = index
+    dimension.width, dimension.bestFit = width, False
+    dimensions[column] = dimension
+
+
 def _run_freeze_panes(wb, phase: Dict[str, Any], stats: Dict[str, Any]) -> None:
     from openpyxl.utils.cell import coordinate_to_tuple
 
@@ -529,7 +589,20 @@ def _run_cell_styles(
     vertical = phase.get("vertical")
     fill_color = str(phase.get("fill_color") or "").strip().upper()
     border = str(phase.get("border") or "").strip()
-    if not any((bold is not None, font_size is not None, horizontal, vertical, fill_color, border)):
+    number_format = phase.get("number_format")
+    if "number_format" in phase and (not isinstance(number_format, str) or not number_format):
+        raise PlanError("cell_styles 的 number_format 需要非空格式字符串。")
+    if not any(
+        (
+            bold is not None,
+            font_size is not None,
+            horizontal,
+            vertical,
+            fill_color,
+            border,
+            number_format,
+        )
+    ):
         raise PlanError("cell_styles 阶段至少需要一个样式字段。")
     if font_size is not None:
         try:
@@ -565,6 +638,8 @@ def _run_cell_styles(
                 )
                 continue
             cell = ws.cell(row, col)
+            if number_format is not None:
+                cell.number_format = number_format
             if bold is not None or font_size is not None:
                 font = copy(cell.font)
                 if bold is not None:
@@ -599,184 +674,19 @@ def _run_cell_styles(
     stats["styled_cells"] = int(stats.get("styled_cells") or 0) + styled
 
 
-def _bounded_range(token: str) -> Tuple[int, int, int, int]:
-    from openpyxl.utils.cell import range_boundaries
-
-    try:
-        left, top, right, bottom = range_boundaries(token.upper())
-    except ValueError as exc:
-        raise PlanError(f"非法范围：{token!r}") from exc
-    if not all((left, top, right, bottom)) or not (
-        left <= right <= XLSX_MAX_COL and top <= bottom <= XLSX_MAX_ROW
-    ):
-        raise PlanError(f"需要工作表内的有限范围：{token!r}")
-    return top, left, bottom, right
-
-
-def _overlaps(a, b) -> bool:
-    return a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]
-
-
-def _native_sheet(wb, name: str):
-    if name not in wb.sheetnames or wb[name] not in wb.worksheets:
-        raise PlanError(f"工作表不存在：{name!r}")
-    return wb[name]
-
-
-def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, stats) -> None:
-    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-    from openpyxl.utils.cell import column_index_from_string, get_column_letter
-    from openpyxl.worksheet.filters import AutoFilter
-    from openpyxl.worksheet.table import Table, TableColumn, TableFormula
-
-    sheet, name = phase["sheet"], phase["name"]
-    ws = _native_sheet(wb, sheet)
-    top, left, bottom, right = _bounded_range(phase["range"])
-    if (
-        top == bottom
-        or left == right
-        or bottom == XLSX_MAX_ROW
-        or ((bottom - top + 2) * (right - left + 1) > 100_000)
-    ):
-        raise PlanError("表格需要标题和数据行、至少两列，以及合计行空间（最多 100000 格）。")
-    target = (top, left, bottom + 1, right)
-    if any(_overlaps(target, zone) for zone in protected.zones.get(sheet, ())):
-        raise PlanError("表格范围与保护区重叠。")
-    if any(_overlaps(target, _bounded_range(str(rng))) for rng in ws.merged_cells.ranges):
-        raise PlanError("表格范围与合并单元格重叠。")
-    if any(_overlaps(target, _bounded_range(table.ref)) for table in ws.tables.values()):
-        raise PlanError("表格范围与现有表格重叠。")
-
-    cell_ref = re.fullmatch(r"([A-Z]{1,3})([1-9][0-9]{0,6})", name.upper())
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,254}", name) or (
-        name.upper() in {"R", "C"}
-        or re.fullmatch(r"R[0-9]+C[0-9]+", name.upper())
-        or (
-            cell_ref
-            and column_index_from_string(cell_ref[1]) <= XLSX_MAX_COL
-            and int(cell_ref[2]) <= XLSX_MAX_ROW
-        )
-    ):
-        raise PlanError(f"非法 Excel 表格名称：{name!r}")
-    existing_names = list(wb.defined_names)
-    for worksheet in wb.worksheets:
-        existing_names.extend(worksheet.tables)
-        existing_names.extend(worksheet.defined_names)
-    if name.casefold() in {item.casefold() for item in existing_names}:
-        raise PlanError(f"Excel 表格名称已存在：{name!r}")
-
-    headers = [ws.cell(top, col) for col in range(left, right + 1)]
-    if any(
-        cell.data_type != "s" or not cell.value.strip() or len(cell.value) > 255 for cell in headers
-    ):
-        raise PlanError("表格标题必须是非空文本，最长 255 个字符。")
-    headings = [cell.value for cell in headers]
-    if len({value.casefold() for value in headings}) != len(headings):
-        raise PlanError("表格标题不能重复。")
-    heading = phase["sum_column"]
-    if heading not in headings or re.search(r"[\[\]#'@\r\n]", heading):
-        raise PlanError("合计列必须是存在的表格标题，且不含结构化引用转义字符。")
-    formula = phase["calculated_formula"]
-    if not formula.startswith("=") or not formula[1:].strip():
-        raise PlanError("计算列需要以 = 开头的非空公式。")
-    try:
-        Tokenizer(formula)
-    except TokenizerError as exc:
-        raise PlanError("计算列公式无法解析。") from exc
-    if any(ws.cell(bottom + 1, col).value is not None for col in range(left, right + 1)):
-        raise PlanError("表格下方的合计行必须为空。")
-
-    start = f"{get_column_letter(left)}{top}"
-    end = get_column_letter(right)
-    table = Table(
-        displayName=name,
-        ref=f"{start}:{end}{bottom + 1}",
-        totalsRowCount=1,
-        totalsRowShown=True,
-        autoFilter=AutoFilter(ref=f"{start}:{end}{bottom}"),
-    )
-    amount = headings.index(heading)
-    label = 0 if amount else 1
-    for idx, value in enumerate(headings):
-        column = TableColumn(id=idx + 1, name=value)
-        if idx == amount:
-            column.calculatedColumnFormula = TableFormula(attr_text=formula[1:])
-            column.totalsRowFunction = "sum"
-        elif idx == label:
-            column.totalsRowLabel = "合计"
-        table.tableColumns.append(column)
-    ws.add_table(table)
-    for row in range(top + 1, bottom + 1):
-        ws.cell(row, left + amount).value = formula
-    total = ws.cell(bottom + 1, left + amount)
-    total.value = f"=SUBTOTAL(109,{name}[{heading}])"
-    if total.number_format == "General":
-        total.number_format = ws.cell(bottom, left + amount).number_format
-    ws.cell(bottom + 1, left + label).value = "合计"
-    stats["formulas_written"] += bottom - top + 1
-
-
-def _run_create_combo_chart(wb, phase: Dict[str, Any]) -> None:
-    from openpyxl.chart import BarChart, LineChart, Reference
-    from openpyxl.chart.data_source import AxDataSource, StrRef
-    from openpyxl.chart.label import DataLabelList
-    from openpyxl.chart.series import SeriesLabel
-
-    source = _native_sheet(wb, phase["source_sheet"])
+def _run_create_sheet(wb, phase: Dict[str, Any], stats: dict) -> None:
     name = phase["sheet"]
     if (
         not name.strip()
         or len(name) > 31
-        or re.search(r"[\\/*?:\[\]]", name)
+        or re.search(r"[\\/*?:\[\]\x00-\x1f]", name)
         or name.startswith("'")
         or name.endswith("'")
         or name.casefold() in {item.casefold() for item in wb.sheetnames}
     ):
-        raise PlanError(f"图表需要合法且未占用的新工作表名称：{name!r}")
-    ranges = [_bounded_range(phase[key]) for key in ("categories", "bar_values", "line_values")]
-    first, _, last, _ = ranges[0]
-    if (
-        last - first >= 10_000
-        or any(
-            (top, bottom) != (first, last) or left != right for top, left, bottom, right in ranges
-        )
-        or len({bounds[1] for bounds in ranges}) != 3
-    ):
-        raise PlanError("图表源需要三个同行对齐的独立单列范围（每列最多 10000 格）。")
-    for idx, (_, col, _, _) in enumerate(ranges):
-        for row in range(first, last + 1):
-            cell = source.cell(row, col)
-            if cell.value is None or cell.data_type not in (
-                {"s", "n", "f"} if idx == 0 else {"n", "f"}
-            ):
-                raise PlanError(f"图表源包含空单元格或不兼容值：{cell.coordinate}")
-    categories, bars, lines = [
-        Reference(source, min_row=top, min_col=left, max_row=bottom, max_col=right)
-        for top, left, bottom, right in ranges
-    ]
-    bar, line = BarChart(), LineChart()
-    bar.type = "col"
-    bar.title = phase["title"]
-    bar.y_axis.title = phase["bar_title"]
-    bar.y_axis.axPos = "l"
-    bar.y_axis.crosses = "autoZero"
-    bar.x_axis.axPos = "b"
-    bar.legend.position = "b"
-    line.y_axis.title = phase["line_title"]
-    line.y_axis.axId = 200
-    line.y_axis.crosses = "max"
-    line.y_axis.axPos = "r"
-    line.y_axis.numFmt = "0.00%"
-    line.y_axis.majorGridlines = None
-    line.x_axis = bar.x_axis
-    line.y_axis.crossAx = bar.x_axis.axId
-    line.dLbls = DataLabelList(showVal=True, numFmt="0.00%", dLblPos="t")
-    for chart, data, label in ((bar, bars, phase["bar_title"]), (line, lines, phase["line_title"])):
-        chart.add_data(data)
-        chart.series[0].cat = AxDataSource(strRef=StrRef(f=str(categories)))
-        chart.series[0].title = SeriesLabel(v=label)
-    bar += line
-    wb.create_sheet(name).add_chart(bar, "A1")
+        raise PlanError(f"需要合法且未占用的新工作表名称：{name!r}")
+    wb.create_sheet(name)
+    stats["sheets_created"].append(name)
 
 
 def _run_sheet_prune(wb, phase: Dict[str, Any], stats: Dict[str, Any]) -> None:
@@ -833,6 +743,206 @@ def _check_template_contract(wb, plan: Dict[str, Any]) -> None:
         raise PlanError(f"模板缺少计划声明的 sheet：{missing}；模板实际 {wb.sheetnames}")
 
 
+def _apply_plan(wb, plan: dict, warnings: list[str], *, strict_protected: bool) -> dict:
+    _check_template_contract(wb, plan)
+    tokens = [str(t) for t in (plan.get("protected_ranges") or [])]
+    protected = _ProtectedZones(wb, tokens)
+
+    stats: Dict[str, Any] = {
+        "cells_written": 0,
+        "formulas_written": 0,
+        "cells_cleared": 0,
+        "styled_cells": 0,
+        "rows_inserted": 0,
+        "merged_ranges": 0,
+        "row_heights_set": 0,
+        "frozen_sheets": 0,
+        "sheets_removed": [],
+        "sheets_created": [],
+        "violations": [],
+    }
+    written: Dict[Tuple[str, int, int], Tuple[str, Any]] = {}
+    for ph in _normalize_phases(plan):
+        kind = str(ph.get("phase"))
+        if kind == "insert_rows":
+            # Row insertion changes later addresses; only compare writes in one stable layout.
+            written.clear()
+        if kind in {"cell_writes", "formula_writes"}:
+            for index, item in enumerate(ph.get("writes") or []):
+                if not isinstance(item, dict):
+                    raise PlanError(f"{kind}[{index}] 必须是对象。")
+                sheet, row, col = _resolve_target(wb.sheetnames, item, index, kind)
+                key = (sheet, row, col)
+                value = (
+                    kind,
+                    item.get("formula") if kind == "formula_writes" else item.get("value"),
+                )
+                if key in written and written[key] != value:
+                    raise PlanError(
+                        f"同一单元格被不同写入项覆盖：{sheet}!{wb[sheet].cell(row, col).coordinate}"
+                    )
+                written[key] = value
+        if kind == "clear_ranges":
+            _run_clear_ranges(wb, ph, protected, stats)
+        elif kind == "cell_writes":
+            _run_cell_writes(wb, ph, protected, stats, warnings)
+        elif kind == "formula_writes":
+            _run_formula_writes(wb, ph, protected, stats)
+        elif kind == "cell_styles":
+            _run_cell_styles(wb, ph, protected, stats)
+        elif kind == "create_table":
+            _run_create_table(wb, ph, protected, stats)
+        elif kind == "create_combo_chart":
+            _run_create_combo_chart(wb, ph)
+        elif kind == "create_sheet":
+            _run_create_sheet(wb, ph, stats)
+        elif kind == "insert_rows":
+            _run_insert_rows(wb, ph, protected, stats)
+        elif kind == "merge_cells":
+            _run_merge_cells(wb, ph, protected, stats)
+        elif kind == "set_row_height":
+            _run_set_row_height(wb, ph, stats)
+        elif kind == "set_column_width":
+            _run_set_column_width(wb, ph)
+        elif kind == "freeze_panes":
+            _run_freeze_panes(wb, ph, stats)
+        elif kind in WORKBOOK_CONTROL_PHASES:
+            try:
+                write_control(wb, ph)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise PlanError(f"{kind}：{exc}") from exc
+        else:
+            _run_sheet_prune(wb, ph, stats)
+
+    if stats["violations"]:
+        msg = f"{len(stats['violations'])} 条写入落在保护区"
+        if strict_protected:
+            raise PlanError(
+                f"{msg}，strict_protected 模式下拒绝写出。示例：{stats['violations'][:3]}"
+            )
+        warnings.append(f"{msg}，已跳过（详见 write_report.json violations）。")
+    return stats
+
+
+def _stored_values(wb) -> dict:
+    # Use the loaded cells so distant formatting cannot expand the scan to a rectangle.
+    return {
+        (ws.title, row, col): (cell.data_type, cell.value)
+        for ws in wb.worksheets
+        for (row, col), cell in ws._cells.items()
+        if cell.value is not None
+    }
+
+
+def _semantically_equal(left: tuple, right: tuple) -> bool:
+    if left == right:
+        return True
+    if right[0] != "d":
+        return False
+    if left[0] == "s":
+        value_type = "datetime" if isinstance(right[1], datetime) else "date"
+        return _coerce_value({"value": left[1], "value_type": value_type}, 0, []) == right[1]
+    return (
+        isinstance(left[1], datetime)
+        and type(right[1]) is date
+        and left[1] == datetime.combine(right[1], datetime.min.time())
+    )
+
+
+def review_literal_changes(template: Path, plan: dict) -> list[dict]:
+    """Apply the actual phases in memory and isolate proposed business-value changes."""
+    from openpyxl import load_workbook
+    from openpyxl.utils.cell import get_column_letter
+
+    phases = _normalize_phases(plan)
+    value_phases = {
+        "cell_writes",
+        "formula_writes",
+        "clear_ranges",
+        "insert_rows",
+        "retain_sheets",
+        "remove_sheets",
+        "create_table",
+        "create_sheet",
+    }
+    if not value_phases.intersection(phase["phase"] for phase in phases):
+        return []
+    wb = load_workbook(template, data_only=False, keep_links=False)
+    try:
+        original = _stored_values(wb)
+        source_tables = {
+            (ws.title, table.name) for ws in wb.worksheets for table in ws.tables.values()
+        }
+        _apply_plan(wb, plan, [], strict_protected=True)
+        result = _stored_values(wb)
+        moves = [phase for phase in phases if phase["phase"] == "insert_rows"]
+
+        def source_row(sheet: str, row: int) -> int | None:
+            for phase in reversed(moves):
+                if sheet != _sheet_of(phase, "insert_rows") or row < phase["row"]:
+                    continue
+                if row < phase["row"] + phase["count"]:
+                    return None
+                row -= phase["count"]
+            return row
+
+        structural_text = {
+            (ws.title, region.min_row, region.min_col)
+            for ws in wb.worksheets
+            for region in ws.merged_cells.ranges
+            if source_row(ws.title, region.min_row) is None
+        }
+        for ws in wb.worksheets:
+            for table in ws.tables.values():
+                if (ws.title, table.name) in source_tables:
+                    continue
+                top, left, bottom, _ = _bounded_range(table.ref)
+                for col, column in enumerate(table.tableColumns, start=left):
+                    if (
+                        column.calculatedColumnFormula is not None
+                        or source_row(ws.title, top) is None
+                    ):
+                        structural_text.add((ws.title, top, col))
+                    if column.totalsRowLabel is not None:
+                        structural_text.add((ws.title, bottom, col))
+
+        changes = []
+        blank = ("blank", None)
+        for (sheet, row, col), new in result.items():
+            key = (sheet, source_row(sheet, row), col)
+            old = original.pop(key, blank)
+            if (
+                _semantically_equal(old, new)
+                or (new[0] == "f" and old[0] in {"blank", "f"})
+                or (old == blank and new[0] == "s" and (sheet, row, col) in structural_text)
+            ):
+                continue
+            changes.append(
+                {
+                    "sheet": sheet,
+                    "ref": f"{get_column_letter(col)}{row}",
+                    "source_ref": f"{get_column_letter(col)}{key[1]}" if key[1] else None,
+                    "kind": "fill_blank" if old == blank else "replace",
+                    "before": old,
+                    "after": new,
+                }
+            )
+        changes.extend(
+            {
+                "sheet": sheet,
+                "ref": f"{get_column_letter(col)}{row}",
+                "source_ref": f"{get_column_letter(col)}{row}",
+                "kind": "clear",
+                "before": old,
+                "after": blank,
+            }
+            for (sheet, row, col), old in original.items()
+        )
+        return changes
+    finally:
+        wb.close()
+
+
 def convert_file(
     src_path: Path,
     output_path: Path,
@@ -877,60 +987,9 @@ def convert_file(
 
     wb = load_workbook(template, data_only=False, keep_vba=keep_vba)
     try:
-        _check_template_contract(wb, plan)
-        tokens = [str(t) for t in (plan.get("protected_ranges") or [])]
-        protected = _ProtectedZones(wb, tokens)
-
-        stats: Dict[str, Any] = {
-            "cells_written": 0,
-            "formulas_written": 0,
-            "cells_cleared": 0,
-            "styled_cells": 0,
-            "rows_inserted": 0,
-            "merged_ranges": 0,
-            "row_heights_set": 0,
-            "frozen_sheets": 0,
-            "sheets_removed": [],
-            "violations": [],
-        }
-        for ph in phases:
-            kind = str(ph.get("phase"))
-            if kind == "clear_ranges":
-                _run_clear_ranges(wb, ph, protected, stats)
-            elif kind == "cell_writes":
-                _run_cell_writes(wb, ph, protected, stats, warnings)
-            elif kind == "formula_writes":
-                _run_formula_writes(wb, ph, protected, stats)
-            elif kind == "cell_styles":
-                _run_cell_styles(wb, ph, protected, stats)
-            elif kind == "create_table":
-                _run_create_table(wb, ph, protected, stats)
-            elif kind == "create_combo_chart":
-                _run_create_combo_chart(wb, ph)
-            elif kind == "insert_rows":
-                _run_insert_rows(wb, ph, protected, stats)
-            elif kind == "merge_cells":
-                _run_merge_cells(wb, ph, protected, stats)
-            elif kind == "set_row_height":
-                _run_set_row_height(wb, ph, stats)
-            elif kind == "freeze_panes":
-                _run_freeze_panes(wb, ph, stats)
-            elif kind in WORKBOOK_CONTROL_PHASES:
-                try:
-                    write_control(wb, ph)
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise PlanError(f"{kind}：{exc}") from exc
-            else:
-                _run_sheet_prune(wb, ph, stats)
-
-        if stats["violations"]:
-            msg = f"{len(stats['violations'])} 条写入落在保护区"
-            if payload.get("strict_protected"):
-                raise PlanError(
-                    f"{msg}，strict_protected 模式下拒绝写出。示例：{stats['violations'][:3]}"
-                )
-            warnings.append(f"{msg}，已跳过（详见 write_report.json violations）。")
-
+        stats = _apply_plan(
+            wb, plan, warnings, strict_protected=bool(payload.get("strict_protected"))
+        )
         wb.save(xlsx_path)
         output_sheet_names = list(wb.sheetnames)
     finally:

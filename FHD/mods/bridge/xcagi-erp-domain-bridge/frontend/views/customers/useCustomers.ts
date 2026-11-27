@@ -70,8 +70,6 @@ export function useCustomers() {
   const pageNavTitle = useCoreNavLabel('customers');
   const schema = useIndustryFieldSchema('customers');
   const entityName = computed(() => schema.entity.value || '客户');
-  const productsNavLabel = useCoreNavLabel('products');
-  const shipmentNavLabel = useCoreNavLabel('shipment-records');
 
   const customers = ref<CustomerRow[]>([]);
   const purchaseUnitOptions = ref<UnitOption[]>([]);
@@ -470,8 +468,6 @@ export function useCustomers() {
 
   return {
     pageNavTitle, entityName,
-    productsNavLabel,
-    shipmentNavLabel,
     customers,
     focusId,
     purchaseUnitOptions,

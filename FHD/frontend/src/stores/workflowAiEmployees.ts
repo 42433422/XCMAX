@@ -251,7 +251,9 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     }
     if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
       enabled.value = next
-      persistAndNotify()
+      // Registry reconciliation is a local projection, not a user setting change.
+      // Writing it back races with the enterprise model's revisioned save.
+      persistAndNotify(false)
     }
   }
 
@@ -265,7 +267,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     }
     if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
       enabled.value = next
-      persistAndNotify()
+      persistAndNotify(false)
     }
   }
 

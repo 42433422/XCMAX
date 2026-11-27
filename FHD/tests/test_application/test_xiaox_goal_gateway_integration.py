@@ -90,7 +90,9 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
     monkeypatch.setattr(
         "app.infrastructure.llm.model_admission.admit_model_call", lambda *args, **kwargs: None
     )
-    ledger.set_model_wallet_balance(str(actor.user_id), 100)
+    initial_balance = 100
+    task_budget = 96
+    ledger.set_model_wallet_balance(str(actor.user_id), initial_balance)
     dispatched = []
 
     def dispatch(tool, action, params):
@@ -239,7 +241,9 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
             runtime_context={
                 **actor.context,
                 "turn_id": f"real-cli-host-goal-fixture-{queued}",
-                "ai_cost_budget_units": 96,
+                # Discovery, actions and corrective review share the original
+                # budget; none may consume the guaranteed final review.
+                "ai_cost_budget_units": task_budget,
             },
             allowed_actions=["products.query"],
             completion_mode="auto",
@@ -256,9 +260,15 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
                 run_repository=repository,
             )._execute_claim(execution, "integration-worker")
             result = repository.get(run_id).final_output["xiaox_result"]
-            assert queue.get(run_id).state == "succeeded", result
+            assert queue.get(run_id).state == "succeeded", json.dumps(
+                result, ensure_ascii=False, default=str
+            )
 
-    assert result["ok"] is True and result["business_completed"] is True, result
+    assert result["ok"] is True and result["business_completed"] is True, json.dumps(
+        result,
+        ensure_ascii=False,
+        default=str,
+    )
     assert result["runtime_completed"] is True and result["exit_status"] == "completed"
     assert observed_parents == [result["run_id"]]
     parent = repository.get(result["run_id"])
@@ -285,6 +295,10 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
     assert all(body["model"] == route.model and body["store"] is False for body in requests)
     assert {record.provider_id for record in parent.llm_calls} == {route.provider_id}
     assert {row["state"] for row in metadata["model_requests"].values()} == {"completed"}
+    assert parent.metadata["ai_cost_budget_units"] == task_budget
+    assert metadata["verification_budget"]["model_calls"] == 1
+    assert metadata["verification_budget"]["max_model_calls"] == 2
+    assert sum(row["purpose"] == "verification" for row in metadata["model_requests"].values()) == 2
     assert parent.metadata["reserved_cost_units"] == 0
     assert metadata["coordinator_active"] is False and metadata["revoked"] is True
     assert parent.final_output["business_result"]["success"] is True
@@ -292,4 +306,4 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
         record.cost_units for child in children for record in child.tool_calls
     )
     assert parent.metadata["ai_cost_units_total"] == total
-    assert ledger.get_model_wallet(str(actor.user_id))["balance_units"] == 100 - total
+    assert ledger.get_model_wallet(str(actor.user_id))["balance_units"] == initial_balance - total

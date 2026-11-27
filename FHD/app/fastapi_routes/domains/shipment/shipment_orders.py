@@ -132,7 +132,6 @@ def shipment_generate_batch(request: Request, payload: dict[str, Any] = Body(def
 def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     unit_name = str(payload.get("unit_name") or "").strip()
     products = payload.get("products") or []
-    date = payload.get("date")
     if not unit_name:
         raise HTTPException(status_code=400, detail="单位名称不能为空")
     if not products:
@@ -144,10 +143,9 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
             params={
                 "unit_name": unit_name,
                 "products": products,
-                "date": date,
                 **{
                     key: payload[key]
-                    for key in ("template_id", "template_name", "order_number")
+                    for key in ("date", "template_id", "template_name", "order_number")
                     if key in payload
                 },
             },
@@ -166,7 +164,6 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
 def shipment_print(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     file_path = payload.get("file_path")
     order_id = payload.get("order_id")
-    printer_name = payload.get("printer_name")
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
@@ -187,8 +184,7 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
             action="print",
             params={
                 "file_path": str(resolved_file),
-                "order_id": order_id,
-                "printer_name": printer_name,
+                **{key: payload[key] for key in ("order_id", "printer_name") if key in payload},
             },
             route_path="/api/shipment/print",
         )
@@ -380,8 +376,7 @@ def shipment_records_create(request: Request, payload: dict[str, Any] = Body(...
         params={
             "unit_name": unit_name,
             "products": products,
-            "contact_person": payload.get("contact_person"),
-            "contact_phone": payload.get("contact_phone"),
+            **{key: payload[key] for key in ("contact_person", "contact_phone") if key in payload},
         },
         route_path="/api/shipment/shipment-records/record",
     )
@@ -396,15 +391,7 @@ def shipment_records_patch(request: Request, payload: dict[str, Any] = Body(...)
     result = _run_shipment_records_agent(
         request=request,
         action="update",
-        params={
-            "id": int(record_id),
-            "unit_name": payload.get("unit_name"),
-            "products": payload.get("products"),
-            "date": payload.get("date"),
-            **{
-                k: v for k, v in payload.items() if k not in ("id", "unit_name", "products", "date")
-            },
-        },
+        params={**payload, "id": int(record_id)},
         route_path="/api/shipment/shipment-records/record",
     )
     return JSONResponse(*_capability_http_receipt(result))

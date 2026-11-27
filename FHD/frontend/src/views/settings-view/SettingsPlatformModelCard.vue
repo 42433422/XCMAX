@@ -244,11 +244,11 @@ onBeforeUnmount(dispose)
 </script>
 
 <style scoped>
-.platform-model { margin: 20px; padding: 20px; border: 1px solid var(--border-color, #d8e0ea); border-radius: 12px; }
+.platform-model { padding: 16px var(--settings-row-pad-x, 16px); }
 .platform-model__header, .platform-model__actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .platform-model h2 { margin: 0 0 8px; font-size: 18px; }
 .platform-model p { line-height: 1.6; margin: 8px 0; }
-.platform-model__scope { padding: 12px 16px; margin: 16px 0; border-radius: 8px; background: var(--bg-secondary, #f3f6fb); }
+.platform-model__scope { padding-block-end: 12px; margin-block-end: 16px; border-block-end: 1px solid var(--xc-color-border); }
 .platform-model fieldset { border: 0; margin: 0; padding: 0; }
 .platform-model__legend { font-weight: 600; margin-bottom: 12px; }
 .platform-model__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -259,5 +259,5 @@ onBeforeUnmount(dispose)
 .platform-model__actions { justify-content: flex-start; }
 .platform-model__error { color: var(--danger-color, #b42318); }
 .platform-model__success { color: var(--success-color, #167445); }
-@media (max-width: 640px) { .platform-model { margin: 12px; padding: 16px; } .platform-model__fields { grid-template-columns: 1fr; } .platform-model__header { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 640px) { .platform-model__fields { grid-template-columns: 1fr; } .platform-model__header { align-items: flex-start; flex-direction: column; } }
 </style>

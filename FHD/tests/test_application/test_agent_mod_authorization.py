@@ -140,10 +140,12 @@ def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
     )
     queue = InMemoryTaskExecutionRepository()
     queue.enqueue(run)
-    assert queue.claim("worker", lease_seconds=30) is not None
+    assert (claim := queue.claim("worker", lease_seconds=30)) is not None
     prior = ["other-write"] if failure == "revoked_with_prior_effect" else []
     for effect in prior:
-        assert queue.mark_open_effect(run.run_id, effect, owner_id="worker")
+        assert queue.mark_open_effect(
+            run.run_id, effect, owner_id="worker", execution_count=claim.execution_count
+        )
     if failure.startswith("revoked"):
         with mod_session.begin() as db:
             db.query(UserSession).one().entitled_mod_ids_json = "[]"
@@ -168,7 +170,7 @@ def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
     monkeypatch.setattr(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", handler
     )
-    token = task_dispatcher._open_effect.set((queue, run.run_id, "worker"))
+    token = task_dispatcher._open_effect.set((queue, run.run_id, "worker", claim.execution_count))
     try:
         result = execute_with_tool_deadline(
             SimpleNamespace(execute=AgentToolExecutor().execute),
@@ -176,6 +178,7 @@ def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
             runtime_context={
                 "run_id": run.run_id,
                 "tenant_id": "1",
+                "idempotency_key": f"agent:{run.run_id}:1:{step.step_id}",
                 "_mod_authorization": binding,
             },
             timeout_seconds=10,
@@ -196,7 +199,9 @@ def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
     step.status, step.output = "failed", result
     run.steps = [step]
     state, error_code = dispatched_run_state(run)
-    stopped = queue.finish(run.run_id, "worker", state, error_code=error_code)
+    stopped = queue.finish(
+        run.run_id, "worker", state, error_code=error_code, execution_count=claim.execution_count
+    )
     assert stopped.state == ("blocked" if failure == "revoked" else "unknown")
     assert queue.lifecycle(run.run_id)["effects"] == (
         prior if failure.startswith("revoked") else [step.step_id]

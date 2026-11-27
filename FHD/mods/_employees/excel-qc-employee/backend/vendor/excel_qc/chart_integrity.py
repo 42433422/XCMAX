@@ -1,5 +1,13 @@
 """Independently check chart sources against the template and ordered plan."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict
+
+if TYPE_CHECKING:
+    from .checks import _Finding
+
+
 from collections import Counter
 from copy import deepcopy
 
@@ -121,3 +129,74 @@ def check_inserted_charts(wb, template_wb, plan, finding):
                 finding.fail("图表所属工作表未经声明删除", sheet=name)
     except (KeyError, TypeError, ValueError, AttributeError, TokenizerError) as exc:
         finding.fail("图表来源引用无法独立核验", reason=str(exc))
+
+
+def _chart_title_text(title) -> str:
+    rich = title.tx.rich if title and title.tx else None
+    return "" if rich is None else "".join(run.t for para in rich.p for run in para.r)
+
+
+def _check_native_chart(wb, ws, phase: Dict[str, Any], f: _Finding) -> None:
+    from openpyxl.chart import BarChart, LineChart, Reference
+    from openpyxl.utils.cell import range_boundaries
+
+    source = phase["source_sheet"]
+    if source not in wb.sheetnames or wb[source] not in wb.worksheets:
+        f.fail("图表源工作表不存在", sheet=source)
+        return
+
+    def expected_ref(key):
+        left, top, right, bottom = range_boundaries(phase[key].upper())
+        if any(wb[source].cell(row, left).value is None for row in range(top, bottom + 1)):
+            raise ValueError("图表源存在空值")
+        return str(Reference(wb[source], min_col=left, min_row=top, max_col=right, max_row=bottom))
+
+    categories, bar_values, line_values = map(
+        expected_ref, ("categories", "bar_values", "line_values")
+    )
+    for chart in ws._charts:
+        parts = chart._charts
+        if (
+            len(parts) != 2
+            or not isinstance(parts[0], BarChart)
+            or not isinstance(parts[1], LineChart)
+            or any(len(part.series) != 1 for part in parts)
+        ):
+            continue
+        bar, line = parts
+        if (
+            bar.type != "col"
+            or chart.legend is None
+            or chart.legend.position != "b"
+            or _chart_title_text(chart.title) != phase["title"]
+            or bar.y_axis.axId == line.y_axis.axId
+            or bar.y_axis.axPos != "l"
+            or line.y_axis.axPos != "r"
+            or line.y_axis.crosses != "max"
+            or line.y_axis.crossAx != bar.x_axis.axId
+            or line.y_axis.numFmt.formatCode != "0.00%"
+            or line.dLbls is None
+            or not line.dLbls.showVal
+            or line.dLbls.numFmt != "0.00%"
+        ):
+            continue
+        for part, values, title in (
+            (bar, bar_values, phase["bar_title"]),
+            (line, line_values, phase["line_title"]),
+        ):
+            series = part.series[0]
+            if (
+                series.cat is None
+                or series.cat.strRef is None
+                or series.cat.strRef.f != categories
+                or series.val is None
+                or series.val.numRef is None
+                or series.val.numRef.f != values
+                or series.title is None
+                or series.title.v != title
+                or _chart_title_text(part.y_axis.title) != title
+            ):
+                break
+        else:
+            return
+    f.fail("输出缺少符合计划的原生双轴柱线组合图", sheet=ws.title)

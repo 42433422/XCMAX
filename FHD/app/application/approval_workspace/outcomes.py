@@ -78,7 +78,20 @@ def run_execution_receipt(run: Any) -> JsonObject:
         or _payload_status({"agent_status": str(run.status or "unknown"), **outputs})
     )
     events = getattr(run, "events", [])
-    latest = events[-1] if isinstance(events, list) and events else None
+    # Persistence appends a state audit after the event that caused the change.
+    # Ignore only that audit: a later business event must supersede an old rejection.
+    latest = (
+        next(
+            (
+                event
+                for event in reversed(events)
+                if getattr(event, "event_type", "") != "run.state_changed"
+            ),
+            None,
+        )
+        if isinstance(events, list)
+        else None
+    )
     rejection = getattr(latest, "data", {})
     preflight_rejected = (
         state == "blocked"

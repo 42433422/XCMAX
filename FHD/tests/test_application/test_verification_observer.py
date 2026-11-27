@@ -47,8 +47,8 @@ def pending_receipt(trusted_actor, monkeypatch):
     project_verification(run)
     repository.save(run)
     queue.enqueue(run)
-    queue.claim("original-worker", lease_seconds=60)
-    queue.finish(run.run_id, "original-worker", "blocked")
+    claim = queue.claim("original-worker", lease_seconds=60)
+    queue.finish(run.run_id, "original-worker", "blocked", execution_count=claim.execution_count)
     observed = []
     source = {"ready": True}
 
@@ -101,11 +101,17 @@ def _persist(runtime, run, *, state="blocked", effects=()):
     runtime.repo.save(run)
     runtime.queue.enqueue(run)
     owner = uuid.uuid4().hex
-    runtime.queue.claim(owner, lease_seconds=60, run_id=run.run_id)
+    claim = runtime.queue.claim(owner, lease_seconds=60, run_id=run.run_id)
     for effect in effects:
-        assert runtime.queue.mark_open_effect(run.run_id, effect, owner_id=owner)
+        assert runtime.queue.mark_open_effect(
+            run.run_id, effect, owner_id=owner, execution_count=claim.execution_count
+        )
     runtime.queue.finish(
-        run.run_id, owner, state, error_code="needs_verification" if effects else ""
+        run.run_id,
+        owner,
+        state,
+        error_code="needs_verification" if effects else "",
+        execution_count=claim.execution_count,
     )
 
 
@@ -258,8 +264,13 @@ def test_desktop_restart_unknown_retains_readonly_verification(pending_receipt, 
     runtime.repo.save(run)
     runtime.queue.enqueue(run)
     owner = "original-desktop-worker"
-    assert runtime.queue.claim(owner, lease_seconds=600, run_id=run.run_id)
-    assert runtime.queue.mark_open_effect(run.run_id, "unsettled-original-effect", owner_id=owner)
+    assert (claim := runtime.queue.claim(owner, lease_seconds=600, run_id=run.run_id))
+    assert runtime.queue.mark_open_effect(
+        run.run_id,
+        "unsettled-original-effect",
+        owner_id=owner,
+        execution_count=claim.execution_count,
+    )
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     monkeypatch.setattr(
         "app.application.agent_orchestrator.run_repository.get_agent_run_repository",

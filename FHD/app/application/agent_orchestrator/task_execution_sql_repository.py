@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import Table, and_, or_
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -23,7 +24,6 @@ from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.domain.task_lifecycle.adapters import (
     APPROVAL_STATES,
     LEASED_STATES,
-    WAITING_STATES,
     canonical_execution_state,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -93,6 +93,7 @@ class SQLAlchemyTaskExecutionRepository:
         from app.db.models.agent import AgentTaskExecutionRecord
 
         record = db.get(AgentTaskExecutionRecord, run.run_id)
+        previous = str(record.state) if record is not None else "created"
         if record is None:
             record = AgentTaskExecutionRecord(
                 run_id=run.run_id,
@@ -124,6 +125,21 @@ class SQLAlchemyTaskExecutionRepository:
         record.requested_by = str(requested_by or "") or None
         record.last_error_code = None
         record.updated_at = now
+        if previous != record.state:
+            from app.domain.task_lifecycle.control import SessionBook, remember
+
+            book = SessionBook(db)
+            tenant = str(record.tenant_id or "")
+            body = book.get("agent", tenant, run.run_id)
+            remember(
+                body,
+                at=now,
+                source=previous,
+                target=str(record.state),
+                code="task_enqueued",
+                actor=str(requested_by or ""),
+            )
+            book.put("agent", tenant, run.run_id, body)
 
     def get(self, run_id: str) -> AgentTaskExecution | None:
         self._ensure_schema()
@@ -239,12 +255,13 @@ class SQLAlchemyTaskExecutionRepository:
                 .limit(8)
                 .all()
             )
-            from app.domain.task_lifecycle.control import SessionBook
+            from app.domain.task_lifecycle.control import SessionBook, remember
 
             book = SessionBook(db)
             self._expire_approvals(db, book, current)
             for candidate in candidates:
                 recovered = candidate.state in LEASED_STATES
+                previous = str(candidate.state)
                 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
                 effects: list[Any] = []
@@ -300,37 +317,36 @@ class SQLAlchemyTaskExecutionRepository:
                                 # Let only the exact native router reconcile. The
                                 # stored effect remains open until a final receipt.
                                 effects = []
-                if recovered and effects:
+                exhausted = int(candidate.execution_count or 0) + 1 > DEFAULT_MAX_ATTEMPTS
+                if recovered and (effects or exhausted):
+                    target = "unknown" if effects else "failed"
+                    code = "needs_verification" if effects else "retries_exhausted"
                     db.query(AgentTaskExecutionRecord).filter(
                         AgentTaskExecutionRecord.run_id == candidate.run_id,
                         AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     ).update(
                         {
-                            AgentTaskExecutionRecord.state: "unknown",
+                            AgentTaskExecutionRecord.state: target,
                             AgentTaskExecutionRecord.lease_owner: None,
                             AgentTaskExecutionRecord.lease_expires_at: None,
-                            AgentTaskExecutionRecord.last_error_code: "needs_verification",
-                            AgentTaskExecutionRecord.finished_at: None,
+                            AgentTaskExecutionRecord.heartbeat_at: None,
+                            AgentTaskExecutionRecord.last_error_code: code,
+                            AgentTaskExecutionRecord.finished_at: None if effects else current,
                             AgentTaskExecutionRecord.updated_at: current,
                         },
                         synchronize_session=False,
                     )
-                    continue
-                if recovered and int(candidate.execution_count or 0) + 1 > DEFAULT_MAX_ATTEMPTS:
-                    db.query(AgentTaskExecutionRecord).filter(
-                        AgentTaskExecutionRecord.run_id == candidate.run_id,
-                        AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
-                    ).update(
-                        {
-                            AgentTaskExecutionRecord.state: "failed",
-                            AgentTaskExecutionRecord.lease_owner: None,
-                            AgentTaskExecutionRecord.lease_expires_at: None,
-                            AgentTaskExecutionRecord.last_error_code: "retries_exhausted",
-                            AgentTaskExecutionRecord.finished_at: current,
-                            AgentTaskExecutionRecord.updated_at: current,
-                        },
-                        synchronize_session=False,
+                    body = book.get("agent", str(candidate.tenant_id or ""), candidate.run_id)
+                    remember(
+                        body,
+                        at=current,
+                        source=previous,
+                        target=target,
+                        code=code,
+                        actor=str(owner_id or ""),
                     )
+                    body["history"][-1]["execution_count"] = int(candidate.execution_count or 0)
+                    book.put("agent", str(candidate.tenant_id or ""), candidate.run_id, body)
                     continue
                 updated = (
                     db.query(AgentTaskExecutionRecord)
@@ -362,6 +378,17 @@ class SQLAlchemyTaskExecutionRepository:
                 record = db.get(AgentTaskExecutionRecord, candidate.run_id)
                 if record is not None:
                     db.refresh(record)
+                    body = book.get("agent", str(record.tenant_id or ""), record.run_id)
+                    remember(
+                        body,
+                        at=current,
+                        source=previous,
+                        target="running",
+                        code="worker_reclaimed" if recovered else "worker_claimed",
+                        actor=str(owner_id or ""),
+                    )
+                    body["history"][-1]["execution_count"] = int(record.execution_count)
+                    book.put("agent", str(record.tenant_id or ""), record.run_id, body)
                     return self._to_model(record)
         return None
 
@@ -370,9 +397,12 @@ class SQLAlchemyTaskExecutionRepository:
         run_id: str,
         owner_id: str,
         *,
+        execution_count: int,
         lease_seconds: float,
         now: str | None = None,
     ) -> bool:
+        if not owner_id or type(execution_count) is not int or execution_count < 1:
+            return False
         self._ensure_schema()
         current = str(now or utc_now_iso())
         with self._session_scope() as db:
@@ -384,6 +414,7 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.run_id == str(run_id or ""),
                     AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
+                    AgentTaskExecutionRecord.execution_count == execution_count,
                     AgentTaskExecutionRecord.lease_expires_at > current,
                 )
                 .update(
@@ -405,6 +436,7 @@ class SQLAlchemyTaskExecutionRepository:
         owner_id: str,
         state: str,
         *,
+        execution_count: int,
         error_code: str = "",
     ) -> AgentTaskExecution | None:
         return self._transition(
@@ -412,6 +444,7 @@ class SQLAlchemyTaskExecutionRepository:
             state,
             error_code=error_code,
             owner_id=owner_id,
+            execution_count=execution_count,
             require_claim=True,
         )
 
@@ -425,130 +458,9 @@ class SQLAlchemyTaskExecutionRepository:
         return self._transition(run_id, state, error_code=error_code)
 
     def reconcile_xiaox_receipts(self, run_repository: Any, previous: AgentRun) -> AgentRun | None:
-        """Project verified delegated results without claiming or replaying a worker.
+        from app.application.agent_orchestrator.resume_transaction import reconcile_xiaox_receipts
 
-        This restricted reconciliation event is not a general lifecycle edge.
-        A stopped parent's original children and frozen goal are independently
-        checked, then its run, Task view and unleased waiting queue row commit
-        together. Callers cannot supply a desired state or replacement result.
-        """
-        from app.application.agent_orchestrator.run_sql_repository import (
-            SQLAlchemyAgentRunRepository,
-        )
-        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
-        from app.domain.task_lifecycle.control import SessionBook, remember
-        from app.infrastructure.xiaox.binding import (
-            XiaoxBinding,
-            XiaoxBindingError,
-            XiaoxBindingStore,
-        )
-        from app.infrastructure.xiaox.receipt_projection import (
-            project_receipt_state,
-            projection_allowed,
-        )
-        from app.infrastructure.xiaox.receipts import read_call_receipt
-
-        if not isinstance(run_repository, SQLAlchemyAgentRunRepository) or not projection_allowed(
-            previous
-        ):
-            return None
-        store = XiaoxBindingStore(run_repository)
-        binding = XiaoxBinding(previous)
-        store._validate_goal(previous, binding.metadata)
-        rows, children = [], {}
-        for call_id, call in binding.metadata["calls"].items():
-            receipt = read_call_receipt(store, binding, call)
-            if receipt != call.get("receipt"):
-                return None  # A child changed since the caller's receipt snapshot.
-            rows.append({"call_id": call_id, **call})
-            if child_id := receipt.get("run_id"):
-                child = run_repository.get(child_id)
-                if child is None or child.updated_at != receipt.get("child_updated_at"):
-                    return None
-                children[child_id] = child
-        projected = project_receipt_state(previous, rows)
-        if projected is None:
-            return None
-        result = projected.final_output["xiaox_result"]
-        if projected.status == "completed" and not (
-            result.get("business_completed") is True
-            and result.get("verified_operations") is True
-            and (result.get("goal_coverage") or {}).get("completed") is True
-        ):
-            return None
-        target = {"completed": "succeeded", "failed": "failed", "blocked": "failed"}.get(
-            projected.status, "waiting_approval"
-        )
-        code = (
-            "needs_verification"
-            if result.get("reconciliation_required")
-            else "xiaox_receipt_projection"
-        )
-        now = utc_now_iso()
-        with self.transaction() as db, run_repository.transaction(read_only=True) as runs:
-            if db.get_bind() is not runs.get_bind():
-                raise XiaoxBindingError("durable_storage_required", "父任务与队列不属于同一数据库")
-            execution = db.get(AgentTaskExecutionRecord, previous.run_id)
-            if execution is not None:
-                if (
-                    execution.state not in WAITING_STATES
-                    or execution.lease_owner
-                    or execution.lease_expires_at
-                ):
-                    return None
-                fenced = (
-                    db.query(AgentTaskExecutionRecord)
-                    .filter(
-                        AgentTaskExecutionRecord.run_id == previous.run_id,
-                        AgentTaskExecutionRecord.state == execution.state,
-                        AgentTaskExecutionRecord.execution_count == execution.execution_count,
-                        AgentTaskExecutionRecord.lease_owner == execution.lease_owner,
-                        AgentTaskExecutionRecord.lease_expires_at == execution.lease_expires_at,
-                    )
-                    .update(
-                        {AgentTaskExecutionRecord.updated_at: execution.updated_at},
-                        synchronize_session=False,
-                    )
-                )
-                if fenced != 1:
-                    return None
-                book = SessionBook(db)
-                body = book.get("agent", str(execution.tenant_id or ""), previous.run_id)
-                if body.get("effects") or execution.last_error_code == "needs_verification":
-                    return None
-            for child_id, child in children.items():
-                record = db.get(AgentRunRecord, child_id)
-                current = run_repository._record_to_run(record) if record is not None else None
-                if current is None or current.to_dict() != child.to_dict():
-                    return None
-                assert record is not None
-                if (
-                    db.query(AgentRunRecord)
-                    .filter(
-                        AgentRunRecord.run_id == child_id,
-                        AgentRunRecord.payload_json == record.payload_json,
-                    )
-                    .update({AgentRunRecord.status: record.status}, synchronize_session=False)
-                    != 1
-                ):
-                    return None
-            if not run_repository.save_if_unchanged_in_session(db, projected, previous):
-                return None
-            if projected.status != result["execution_state"] and not (
-                projected.status == "blocked" and result["execution_state"] == "unknown"
-            ):
-                raise XiaoxBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
-            if execution is not None:
-                remember(
-                    body, at=now, source=str(execution.state), target=target, code=code, actor=""
-                )
-                book.put("agent", str(execution.tenant_id or ""), previous.run_id, body)
-                execution.state = target
-                execution.last_error_code = None if target == "succeeded" else code
-                execution.updated_at = now
-                if target in {"succeeded", "failed"}:
-                    execution.finished_at = now
-        return run_repository.get(previous.run_id)
+        return reconcile_xiaox_receipts(self, run_repository, previous)
 
     def _transition(
         self,
@@ -558,9 +470,14 @@ class SQLAlchemyTaskExecutionRepository:
         error_code: str,
         owner_id: str = "",
         require_claim: bool = False,
+        execution_count: int | None = None,
         approver: str | None = None,
         approval_actor: str | None = None,
     ) -> AgentTaskExecution | None:
+        if require_claim and (
+            not owner_id or type(execution_count) is not int or execution_count < 1
+        ):
+            return None
         self._ensure_schema()
         now = utc_now_iso()
         with self._session_scope() as db:
@@ -640,6 +557,7 @@ class SQLAlchemyTaskExecutionRepository:
                 query = query.filter(
                     AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
+                    AgentTaskExecutionRecord.execution_count == execution_count,
                     AgentTaskExecutionRecord.lease_expires_at > now,
                 )
             values: dict[Any, Any] = {
@@ -668,8 +586,10 @@ class SQLAlchemyTaskExecutionRepository:
         return self.get(run_id)
 
     def mark_open_effect(
-        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str = ""
+        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str, execution_count: int
     ) -> bool:
+        if not owner_id or type(execution_count) is not int or execution_count < 1:
+            return False
         self._ensure_schema()
         with self._session_scope() as db:
             from app.db.models.agent import AgentTaskExecutionRecord
@@ -679,12 +599,10 @@ class SQLAlchemyTaskExecutionRepository:
             query = db.query(AgentTaskExecutionRecord).filter(
                 AgentTaskExecutionRecord.run_id == str(run_id or ""),
                 AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
+                AgentTaskExecutionRecord.lease_owner == owner_id,
+                AgentTaskExecutionRecord.execution_count == execution_count,
+                AgentTaskExecutionRecord.lease_expires_at > now,
             )
-            if owner_id:
-                query = query.filter(
-                    AgentTaskExecutionRecord.lease_owner == owner_id,
-                    AgentTaskExecutionRecord.lease_expires_at > now,
-                )
             if (
                 query.update({AgentTaskExecutionRecord.updated_at: now}, synchronize_session=False)
                 != 1
@@ -732,10 +650,14 @@ class SQLAlchemyTaskExecutionRepository:
             return SessionBook(db).get("agent", tenant, str(run_id or ""))
 
     def _expire_approvals(self, db: Session, book: Any, current: str) -> None:
-        from app.db.models.agent import AgentTaskExecutionRecord
+        from sqlalchemy import inspect
+
+        from app.application.agent_orchestrator.run_record_mapping import _record_to_run
+        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
         from app.domain.task_lifecycle.control import remember
 
         moment = datetime.fromisoformat(current.replace("Z", "+00:00"))
+        has_runs: bool | None = None
         rows = (
             db.query(AgentTaskExecutionRecord)
             .filter(AgentTaskExecutionRecord.state.in_(tuple(APPROVAL_STATES)))
@@ -750,11 +672,47 @@ class SQLAlchemyTaskExecutionRepository:
             age = (moment - datetime.fromisoformat(started.replace("Z", "+00:00"))).total_seconds()
             if age < self._approval_timeout_seconds:
                 continue
+            # Xiaox parents park on delegated receipts, clarification or a
+            # paused turn. Their child approval owns the human deadline. Read
+            # the original run so rows persisted before this fix are safe too.
+            # A standalone queue can exist before run storage is provisioned.
+            if has_runs is None:
+                has_runs = inspect(db.connection()).has_table(AgentRunRecord.__tablename__)
+            saved = db.get(AgentRunRecord, record.run_id) if has_runs else None
+            parent = _record_to_run(saved) if saved is not None else None
+            if (
+                parent is not None
+                and parent.metadata.get("runtime_type") == "xiaox"
+                and parent.user_id == record.user_id
+                and tenant_id_of_run(parent) == str(record.tenant_id or "")
+            ):
+                continue
             previous = str(record.state)
-            record.state = "rejected"
-            record.last_error_code = "approval_timeout"
-            record.finished_at = current
-            record.updated_at = current
+            # SQLite ignores FOR UPDATE. The expired snapshot must win a
+            # conditional write before it can reject or replace lifecycle data.
+            if (
+                db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.run_id == record.run_id,
+                    AgentTaskExecutionRecord.state == previous,
+                    AgentTaskExecutionRecord.execution_count == record.execution_count,
+                    AgentTaskExecutionRecord.updated_at == record.updated_at,
+                    AgentTaskExecutionRecord.lease_owner == record.lease_owner,
+                    AgentTaskExecutionRecord.lease_expires_at == record.lease_expires_at,
+                )
+                .update(
+                    {
+                        AgentTaskExecutionRecord.state: "rejected",
+                        AgentTaskExecutionRecord.last_error_code: "approval_timeout",
+                        AgentTaskExecutionRecord.finished_at: current,
+                        AgentTaskExecutionRecord.updated_at: current,
+                    },
+                    synchronize_session=False,
+                )
+                != 1
+            ):
+                continue
+            body = book.get("agent", str(record.tenant_id or ""), str(record.run_id))
             remember(
                 body,
                 at=current,
@@ -816,6 +774,7 @@ class SQLAlchemyTaskExecutionRepository:
             return
         with self._schema_lock:
             with self._session_scope(read_only=True) as db:
+                from app.db.bootstrap.orm_tables import _serialized_schema_bind
                 from app.db.db_base import Base
                 from app.db.models.agent import AgentTaskExecutionRecord
                 from app.db.models.task_lifecycle import (
@@ -826,17 +785,19 @@ class SQLAlchemyTaskExecutionRepository:
                 bind = db.get_bind()
                 if self._schema_ready and self._schema_bind is bind:
                     return
-                Base.metadata.create_all(
-                    bind=bind,
-                    tables=[
-                        cast("Table", AgentTaskExecutionRecord.__table__),
-                        cast("Table", TaskLifecycleRecord.__table__),
-                        cast("Table", TaskLifecycleIdempotency.__table__),
-                    ],
-                    checkfirst=True,
-                )
+                with _serialized_schema_bind(bind) as schema_bind:
+                    Base.metadata.create_all(
+                        bind=schema_bind,
+                        tables=[
+                            cast("Table", AgentTaskExecutionRecord.__table__),
+                            cast("Table", TaskLifecycleRecord.__table__),
+                            cast("Table", TaskLifecycleIdempotency.__table__),
+                        ],
+                        checkfirst=True,
+                    )
                 self._schema_bind = bind
-            self._schema_ready = True
+            # DDL on a caller-owned Connection can still be rolled back later.
+            self._schema_ready = isinstance(bind, Engine)
 
     @staticmethod
     def _to_model(record) -> AgentTaskExecution:

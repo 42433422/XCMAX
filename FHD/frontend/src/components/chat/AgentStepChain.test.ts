@@ -21,7 +21,7 @@ describe('AgentStepChain', () => {
   it('labels cumulative tool time and keeps observation data in expandable details', async () => {
     const wrapper = mount(AgentStepChain, { props: { steps: [step({
       state: 'failed', durationMs: 0, trace_id: 'trace-a', run_id: 'run-a', error_code: 'tool_timeout',
-    })] } })
+    })], showDiagnosticMetadata: true } })
     expect(wrapper.text()).toContain('工具累计 0ms')
     expect(wrapper.get('.asc-step-duration').text()).toBe('0ms')
     await wrapper.get('button.asc-step-row').trigger('click')
@@ -30,6 +30,12 @@ describe('AgentStepChain', () => {
     expect(wrapper.text()).toContain('tool_timeout')
     await wrapper.setProps({ steps: [step({ durationMs: 100 }), step({ id: 'unknown-duration' })] })
     expect(wrapper.text()).not.toContain('工具累计')
+  })
+
+  it('does not expose trace identifiers or a details control without user-facing details', () => {
+    const wrapper = mount(AgentStepChain, { props: { steps: [step({ trace_id: 'trace-hidden', run_id: 'run-hidden' })] } })
+    expect(wrapper.text()).not.toContain('诊断信息')
+    expect(wrapper.find('button.asc-step-row').exists()).toBe(false)
   })
 
   it('渲染步骤数、状态与单步耗时，不把缺失数据当成零汇总', async () => {

@@ -58,7 +58,7 @@
                     <div class="asc-label">建议</div>
                     <p>{{ step.hint }}</p>
                   </section>
-                  <details v-if="step.trace_id || step.run_id || step.error_code" class="asc-section">
+                  <details v-if="showDiagnosticMetadata && (step.trace_id || step.run_id || step.error_code)" class="asc-section">
                     <summary>诊断信息</summary>
                     <pre>{{ executionObservationDetails(step) }}</pre>
                   </details>
@@ -99,6 +99,7 @@ import { executionObservationDetails } from '@/utils/agentRunTraceModel'
 
 const props = defineProps<{
   steps: AgentStepView[]
+  showDiagnosticMetadata?: boolean
 }>()
 
 const state = computed<AgentStepState>(() => chainState(props.steps))
@@ -120,7 +121,13 @@ function traceStatus(value: AgentStepState): 'running' | 'error' | 'pending' | u
 }
 
 function hasDetails(step: AgentStepView): boolean {
-  return hasStepDetails({ ...step, hint: step.state === 'running' || step.state === 'unknown' ? undefined : step.hint })
+  return hasStepDetails({
+    ...step,
+    hint: step.state === 'running' || step.state === 'unknown' ? undefined : step.hint,
+    trace_id: props.showDiagnosticMetadata ? step.trace_id : undefined,
+    run_id: props.showDiagnosticMetadata ? step.run_id : undefined,
+    error_code: props.showDiagnosticMetadata ? step.error_code : undefined,
+  })
 }
 
 function iconFor(step: AgentStepView): string {

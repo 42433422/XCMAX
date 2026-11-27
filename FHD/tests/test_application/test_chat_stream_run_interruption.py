@@ -137,7 +137,21 @@ def test_unknown_readback_preserves_receipt_cost_and_later_real_completion(repos
     assert current.final_output["cost_units_total"] == 17
     assert current.metadata["cost_units_total"] == 17
     assert current.metadata["stream_interruption"]["business_outcome"] == "unknown"
-    assert len(repo.list_events(expected.run_id)) == 2
+    events = repo.list_events(expected.run_id)
+    assert [event.event_type for event in events] == [
+        "run.state_changed",
+        "run.observation_interrupted",
+        "run.observation_interrupted",
+        "run.state_changed",
+    ]
+    assert [event.data["worker_pending"] for event in events[1:3]] == [True, False]
+    assert [
+        (event.data["from_status"], event.data["to_status"]) for event in (events[0], events[-1])
+    ] == [
+        (None, "running"),
+        ("running", "blocked"),
+    ]
+    assert events[-1].data["reason_event_id"] == events[-2].event_id
     mark(expected, pending=True, reason="consumer_closed")
     assert repo.get(expected.run_id).metadata["stream_interruption"]["worker_pending"] is False
     current.status = "completed"
@@ -206,7 +220,20 @@ def test_registration_after_workers_exit_and_concurrent_last_workers(repositorie
         thread.join(1)
     lifetime.observe(lambda **state: mark(expected, **state))
     assert repo.get(expected.run_id).status == "blocked"
-    assert len(repo.list_events(expected.run_id)) == 1
+    events = repo.list_events(expected.run_id)
+    assert [event.event_type for event in events] == [
+        "run.state_changed",
+        "run.observation_interrupted",
+        "run.state_changed",
+    ]
+    assert events[1].data["worker_pending"] is False
+    assert [
+        (event.data["from_status"], event.data["to_status"]) for event in (events[0], events[-1])
+    ] == [
+        (None, "running"),
+        ("running", "blocked"),
+    ]
+    assert events[-1].data["reason_event_id"] == events[1].event_id
 
 
 def test_sql_cas_with_two_connections_preserves_new_terminal_and_audit_fields(

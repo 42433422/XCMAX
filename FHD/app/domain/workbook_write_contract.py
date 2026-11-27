@@ -11,11 +11,17 @@ from typing import Any
 WORKBOOK_READER = "excel-full-read-employee"
 WORKBOOK_WRITER = "excel-template-write-employee"
 WORKBOOK_QC = "excel-qc-employee"
+WORKBOOK_WRITE_REVIEW = "_workbook_write_review"
+WORKBOOK_BANDED_TABLE_STYLE = "TableStyleMedium2"
 _TEXT = {"type": "string", "minLength": 1}
+_ROW = {"type": "integer", "minimum": 1, "maximum": 1048576}
+_REF = {"type": "string", "pattern": "^[A-Za-z]{1,3}[1-9][0-9]*$"}
+_COLUMN = {"type": "string", "pattern": "^[A-Za-z]{1,3}$"}
+_COLOR = {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"}
 _TARGET = {
     "sheet": _TEXT,
-    "ref": {"type": "string", "pattern": "^[A-Za-z]{1,3}[1-9][0-9]*$"},
-    "row": {"type": "integer", "minimum": 1, "maximum": 1048576},
+    "ref": _REF,
+    "row": _ROW,
     "col": {"type": "integer", "minimum": 1, "maximum": 16384},
     "number_format": {"type": "string"},
 }
@@ -44,21 +50,12 @@ def _writes(*, formula: bool) -> dict[str, Any]:
     }
 
 
-def _phase(name: str, field: str, schema: dict) -> dict[str, Any]:
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["phase", field],
-        "properties": {"phase": {"const": name}, field: schema},
-    }
-
-
-def _flat_phase(name: str, /, **fields: dict) -> dict[str, Any]:
+def _flat_phase(name: str, /, *, optional: dict | None = None, **fields: dict) -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["phase", *fields],
-        "properties": {"phase": {"const": name}, **fields},
+        "properties": {"phase": {"const": name}, **fields, **(optional or {})},
     }
 
 
@@ -66,18 +63,31 @@ _RANGE = {
     "type": "string",
     "pattern": r"^\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6}(:\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})?$",
 }
+_SHEET_AREA: dict[str, dict[str, Any]] = {"sheet": _TEXT, "range": _RANGE}
 _TABLE = _flat_phase(
     "create_table",
     sheet=_TEXT,
-    range={**_RANGE, "description": "含标题和数据行，不含下一行合计"},
+    range={**_RANGE, "description": "含标题和数据行；sum_column 另占下一行"},
     name={
-        "type": "string",
-        "pattern": r"^[A-Za-z_][A-Za-z0-9_.]{0,254}$",
-        "description": "Excel 表名须以字母或下划线开头，只含 ASCII 字母数字下划线（不支持中文）",
+        **_TEXT,
+        "maxLength": 255,
+        "description": "Excel 表名以字母、下划线或反斜杠开头，其余可用字母、数字、下划线和点",
     },
-    sum_column=_TEXT,
-    calculated_formula={"type": "string", "pattern": "^=.", "maxLength": 8192},
+    optional={
+        "sum_column": {**_TEXT, "description": "需要合计行时提供求和列标题"},
+        "calculated_column": {**_TEXT, "description": "需要计算列时提供列标题"},
+        "calculated_formula": {
+            "type": "string",
+            "pattern": "^=.",
+            "maxLength": 8192,
+            "description": "计算列公式；没有 calculated_column 时沿用 sum_column",
+        },
+        "banded_rows": {"type": "boolean", "description": "开启可打印且随表格扩展的隔行底纹"},
+    },
 )
+_TABLE["dependentRequired"] = {"calculated_column": ["calculated_formula"]}
+_TABLE["if"] = {"required": ["calculated_formula"]}
+_TABLE["then"] = {"anyOf": [{"required": ["calculated_column"]}, {"required": ["sum_column"]}]}
 _COMBO_CHART = _flat_phase(
     "create_combo_chart",
     sheet={**_TEXT, "description": "图表所在的新工作表"},
@@ -89,80 +99,72 @@ _COMBO_CHART = _flat_phase(
     bar_title=_TEXT,
     line_title=_TEXT,
 )
-_ROW = {"type": "integer", "minimum": 1, "maximum": 1048576}
+_CREATE_SHEET = _flat_phase(
+    "create_sheet",
+    sheet={**_TEXT, "maxLength": 31, "pattern": r"^[^\\/*?:\[\]\x00-\x1f]+$"},
+)
 _INSERT_ROWS = _flat_phase(
     "insert_rows",
     sheet=_TEXT,
     row=_ROW,
     count={"type": "integer", "minimum": 1, "maximum": 10000},
 )
-_MERGE_CELLS = _flat_phase("merge_cells", sheet=_TEXT, range=_RANGE)
+_MERGE_CELLS = _flat_phase("merge_cells", **_SHEET_AREA)
 _SET_ROW_HEIGHT = _flat_phase(
     "set_row_height",
     sheet=_TEXT,
     row=_ROW,
     height={"type": "number", "minimum": 0.25, "maximum": 409},
 )
-_FREEZE_PANES = _flat_phase(
-    "freeze_panes",
+_SET_COLUMN_WIDTH = _flat_phase(
+    "set_column_width",
     sheet=_TEXT,
-    ref={"type": "string", "pattern": "^[A-Za-z]{1,3}[1-9][0-9]*$"},
+    column=_COLUMN,
+    width={"type": "number", "exclusiveMinimum": 0, "maximum": 255},
 )
-_CELL_STYLES = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["phase", "sheet", "range"],
-    "anyOf": [
-        {"required": ["bold"]},
-        {"required": ["horizontal"]},
-        {"required": ["vertical"]},
-        {"required": ["fill_color"]},
-        {"required": ["border"]},
-        {"required": ["font_size"]},
-    ],
-    "properties": {
-        "phase": {"const": "cell_styles"},
-        "sheet": _TEXT,
-        "range": {**_RANGE, "description": "应用样式的连续区域，如 A1:F1 或 A1:F20"},
-        "bold": {"type": "boolean"},
-        "font_size": {"type": "number", "minimum": 1, "maximum": 409},
-        "horizontal": {"enum": ["left", "center", "right"]},
-        "vertical": {"enum": ["top", "center", "bottom"]},
-        "fill_color": {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"},
-        "border": {"const": "thin", "description": "区域内每格四边细边框"},
-    },
+_FREEZE_PANES = _flat_phase("freeze_panes", sheet=_TEXT, ref=_REF)
+_STYLE_FIELDS = {
+    "number_format": _TEXT,
+    "bold": {"type": "boolean"},
+    "horizontal": {"enum": ["left", "center", "right"]},
+    "vertical": {"enum": ["top", "center", "bottom"]},
+    "fill_color": _COLOR,
+    "border": {"const": "thin", "description": "区域内每格四边细边框"},
+    "font_size": {"type": "number", "minimum": 1, "maximum": 409},
 }
-_COLOR = {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"}
+_CELL_STYLES = _flat_phase(
+    "cell_styles",
+    sheet=_TEXT,
+    range={**_RANGE, "description": "应用样式的连续区域，如 A1:F1 或 A1:F20"},
+    optional=_STYLE_FIELDS,
+)
+_CELL_STYLES["anyOf"] = [{"required": [field]} for field in _STYLE_FIELDS]
 _NUMBER = {"type": "number"}
 _INTEGER = {"type": "integer"}
 _TOP_PERCENT = _flat_phase(
     "conditional_format",
-    sheet=_TEXT,
-    range=_RANGE,
+    **_SHEET_AREA,
     rule={"const": "top_percent"},
     percent={"type": "integer", "minimum": 1, "maximum": 100},
     color=_COLOR,
 )
 _LESS_THAN = _flat_phase(
     "conditional_format",
-    sheet=_TEXT,
-    range=_RANGE,
+    **_SHEET_AREA,
     rule={"const": "less_than"},
     threshold=_NUMBER,
     color=_COLOR,
 )
 _DUPLICATE_ROWS = _flat_phase(
     "conditional_format",
-    sheet=_TEXT,
-    range=_RANGE,
+    **_SHEET_AREA,
     rule={"const": "duplicate_rows"},
-    key_column={"type": "string", "pattern": "^[A-Za-z]{1,3}$"},
+    key_column=_COLUMN,
     color=_COLOR,
 )
 _LIST_VALIDATION = _flat_phase(
     "data_validation",
-    sheet=_TEXT,
-    range=_RANGE,
+    **_SHEET_AREA,
     rule={"const": "list"},
     source_sheet=_TEXT,
     source_range=_RANGE,
@@ -174,8 +176,7 @@ _LIST_VALIDATION = _flat_phase(
 )
 _WHOLE_VALIDATION = _flat_phase(
     "data_validation",
-    sheet=_TEXT,
-    range=_RANGE,
+    **_SHEET_AREA,
     rule={"const": "whole"},
     minimum=_INTEGER,
     maximum=_INTEGER,
@@ -183,8 +184,7 @@ _WHOLE_VALIDATION = _flat_phase(
 )
 _PRINT_LAYOUT = _flat_phase(
     "print_layout",
-    sheet=_TEXT,
-    range=_RANGE,
+    **_SHEET_AREA,
     orientation={"enum": ["portrait", "landscape"]},
     paper={"enum": ["A4", "letter"]},
     margins={"enum": ["normal", "narrow", "wide"]},
@@ -196,7 +196,14 @@ _PRINT_LAYOUT = _flat_phase(
 WORKBOOK_CONTROL_PHASES = frozenset({"conditional_format", "data_validation", "print_layout"})
 WORKBOOK_NATIVE_PHASES = WORKBOOK_CONTROL_PHASES | {"create_table", "create_combo_chart"}
 WORKBOOK_STRUCTURAL_PHASES = frozenset(
-    {"insert_rows", "merge_cells", "set_row_height", "freeze_panes"}
+    {
+        "create_sheet",
+        "insert_rows",
+        "merge_cells",
+        "set_row_height",
+        "set_column_width",
+        "freeze_panes",
+    }
 )
 
 
@@ -209,6 +216,12 @@ WORKBOOK_WRITE_INPUT = {
         "template_path": {
             **_TEXT,
             "description": "当前账号的上传 ID/文件名，或同原任务已核验的工作簿产物 URI",
+        },
+        "output_name": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": r'^[^/\\\x00-\x1f\x7f<>:"|?*]+\.[xX][lL][sS][xXmM]$',
+            "description": "下载文件名，不含路径，扩展名与模板完全同类",
         },
         "user_request": {"type": "string"},
         "plan": {
@@ -229,17 +242,19 @@ WORKBOOK_WRITE_INPUT = {
                     "maxItems": 100,
                     "items": {
                         "oneOf": [
-                            _phase("clear_ranges", "ranges", _NAMES),
-                            _phase("cell_writes", "writes", _writes(formula=False)),
-                            _phase("formula_writes", "writes", _writes(formula=True)),
-                            _phase("retain_sheets", "names", _NAMES),
-                            _phase("remove_sheets", "names", _NAMES),
+                            _flat_phase("clear_ranges", ranges=_NAMES),
+                            _flat_phase("cell_writes", writes=_writes(formula=False)),
+                            _flat_phase("formula_writes", writes=_writes(formula=True)),
+                            _flat_phase("retain_sheets", names=_NAMES),
+                            _flat_phase("remove_sheets", names=_NAMES),
                             _TABLE,
                             _COMBO_CHART,
                             _CELL_STYLES,
+                            _CREATE_SHEET,
                             _INSERT_ROWS,
                             _MERGE_CELLS,
                             _SET_ROW_HEIGHT,
+                            _SET_COLUMN_WIDTH,
                             _FREEZE_PANES,
                             _TOP_PERCENT,
                             _LESS_THAN,
@@ -252,7 +267,25 @@ WORKBOOK_WRITE_INPUT = {
                 },
                 "expected": {
                     "type": "object",
-                    "description": "原 QC 独立比对的计划格数/数值合计；不声明公式已重算",
+                    "description": "原 QC 比对计划格数/数值合计；formula_values 只填写原目标给出的独立数值要求，冻结后由真实计算引擎核对，不能以执行者自述证明正确",
+                    "properties": {
+                        "formula_values": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 10000,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["sheet", "ref", "value"],
+                                "properties": {
+                                    "sheet": _TEXT,
+                                    "ref": _REF,
+                                    "value": {"type": ["string", "number", "boolean"]},
+                                    "abs_tolerance": {"type": "number", "minimum": 0},
+                                },
+                            },
+                        },
+                    },
                 },
             },
         },

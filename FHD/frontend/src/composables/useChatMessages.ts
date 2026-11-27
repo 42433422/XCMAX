@@ -1,7 +1,7 @@
 import { ref, computed, shallowRef, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import chatApi from '../api/chat'
-import { boundedChatMessageCache, CHAT_HISTORY_PAGE_SIZE, localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
+import { boundedChatMessageCache, CHAT_HISTORY_PAGE_SIZE, isServerHistoryCopy, localChatCacheRows, LOCAL_CHAT_CACHE_VERSION, localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 import { useModsStore } from '@/stores/mods'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -15,7 +15,12 @@ import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprovalCard'
 import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { captureAuthSession } from '@/utils/authSessionCache'
-import { restoreRuntimeContinuation, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { readAgentArtifactDownloads } from '@/utils/agentArtifactDownloads'
+import { readChatFileSources } from '@/utils/chatFileSources'
+import { isDurableChatScope } from '@/utils/chatSessionRestore'
+import { restoreRuntimeContinuation, runtimeContinuationFromPayload, withoutSettledQueueReplies } from '@/utils/chatRuntimeContinuation'
+import { readChatExecution } from '@/components/chat/chatFailureRecovery'
+import { normalizeServerContentToHtml } from '@/utils/sanitizeHtml'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 
@@ -111,6 +116,21 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
     const continuation = restoreRuntimeContinuation(ui.runtimeContinuation)
       || runtimeContinuationFromPayload(metadata)
     if (continuation) extras.runtimeContinuation = continuation
+    const execution = readChatExecution({ execution: ui.execution })
+    if (execution) extras.execution = execution
+    const files = readAgentArtifactDownloads(ui.outputArtifacts)
+    if (files.length) extras.outputArtifacts = files
+    if (row.role === 'assistant' || row.role === 'ai') {
+      const sources = readChatFileSources(ui.fileSources)
+      if (sources.length) extras.fileSources = sources
+    }
+  } else {
+    const files = objectArray(ui.inputAttachments).flatMap(row => {
+      const name = asString(row.name).trim()
+      const reference = asString(row.reference).trim()
+      return name && /^conversation-upload:[0-9a-f]{40}$/.test(reference) ? [{ name, reference }] : []
+    })
+    if (files.length) extras.inputAttachments = files
   }
   const summary = asRecord(metadata.summary)
   const serverStatus = asString(summary.status)
@@ -228,6 +248,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   let beforeMessageId: number | undefined
   let historyRevision: number | null = null
   let historyMessageCount: number | null = null
+  const hiddenQueueReplyIds = new Set<number>()
   let historyTitle = ''
   let historyEpoch = 0
   let disposed = false
@@ -236,6 +257,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     beforeMessageId = undefined
     historyRevision = null
     historyMessageCount = null
+    hiddenQueueReplyIds.clear()
     historyTitle = ''
     messagesHaveEarlier.value = earlierMessagesLoading.value = false
     earlierMessagesError.value = ''
@@ -247,6 +269,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       earlierMessagesLoading.value = false
       earlierMessagesError.value = ''
       historyMessageCount = null
+      hiddenQueueReplyIds.clear()
       historyTitle = ''
     }
     if (typeof page.message_count === 'number' && Number.isSafeInteger(page.message_count) && page.message_count >= 0)
@@ -283,7 +306,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const older = fromServerRows(asArray(page.messages), page.durable).filter(row =>
         !messages.value.some(existing => samePersistedMessage(existing, row, toPlainText)))
       setHistoryPage(page)
-      messages.value = [...older, ...messages.value]
+      messages.value = withoutSettledQueueReplies([...older, ...messages.value], hiddenQueueReplyIds)
       reconcileApprovalCards(messages.value)
       restoreModelRoute()
       persistMessagesCache()
@@ -306,17 +329,18 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     ]
   }
 
-  function readCachedMessages(key = storageKey.value): ChatMessage[] {
+  function readCachedMessages(key = storageKey.value, sid = sessionId.value): ChatMessage[] {
     try {
       const raw = localStorage.getItem(key)
       if (!raw) return getDefaultWelcome()
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed) || !parsed.length) return getDefaultWelcome()
       const withoutLegacyNotices = parsed.filter(message => !isLegacyLocalStopNotice(asRecord(message)))
-      if (withoutLegacyNotices.length !== parsed.length) {
-        try { localStorage.setItem(key, JSON.stringify(withoutLegacyNotices)) } catch { /* 仍使用清理后的内存副本 */ }
+      const local = localChatCacheRows(withoutLegacyNotices, resolveChatStorageScope(), sid)
+      if (local.length !== parsed.length) {
+        try { localStorage.setItem(key, JSON.stringify(local)) } catch { /* Use the filtered in-memory copy. */ }
       }
-      const sanitized = sanitizeMessagesList(withoutLegacyNotices)
+      const sanitized = sanitizeMessagesList(local)
       for (const message of sanitized) {
         if (message.streamingShell) {
           delete message.streamingShell
@@ -327,7 +351,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
           message.persistence.error = '上次保存未确认，请仅重试保存。'
         }
       }
-      if (!sanitized.length) return getDefaultWelcome()
+      if (!sanitized.length) return local.length < withoutLegacyNotices.length ? [] : getDefaultWelcome()
       if (isWelcomeMessage(sanitized[0]) && /<[a-z]+[\s>]/i.test(sanitized[0].content)) {
         sanitized[0] = getDefaultWelcome()[0]
       }
@@ -396,7 +420,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       }
       const live = new Set(list.filter(message => message.streamingShell
         || ['submitted', 'streaming'].includes(message.streamStatus || '')).map(chatMessageKey))
-      const cached = boundedChatMessageCache(sanitized.map(message => live.has(chatMessageKey(message))
+      const cached = boundedChatMessageCache(localChatCacheRows(sanitized, resolveChatStorageScope(), sid).map(message => live.has(chatMessageKey(message))
         ? { ...message, streamingShell: true, ...(message.persistence ? { persistence: { ...message.persistence, durable: undefined } } : {}) }
         : message))
       localStorage.setItem(key, JSON.stringify(cached))
@@ -542,19 +566,23 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       }
       let previous: Record<string, unknown> = {}
       try { previous = asRecord(JSON.parse(localStorage.getItem(metaKey) || '{}')) } catch { /* Rebuild invalid metadata. */ }
+      if (isDurableChatScope(resolveChatStorageScope()) && previous.local_cache_version !== LOCAL_CHAT_CACHE_VERSION) previous = {}
       const revision = sid === sessionId.value ? historyRevision : null
       const sameHistory = revision === null || previous.history_revision === revision
       const previousCount = Number(previous.message_count)
       const serverCount = sid === sessionId.value ? historyMessageCount : null
       // A lost save receipt may already be in SQL. Never add pending local rows to this total.
-      const count = serverCount ?? (sameHistory && previous.cache_truncated === true && Number.isSafeInteger(previousCount)
+      const count = serverCount === null ? (sameHistory && previous.cache_truncated === true && Number.isSafeInteger(previousCount)
         && previousCount >= 0 ? previousCount : meaningful.length)
+        : Math.max(0, serverCount - hiddenQueueReplyIds.size)
       localStorage.setItem(
         metaKey,
         JSON.stringify({
           session_id: String(sid || 'default'),
+          local_cache_version: LOCAL_CHAT_CACHE_VERSION,
           title: (sid === sessionId.value && historyTitle) || (sameHistory && asString(previous.title).trim()) || deriveSessionTitle(list),
           message_count: count,
+          ...(serverCount !== null && hiddenQueueReplyIds.size ? { server_message_count: serverCount } : {}),
           history_revision: revision ?? previous.history_revision ?? null,
           cache_truncated: cacheTruncated || (sameHistory && previous.cache_truncated === true),
           updated_at: new Date().toISOString(),
@@ -604,13 +632,6 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       .filter((m): m is ChatMessage => !!m)
   }
 
-  function normalizeServerContentToHtml(raw: unknown): string {
-    const text = String(raw || '')
-    // 如果已经是 HTML（常见：<br>/<div>/<ul>），按原样展示，避免二次转义
-    if (/<[a-z][\s\S]*>/i.test(text)) return text
-    return escapeHtml(text).replace(/\n/g, '<br>')
-  }
-
   function addMessage(content: string, role: 'user' | 'ai' | 'task' = 'ai', extras?: ChatMessageExtras, options?: { speak?: boolean }) {
     const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
     if (!hasMeaningfulContent(visibleContent)) return
@@ -640,7 +661,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const key = buildChatMessagesKey(sid, String(activeModId.value || ''))
       const store = chatMessageStores.get(key)
       if (store) return store.messages.value
-      try { return sanitizeMessagesList(JSON.parse(localStorage.getItem(key) || '[]')) }
+      try { return sanitizeMessagesList(localChatCacheRows(asArray(JSON.parse(localStorage.getItem(key) || '[]')), resolveChatStorageScope(), sid)) }
       catch { return [] }
     },
     persist: (list, sid) => persistMessagesCache(list, buildChatMessagesKey(sid, String(activeModId.value || '')), buildChatSessionMetaKey(sid, String(activeModId.value || '')), sid),
@@ -694,7 +715,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     const modId = String(activeModId.value || '')
     const key = buildChatMessagesKey(sid, modId)
     const metaKey = buildChatSessionMetaKey(sid, modId)
-    const store = acquireChatMessageStore(key, () => readCachedMessages(key))
+    const store = acquireChatMessageStore(key, () => readCachedMessages(key, sid))
     const persist = () => persistMessagesCache(store.messages.value, key, metaKey, sid)
     return {
       messages: store.messages,
@@ -716,7 +737,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
 
   function loadMessages(newMessages: ChatMessage[], page?: Record<string, unknown>) {
     if (page) setHistoryPage(page)
-    const sanitized = sanitizeMessagesList(newMessages)
+    const sanitized = withoutSettledQueueReplies(sanitizeMessagesList(newMessages), hiddenQueueReplyIds)
     reconcileApprovalCards(sanitized)
     messages.value = sanitized
     restoreModelRoute()
@@ -746,8 +767,13 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const sameRevision = historyRevision !== null && historyRevision === dataRow.revision
       const serverMessages = asArray(dataRow.messages)
       if (!serverMessages.length) {
-        setHistoryPage(dataRow)
-        if (dataRow.durable === true && dataRow.revision === null) loadMessages([])
+        if (dataRow.success === true && dataRow.durable === true && isDurableChatScope(resolveChatStorageScope())) {
+          loadMessages(messages.value.filter(message => !isServerHistoryCopy(message)
+            && (!message.persistence?.request || (message.persistence.request.expected_revision ?? 0) === (dataRow.revision ?? 0))), dataRow)
+        } else {
+          setHistoryPage(dataRow)
+          if (dataRow.durable === true && dataRow.revision === null) loadMessages([])
+        }
         options.onConversation?.(dataRow)
         return options.required === true
       }
@@ -766,6 +792,8 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       }
       const lastLocal = localList[localList.length - 1]
       const serverTurnIds = new Set(sanitized.map(message => message.turnId).filter(Boolean))
+      const localQueuedTurns = new Set(localList.filter(message => message.workflowAction === 'queued'
+        || message.runtimeContinuation?.status === 'queued').map(message => message.turnId).filter(Boolean))
       // 原地复用本地消息对象：对象身份稳定，列表 key 才不会在同步后整列变化。
       const matched = new Set<number>()
       const mergedServer = sanitized.map((server) => {
@@ -778,13 +806,14 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         if (matched.has(index)) return false
         if (typeof dataRow.revision === 'number' && local.persistence?.request
           && (local.persistence.request.expected_revision ?? 0) !== dataRow.revision) return false
-        if (local.persistence?.status === 'saved') return false
+        if (isServerHistoryCopy(local)) return false
         // 服务端已有同一轮次：本地这条只是同一问题的副本（附件证据会改写服务端正文，
         // 按文本匹配不到）。保留它会在每次同步时追加到末尾并再次落库，形成重复提问。
         if (local.role === 'user' && local.turnId && serverTurnIds.has(local.turnId)) return false
         // 没有进行中的轮次、且本轮 turnId 不在服务端：这是从未真正发出的孤儿提问
         // （例如视图已被替换导致请求没发出去），保留它只会在每次同步时被追加到末尾。
-        if (local.role === 'user' && local.turnId && !busy() && !serverTurnIds.has(local.turnId)) return false
+        if (local.role === 'user' && local.turnId && !busy() && !local.persistence?.request
+          && !localQueuedTurns.has(local.turnId) && !serverTurnIds.has(local.turnId)) return false
         // 已被后续对话取代的本地失败回执没有保存价值：它永远匹配不到服务端，
         // 每次同步都会被追加到末尾，把真正的最新回复挤到上面，看起来像“AI 没回”。
         if (isSupersededTransportFailure(local)) {
@@ -801,7 +830,9 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       setHistoryPage(older.length ? { ...dataRow,
         has_more: messagesHaveEarlier.value, next_before_id: beforeMessageId,
       } : dataRow)
-      const next = withoutRepeatedWelcomes([...older, ...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message))])
+      const next = withoutRepeatedWelcomes(withoutSettledQueueReplies([
+        ...older, ...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message)),
+      ], hiddenQueueReplyIds))
       const unchanged = next.length === currentList.length && next.every((message, index) => message === currentList[index])
       if (!unchanged) loadMessages(next)
       else persistMessagesCache()
@@ -856,6 +887,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         approvalCard: message.approvalCard,
         agentRunTrace: message.agentRunTrace,
         attachments: message.attachments,
+        outputArtifacts: message.outputArtifacts,
         businessResult: message.businessResult,
         sameAsPrevious: message.sameAsPrevious,
         routeMetadata: message.routeMetadata,

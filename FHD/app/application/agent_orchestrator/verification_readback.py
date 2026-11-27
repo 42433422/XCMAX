@@ -7,11 +7,13 @@ Adapters are chosen by the host action contract, not by an executor's claimed
 from __future__ import annotations
 
 import csv
+import json
 import zipfile
 from pathlib import Path
 from typing import Any
 from xml.etree.ElementTree import ParseError
 
+from app.domain.workbook_write_contract import WORKBOOK_READER
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EMPLOYEE_COMPLETION_ACTIONS = frozenset({"run_tools", "child_return", "chain"})
@@ -25,6 +27,7 @@ _FILE_ACTIONS = frozenset(
     }
 )
 _GENERATORS = {
+    WORKBOOK_READER: ".json",
     "excel-generate-employee": ".xlsx",
     "csv-generate-employee": ".csv",
     "word-generate-employee": ".docx",
@@ -163,7 +166,7 @@ def _files(
             return _report("failed", "result_artifact_identity_mismatch", "run_artifact")
         expected_uri = f"/api/agent/runs/{run.run_id}/artifacts/{artifact_id}"
         if artifact.get("uri") != expected_uri or any(
-            (office or business_export or field in metadata)
+            (office or business_export or suffix == ".json" or field in metadata)
             and str(metadata.get(field)) != expected
             for field, expected in (
                 ("run_id", run.run_id),
@@ -194,7 +197,18 @@ def _files(
         ):
             return _report("inconclusive", "result_artifact_owner_missing", "run_artifact")
         content = read_verified_run_file(run.run_id, artifact)
-        structure = inspect_run_file_structure(content, actual_suffix)
+        if actual_suffix == ".json":
+            workbook = json.loads(content)
+            sheets = workbook.get("sheets") if isinstance(workbook, dict) else None
+            if (
+                not isinstance(sheets, list)
+                or not sheets
+                or workbook.get("sheet_count") != len(sheets)
+            ):
+                return _report("failed", "result_artifact_invalid", "run_artifact")
+            structure = {"format": "json", "sheets": len(sheets)}
+        else:
+            structure = inspect_run_file_structure(content, actual_suffix)
         rows = step.params.get("rows" if step.tool_id == "excel_analysis" else "data")
         comparison = compare_run_file_table(rows, content, actual_suffix) if not suffix else {}
         checks.append(
@@ -331,6 +345,7 @@ def verify_independent_result(
 ) -> dict[str, Any]:
     """Read server-selected evidence under the original authenticated task scope."""
     action = (step.tool_id, step.action)
+    attachment_read = action == ("conversation_history", "read_attachment")
     employee = (
         str(
             next(
@@ -341,7 +356,7 @@ def verify_independent_result(
                 ),
                 "",
             )
-        )
+        ).strip()
         if action == ("employee", "execute")
         else ""
     )
@@ -425,6 +440,7 @@ def verify_independent_result(
         action == ("customers", "create")
         or catalog_action
         or file_action
+        or attachment_read
         or workbook_write
         or sales_action
         or sales_closed_loop
@@ -465,6 +481,22 @@ def verify_independent_result(
             actor = _bound_actor(context)
         except AgentModAuthorizationError:
             return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
+        if attachment_read:
+            from app.application.agent_orchestrator.attachment_inputs import (
+                read_bound_chat_attachment,
+            )
+
+            data = read_bound_chat_attachment(step.params["upload_id"], context)
+            if output.get("data") != data:
+                return _report("failed", "result_attachment_mismatch", "owned_attachment")
+            return _report(
+                "verified",
+                "result_verified",
+                "owned_attachment",
+                upload_id=data["upload_id"],
+                sha256=data["sha256"],
+                coverage=data["coverage"],
+            )
         if surface_action:
             from app.application.agent_orchestrator.verification_surface import (
                 verify_surface_result,

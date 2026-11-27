@@ -417,6 +417,18 @@
           "idempotent": true,
           "required_params": [],
           "availability": "shared"
+        },
+        "read_attachment": {
+          "description": "只读读取当前任务已绑定的附件文件，例如 Word DOCX 的正文和表格。使用已授权的 upload_id，返回实际抽取内容和全文覆盖范围；不能读取本地路径或未关联的上传。",
+          "risk": "low",
+          "read_only": true,
+          "idempotent": true,
+          "input_schema": {
+            "type": "object",
+            "properties": {"upload_id": {"type": "string", "minLength": 1, "maxLength": 80}},
+            "required": ["upload_id"],
+            "additionalProperties": false
+          }
         }
       }
     },
@@ -481,6 +493,26 @@
               "confirmed"
             ],
             "properties": {
+              "operation_id": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "revision": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "reason": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "price": {
+                "not": {
+                  "type": "null"
+                }
+              },
               "product_id": {
                 "type": "integer"
               },
@@ -556,6 +588,26 @@
               "confirmed"
             ],
             "properties": {
+              "operation_id": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "revision": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "reason": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "price": {
+                "not": {
+                  "type": "null"
+                }
+              },
               "product_id": {
                 "type": "integer"
               },
@@ -2960,7 +3012,32 @@
             "file_path",
             "rows"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "contract_samples": [
+            {
+              "name": "excel_analysis.export.contract",
+              "input": {
+                "file_path": "sample.xlsx",
+                "rows": [
+                  {
+                    "item": "paint",
+                    "count": 2
+                  }
+                ]
+              },
+              "output": {
+                "success": true,
+                "data": {
+                  "file_path": "/workspace/sample.xlsx",
+                  "row_count": 1,
+                  "columns": [
+                    "item",
+                    "count"
+                  ]
+                }
+              }
+            }
+          ]
         },
         "aggregate": {
           "risk": "low",

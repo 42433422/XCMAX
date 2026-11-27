@@ -6,10 +6,32 @@ import copy
 import hashlib
 import json
 import re
-from typing import Any, Literal
+from collections.abc import Sequence
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
+from app.domain.task_lifecycle.goal_review_models import (
+    FileCitation as FileCitation,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    GoalAssessment as GoalAssessment,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    GoalReview as GoalReview,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    PlannedNavigation as PlannedNavigation,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    PlannedToolCall as PlannedToolCall,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    PlanToolAction as PlanToolAction,
+)
+from app.domain.task_lifecycle.goal_review_models import (
+    goal_source_catalogue as goal_source_catalogue,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_error,
     execution_result_outcome_unknown,
@@ -31,6 +53,11 @@ def canonical_digest(value: Any) -> str:
 
 
 GOAL_PROTOCOL = "xcmax.agent-goal.v2"
+REPAIRABLE_GOAL_REVIEW_ERRORS = (
+    "goal_id_duplicate:",
+    "goal_source_unknown:",
+    "goal_source_mismatch:",
+)
 _SCOPE_FIELDS = (
     "user_id",
     "actor_id",
@@ -59,6 +86,18 @@ def goal_scope(run: Any) -> dict[str, Any]:
         "entity_binding_digest": canonical_digest(context.get("enterprise_cognition")),
         **{key: copy.deepcopy(context.get(key)) for key in _SCOPE_FIELDS},
         "constraints": copy.deepcopy(context.get("_runtime_goal_constraints") or {}),
+        **(
+            {
+                "requested_deliverable": "action_plan",
+                **(
+                    {"plan_delivery_version": 1}
+                    if run.metadata.get("plan_delivery_version") == 1
+                    else {}
+                ),
+            }
+            if run.metadata.get("runtime_requested_deliverable") == "action_plan"
+            else {}
+        ),
     }
 
 
@@ -135,25 +174,117 @@ def goal_answers(run: Any) -> list[dict[str, Any]]:
     ]
 
 
-class GoalAssessment(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
-    goal_id: str = Field(min_length=1, max_length=80)
-    source_id: str = Field(min_length=1, max_length=200)
-    source: str = Field(min_length=1, max_length=4000)
-    kind: Literal["reply", "read", "write", "constraint"]
-    status: Literal["satisfied", "unmet", "not_applicable"]
-    evidence_ids: list[str] = Field(max_length=256)
-    reason: str = Field(min_length=1, max_length=4000)
+def plan_navigation_entries(contract: dict[str, Any]) -> list[dict[str, Any]]:
+    if contract["scope"].get("requested_deliverable") != "action_plan":
+        return []
+    return next(
+        (
+            evidence["entries"]
+            for evidence in contract["request"].get("context_evidence") or []
+            if evidence.get("source") == "desktop_navigation"
+        ),
+        [],
+    )
 
 
-class GoalReview(BaseModel):
-    """A non-executing semantic assessment, constrained by host receipt validation."""
-
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
-    goals: list[GoalAssessment] = Field(min_length=1, max_length=64)
-    violations: list[str] = Field(max_length=64)
-    uncovered_sources: list[str] = Field(max_length=64)
-    feedback: str = Field(max_length=12000)
+def review_schema(
+    contract: dict[str, Any],
+    *,
+    action_catalog: dict[str, list[str]] | None = None,
+    file_evidence: dict[str, dict[str, Any]] | None = None,
+    receipt_ids: tuple[str, ...] = (),
+    source_block_ids: tuple[str, ...] = (),
+    response_block_ids: tuple[str, ...] = (),
+    answers: Sequence[dict[str, Any]] = (),
+) -> dict[str, Any]:
+    schema = GoalReview.model_json_schema()
+    assessment = schema["$defs"]["GoalAssessment"]
+    properties = assessment["properties"]
+    properties["evidence_ids"]["items"]["enum"] = ["response", *receipt_ids]
+    assessment["allOf"] = [
+        {
+            "if": {"properties": {"kind": {"enum": ["reply", "planned_action"]}}},
+            "then": {
+                "properties": {"evidence_ids": {"items": {"const": "response"}, "maxItems": 1}}
+            },
+        }
+    ]
+    sources = goal_source_catalogue(contract, answers)
+    properties["source_id"]["enum"] = list(sources)
+    source_kinds: dict[tuple[str, ...], list[str]] = {}
+    for identity, source in sources.items():
+        source_kinds.setdefault(tuple(source["allowed_kinds"]), []).append(identity)
+    for source_types, identities in source_kinds.items():
+        bound: dict[str, Any] = {"properties": {"kind": {"enum": list(source_types)}}}
+        if source_types == ("reply", "constraint"):
+            bound["properties"].update(
+                status={"enum": ["satisfied", "unmet"]},
+                evidence_ids={"items": {"const": "response"}, "maxItems": 1},
+            )
+            bound["if"] = {"properties": {"kind": {"const": "constraint"}}}
+            bound["then"] = {"properties": {"evidence_ids": {"minItems": 1}}}
+        assessment["allOf"].append(
+            {"if": {"properties": {"source_id": {"enum": identities}}}, "then": bound}
+        )
+    plan_content = schema["properties"]["plan_content"]
+    if contract["scope"].get("plan_delivery_version") == 1:
+        plan_content.pop("default")
+        plan_content.pop("anyOf")
+        plan_content["enum"] = ["steps", "narrative"]
+        schema["required"].append("plan_content")
+    else:
+        schema["properties"].pop("plan_content")
+    kinds = properties["kind"]["enum"]
+    if contract["scope"].get("requested_deliverable") == "action_plan":
+        kinds.remove("read")
+        kinds.remove("write")
+        # Use the same tenant-visible business identities as MCP tools/list.
+        # Transport tool names and inaccessible tool/action pairs are not business operations.
+        if action_catalog:
+            schema["$defs"]["PlannedToolCall"]["oneOf"] = [
+                {"properties": {"tool_id": {"const": tool_id}, "action": {"enum": actions}}}
+                for tool_id, actions in action_catalog.items()
+            ]
+        elif action_catalog is not None:
+            properties["planned_calls"]["maxItems"] = 0
+    else:
+        kinds.remove("planned_action")
+    if entries := plan_navigation_entries(contract):
+        ids = schema["$defs"]["PlannedNavigation"]["properties"]["navigation_id"]
+        ids["enum"] = [entry["id"] for entry in entries]
+    else:
+        properties.pop("planned_navigation")
+        schema["$defs"].pop("PlannedNavigation")
+    if file_evidence is None:
+        properties.pop("file_basis")
+        properties.pop("file_citations")
+        schema["$defs"].pop("FileCitation")
+    else:
+        schema["properties"]["feedback_disposition"].pop("default")
+        schema["required"].append("feedback_disposition")
+        properties["file_basis"].pop("anyOf")
+        properties["file_basis"].pop("default")
+        properties["file_basis"]["enum"] = ["independent", "passages", "complete"]
+        assessment["allOf"].append(
+            {
+                "if": {"properties": {"kind": {"enum": ["read", "reply"]}}},
+                "then": {"required": ["file_basis"]},
+            }
+        )
+        if source_block_ids and response_block_ids:
+            schema["$defs"]["FileCitation"] = {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["source_block_id", "response_block_id"],
+                "properties": {
+                    "source_block_id": {"type": "string", "enum": list(source_block_ids)},
+                    "response_block_id": {"type": "string", "enum": list(response_block_ids)},
+                },
+            }
+        else:
+            properties["file_citations"].update(maxItems=0, items=False)
+            schema["$defs"].pop("FileCitation")
+    return schema
 
 
 def goal_evidence_snapshot(
@@ -211,6 +342,147 @@ def goal_evidence_snapshot(
     return {**snapshot, "digest": canonical_digest(snapshot)}
 
 
+def _verified_evidence(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        row["evidence_id"]: row
+        for row in snapshot["evidence"]
+        if row["state"] == "completed"
+        and row["receipt"].get("status") == "completed"
+        and row["receipt"].get("success") is True
+        and row["receipt"].get("verified") is True
+        and not execution_result_outcome_unknown(row["receipt"], include_execution=True)
+        and not execution_result_error(row["receipt"])
+    }
+
+
+def _file_source(data: dict[str, Any], *, origin: str) -> dict[str, Any] | None:
+    name, text, sha256, coverage = (data.get(key) for key in ("name", "text", "sha256", "coverage"))
+    if (
+        isinstance(name, str)
+        and isinstance(text, str)
+        and text.strip()
+        and isinstance(sha256, str)
+        and re.fullmatch(r"[0-9a-f]{64}", sha256)
+        and isinstance(coverage, dict)
+        and type(coverage.get("truncated")) is bool
+        and coverage.get("method") != "ocr_unverified"
+    ):
+        return {
+            "name": name,
+            "sha256": sha256,
+            "origin": origin,
+            "text": text,
+            "coverage": coverage,
+        }
+    return None
+
+
+def runtime_file_evidence(
+    contract: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, dict[str, Any]] | None:
+    """Only already admitted bytes or independently checked child readback can prove a claim."""
+    request = contract["request"]
+    sources: dict[str, dict[str, Any]] = {}
+    upload_ids: set[str] = set()
+    for item in request.get("attachments") or []:
+        if item.get("source") != "owned_elt_upload":
+            continue
+        metadata, preview = item.get("metadata") or {}, item.get("preview") or {}
+        upload_id = metadata.get("upload_id")
+        if isinstance(upload_id, str) and upload_id:
+            upload_ids.add(upload_id)
+            if source := _file_source(
+                {**preview, "name": item.get("name"), "sha256": metadata.get("sha256")},
+                origin="original_request.attachments",
+            ):
+                sources[upload_id] = source
+    for catalogue in request.get("context_evidence") or []:
+        if catalogue.get("source") != "conversation_uploads":
+            continue
+        entries = {item["upload_id"]: item for item in catalogue.get("entries") or []}
+        upload_ids.update(entries)
+        reads = catalogue.get("verified_reads")
+        if reads is None:
+            reads = [catalogue.get("verified_read")]
+        elif (
+            not isinstance(reads, list)
+            or not 2 <= len(reads) <= 4
+            or [read.get("upload_id") for read in reads if isinstance(read, dict)] != list(entries)
+            or len({entry["source_run_id"] for entry in entries.values()}) != 1
+        ):
+            continue
+        for read in reads:
+            if not isinstance(read, dict):
+                continue
+            origin = entries.get(read.get("upload_id")) or {}
+            if origin and origin["source_run_id"] == read.get("source_run_id"):
+                if source := _file_source(read, origin="conversation_uploads"):
+                    sources[read["upload_id"]] = source
+    if not upload_ids:
+        return None
+    verified = _verified_evidence(snapshot)
+    verified_files = {
+        artifact.get("uri")
+        for row in verified.values()
+        if row["read_only"] is False
+        for artifact in row["receipt"].get("artifacts") or []
+        if isinstance(artifact, dict) and artifact.get("artifact_type") == "file"
+    }
+    for identity, row in verified.items():
+        calls = row["receipt"].get("tool_calls") or []
+        if row["read_only"] is not True or len(calls) != 1:
+            continue
+        params = row.get("params") or {}
+        input_data = params.get("input") if isinstance(params, dict) else None
+        call = calls[0]
+        output = call.get("output") if isinstance(call, dict) else None
+        data = output.get("data") if isinstance(output, dict) else None
+        if (
+            (row.get("tool_id"), row.get("action")) == ("employee", "execute")
+            and params.get("employee_id") == "excel-full-read-employee"
+            and isinstance(input_data, dict)
+            and input_data.get("file_path") in verified_files
+            and isinstance(data, dict)
+            and isinstance(readback := data.get("readback"), dict)
+        ):
+            artifacts = row["receipt"].get("artifacts") or []
+            proof = (call.get("metadata") or {}).get("verification") or {}
+            checks = proof.get("checks") or []
+            if (
+                len(artifacts) == 1
+                and any(
+                    check.get("source") == "run_artifact"
+                    and check.get("status") == "passed"
+                    and (check.get("evidence") or {}).get("sha256") == readback.get("sha256")
+                    and (check.get("evidence") or {}).get("artifact_id")
+                    == artifacts[0].get("artifact_id")
+                    for check in checks
+                    if isinstance(check, dict)
+                )
+                and artifacts[0].get("metadata", {}).get("sha256") == readback.get("sha256")
+            ):
+                if source := _file_source(readback, origin="verified_workbook_readback"):
+                    sources[identity] = source
+        upload_id = (row.get("params") or {}).get("upload_id")
+        if not isinstance(upload_id, str) or upload_id not in upload_ids:
+            continue
+        if not isinstance(data, dict) or data.get("upload_id") != upload_id:
+            continue
+        proof = (call.get("metadata") or {}).get("verification") or {}
+        if proof.get("status") != "verified" or not any(
+            check.get("source") == "owned_attachment"
+            and check.get("status") == "passed"
+            and check.get("evidence")
+            == {key: data.get(key) for key in ("upload_id", "sha256", "coverage")}
+            for check in proof.get("checks") or []
+        ):
+            continue
+        if source := _file_source(data, origin="evidence"):
+            sources[identity] = source
+    return sources
+
+
 _FUTURE_SCOPE_RE = re.compile(
     r"(?:接下来|后续|以后|之后|未来)(?:的)?(?:所有|全部|每一|每次|每个)?(?:对话|回复|回答|轮次|回合)"
 )
@@ -237,52 +509,202 @@ def is_deferred_reply_preference(request_text: str, goal: GoalAssessment) -> boo
 
 
 def _batch_goal_capacity(row: dict[str, Any]) -> int:
-    """A verified employee batch can cover one goal per declared phase."""
+    """Bound a workbook batch by independently checked changes, not plan grouping."""
     params = row.get("params")
     if (row.get("tool_id"), row.get("action")) != ("employee", "execute") or not isinstance(
         params, dict
     ):
         return 1
-    payload = params.get("input") if isinstance(params.get("input"), dict) else params
-    plan = payload.get("plan") if isinstance(payload, dict) else None
-    phases = plan.get("phases") if isinstance(plan, dict) else None
-    return len(phases) if isinstance(phases, list) and phases else 1
+    if params.get("employee_id") != "excel-template-write-employee":
+        return 1
+    for step in row["receipt"].get("verification", {}).get("steps") or []:
+        for check in step.get("checks") or []:
+            evidence = check.get("evidence") or {}
+            changes = evidence.get("cell_changes") or {}
+            if (
+                check.get("source") == "workbook_qc"
+                and check.get("status") == "passed"
+                and evidence.get("sections", {}).get("conformance") == "pass"
+                and changes.get("scan_complete") is True
+            ):
+                count = 0
+                for group in changes.get("groups") or []:
+                    amount = group.get("count") if isinstance(group, dict) else None
+                    if type(amount) is int:
+                        count += amount
+                return min(64, max(1, count))
+    return 1
+
+
+def planned_tool_calls(review: dict[str, Any]) -> list[dict[str, Any]]:
+    return [call for goal in review["goals"] for call in goal.get("planned_calls", [])]
+
+
+def _plan_proofs_match(review: dict[str, Any], proofs: Any) -> bool:
+    calls = planned_tool_calls(review)
+    return (
+        isinstance(proofs, list)
+        and len(calls) == len(proofs)
+        and all(
+            isinstance(proof, dict)
+            and proof.get("call_digest") == canonical_digest(call)
+            and isinstance(proof.get("schema_digest"), str)
+            and bool(re.fullmatch(r"[0-9a-f]{64}", proof["schema_digest"]))
+            for call, proof in zip(calls, proofs, strict=True)
+        )
+    )
+
+
+def _navigation_path_matches(entry: dict[str, Any], excerpt: str) -> bool:
+    for label in (*entry["breadcrumb"], entry["label"]):
+        _, matched, excerpt = excerpt.partition(label)
+        if not matched:
+            return False
+    return True
+
+
+def _quotes_planned_action(call: PlannedToolCall, output: str) -> bool:
+    excerpt = call.response_excerpt
+    if excerpt not in output:
+        return False
+    identity = re.escape(f"{call.tool_id}.{call.action}")
+    reference = re.compile(rf"(?<![\w.]){identity}(?!\w|\.\w)", re.ASCII)
+    if reference.search(excerpt):
+        return bool(reference.search(output))
+    # The public MCP adapter also represents a business operation as two named
+    # arguments. Require a single unambiguous pair in the quoted invocation.
+    if not re.search(r"(?<![\w.])(?:mcp__xcmax__)?execute_action(?![\w.])", excerpt, re.ASCII):
+        return False
+    fields = re.findall(
+        r"""(?<![\w.])["']?(tool_id|action)["']?\s*[:=]\s*["']?([\w.-]+)""", excerpt, re.ASCII
+    )
+    return sorted(fields) == [("action", call.action), ("tool_id", call.tool_id)] and bool(
+        re.search(rf"(?<![\w.-]){re.escape(excerpt)}(?![\w.-])", output, re.ASCII)
+    )
 
 
 def validate_goal_review(
-    raw: Any, contract: dict[str, Any], snapshot: dict[str, Any], output: str
+    raw: Any,
+    contract: dict[str, Any],
+    snapshot: dict[str, Any],
+    output: str,
+    *,
+    file_evidence: dict[str, dict[str, Any]] | None = None,
+    require_completion: bool = True,
 ) -> tuple[dict[str, Any], list[str]]:
     """A model can associate facts with goals; it cannot mint execution evidence."""
     review = GoalReview.model_validate(raw)
-    sources = {"request": contract["request"]["text"]}
-    sources.update(
-        (row["source_id"], row["answer"])
-        for row in snapshot["answers"]
-        if isinstance(row.get("source_id"), str) and isinstance(row.get("answer"), str)
-    )
+    sources = goal_source_catalogue(contract, snapshot["answers"])
     constraints = contract["scope"].get("constraints") or {}
-    if isinstance(constraints.get("objective"), str):
-        sources["objective"] = constraints["objective"]
+    # History can ground a retained term in today's reply, never serve as
+    # the current objective or authorize a tool action.
+    current_reply = any(
+        (goal.source_id == "request" or goal.source_id.startswith("answer:"))
+        and goal.source_id in sources
+        and goal.kind == "reply"
+        and (
+            (goal.status == "satisfied" and goal.evidence_ids == ["response"])
+            or (goal.status == "unmet" and goal.evidence_ids in ([], ["response"]))
+        )
+        and goal.source in sources[goal.source_id]["text"]
+        for goal in review.goals
+    )
+    prior_requests = [
+        source["text"] for key, source in sources.items() if key.startswith("history:")
+    ]
     evidence = {row["evidence_id"]: row for row in snapshot["evidence"]}
-    verified = {
-        key: row
-        for key, row in evidence.items()
-        if row["state"] == "completed"
-        and row["receipt"].get("status") == "completed"
-        and row["receipt"].get("success") is True
-        and row["receipt"].get("verified") is True
-        and not execution_result_outcome_unknown(row["receipt"], include_execution=True)
-        and not execution_result_error(row["receipt"])
-    }
+    verified = _verified_evidence(snapshot)
+    if file_evidence is None:
+        file_evidence = runtime_file_evidence(contract, snapshot)
     errors = list(snapshot["conflicts"])
+    if file_evidence is not None:
+        if review.feedback_disposition is None:
+            errors.append("附件核验缺少反馈结论")
+        elif require_completion and review.feedback_disposition == "blocking":
+            errors.append(review.feedback or "附件事实未通过核验")
     seen: set[str] = set()
     used_writes: set[str] = set()
     assigned: dict[str, list[str]] = {}
     deferred_preferences = 0
+    planned_delivery = contract["scope"].get("requested_deliverable") == "action_plan"
+    navigation = {entry["id"]: entry for entry in plan_navigation_entries(contract)}
     for goal in review.goals:
-        if goal.goal_id in seen or goal.source not in sources.get(goal.source_id, ""):
-            errors.append(f"目标 {goal.goal_id} 缺少唯一标识或原始请求证据")
+        if (goal.kind == "planned_action" and not planned_delivery) or (
+            goal.kind in {"read", "write"} and planned_delivery
+        ):
+            errors.append(f"目标 {goal.goal_id} 与原任务的交付类型不符")
+        has_plan_evidence = bool(goal.planned_calls or goal.planned_navigation)
+        if has_plan_evidence and goal.kind != "planned_action":
+            errors.append(f"目标 {goal.goal_id} 的动作或入口需要按方案核对")
+        if goal.kind == "planned_action" and goal.status == "satisfied" and not has_plan_evidence:
+            errors.append(
+                f"方案目标 {goal.goal_id} 缺少可核对的业务动作或人工入口。请按当前账号能力及导航目录给出方案。"
+            )
+        for citation in goal.planned_navigation:
+            entry = navigation.get(citation.navigation_id)
+            if (
+                entry is None
+                or citation.response_excerpt not in output
+                or not _navigation_path_matches(entry, citation.response_excerpt)
+            ):
+                errors.append(f"方案入口 {citation.navigation_id} 与当前导航或成稿原文不一致")
+        for call in goal.planned_calls:
+            if not _quotes_planned_action(call, output):
+                errors.append(f"方案动作 {call.tool_id}.{call.action} 未见于当前成稿")
+        source = sources.get(goal.source_id)
+        source_known = source is not None
+        source_matches = source is not None and goal.source in source["text"]
+        # Persisted v2 reports used a user-history alias. New reports receive
+        # granular IDs; compatibility must not promote assistant/tool text.
+        if goal.source_id == "history":
+            source_known = bool(prior_requests)
+            source_matches = any(goal.source in text for text in prior_requests)
+        if goal.goal_id in seen:
+            errors.append(f"goal_id_duplicate: 目标 {goal.goal_id} 的唯一标识重复")
+        if not source_known:
+            errors.append(
+                f"goal_source_unknown: 目标 {goal.goal_id} 的来源 {goal.source_id} 不存在，缺少原始请求证据"
+            )
+        elif not source_matches:
+            errors.append(
+                f"goal_source_mismatch: 目标 {goal.goal_id} 的引用不匹配来源 {goal.source_id}，缺少原始请求证据"
+            )
+        if (goal.source_id == "history" or goal.source_id.startswith("history:")) and not (
+            current_reply
+            and goal.kind in {"reply", "constraint"}
+            and (goal.kind == "reply" or goal.evidence_ids == ["response"])
+            and (
+                (goal.status == "satisfied" and goal.evidence_ids == ["response"])
+                or (goal.status == "unmet" and goal.evidence_ids in ([], ["response"]))
+            )
+        ):
+            errors.append(
+                f"goal_history_scope_invalid: 目标 {goal.goal_id} 的历史来源仅能补充本轮回复条件，不能授权业务动作"
+            )
         seen.add(goal.goal_id)
+        if file_evidence is not None and goal.kind in {"read", "reply"} and goal.file_basis is None:
+            errors.append(f"目标 {goal.goal_id} 未区分附件事实与独立回复")
+        if goal.file_basis in {"passages", "complete"}:
+            if goal.status != "unmet" and (
+                goal.status != "satisfied"
+                or not goal.file_citations
+                or not file_evidence
+                or any(
+                    citation.evidence_id not in file_evidence
+                    or citation.response_excerpt not in output
+                    or citation.source_excerpt not in file_evidence[citation.evidence_id]["text"]
+                    or (
+                        goal.file_basis == "complete"
+                        and file_evidence[citation.evidence_id]["coverage"]["truncated"]
+                    )
+                    for citation in goal.file_citations
+                )
+            ):
+                errors.append(
+                    f"目标 {goal.goal_id} 缺少可核对的文件内容或所需完整范围，不能确认附件事实"
+                )
+        elif goal.file_citations:
+            errors.append(f"目标 {goal.goal_id} 的文件引文缺少来源类型")
         selected = set(goal.evidence_ids)
         if len(selected) != len(goal.evidence_ids) or selected - evidence.keys() - {"response"}:
             errors.append(f"目标 {goal.goal_id} 引用了不存在的回执")
@@ -291,10 +713,13 @@ def validate_goal_review(
             deferred_preferences += 1
             continue
         if goal.status == "unmet":
-            errors.append(f"目标 {goal.goal_id} 尚未完成")
+            if require_completion:
+                errors.append(f"目标 {goal.goal_id} 尚未完成")
             continue
         # 只引用正文的约束只能约束回复本身，按正文目标核对，不要求业务回执。
-        if goal.kind == "reply" or (goal.kind == "constraint" and selected == {"response"}):
+        if goal.kind in {"reply", "planned_action"} or (
+            goal.kind == "constraint" and selected == {"response"}
+        ):
             if goal.status != "satisfied" or selected != {"response"} or not output.strip():
                 errors.append(f"回复目标 {goal.goal_id} 没有完整正文")
         elif goal.kind in {"read", "write"}:
@@ -346,14 +771,64 @@ def validate_goal_review(
             errors.append("未核对宿主绑定的经营目标")
         elif any(
             goal.kind not in {"read", "write"}
-            or goal.status != "satisfied"
-            or not goal.evidence_ids
-            or not set(goal.evidence_ids) <= verified.keys()
+            or (
+                (require_completion or goal.status != "unmet")
+                and (
+                    goal.status != "satisfied"
+                    or not goal.evidence_ids
+                    or not set(goal.evidence_ids) <= verified.keys()
+                )
+            )
             for goal in bound_goals
         ):
             # 宿主已结构化的经营义务不能用回复或空证据降级为完成。
             errors.append("宿主绑定的经营目标必须由独立核验的业务回执证明")
     return review.model_dump(), errors
+
+
+def valid_compensation_review(
+    raw: Any,
+    contract: dict[str, Any],
+    snapshot: dict[str, Any],
+    output: str,
+    *,
+    file_evidence: dict[str, dict[str, Any]] | None = None,
+) -> bool:
+    """A missing outcome is actionable only when its original provenance is valid.
+
+    This does not authorize any tool or new goal. The ordinary review validator
+    still checks schema, source, evidence, completed effects and scope; only
+    incompleteness itself is allowed through this continuation boundary.
+    """
+    try:
+        review, errors = validate_goal_review(
+            raw,
+            contract,
+            snapshot,
+            output,
+            file_evidence=file_evidence,
+            require_completion=False,
+        )
+        if errors:
+            return False
+        if file_evidence is None:
+            file_evidence = runtime_file_evidence(contract, snapshot)
+        # An unmet file goal may lack a citation or complete input. Any citation
+        # it does supply must still refer to the real current source and output.
+        for goal in review["goals"]:
+            if goal["status"] != "unmet":
+                continue
+            for citation in goal["file_citations"]:
+                source = (file_evidence or {}).get(citation["evidence_id"])
+                if (
+                    source is None
+                    or citation["source_excerpt"] not in source["text"]
+                    or citation["response_excerpt"] not in output
+                ):
+                    return False
+    except (TypeError, ValueError, KeyError):
+        return False
+    return True
 
 
 def goal_report_coverage(
@@ -380,7 +855,21 @@ def goal_report_coverage(
         ):
             result["errors"] = ["目标、补答、执行回执或回复已改变，需要重新核验"]
             return result
+        proof = report.get("plan_delivery")
+        if contract["scope"].get("plan_delivery_version") == 1 and (
+            not isinstance(proof, dict)
+            or proof.get("kind") not in {"steps", "narrative"}
+            or not isinstance(report.get("review"), dict)
+            or report["review"].get("plan_content") != proof["kind"]
+            or proof.get("goal_digest") != contract["digest"]
+            or proof.get("response_digest") != snapshot["response_digest"]
+        ):
+            result["errors"] = ["方案缺少宿主验证的交付记录"]
+            return result
         review, errors = validate_goal_review(report.get("review"), contract, snapshot, output)
+        plan_verified = _plan_proofs_match(review, report.get("plan_capabilities", []))
+        if not plan_verified:
+            errors.append("方案缺少与成稿动作一致的宿主能力校验证据")
         goals = review["goals"]
         mode = "business" if any(g["kind"] in {"read", "write"} for g in goals) else "reply"
         complete = not (errors or review["violations"] or review["uncovered_sources"])
@@ -390,7 +879,19 @@ def goal_report_coverage(
             and report.get("accepted") is True
             and all(g["status"] != "unmet" for g in goals),
             "required": len(goals),
-            "verified": sum(g["status"] == "satisfied" for g in goals),
+            "verified": sum(
+                g["status"] == "satisfied"
+                and (g.get("file_basis") not in {"passages", "complete"} or complete)
+                and (
+                    g["kind"] != "planned_action"
+                    or (
+                        complete
+                        and plan_verified
+                        and bool(g["planned_calls"] or g["planned_navigation"])
+                    )
+                )
+                for g in goals
+            ),
             "mode": mode,
             "errors": errors + review["violations"] + review["uncovered_sources"],
         }

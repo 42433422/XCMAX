@@ -502,15 +502,18 @@ def test_chat_evidence_lists_clearable_datasets_for_clear_request(tmp_path, monk
     assert result["chat_clearable_dataset_ids"] == ["office-docking", "persy-knowledge"]
 
 
-def test_chat_evidence_recovers_active_session_when_request_omits_session_id(store, monkeypatch):
+@pytest.mark.parametrize("content", ["之前说的是宗南产品", "[原文消息 #123]\n之前说的是宗南产品"])
+def test_chat_evidence_recovers_active_session_when_request_omits_session_id(
+    store, monkeypatch, content
+):
     from app.application.ai_chat import active_conversation
     from app.application.ai_chat.chat_evidence import prepare_chat_evidence
 
-    store.save_message(
+    saved_id = store.save_message(
         session_id="active-chat",
         user_id=41,
         role="user",
-        content="之前说的是宗南产品",
+        content=content,
     )
     monkeypatch.setattr(
         active_conversation,
@@ -527,9 +530,9 @@ def test_chat_evidence_recovers_active_session_when_request_omits_session_id(sto
     )
 
     assert result["conversation_id"] == "active-chat"
-    assert result["recent_messages"] == [
-        {"role": "user", "content": "[原文消息 #1]\n之前说的是宗南产品"}
-    ]
+    assert result["recent_messages"] == [{"role": "user", "content": content}]
+    assert result["_chat_history_ids"] == [saved_id]
+    assert result["_chat_history_revision"] == 0
 
 
 def test_persist_chat_turn_keeps_clarification_candidates() -> None:

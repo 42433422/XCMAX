@@ -2,89 +2,20 @@
 
 import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
 
 from modstore_server import llm_billed_chat
 from modstore_server import llm_client_requests as ledger
 from modstore_server.llm_billing_values import WalletHold
 from modstore_server.llm_key_resolver import ChatRouteSnapshot
-
-KEY = "a" * 32
-
-
-@pytest.fixture
-def db():
-    from modstore_server.models import Base, User
-
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
-    session.add_all(
-        [
-            User(id=7, username="ledger-user-7", password_hash="test-only"),
-            User(id=8, username="ledger-user-8", password_hash="test-only"),
-        ]
-    )
-    session.commit()
-    yield session
-    session.close()
-
-
-def test_ledger_replays_completed_and_refuses_live_or_different_requests(db):
-    assert ledger.lookup(db, 7, KEY, 90) == "not_found"
-    outcome, row = ledger.begin(db, 7, KEY, "d1", 90)
-    assert outcome == "run" and row.attempts == 1
-    assert ledger.begin(db, 7, KEY, "d1", 90) == ("processing", None)
-    assert ledger.begin(db, 7, KEY, "d2", 90) == ("conflict", None)
-    assert ledger.begin(db, 8, KEY, "d1", 90)[0] == "run"
-    ledger.finish(db, row, {"ok": True, "content": "synthetic"})
-    assert ledger.lookup(db, 7, KEY, 90) == "completed"
-    assert ledger.begin(db, 7, KEY, "d1", 90) == (
-        "replay",
-        {"ok": True, "content": "synthetic"},
-    )
-    ledger.finish(db, row, None)
-    assert ledger.lookup(db, 7, KEY, 90) == "completed"
-
-
-def test_only_an_unsettled_attempt_may_run_again(db):
-    _, row = ledger.begin(db, 7, KEY, "d1", 90)
-    ledger.finish(db, row, None)
-    assert ledger.lookup(db, 7, KEY, 90) == "failed"
-    outcome, again = ledger.begin(db, 7, KEY, "d1", 90)
-    assert outcome == "run" and again.attempts == 2
-    assert ledger.attempt_request_id(7, KEY, 1) != ledger.attempt_request_id(7, KEY, 2)
-    again.updated_at = datetime.now(UTC) - timedelta(seconds=400)
-    db.commit()
-    assert ledger.lookup(db, 7, KEY, 90) == "failed"
-    ledger.mark_settling(db, again)
-    ledger.finish(db, again, None)
-    again.updated_at = datetime.now(UTC) - timedelta(days=1)
-    db.commit()
-    assert ledger.lookup(db, 7, KEY, 90) == "settling"
-    assert ledger.begin(db, 7, KEY, "d1", 90) == ("processing", None)
-
-
-def test_completed_receipt_is_bound_to_user_key_and_digest(db):
-    _, row = ledger.begin(db, 7, KEY, "digest", 90)
-    ledger.finish(db, row, {"ok": True, "images": ["receipt"]})
-    assert ledger.completed_receipt(db, 7, KEY, "digest") == (
-        "replay",
-        {"ok": True, "images": ["receipt"]},
-    )
-    assert ledger.completed_receipt(db, 7, KEY, "different") == ("conflict", None)
-    assert ledger.completed_receipt(db, 8, KEY, "digest") is None
+from tests.llm_request_support import KEY
+from tests.llm_request_support import db as db
 
 
 def _frames(frames):
@@ -299,120 +230,6 @@ async def test_wallet_readback_recovers_a_paid_image_once(db, monkeypatch):
     assert db.query(LlmCallLog).count() == 1
 
 
-@pytest.mark.parametrize("operation", ["chat", "image_generation"])
-@pytest.mark.parametrize("first_fails", [False, True])
-def test_sqlite_concurrent_settlement_recovery_publishes_once(
-    tmp_path, monkeypatch, operation, first_fails
-):
-    from modstore_server import llm_billing_recovery as recovery
-    from modstore_server.db.llm_chat import (
-        ChatConversation,
-        ChatMessage,
-        LlmCallLog,
-        LlmClientRequest,
-    )
-    from modstore_server.models import Base, User
-
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'billing.sqlite'}",
-        connect_args={"check_same_thread": False, "timeout": 10},
-        pool_size=2,
-        max_overflow=0,
-    )
-    Base.metadata.create_all(
-        engine,
-        tables=[
-            model.__table__
-            for model in (User, ChatConversation, ChatMessage, LlmCallLog, LlmClientRequest)
-        ],
-    )
-    sessions = sessionmaker(bind=engine)
-    receipt = {
-        "ok": True,
-        "operation": operation,
-        "provider": "openai",
-        "model": "model-a",
-        "hold_no": "AIH-concurrent",
-        "request_id": "request-concurrent",
-        "charge_amount": "0.42",
-        "usage": {"prompt_tokens": 17, "completion_tokens": 42, "total_tokens": 59},
-    }
-    if operation == "chat":
-        receipt.update(
-            content="saved answer",
-            conversation_id=None,
-            _history=[{"role": "user", "content": "saved question"}],
-        )
-    else:
-        receipt["images"] = ["saved-image"]
-    with sessions() as db:
-        db.add(User(id=7, username="concurrent-user", password_hash="test-only"))
-        db.commit()
-        _, row = ledger.begin(db, 7, KEY, "digest", 180)
-        ledger.prepare_settlement(db, row, receipt)
-
-    hold = {name: receipt[name] for name in ("provider", "model", "hold_no", "request_id")}
-    read_hold = AsyncMock(return_value={**hold, "status": "settled", "settled_amount": "0.42"})
-    monkeypatch.setattr(recovery, "JavaWalletClient", lambda: SimpleNamespace(read_hold=read_hold))
-    first_write, release_first, second_lock, second_finished = (Event() for _ in range(4))
-    original_lock = ledger.lock_request
-
-    def observed_lock(db, user_id, key):
-        if db.info["worker"] == "second":
-            second_lock.set()
-        return original_lock(db, user_id, key)
-
-    def pause_first_write(db, _context, _instances):
-        if db.info["worker"] == "first" and db.new:
-            first_write.set()
-            assert release_first.wait(10), "first completion was not released"
-            if first_fails:
-                raise RuntimeError("interrupted completion")
-
-    def recover(worker):
-        try:
-            with sessions() as db:
-                db.info["worker"] = worker
-                event.listen(db, "before_flush", pause_first_write)
-                return asyncio.run(recovery.recover_receipt(db, 7, KEY, "owner-token"))
-        finally:
-            if worker == "second":
-                second_finished.set()
-
-    monkeypatch.setattr(ledger, "lock_request", observed_lock)
-    try:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            first = pool.submit(recover, "first")
-            try:
-                assert first_write.wait(10), "first completion did not reach its write"
-                second = pool.submit(recover, "second")
-                assert second_lock.wait(10), "second recovery did not attempt to lock"
-                # Keep the first transaction open while the other connection tries
-                # to finish. Without serialization it commits a duplicate receipt.
-                second_finished.wait(1)
-            finally:
-                release_first.set()
-            if first_fails:
-                with pytest.raises(RuntimeError, match="interrupted completion"):
-                    first.result(timeout=10)
-            else:
-                first_receipt = first.result(timeout=10)
-            completed = second.result(timeout=10)
-        with sessions() as db:
-            logs = db.query(LlmCallLog).all()
-            assert len(logs) == 1
-            assert logs[0].charge_amount == Decimal("0.42") and logs[0].total_tokens == 59
-            assert db.query(ChatConversation).count() == (1 if operation == "chat" else 0)
-            assert db.query(ChatMessage).count() == (2 if operation == "chat" else 0)
-            assert ledger.completed_receipt(db, 7, KEY, "digest") == ("replay", completed)
-        if not first_fails:
-            assert completed == first_receipt
-        assert read_hold.await_count == 2
-    finally:
-        release_first.set()
-        engine.dispose()
-
-
 @pytest.mark.asyncio
 async def test_sync_chat_replays_after_wallet_response_is_lost(db, monkeypatch):
     from fastapi import HTTPException
@@ -486,6 +303,128 @@ async def test_sync_chat_replays_after_wallet_response_is_lost(db, monkeypatch):
     assert await request() == receipt
     send.assert_awaited_once()
     wallet.settle.assert_awaited_once()
+
+
+@pytest.fixture
+def sync_billed(billed, db, monkeypatch):
+    from modstore_server import llm_billed_once
+
+    monkeypatch.setattr(llm_billed_once, "JavaWalletClient", lambda **kwargs: billed.wallet)
+    monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
+    monkeypatch.setattr(llm_billed_once, "estimate_preauthorization", lambda *a: Decimal(".01"))
+    send = AsyncMock(
+        return_value={
+            "ok": True,
+            "content": "original answer",
+            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+        }
+    )
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", send)
+
+    async def call(funding):
+        route = (
+            replace(billed.route, key_source="user_override") if funding == "byok" else billed.route
+        )
+        if funding == "disabled":
+            billed.wallet.enabled = False
+            billed.wallet.preauthorize.return_value = WalletHold("disabled", Decimal("0"), False)
+        return await llm_billed_chat.run_billed_llm_chat(
+            SimpleNamespace(state=SimpleNamespace(), headers={}),
+            db,
+            SimpleNamespace(id=7),
+            provider=route.provider,
+            model=route.model,
+            route_snapshot=route,
+            messages=[{"role": "user", "content": "original request"}],
+            client_request_id=KEY,
+        )
+
+    return SimpleNamespace(call=call, send=send, wallet=billed.wallet, route=billed.route)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("funding", ["byok", "disabled"])
+@pytest.mark.parametrize("failure", ["timeout", "server_error", "cancelled"])
+async def test_sync_unknown_attempt_stays_owned_even_without_platform_wallet(
+    sync_billed, db, funding, failure
+):
+    if failure == "server_error":
+        sync_billed.send.return_value = {
+            "ok": False,
+            "status": 500,
+            "error": "provider unavailable",
+        }
+    else:
+        sync_billed.send.side_effect = (
+            asyncio.CancelledError() if failure == "cancelled" else TimeoutError("response lost")
+        )
+    expected = asyncio.CancelledError if failure == "cancelled" else HTTPException
+    with pytest.raises(expected):
+        await sync_billed.call(funding)
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
+    with pytest.raises(HTTPException) as replay:
+        await sync_billed.call(funding)
+    assert replay.value.status_code == 409
+    sync_billed.send.assert_awaited_once()
+    sync_billed.wallet.settle.assert_not_awaited()
+    sync_billed.wallet.release.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("funding", ["byok", "disabled"])
+async def test_sync_receipt_replays_once_without_platform_wallet(sync_billed, db, funding):
+    from modstore_server.db.llm_chat import ChatMessage, LlmCallLog
+
+    first = await sync_billed.call(funding)
+    assert first["content"] == "original answer"
+    assert await sync_billed.call(funding) == first
+    sync_billed.send.assert_awaited_once()
+    assert ledger.lookup(db, 7, KEY, 90) == "completed"
+    assert db.query(LlmCallLog).count() == 1 and db.query(ChatMessage).count() == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("funding", ["byok", "disabled"])
+@pytest.mark.parametrize("status", [402, 429])
+async def test_sync_definite_rejection_can_release_the_original_request(
+    sync_billed, db, funding, status
+):
+    sync_billed.send.return_value = {"ok": False, "status": status, "error": "quota exhausted"}
+    with pytest.raises(HTTPException) as rejected:
+        await sync_billed.call(funding)
+    assert rejected.value.status_code == status
+    assert ledger.lookup(db, 7, KEY, 90) == "failed"
+    sync_billed.send.return_value = {
+        "ok": True,
+        "content": "second admitted attempt",
+        "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+    }
+    assert (await sync_billed.call(funding))["content"] == "second admitted attempt"
+    assert sync_billed.send.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_sync_byok_recovers_its_saved_response_after_local_receipt_failure(
+    sync_billed, db, monkeypatch
+):
+    from modstore_server import llm_billed_once
+    from modstore_server.db.llm_chat import ChatMessage, LlmCallLog
+
+    monkeypatch.setattr(
+        llm_billed_once, "complete_receipt", Mock(side_effect=OSError("local commit unavailable"))
+    )
+    with pytest.raises(HTTPException) as failed:
+        await sync_billed.call("byok")
+    assert failed.value.status_code == 409 and ledger.lookup(db, 7, KEY, 90) == "settling"
+    assert db.query(LlmCallLog).count() == 0
+    receipt = await sync_billed.call("byok")
+    assert receipt["content"] == "original answer" and receipt["billed"] is False
+    assert await sync_billed.call("byok") == receipt
+    sync_billed.send.assert_awaited_once()
+    sync_billed.wallet.preauthorize.assert_not_awaited()
+    sync_billed.wallet.settle.assert_not_awaited()
+    sync_billed.wallet.release.assert_not_awaited()
+    assert db.query(LlmCallLog).count() == 1 and db.query(ChatMessage).count() == 2
 
 
 @pytest.mark.asyncio

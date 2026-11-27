@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Dict
+
+from app.mod_sdk.workbook_controls import WORKBOOK_BANDED_TABLE_STYLE
+from app.mod_sdk.workbook_reference_relocation import fill_formula_rows
+
+if TYPE_CHECKING:
+    from .checks import _CellExpectations, _CellTarget, _Finding
+
+
 from copy import deepcopy
 
 from openpyxl.utils.cell import get_column_letter, range_boundaries
@@ -129,3 +138,79 @@ def check_inserted_tables(wb, template_wb, plan, finding):
                 )
         except (TypeError, ValueError) as exc:
             finding.fail("无法独立核验插行后的表格", sheet=sheet, table=name, error=str(exc))
+
+
+def _check_native_table(
+    ws,
+    phase: Dict[str, Any],
+    f: _Finding,
+    cells: _CellExpectations,
+    formats: dict[_CellTarget, str],
+) -> None:
+    from openpyxl.utils.cell import get_column_letter, range_boundaries
+
+    left, top, right, bottom = range_boundaries(phase["range"].upper())
+    columns = [ws.cell(top, col).value for col in range(left, right + 1)]
+    sum_heading = phase.get("sum_column")
+    formula = phase.get("calculated_formula")
+    calc_heading = phase.get("calculated_column", sum_heading if formula is not None else None)
+    has_total = sum_heading is not None
+    table = ws.tables.get(phase["name"])
+    if (
+        table is None
+        or (has_total and (sum_heading not in columns or left == right))
+        or (formula is not None and (calc_heading not in columns or not isinstance(formula, str)))
+        or (calc_heading is not None and formula is None)
+    ):
+        f.fail("输出缺少计划的原生 Excel 表格或指定列", sheet=ws.title)
+        return
+    start, end = f"{get_column_letter(left)}{top}", get_column_letter(right)
+    if (
+        table.ref != f"{start}:{end}{bottom + int(has_total)}"
+        or (table.totalsRowCount or 0) != int(has_total)
+        or (table.totalsRowShown is False if has_total else table.totalsRowShown is True)
+        or table.autoFilter is None
+        or table.autoFilter.ref != f"{start}:{end}{bottom}"
+        or [column.name for column in table.tableColumns] != columns
+    ):
+        f.fail("原生表格范围、合计行、筛选范围或列标题与计划不符", sheet=ws.title)
+        return
+    if "banded_rows" in phase:
+        style = table.tableStyleInfo
+        striped = style is not None and style.showRowStripes is True
+        if striped != phase["banded_rows"] or (
+            striped and style.name != WORKBOOK_BANDED_TABLE_STYLE
+        ):
+            f.fail("原生表格隔行底纹与计划不符", sheet=ws.title)
+    summed = columns.index(sum_heading) if has_total else None
+    calculated = columns.index(calc_heading) if calc_heading is not None else None
+    label = 1 if summed == 0 else 0
+    for idx, column in enumerate(table.tableColumns):
+        actual_formula = getattr(column.calculatedColumnFormula, "attr_text", None)
+        if (
+            actual_formula != (formula[1:] if idx == calculated else None)
+            or column.totalsRowFunction != ("sum" if idx == summed else None)
+            or column.totalsRowLabel != ("合计" if has_total and idx == label else None)
+            or column.totalsRowFormula is not None
+        ):
+            f.fail("原生表格计算列或合计行元数据与计划不符", sheet=ws.title)
+    if calculated is not None:
+        formulas = fill_formula_rows(
+            formula,
+            origin=f"{get_column_letter(left + calculated)}{top + 1}",
+            count=bottom - top,
+        )
+        for row, expected in enumerate(formulas, start=top + 1):
+            cells[(ws.title, row, left + calculated)] = ("table_formula", expected)
+    if summed is None:
+        return
+    cells[(ws.title, bottom + 1, left + label)] = ("cell_writes", "合计")
+    total = (ws.title, bottom + 1, left + summed)
+    cells[total] = ("table_formula", f"=SUBTOTAL(109,{phase['name']}[{sum_heading}])")
+    if formats.get(total) == "General":
+        # The writer gives a general-format total the last data row's format.
+        inherited = formats.get((ws.title, bottom, left + summed))
+        if inherited is None:
+            formats.pop(total)
+        else:
+            formats[total] = inherited
