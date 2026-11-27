@@ -113,9 +113,29 @@ Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回�
 |---|---|---|
 | SLO 采集与告警 | [Prometheus 3.14.0](https://github.com/prometheus/prometheus/tree/v3.14.0)（Apache-2.0）；现有锁中的 [Tenacity 9.1.4](https://github.com/jd/tenacity/tree/9.1.4)（Apache-2.0）、[filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT） | promtool 执行真实规则；安全 GET 有界重试、证据跨进程互斥追加。按固定目标、实际采样数、完整指标和摘要核对；正式 90 天 / 99% 覆盖与近期 7 天观察保持原要求。 |
 | 压力与网络故障验收 | [k6 0.54.0](https://github.com/grafana/k6/tree/v0.54.0)（AGPL-3.0，沿用现有性能流水线版本）、[Toxiproxy 2.12.0](https://github.com/Shopify/toxiproxy/tree/v2.12.0)（MIT） | CI 校验官方二进制摘要；真实 TCP 故障接入原执行器和 SQLite 幂等账本，k6 独立回读同一持久轮次。缺工具、版本不符、未知结果和未完成时长均不能通过。 |
+| Agent 状态随机回归 | [Hypothesis 6.170.17](https://github.com/HypothesisWorks/hypothesis/tree/hypothesis-python-6.170.17)（MPL-2.0，开发依赖精确锁定） | 复用 `RuleBasedStateMachine` 生成操作序列与缩减失败案例；生产 SQL 队列、控制命令与任务账本执行实际状态变化。测试入口只编排已有 pytest 场景和证据核验，不增加 Agent Runtime。 |
 | 在线备份与发布恢复 | [SQLite 在线备份 API](https://www.sqlite.org/backup.html)（Public Domain），经现有 Python 标准库 `sqlite3` 调用；原生 systemd / 原子文件替换沿用部署宿主版本 | 备份包含已提交 WAL 并检查完整性。候选发布核对原归档摘要、运行 SHA 和发布身份，失败恢复旧指针及服务；产品版本、授权和数据库模式边界由既有发布清单决定。 |
 
 遥测队列有界，退出时由 SDK 排空并关闭 exporter；短暂导出失败不永久关闭后续批次。本地查询逐行读取并只保留所需最新记录，持续运行时按日清理过期数据。遥测仍是观察数据，不能替代业务账本；强制结束进程、磁盘故障或队列溢出不承诺零丢失。网络故障与备份回归证明限定代码路径；真实生产 90 天、7 天 staging 压测及 Windows/macOS 安装恢复须提供对应原始证据，短时本地回归不能代替。
+
+工作组10统一入口（从 `FHD/` 执行）：
+
+```bash
+# PR 工程回归；须安装上表固定版本 Toxiproxy，可用 TOXIPROXY_SERVER_BIN 指定路径。
+python scripts/dev/run_agent_fault_regression.py --faults-only
+# 完整 WG10 验收：同时重验已有真实模型流水线的原始报告和全部三轮 JSONL。
+python scripts/dev/run_agent_fault_regression.py --model-reports test_reports
+```
+
+`faults-junit.xml` 与 `wg10.json` 记录当前 SHA、源码是否修改、依赖版本和逐项结果。缺用例、skip/xfail、失败、未生成报告均不算通过；`--faults-only` 成功只表示 J01–J09 工程场景通过，`wg10_accepted` 仍为 false。完整验收复用 `verify_task_benchmark_evidence.py`，拒绝旧 SHA、脏源码、缺失或改动的原始回执、规则兜底和观察模式；J10 沿用现有 13×3 留出集及 0.4 门槛，不冒充工作组11的 99% / 长周期目标。
+
+| 项目 | 固定回归入口与真实边界 |
+|---|---|
+| J01–J02 | 模型网关真实响应头/响应体超时、SSE 断流；Toxiproxy 超时、断连与延迟。合成服务端沿真实 TCP、SQL 和 LangGraph 检查点执行，不算真实模型验收。 |
+| J03–J06 | 随机种子决定持久化后终止点、原生检查点恢复、真实 SQLite 写锁、E23/E24 提交后回执丢失、四个进程并发接管；保留成功步骤、原业务行与唯一有效租约。 |
+| J07–J08 | Hypothesis 30 组、每组最多 40 步；取消前后的 CAS/整条保存与迟到状态交错。生成序列不计作独立业务验收轮次。 |
+| J09 | 保留原运行仓储、对话中断、核验、队列、交付回执与重启清扫回归；包括 #3682 等待子任务父任务被清扫，以及取消后迟到保存丢失控制指令。 |
+| J10 | 既有 `task-holdout-real-model.yml` 在受保护 main 推送时自动执行。原账号、模型授权、运行资格、完整三轮回执及独立业务核验均必需；缺证据为 BLOCKED。 |
 
 对话执行卡复用同一套 Trace 组件展示规划、附件读取、工具节点、确认和回执。规划占用状态栏，步骤数来自真实工具事件或运行回执。ELT 进度直接读取已持久化的阶段数据；流结束且缺少工具回执时显示“待核对”。正文和执行进度独立更新。
 

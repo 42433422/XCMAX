@@ -197,7 +197,10 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         engine.dispose()
 
 
-def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("runtime_type", ["", "xiaox"])
+def test_desktop_restart_interrupts_fresh_lease_without_reclaim(
+    tmp_path, monkeypatch, runtime_type
+) -> None:
     """桌面进程重启不得把仍标着有效租约的在途任务自动重放。"""
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     engine, factory, repo = _make_repo(tmp_path, "desktop-restart.db")
@@ -206,6 +209,7 @@ def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkey
         from app.application.agent_orchestrator.run_models import AgentStep
 
         run = AgentRun(user_id="u1", message="生成送货单", status="running")
+        run.metadata["runtime_type"] = runtime_type
         run.steps = [AgentStep("write", "sales", "shipment", status="running", idempotent=True)]
         run.metadata["task_context"] = {"task_id": "task-live"}
         repo.save(run)
