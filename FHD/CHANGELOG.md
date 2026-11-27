@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Java 支付服务补齐原路渠道退款闭环：`AlipayService` 新增基于 `AlipayTradeRefundRequest` 与 `out_request_no` 幂等键的 `refundOrder`，`Refund` 与 Flyway `V21` 新增渠道退款元数据字段，`RefundService` 支持按 `refund_target=original|alipay|wallet` 执行原路退款并在渠道失败时回滚不误退钱包，补充 3 项原路退款正负向单测（36 项退款单测与契约测试全绿）。
+- 新用户引导 `onboardingTutorial` store 新增 10 分钟（600s）核心任务清单追踪（`startCoreChecklist` / `completeCoreTask` / `getCoreChecklistSummary` / `resetCoreChecklist`），支持 `localStorage` 持久化、完成度百分比与 10 分钟 SLA 达标判定，并补充 Vitest 单元测试（13/13 通过）。
 - 加快 Excel 原生读取和连续翻页，减少重复解析、临时对象与完整 JSON 输出开销；每页仍核对当前权限和文件摘要，文件变化、撤权或过期后不能使用旧缓存。
 - 通用表格读取保留隐藏表、远坐标、零值、空字符串、样式和公式缓存证据，并提供原件摘要及完整度说明；大结果可按原位置回读，预览截断不再冒充完整解析。
 - Excel、CSV/TSV、Word、PPT、PDF、HTML 与 JSON/XML 共用来源事实协议；重复表头、单元格内换行和嵌套结构保留，缺少 OCR 或复杂结构后端时明确报告能力限制。
