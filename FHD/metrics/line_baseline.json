@@ -1,5 +1,5 @@
 {
-  "lines": 2801451,
+  "lines": 2801484,
   "updated": "2026-11-27",
-  "note": "用户批准商业成熟度 P0 组合：补齐 02 域财务 update_transaction/delete_transaction 独立读回核验并统一 Flutter CI 版本锁（合入最新 main fe7580bd 对齐基线）"
+  "note": "PR #3721 拆分 verification_finance.py 以满足 G11 <40KB 结构门禁"
 }
