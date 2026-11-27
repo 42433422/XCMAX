@@ -15,6 +15,7 @@ from app.application.elt.table_segmentation import (
     worksheet_grid,
     worksheet_native_regions,
 )
+from app.infrastructure.excel.cell_visual_facts import worksheet_geometry_regions
 
 MAX_STRUCTURE_BYTES = 40 * 1024 * 1024
 
@@ -35,7 +36,11 @@ class RowPlan:
         return role, reason
 
     def public(self) -> dict[str, Any]:
+        from app.application.elt.table_segmentation import iter_structure_candidates
+        from app.application.elt.table_structure_candidates import summarize_structure_candidates
+
         return {
+            **summarize_structure_candidates(iter_structure_candidates(self.segmentation)),
             "tables": [table.public() for table in self.tables],
             "other_tables": [
                 table.public() for table in self.segmentation.tables if table not in self.tables
@@ -58,7 +63,10 @@ def load_sheet_segmentations(path: Path) -> dict[str, SheetSegmentation]:
     try:
         return {
             ws.title: segment_sheet(
-                ws.title, *worksheet_grid(ws), native_regions=worksheet_native_regions(ws)
+                ws.title,
+                *worksheet_grid(ws),
+                native_regions=worksheet_native_regions(ws),
+                geometry_regions=worksheet_geometry_regions(ws),
             )
             for ws in workbook.worksheets
         }

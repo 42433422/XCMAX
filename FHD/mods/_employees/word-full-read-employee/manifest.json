@@ -1,7 +1,7 @@
 {
   "id": "word-full-read-employee",
   "name": "Word 全量读取员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
   "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造",
   "artifact": "employee_pack",
@@ -44,7 +44,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "word-full-read-employee",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "Word 全量读取员",
       "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造"

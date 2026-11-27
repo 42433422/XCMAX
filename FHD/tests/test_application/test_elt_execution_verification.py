@@ -297,6 +297,29 @@ def _assert_no_replay(result, actor):
     assert result.executor.execute_with_deadline.call_count == 1
 
 
+@pytest.mark.parametrize("dedupe_keys", [("code", "missing"), ("code",), ()])
+def test_dynamic_readback_keeps_complete_proposed_key(native_execution, dedupe_keys):
+    case = native_execution
+    payloads = [{"code": "A", "amount": "7"}, {"code": "B", "amount": "9"}]
+    params = case.prepare(payloads=payloads, dedupe_keys=dedupe_keys)
+    result = case.dispatch(params)
+    assert result.run.status == "completed", result.run.final_output.get("verification")
+    with tenant_scope(case.actor.tenant_id), case.actor.factory() as db:
+        native = db.get(EltRun, params["run_id"])
+        assert native.executed_rows == 2
+        actual = (
+            db.query(EltDynamicRow)
+            .filter_by(run_id=native.id, owner_user_id=case.actor.user_id)
+            .order_by(EltDynamicRow.id)
+            .all()
+        )
+        assert sorted(load_json(row.payload_json, {})["amount"] for row in actual) == ["7", "9"]
+        source = db.query(EltRunRow).filter_by(run_id=native.id).order_by(EltRunRow.id).all()
+        assert [load_json(row.source_json, {}) for row in source] == payloads
+    assert result.run.tool_calls[0].metadata["verification"]["accepted"] is True
+    assert result.executor.execute_with_deadline.call_count == 1
+
+
 @pytest.mark.parametrize(
     "change",
     [

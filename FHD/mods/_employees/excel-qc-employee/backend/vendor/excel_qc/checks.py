@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .chart_integrity import check_inserted_charts
 from .conditional_formats import check_inserted_conditionals
+from .geometry_preservation import check_preserved_geometry, check_printer_settings
 from .plan_coordinates import (
     affected_reserved_names as _affected_reserved_names,
 )
@@ -29,9 +30,6 @@ from .plan_coordinates import (
 )
 from .plan_coordinates import (
     final_writes as _final_writes,
-)
-from .plan_coordinates import (
-    in_ranges as _in_ranges,
 )
 from .plan_coordinates import (
     insertions as _insertions,
@@ -66,6 +64,7 @@ from .plan_coordinates import (
 from .plan_coordinates import (
     unsafe_named_control_order as _unsafe_named_control_order,
 )
+from .preservation import StyleProjection, check_preserved_cells, declared_merges
 from .styles import check_cell_styles as _check_cell_styles
 from .styles import style_signature as _style_signature
 from .table_integrity import check_inserted_tables
@@ -301,79 +300,42 @@ def _check_defined_names(wb, template_wb, plan, finding):
             )
 
 
-def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
+def _check_original_content(wb, plan, template_wb, planned_targets, f, projection) -> int:
     if template_wb is None:
-        f.warn("未提供原模板，插入行后的数据与公式迁移无法独立核验")
-        return
+        return 0
     insertions = tuple(_insertions(plan))
     _check_defined_names(wb, template_wb, plan, f)
     check_three_dimensional_references(wb, template_wb, plan, f)
     check_inserted_charts(wb, template_wb, plan, f)
     check_inserted_conditionals(wb, template_wb, plan, f)
     check_inserted_tables(wb, template_wb, plan, f)
-    style_ranges = _declared_ranges(plan, "cell_styles", wb)
     for target, _, _ in insertions:
         if target not in template_wb.sheetnames:
             f.fail("插入行的 sheet 不在原模板中", sheet=target)
-    clear_ranges = _declared_ranges(plan, "clear_ranges", wb)
-    formats = {
-        _target(w)
-        for kind in ("cell_writes", "formula_writes")
-        for w in _final_writes(plan, kind)
-        if w.get("number_format")
-    }
-    issues = 0
+    checked = check_preserved_cells(wb, template_wb, plan, planned_targets, f, projection)
+    check_preserved_geometry(wb, template_wb, plan, f)
+    expected_sheets = list(template_wb.sheetnames)
+    for phase in _plan_phases(plan):
+        kind = phase.get("phase")
+        if kind in {"remove_sheets", "retain_sheets"}:
+            names = set(phase.get("names") or ())
+            expected_sheets = [
+                name for name in expected_sheets if (name in names) == (kind == "retain_sheets")
+            ]
+        elif kind == "create_combo_chart":
+            expected_sheets.append(phase["sheet"])
+    if wb.sheetnames != expected_sheets:
+        f.fail("工作表清单或顺序发生未获批准的改变")
+    additions = tuple(declared_merges(plan, wb))
     for tpl in template_wb.worksheets:
         sheet = tpl.title
         if sheet not in wb.sheetnames:
             continue
         out = wb[sheet]
-        for original in tuple(tpl._cells.values()):
-            r, c = _moved_row(sheet, original.row, insertions), original.column
-            target, actual = (sheet, r, c), out.cell(r, c)
-            expected = original.value
-            if isinstance(expected, str) and expected.startswith("="):
-                expected = _shift_formula_rows(expected, sheet, insertions)
-            overridden = target in planned_targets or _in_ranges(clear_ranges, sheet, r, c)
-            if not overridden and not _values_match(expected, actual.value):
-                issues += 1
-                f.fail(
-                    "插入行后原数据或公式引用未按行迁移",
-                    sheet=sheet,
-                    template_ref=original.coordinate,
-                    actual_ref=actual.coordinate,
-                    planned=str(expected)[:80],
-                    actual=str(actual.value)[:80],
-                )
-            changed = {"number_format"} if target in formats else set()
-            for *bounds, style in style_ranges:
-                if _in_ranges([bounds], sheet, r, c):
-                    changed.update(
-                        key for key in ("bold", "font_size") if style.get(key) is not None
-                    )
-                    changed.update(
-                        key
-                        for key in ("horizontal", "vertical", "fill_color", "border")
-                        if str(style.get(key) or "").strip()
-                    )
-            if _style_signature(original, changed) != _style_signature(actual, changed):
-                issues += 1
-                f.fail(
-                    "插入行后原样式未保留",
-                    sheet=sheet,
-                    template_ref=original.coordinate,
-                    actual_ref=actual.coordinate,
-                )
-            if issues >= _MAX_SAMPLES * 4:
-                return
-        for cell in tuple(out._cells.values()):
-            if (
-                cell.value is not None
-                and _original_row(sheet, cell.row, insertions) is None
-                and (sheet, cell.row, cell.column) not in planned_targets
-            ):
-                f.fail("插入空行出现计划外数据", sheet=sheet, ref=cell.coordinate)
+        if tpl.sheet_state != out.sheet_state:
+            f.fail("工作表可见性发生未获批准的改变", sheet=sheet)
         merged = {(r.min_row, r.min_col, r.max_row, r.max_col) for r in out.merged_cells.ranges}
+        expected_merges = {tuple(area[1:]) for area in additions if area[0] == sheet}
         for region in tpl.merged_cells.ranges:
             bounds = (
                 _moved_row(sheet, region.min_row, insertions),
@@ -381,28 +343,21 @@ def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
                 _moved_row(sheet, region.max_row, insertions),
                 region.max_col,
             )
-            if bounds not in merged:
-                f.fail("插入行后原合并区域未保留", sheet=sheet, range=str(region))
-        heights = {
-            _moved_row(sheet, int(ph["row"]), _insertions(plan, index + 1))
-            for index, ph in enumerate(_plan_phases(plan))
-            if ph.get("phase") == "set_row_height" and ph.get("sheet") == sheet
-        }
-        for row, dimension in tpl.row_dimensions.items():
-            target_row = _moved_row(sheet, row, insertions)
-            if (
-                target_row not in heights
-                and dimension.height != out.row_dimensions[target_row].height
-            ):
-                f.fail("插入行后原行高未保留", sheet=sheet, row=target_row)
+            expected_merges.add(bounds)
+        if merged != expected_merges:
+            f.fail("合并区域不符合原模板及批准计划", sheet=sheet)
+    return checked
 
 
 def _check_structural(wb, plan, template_wb, planned_targets, f) -> int:
-    from openpyxl.utils.cell import range_boundaries
+    from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
 
     checked = 0
     checked_insertions = False
-    for index, ph in enumerate(_plan_phases(plan)):
+    final_geometry = set()
+    phases = _plan_phases(plan)
+    for index in reversed(range(len(phases))):
+        ph = phases[index]
         kind = str(ph.get("phase"))
         if kind not in _STRUCTURAL_PHASES:
             continue
@@ -418,7 +373,8 @@ def _check_structural(wb, plan, template_wb, planned_targets, f) -> int:
                 if row < 1 or count < 1:
                     raise ValueError("插行位置与数量必须为正数")
                 if not checked_insertions:
-                    _check_insert_rows(wb, plan, template_wb, planned_targets, f)
+                    if template_wb is None:
+                        f.warn("未提供原模板，插入行后的数据与公式迁移无法独立核验")
                     checked_insertions = True
             elif kind == "merge_cells":
                 left, top, right, bottom = range_boundaries(str(ph.get("range")).upper())
@@ -431,8 +387,13 @@ def _check_structural(wb, plan, template_wb, planned_targets, f) -> int:
                     f.fail("计划合并区域在输出中不存在", sheet=sheet, range=str(ph.get("range")))
             elif kind == "set_row_height":
                 row = _moved_row(sheet, int(ph.get("row")), _insertions(plan, index + 1))
+                planned_height = float(ph.get("height"))
+                target = (sheet, kind, row)
+                if target in final_geometry:
+                    continue
+                final_geometry.add(target)
                 height = ws.row_dimensions[row].height
-                if height is None or abs(float(height) - float(ph.get("height"))) > _NUM_TOL:
+                if height is None or abs(float(height) - planned_height) > _NUM_TOL:
                     f.fail(
                         "行高与计划不符",
                         sheet=sheet,
@@ -442,6 +403,13 @@ def _check_structural(wb, plan, template_wb, planned_targets, f) -> int:
                     )
             else:
                 ref = str(ph.get("ref") or "").strip().upper()
+                coordinate_to_tuple(ref)
+                target = (sheet, kind, 0)
+                if target in final_geometry:
+                    continue
+                final_geometry.add(target)
+                if ref == "A1":
+                    ref = ""  # openpyxl represents an approved unfreeze as no pane.
                 if str(ws.freeze_panes or "").upper() != ref:
                     f.fail(
                         "冻结窗格与计划不符", sheet=sheet, planned=ref, actual=str(ws.freeze_panes)
@@ -483,8 +451,8 @@ def _check_conformance(
                 detail, limit = ("公式与计划不符", 80) if formula else ("格值与计划不符", None)
                 f.fail(detail, **location, planned=str(raw)[:limit], actual=str(actual)[:limit])
             nf = w.get("number_format")
-            if not formula and nf and cell.number_format != str(nf):
-                f.warn(
+            if nf and cell.number_format != str(nf):
+                f.fail(
                     "number_format 与计划不符",
                     **location,
                     planned=str(nf),
@@ -549,8 +517,14 @@ def _check_conformance(
             if extra:
                 f.fail(f"retain_sheets 后仍存在多余 sheet：{extra}")
 
-    styled_checked = _check_cell_styles(wb, plan, f)
+    projection = (
+        StyleProjection(wb, template_wb, plan, _coerce_planned) if template_wb is not None else None
+    )
+    styled_checked = _check_cell_styles(wb, plan, f, projection)
     structural_checked = _check_structural(wb, plan, template_wb, planned_targets, f)
+    original_checked = _check_original_content(
+        wb, plan, template_wb, planned_targets, f, projection
+    )
 
     f.stats = {
         "cell_writes_planned": len(cell_writes),
@@ -558,6 +532,8 @@ def _check_conformance(
         "cells_checked": checked,
         "style_cells_checked": styled_checked,
         "clear_residues": residues,
+        "original_content_checked": template_wb is not None,
+        "original_and_output_cells_checked": original_checked,
     }
     if native_checked:
         f.stats["native_phases_checked"] = native_checked
@@ -707,25 +683,24 @@ def _check_formulas(wb) -> _Finding:
     dangling: set[str] = set()
     names = {name.casefold() for name in wb.sheetnames}
     for ws in wb.worksheets:
-        for row in ws.iter_rows():
-            for cell in row:
-                v = cell.value
-                if not (isinstance(v, str) and v.startswith("=")):
-                    continue
-                total += 1
-                if _REF_ERR_RE.search(v):
-                    ref_errors += 1
-                    if ref_errors <= _MAX_SAMPLES:
-                        f.fail("公式含 #REF!", sheet=ws.title, ref=cell.coordinate, formula=v[:80])
-                try:
-                    tokens = Tokenizer(v).items
-                except TokenizerError:
-                    continue
-                for token in tokens:
-                    if token.type == "OPERAND" and token.subtype == "RANGE" and "!" in token.value:
-                        target, _, _ = _reference_sheet(token.value, ws.title)
-                        if target and target.casefold() not in names and not target.isdigit():
-                            dangling.add(target)
+        for cell in ws._cells.values():
+            v = cell.value
+            if not (isinstance(v, str) and v.startswith("=")):
+                continue
+            total += 1
+            if _REF_ERR_RE.search(v):
+                ref_errors += 1
+                if ref_errors <= _MAX_SAMPLES:
+                    f.fail("公式含 #REF!", sheet=ws.title, ref=cell.coordinate, formula=v[:80])
+            try:
+                tokens = Tokenizer(v).items
+            except TokenizerError:
+                continue
+            for token in tokens:
+                if token.type == "OPERAND" and token.subtype == "RANGE" and "!" in token.value:
+                    target, _, _ = _reference_sheet(token.value, ws.title)
+                    if target and target.casefold() not in names and not target.isdigit():
+                        dangling.add(target)
     for target in sorted(dangling):
         f.fail(f"公式引用了不存在的 sheet：{target!r}")
     f.stats = {"formulas_total": total, "ref_errors": ref_errors}
@@ -843,11 +818,11 @@ def run_qc(
     from openpyxl import load_workbook
 
     keep_vba = filled_path.suffix.lower() == ".xlsm"
-    wb = load_workbook(filled_path, data_only=False, keep_vba=keep_vba)
+    wb = load_workbook(filled_path, data_only=False, keep_vba=keep_vba, rich_text=True)
     template_wb = None
     try:
         if template_path is not None and Path(template_path).is_file():
-            template_wb = load_workbook(template_path, data_only=False)
+            template_wb = load_workbook(template_path, data_only=False, rich_text=True)
         sections = {
             "conformance": _check_conformance(wb, plan, write_report, template_wb),
             "protection": _check_protection(wb, plan, template_wb),
@@ -856,6 +831,10 @@ def run_qc(
             "traceability": _check_traceability(plan, rules),
             "structure": _check_structure(wb, rules),
         }
+        if template_wb is not None:
+            check_printer_settings(
+                filled_path, template_path, wb.sheetnames, sections["conformance"]
+            )
     finally:
         wb.close()
         if template_wb is not None:

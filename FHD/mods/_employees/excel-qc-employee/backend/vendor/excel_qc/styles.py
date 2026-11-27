@@ -9,7 +9,7 @@ from .plan_coordinates import insertions, moved_row, plan_phases, range_bounds
 _NUM_TOL = 1e-6
 
 
-def check_cell_styles(wb, plan: Dict[str, Any], f) -> int:
+def check_cell_styles(wb, plan: Dict[str, Any], f, projection=None) -> int:
     checked = 0
     for index, ph in enumerate(plan_phases(plan)):
         if str(ph.get("phase")) != "cell_styles":
@@ -33,6 +33,10 @@ def check_cell_styles(wb, plan: Dict[str, Any], f) -> int:
                 cell = ws.cell(row, col)
                 checked += 1
                 location = {"sheet": sheet, "row": row, "col": col}
+                if projection is not None:
+                    if style_signature(projection(sheet, row, col)) != style_signature(cell):
+                        f.fail("单元格样式与批准阶段投影不符", **location)
+                    continue
                 for key, actual in (
                     ("bold", cell.font.bold),
                     ("horizontal", cell.alignment.horizontal),
@@ -71,7 +75,7 @@ def check_cell_styles(wb, plan: Dict[str, Any], f) -> int:
                         cell.border.top,
                         cell.border.bottom,
                     )
-                    if any(side.style != border for side in sides):
+                    if any(side.style != border or side.color is not None for side in sides):
                         f.fail(
                             "边框与计划不符",
                             **location,
@@ -98,4 +102,6 @@ def style_signature(cell, changed=()) -> Tuple[Any, ...]:
         None if "fill_color" in changed else copy(cell.fill),
         None if "border" in changed else copy(cell.border),
         copy(cell.protection),
+        bool(cell.quotePrefix),
+        bool(cell.pivotButton),
     )

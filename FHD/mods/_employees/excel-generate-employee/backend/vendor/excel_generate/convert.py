@@ -10,7 +10,7 @@ try:
     from app.mod_sdk.host_services import (
         resolve_table_spec as _shared_resolve_table_spec,
     )
-except RECOVERABLE_ERRORS:  # noqa: BLE001 - employee packs must remain self-contained outside MODstore.
+except RECOVERABLE_ERRORS:  # Employee packs must remain self-contained outside MODstore.
     _shared_resolve_table_spec = None
 
 
@@ -86,9 +86,7 @@ def _coerce_sheet(sheet: Dict[str, Any], idx: int) -> Dict[str, Any]:
 
 
 def _is_table_structured(data: Dict[str, Any]) -> bool:
-    if isinstance(data.get("sheets"), list) and data["sheets"]:
-        return True
-    return isinstance(data.get("columns"), list) and isinstance(data.get("rows"), list)
+    return any(isinstance(data.get(key), list) for key in ("sheets", "columns", "rows"))
 
 
 def _coerce_json_to_table(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,7 +175,17 @@ async def _resolve_table_spec(
 
     suffix = src_path.suffix.lower()
     if suffix == ".json" and src_path.is_file():
-        return _coerce_json_to_table(_load_json_file(src_path)), []
+        data = _load_json_file(src_path)
+        for candidate in (
+            data.get("table_json"),
+            data.get("workbook"),
+            data.get("document_full"),
+            data,
+        ):
+            if isinstance(candidate, dict) and _is_table_structured(candidate):
+                return _coerce_json_to_table(candidate), []
+        # Runtime request JSON is not an empty table. Let the existing shared
+        # resolver read its user_request/plain_text and retain the actual text.
 
     if _shared_resolve_table_spec is not None:
         return await _shared_resolve_table_spec(

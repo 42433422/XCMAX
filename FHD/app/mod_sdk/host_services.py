@@ -341,6 +341,11 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "resolve_presentation_spec",
     ),
     "read_workbook_facts": ("app.application.tabular_workbook", "read_workbook_facts"),
+    "printer_settings_facts": ("app.infrastructure.excel.workbook_parts", "printer_settings_facts"),
+    "read_document_facts_page": (
+        "app.application.tabular_document",
+        "read_document_facts_page",
+    ),
     "read_native_document": ("app.infrastructure.document_parsing.native", "read_native_document"),
     "tabular_column_keys": ("app.infrastructure.document_parsing.delimited", "column_keys"),
     "resolve_table_spec": ("app.application.office_plaintext_generate", "resolve_table_spec"),

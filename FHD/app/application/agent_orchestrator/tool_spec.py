@@ -7,6 +7,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
+from app.application.agent_orchestrator.tool_schema_values import (
+    allows_empty_value,
+)
+from app.application.agent_orchestrator.tool_schema_values import (
+    type_matches as _type_matches,
+)
+
 # Re-export tool data for existing callers.
 from app.application.agent_orchestrator.tool_spec_data import (  # noqa: F401
     _BUSINESS_ENTITIES,
@@ -507,22 +514,6 @@ def _is_empty(value: Any) -> bool:
     return value is None or (isinstance(value, (str, list, tuple, dict)) and not value)
 
 
-def _type_matches(value: Any, expected: str) -> bool:
-    if expected == "object":
-        return isinstance(value, dict)
-    if expected == "array":
-        return isinstance(value, list)
-    if expected == "string":
-        return isinstance(value, str)
-    if expected == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if expected == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if expected == "boolean":
-        return isinstance(value, bool)
-    return True
-
-
 def _numeric_bound_error(key: str, value: Any, prop: dict[str, Any]) -> str:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return ""
@@ -577,6 +568,8 @@ def _validate_schema_payload(
     expected_root_type = str(schema.get("type") or "object").strip()
     if expected_root_type == "object" and not isinstance(payload, dict):
         return False, f"{subject} 必须是 object"
+    raw_properties = schema.get("properties")
+    properties = raw_properties if isinstance(raw_properties, dict) else {}
     required = schema.get("required") if isinstance(schema.get("required"), list) else []
     if subject == "工具输出" and payload.get("success") is False:
         required = [key for key in (required or []) if str(key) == "success"]
@@ -591,16 +584,15 @@ def _validate_schema_payload(
             continue
         present = isinstance(payload, dict) and name in payload
         value = payload.get(name) if present else None
+        explicitly_empty = allows_empty_value(value, properties.get(name))
         # A present array or object is the field, including an empty list.
-        if (
-            not present
-            or value is None
-            or (_is_empty(value) and not isinstance(value, (list, dict)))
+        # Explicit JSON Schema null/empty-string contracts also require presence,
+        # not truthiness. Undeclared legacy scalar requirements keep their rules.
+        if not present or (
+            _is_empty(value) and not isinstance(value, (list, dict)) and not explicitly_empty
         ):
             return False, f"{subject} 缺少字段：{name}"
 
-    raw_properties = schema.get("properties")
-    properties = raw_properties if isinstance(raw_properties, dict) else {}
     if schema.get("additionalProperties") is False:
         unknown = [key for key in payload if key not in properties]
         if unknown:
@@ -634,7 +626,8 @@ def _validate_schema_payload(
             # The concrete value is checked again after its declared predecessor
             # has completed and the reference has been resolved.
             continue
-        expected_type = str(prop.get("type") or "").strip()
+        raw_type = prop.get("type")
+        expected_type = raw_type if isinstance(raw_type, (str, list)) else ""
         if expected_type == "array" and isinstance(value, str) and value.strip():
             # 模型常把一组 id 写成逗号/分号分隔的字符串；这里拆成数组，
             # 否则会被类型校验拦成「字段 xxx 类型错误，应为 array」。

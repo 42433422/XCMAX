@@ -1,5 +1,5 @@
 {
-  "brief": "制作 PDF 全量读取员工包。上传 .pdf：只读原生文字层写入 outputs/document_full.txt；内嵌图片导出到 outputs/images/{figures,photos,diagrams,icons,uncategorized}/，并通过 VLM（ctx.call_llm vision）生成 .vlm.json 描述；元数据 outputs/document_meta.json。使用 direct_python，handlers 仅 direct_python。",
+  "brief": "PDF 全量读取：原生文字写入 outputs/document_full.txt；内嵌图片本地导出至 outputs/images/，结构与来源写入 outputs/document_meta.json。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义描述标记 blocked，原生读取结果仍保留。",
   "mode": "direct_python_file_transform",
   "accepted_extensions": [
     ".pdf"
@@ -16,13 +16,15 @@
     "char_count",
     "images",
     "image_categories",
-    "source"
+    "source",
+    "status",
+    "image_semantics"
   ],
   "requirements": [
     "Use direct_python only; handlers must be [\"direct_python\"].",
     "Extract native text and embedded images with pypdf; never use LLM for body text.",
     "Export images to outputs/images/{figures,photos,diagrams,icons,uncategorized}/.",
-    "When ctx.call_llm supports vision, describe each image to outputs/images/<cat>/<name>.vlm.json.",
+    "Preserve extracted images locally; no implicit VLM call without verified document-content egress authorization.",
     "Write document_full.txt, document_meta.json, images_index.json.",
     "Return {ok, summary, items, warnings, error, meta}."
   ],

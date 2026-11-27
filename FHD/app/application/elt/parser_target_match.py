@@ -22,7 +22,9 @@ def target_header_hints(target_type: str) -> list[str]:
     ]
 
 
-def covers_required_target_fields(dataset: ParsedDataset, target_type: str) -> bool:
+def covers_required_target_fields(
+    dataset: ParsedDataset, target_type: str, *, minimum_score: float = 0.75
+) -> bool:
     from app.application.elt.targets import get_adapter
 
     required_fields = [field for field in get_adapter(target_type).fields if field.required]
@@ -43,10 +45,30 @@ def covers_required_target_fields(dataset: ParsedDataset, target_type: str) -> b
     matched_fields: set[int] = set()
     used_headers: set[int] = set()
     for score, field_index, header_index in pairs:
-        if score < 0.75:
+        if score < minimum_score:
             break
         if field_index in matched_fields or header_index in used_headers:
             continue
         matched_fields.add(field_index)
         used_headers.add(header_index)
     return len(matched_fields) == len(required_fields)
+
+
+def row_target_field_coverage(dataset: ParsedDataset, target_type: str) -> tuple[int, int]:
+    """Count explicit row schemas, never treat a cross-sheet header union as one schema."""
+    schemas: dict[tuple[str, ...], bool] = {}
+    complete = incomplete = 0
+    for row in dataset.rows:
+        columns = row.provenance.get("columns")
+        headers = tuple(columns) if isinstance(columns, dict) else ()
+        if headers not in schemas:
+            if len(schemas) >= 128:
+                schemas.clear()
+            schemas[headers] = bool(headers) and covers_required_target_fields(
+                ParsedDataset(list(headers), [], {}), target_type, minimum_score=0.9
+            )
+        if schemas[headers]:
+            complete += 1
+        else:
+            incomplete += 1
+    return complete, incomplete

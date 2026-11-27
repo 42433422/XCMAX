@@ -281,15 +281,30 @@ def _execute_claimed_cross_module(
                 raise ValueError("上传文件已变化，已回滚导入")
             raise_if_tx_fault("rollback_before_commit")
         raise_if_tx_fault("crash_after_commit")
-        with tenant_scope(int(tenant_text)):
-            employee = chain._run_employee(
-                "excel-full-read-employee",
-                "读取导入结果",
-                {"file_path": str(result_path)},
-                result_path.parent,
-                user_id=user_id,
-            )
-        employee_ok = bool(employee["result"].get("success"))
+        content = result_path.read_bytes() if result_path.is_file() else b""
+        download_sha = hashlib.sha256(content).hexdigest() if content else ""
+        artifact = store_spreadsheet(run.run_id, content, name="result.xlsx") if content else None
+        employee_ok = False
+        if artifact is not None:
+            outputs = context.get("node_outputs")
+            reader_context = {
+                **context,
+                "run_id": run.run_id,
+                "node_outputs": {
+                    **(outputs if isinstance(outputs, dict) else {}),
+                    artifact["artifact_id"]: {"success": True, "artifacts": [artifact]},
+                },
+            }
+            with tenant_scope(int(tenant_text)):
+                employee = chain._run_employee(
+                    "excel-full-read-employee",
+                    "读取导入结果",
+                    {"file_path": artifact["uri"]},
+                    result_path.parent,
+                    user_id=user_id,
+                    runtime_context=reader_context,
+                )
+            employee_ok = bool(employee["result"].get("success"))
         anomaly_count = int(checkpoint.get("anomaly_count") or 0)
         verification = chain.verify_against_data(
             qualifying_count=len(products),
@@ -301,9 +316,6 @@ def _execute_claimed_cross_module(
         )
         _, source_body = chain._source_bytes(source, user_id=user_id)
         source_unchanged = hashlib.sha256(source_body).hexdigest() == original_hash
-        content = result_path.read_bytes() if result_path.is_file() else b""
-        download_sha = hashlib.sha256(content).hexdigest() if content else ""
-        artifact = store_spreadsheet(run.run_id, content, name="result.xlsx") if content else None
         if artifact is not None and not any(
             item.artifact_id == artifact["artifact_id"] for item in run.artifacts
         ):

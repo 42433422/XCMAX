@@ -72,7 +72,9 @@ def test_generated_office_file_owned_handoff(
         assert snapshot.read_bytes() == content
         assert snapshot != path
         read_payloads.append(dict(payload))
-        return {"success": True, "result": {"outputs": [{"output": "read verified snapshot"}]}}
+        output = Path(payload["workspace_root"]) / "parsed.json"
+        output.write_text(json.dumps({"verified_input_bytes": len(content)}))
+        return {"success": True, "result": {"outputs": [{"output_path": str(output)}]}}
 
     monkeypatch.setattr(EmployeeAgent, "run", read_snapshot)
     context = {**owner.context, "run_id": "office-run"}

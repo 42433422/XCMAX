@@ -190,3 +190,94 @@ def test_excel_generator_accepts_reader_workbook_json(tmp_path: Path) -> None:
         ]
     finally:
         wb.close()
+
+
+@pytest.mark.parametrize("wrapper", [None, "table_json", "workbook", "document_full"])
+def test_excel_generator_preserves_uploaded_table_json(tmp_path: Path, wrapper: str | None) -> None:
+    generator = _load_module(
+        "excel_generate_structured_json_test",
+        FHD_ROOT
+        / "mods/_employees/excel-generate-employee/backend/vendor/excel_generate/convert.py",
+    )
+    table = {
+        "columns": ["数量", "启用", "备注"],
+        "rows": [{"数量": 0, "启用": False, "备注": "原文"}],
+    }
+    content = json.dumps({wrapper: table} if wrapper else table, ensure_ascii=False)
+    source, target = tmp_path / "uploaded.json", tmp_path / "output.xlsx"
+    source.write_text(content, encoding="utf-8")
+    asyncio.run(generator.convert_file(source, target, payload={}, ctx={}, rule_spec={}))
+    workbook = load_workbook(target, data_only=False)
+    try:
+        assert list(workbook.active.values) == [("数量", "启用", "备注"), (0, False, "原文")]
+        assert workbook.active["A2"].data_type == "n"
+        assert workbook.active["B2"].data_type == "b"
+    finally:
+        workbook.close()
+    assert source.read_text(encoding="utf-8") == content
+
+
+@pytest.mark.parametrize(
+    "table,expected",
+    [
+        ({"rows": [{"数量": 0, "启用": False}]}, [("数量", "启用"), (0, False)]),
+        ({"columns": ["数量", "启用"]}, [("数量", "启用")]),
+        ({"rows": []}, []),
+        ({"sheets": []}, []),
+    ],
+)
+def test_excel_generator_keeps_explicit_partial_and_empty_table_contracts(
+    tmp_path: Path, table: dict, expected: list
+) -> None:
+    generator = _load_module(
+        "excel_generate_partial_json_test",
+        FHD_ROOT
+        / "mods/_employees/excel-generate-employee/backend/vendor/excel_generate/convert.py",
+    )
+    source, target = tmp_path / "uploaded.json", tmp_path / "output.xlsx"
+    source.write_text(json.dumps(table), encoding="utf-8")
+    asyncio.run(
+        generator.convert_file(
+            source,
+            target,
+            payload={"user_query": "This must not replace an explicit table."},
+            ctx={},
+            rule_spec={},
+        )
+    )
+    workbook = load_workbook(target, data_only=False, read_only=True)
+    try:
+        assert list(workbook.active.values) == expected
+    finally:
+        workbook.close()
+
+
+@pytest.mark.parametrize("request_in_file", [False, True])
+def test_excel_generator_retains_request_text_from_json_or_runtime(
+    tmp_path: Path, request_in_file: bool
+) -> None:
+    generator = _load_module(
+        "excel_generate_request_json_test",
+        FHD_ROOT
+        / "mods/_employees/excel-generate-employee/backend/vendor/excel_generate/convert.py",
+    )
+    request = "生成业务摘要，保留客户、金额和交付状态。"
+    source, target = tmp_path / "request.json", tmp_path / "output.xlsx"
+    content = json.dumps({"user_request": request} if request_in_file else {}, ensure_ascii=False)
+    source.write_text(content, encoding="utf-8")
+    result = asyncio.run(
+        generator.convert_file(
+            source,
+            target,
+            payload={} if request_in_file else {"user_query": request},
+            ctx={},
+            rule_spec={},
+        )
+    )
+    workbook = load_workbook(target, data_only=False)
+    try:
+        assert list(workbook.active.values) == [("内容",), (request,)]
+    finally:
+        workbook.close()
+    assert result["row_count"] == 1
+    assert source.read_text(encoding="utf-8") == content

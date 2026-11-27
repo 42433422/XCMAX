@@ -26,6 +26,8 @@ from app.utils.path_io.path_utils import get_app_data_dir
 
 RUN_FILE_MIME_TYPES = {
     ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
     ".json": "application/json",
     ".txt": "text/plain",
     ".xls": "application/vnd.ms-excel",
@@ -37,18 +39,18 @@ RUN_FILE_MIME_TYPES = {
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
-_OWNER_BOUND_TYPES = {".pdf", ".docx", ".pptx", ".png", ".json", ".txt"}
+_OWNER_BOUND_TYPES = {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg", ".json", ".txt"}
 
 
 def _verify_bound_content(content: bytes, suffix: str) -> None:
     if suffix in {".pdf", ".docx", ".pptx"}:
         _verify_office_content(content, suffix)
-    elif suffix == ".png":
+    elif suffix in {".png", ".jpg", ".jpeg"}:
         from PIL import Image
 
         with Image.open(io.BytesIO(content)) as image:
-            if image.format != "PNG":
-                raise ValueError("browser screenshot format does not match suffix")
+            if image.format != ("PNG" if suffix == ".png" else "JPEG"):
+                raise ValueError("image artifact format does not match suffix")
             image.verify()
     elif suffix == ".json":
         json.loads(content.decode("utf-8"))

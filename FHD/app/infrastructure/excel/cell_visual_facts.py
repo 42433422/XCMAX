@@ -7,6 +7,7 @@ Openpyxl normalizes merged cells; this is not raw OOXML cell fidelity.
 
 from collections import defaultdict
 from copy import copy
+from itertools import groupby
 
 from openpyxl.cell.cell import Cell, MergedCell
 from openpyxl.utils import column_index_from_string
@@ -138,6 +139,104 @@ def _neighbors(cells, styles):
                         side for side in parallel if gap == 0 and a[side] and a[side] == b[side]
                     ],
                 }
+
+
+def _border_spans(cells, merged_anchors):
+    """Keep native outline styles separate from thinner internal grid strokes."""
+    starts = {}
+    for column, cell in cells:
+        if not cell.has_style:
+            continue
+        border = cell.border
+        end_row, end_column = merged_anchors.get((cell.row, column), (cell.row, column))
+        if border.left and border.left.style:
+            starts[border.left.style] = [column, 0, 0]
+        # openpyxl's finite border-style enum bounds active outline kinds.
+        for style, counts in starts.items():
+            counts[1] += bool(border.top and border.top.style == style)
+            counts[2] += bool(
+                cell.row == end_row and border.bottom and border.bottom.style == style
+            )
+        if column == end_column and border.right and border.right.style:
+            counts = starts.pop(border.right.style, None)
+            if counts is None:
+                continue
+            start, top, bottom = counts
+            width = column - start + 1
+            if width > 1:
+                yield start, column, border.right.style, top == width, bottom == width
+
+
+def _fill_spans(cells):
+    start = end = fill = 0
+    for column, cell in cells:
+        current = cell._style.fillId if cell.has_style and cell.fill.patternType else 0
+        if current != fill or column != end + 1:
+            if fill:
+                yield start, end, fill
+            start = column
+        end, fill = column, current
+    if fill:
+        yield start, end, fill
+
+
+def worksheet_geometry_regions(sheet):
+    """Offer source-border enclosures and fill runs, without deciding table semantics.
+
+    This is a sparse projection of pinned openpyxl border/fill objects, not a
+    general graph partitioner. Missing side edges or missing native rows break
+    an enclosure. Filled runs merge only over consecutive, identical spans.
+    Unclosed and unstyled content remains in the caller's original cell facts.
+    """
+    store = getattr(sheet, "_cells", {})
+    if not any(cell.has_style for cell in store.values()):
+        return ()
+    regions = []
+    outlines = {}
+    fills = {}
+    # openpyxl copies the final right/bottom borders to a merged anchor; those
+    # strokes belong at the merge edge, not inside the span at the anchor.
+    merged_anchors = {
+        (merge.min_row, merge.min_col): (merge.max_row, merge.max_col)
+        for merge in sheet.merged_cells.ranges
+    }
+
+    def finish_fill(key, rows):
+        left, right, fill = key
+        top, bottom = rows
+        if top != bottom or left != right:
+            regions.append(((top, left, bottom, right), "style_continuity", f"fill:{fill}"))
+
+    for row, entries in groupby(sorted(store.items()), key=lambda item: item[0][0]):
+        cells = [(position[1], cell) for position, cell in entries]
+        current_outlines = {}
+        for left, right, style, top, bottom in _border_spans(cells, merged_anchors):
+            previous = outlines.get((left, right, style))
+            start = row if top else previous[0] if previous and previous[1] == row - 1 else None
+            if start is None:
+                continue
+            if bottom:
+                if start < row:
+                    regions.append(((start, left, row, right), "border_enclosure", ""))
+            else:
+                current_outlines[(left, right, style)] = (start, row)
+        outlines = current_outlines
+        current_fills = {}
+        for left, right, fill in _fill_spans(cells):
+            key = (left, right, fill)
+            previous = fills.pop(key, None)
+            if previous and previous[1] == row - 1:
+                current_fills[key] = (previous[0], row)
+            else:
+                if previous:
+                    finish_fill(key, previous)
+                current_fills[key] = (row, row)
+        for key, rows in fills.items():
+            finish_fill(key, rows)
+        fills = current_fills
+    for key, rows in fills.items():
+        finish_fill(key, rows)
+    return tuple(sorted(regions))
 
 
 def worksheet_visual_facts(

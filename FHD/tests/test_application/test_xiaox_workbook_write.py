@@ -190,6 +190,17 @@ def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_
     state = workbook_runtime
     upload_id = state.upload["upload_id"]
     reader = "excel-full-read-employee"
+    reader_input = {"upload_id": upload_id}
+    reader_context = {
+        **state.actor.context,
+        "run_id": state.parent.run_id,
+        "step_id": "read-upload",
+        "node_id": "read-upload",
+        "call_id": "read-upload",
+        "input_sha256": hashlib.sha256(
+            json.dumps(reader_input, sort_keys=True).encode()
+        ).hexdigest(),
+    }
     with tenant_scope(state.actor.tenant_id):
         with get_db() as db:
             owned_copy = Path(db.get(EltUpload, upload_id).storage_path)
@@ -197,13 +208,18 @@ def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_
         read = execute_employee_task_local(
             reader,
             "读取上传的工作簿",
-            {"upload_id": upload_id},
+            reader_input,
             user_id=state.actor.user_id,
-            runtime_context=state.actor.context,
+            runtime_context=reader_context,
         )
-    assert read["success"] is True, read
-    [reader_output] = office_output_paths(reader, read)
-    [sheet] = json.loads(Path(reader_output).read_text(encoding="utf-8"))["sheets"]
+        assert read["success"] is True, read
+        [reader_output] = office_output_paths(reader, read)
+        [reader_artifact] = read["artifacts"]
+        assert reader_output == reader_artifact["uri"]
+        assert reader_artifact["metadata"]["call_id"] == reader_context["call_id"]
+        assert reader_artifact["metadata"]["owner_user_id"] == str(state.actor.user_id)
+        reader_content = read_verified_run_file(state.parent.run_id, reader_artifact)
+    [sheet] = json.loads(reader_content)["sheets"]
     assert sheet["name"] == "Data"
     cells = {(cell["row"], cell["col"]): cell["value"] for cell in sheet["cells"]}
     assert cells[2, 1] == "old"
@@ -341,6 +357,54 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
     assert replay["run_id"] == child.run_id
     assert read_verified_run_file(child.run_id, artifact) == raw
     assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
+
+
+def test_independent_qc_rejects_unapproved_changes_with_valid_artifact_hash(
+    workbook_runtime, monkeypatch
+):
+    from app.application.tools import workflow_spreadsheet_scope as scope
+
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"].pop("protected_ranges")
+    publish = scope.publish_written_workbook
+    changed = []
+
+    def corrupt_before_publication(result, context, workspace):
+        [path] = office_output_paths(WORKBOOK_WRITER, result)
+        book = load_workbook(path)
+        book["Data"]["D2"] = "not approved"
+        font = copy.copy(book["Data"]["D2"].font)
+        font.bold = True
+        book["Data"]["D2"].font = font
+        book.save(path)
+        book.close()
+        changed.append(Path(path).read_bytes())
+        return publish(result, context, workspace)
+
+    monkeypatch.setattr(scope, "publish_written_workbook", corrupt_before_publication)
+    pending = state.invoke("unapproved-mutation", params)
+    assert pending["pending_approval"] is True
+    child = state.approve(pending)
+    assert len(changed) == 1
+    [call] = child.tool_calls
+    assert call.output["success"] is True
+    [artifact] = call.output["artifacts"]
+    raw = read_verified_run_file(child.run_id, artifact)
+    assert raw == changed[0]
+    assert artifact["metadata"]["sha256"] == hashlib.sha256(raw).hexdigest()
+    verification = call.metadata["verification"]
+    assert verification["status"] == "failed", verification
+    checks = verification["checks"]
+    assert any(
+        check["source"] == "run_artifact" and check["status"] == "passed" for check in checks
+    ), checks
+    quality = next(check for check in checks if check["source"] == "workbook_qc")
+    assert quality["status"] == "failed"
+    assert quality["evidence"]["sections"]["conformance"] == "fail"
+    receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
+    assert child.status != "completed" and receipt.get("verified") is not True
+    assert state.workspace_copy.read_bytes() == state.original
 
 
 @pytest.mark.parametrize("override", ["workspace_root", "output_relpath", "template_relpath"])

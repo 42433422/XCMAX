@@ -123,6 +123,19 @@ def _json(document: dict, raw: bytes) -> None:
         return value
 
     value = json.loads(raw, parse_constant=reject_constant, object_pairs_hook=object_pairs)
+    pending = [(iter((value,)), 0)]
+    count = 0
+    while pending:
+        children, depth = pending[-1]
+        item = next(children, ...)
+        if item is ...:
+            pending.pop()
+            continue
+        count += 1
+        if count > MAX_NATIVE_ITEMS or depth > 128:
+            raise ValueError("JSON structure exceeds the node/depth budget")
+        if isinstance(item, (dict, list)):
+            pending.append((iter(item.values() if isinstance(item, dict) else item), depth + 1))
     # Keep arrays/objects and scalar types verbatim, including empty containers.
     document["regions"].append(
         {
@@ -497,7 +510,9 @@ def _html(document: dict, raw: bytes) -> None:
         _partial(document, "dynamic_content_not_executed")
 
 
-def read_native_document(path: Path, *, authorization_scope: str = "") -> dict:
+def read_native_document(
+    path: Path, *, authorization_scope: str = "", expected_sha256: str | None = None
+) -> dict:
     """Extract facts from a caller-authorized file; no cross-request cache."""
     path = Path(path)
     suffix = path.suffix.lower()
@@ -505,6 +520,9 @@ def read_native_document(path: Path, *, authorization_scope: str = "") -> dict:
         raw = handle.read(MAX_SOURCE_BYTES + 1)
     if len(raw) > MAX_SOURCE_BYTES:
         raise ValueError("Native document exceeds the source byte budget")
+    digest = hashlib.sha256(raw).hexdigest()
+    if expected_sha256 is not None and digest != expected_sha256:
+        raise ValueError("native_document_source_sha256_mismatch")
     backend = _BACKENDS.get(suffix, "python-stdlib")
     version = (
         importlib.metadata.version(backend)
@@ -514,7 +532,7 @@ def read_native_document(path: Path, *, authorization_scope: str = "") -> dict:
     document: dict[str, Any] = dict(
         new_document(
             make_source_ref(
-                source_sha256=hashlib.sha256(raw).hexdigest(),
+                source_sha256=digest,
                 source_format=suffix.lstrip(".") or "unknown",
                 parser=backend,
                 parser_version=version,

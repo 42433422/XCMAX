@@ -1,7 +1,7 @@
 {
   "id": "excel-generate-employee",
   "name": "Excel 生成员",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "XCAGI",
   "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据",
   "artifact": "employee_pack",
@@ -38,7 +38,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "excel-generate-employee",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "artifact": "employee_pack",
       "name": "Excel 生成员",
       "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据"

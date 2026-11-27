@@ -70,6 +70,25 @@ class PlanError(ValueError):
     """plan.json 结构或与模板不匹配的错误（fail-fast）。"""
 
 
+def _preserve_zero_width_columns(wb):
+    from copy import copy
+
+    from openpyxl.worksheet.dimensions import ColumnDimension
+
+    class ZeroWidthColumn(ColumnDimension):
+        def __iter__(self):
+            yield from super().__iter__()
+            if self.width == 0:
+                yield "width", "0"
+
+    for sheet in wb.worksheets:
+        for name, original in list(sheet.column_dimensions.items()):
+            if original.width == 0:
+                fixed = ZeroWidthColumn(**{**vars(original), "worksheet": sheet})
+                fixed._style = copy(original._style)
+                sheet.column_dimensions[name] = fixed
+
+
 def _load_plan(src_path: Optional[Path], payload: Dict[str, Any]) -> Dict[str, Any]:
     inline = (payload or {}).get("plan")
     if isinstance(inline, dict):
@@ -582,19 +601,10 @@ def _run_cell_styles(
             if fill is not None:
                 cell.fill = copy(fill)
             if thin is not None:
-                from openpyxl.styles import Border
-
-                cell.border = Border(
-                    left=thin,
-                    right=thin,
-                    top=thin,
-                    bottom=thin,
-                    diagonal=cell.border.diagonal,
-                    diagonal_direction=cell.border.diagonal_direction,
-                    outline=cell.border.outline,
-                    vertical=cell.border.vertical,
-                    horizontal=cell.border.horizontal,
-                )
+                updated = copy(cell.border)
+                for edge in ("left", "right", "top", "bottom"):
+                    setattr(updated, edge, thin)
+                cell.border = updated
             styled += 1
     stats["styled_cells"] = int(stats.get("styled_cells") or 0) + styled
 
@@ -862,6 +872,15 @@ def convert_file(
         raise PlanError(f"模板必须是 .xlsx/.xlsm：{template.name}")
     keep_vba = template.suffix.lower() == ".xlsm"
 
+    from app.mod_sdk.host_services import printer_settings_facts
+
+    try:
+        printer_settings = printer_settings_facts(template)
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise PlanError(f"workbook_package_unsupported: {exc}") from exc
+    if printer_settings:
+        raise PlanError("unsupported_workbook_printer_settings: 当前写入器无法保留原生打印机配置")
+
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     xlsx_path = output_path
@@ -875,7 +894,7 @@ def convert_file(
         xlsx_path = xlsx_path.with_suffix(".xlsm")
         warnings.append("模板为 .xlsm，输出扩展名已改为 .xlsm 以保留宏。")
 
-    wb = load_workbook(template, data_only=False, keep_vba=keep_vba)
+    wb = load_workbook(template, data_only=False, keep_vba=keep_vba, rich_text=True)
     try:
         _check_template_contract(wb, plan)
         tokens = [str(t) for t in (plan.get("protected_ranges") or [])]
@@ -931,6 +950,7 @@ def convert_file(
                 )
             warnings.append(f"{msg}，已跳过（详见 write_report.json violations）。")
 
+        _preserve_zero_width_columns(wb)
         wb.save(xlsx_path)
         output_sheet_names = list(wb.sheetnames)
     finally:

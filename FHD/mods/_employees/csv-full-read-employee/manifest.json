@@ -1,7 +1,7 @@
 {
   "id": "csv-full-read-employee",
   "name": "CSV 全量读取员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
   "description": "CSV全量读取员工：上传 .csv 文件，使用 direct_python 解析为结构化 data.json，包含 columns、rows、row_count、meta，禁止 LLM 编造行列",
   "artifact": "employee_pack",
@@ -38,7 +38,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "csv-full-read-employee",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "CSV 全量读取员",
       "description": "CSV全量读取员工：上传 .csv 文件，使用 direct_python 解析为结构化 data.json，包含 columns、rows、row_count、meta，禁止 LLM 编造行列"

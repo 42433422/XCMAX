@@ -6,11 +6,67 @@ legacy table roles remain fallback interpretations.
 
 from __future__ import annotations
 
-from itertools import groupby
+from collections.abc import Iterable, Iterator
+from itertools import chain, groupby
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from app.application.elt.table_segmentation import Merge, SheetSegmentation
+
+
+def _candidate(
+    sheet: str, bounds: Merge, basis: str, source: str, headers: Iterable[int] = ()
+) -> dict[str, Any]:
+    from openpyxl.utils import get_column_letter
+
+    r1, c1, r2, c2 = bounds
+    ref = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+    return {
+        "candidate_id": f"{sheet}!{ref}:{basis}:{source}",
+        "sheet": sheet,
+        "range": ref,
+        "basis": basis,
+        "source": source,
+        "header_rows": list(headers),
+        "status": "candidate",
+    }
+
+
+def summarize_structure_candidates(candidates: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Keep bounded model navigation and the exact count of offered alternatives."""
+    retained: list[dict[str, Any]] = []
+    total = 0
+    for item in candidates:
+        total += 1
+        if len(retained) < 80:
+            retained.append(item)
+    return {
+        "structure_candidates": retained,
+        "structure_candidate_total": total,
+        "structure_candidates_truncated": total > len(retained),
+    }
+
+
+def worksheet_candidate_summary(worksheet: Any) -> dict[str, Any]:
+    from app.infrastructure.excel.cell_visual_facts import worksheet_geometry_regions
+
+    occupied = (
+        position
+        for position, cell in worksheet._cells.items()
+        if cell.value is not None and str(cell.value).strip()
+    )
+    return {
+        **summarize_structure_candidates(
+            _candidate(worksheet.title, bounds, basis, name)
+            for bounds, basis, name in chain(
+                worksheet_native_regions(worksheet),
+                worksheet_geometry_regions(worksheet),
+                ((bounds, "occupied_region", "") for bounds in _occupied_regions(occupied)),
+            )
+        ),
+        # Combined with the outer navigation's SHA-bound readback and sheet name.
+        "structure_readback_range": worksheet.calculate_dimension(),
+    }
 
 
 def worksheet_native_regions(worksheet: Any) -> tuple[tuple[Merge, str, str], ...]:
@@ -52,22 +108,11 @@ def iter_structure_candidates(segmentation: SheetSegmentation):
     Native ranges, legacy Segmenter tables, and unresolved occupied runs coexist.
     The latter retain coordinates even when fallback roles exclude a row.
     """
-    from openpyxl.utils import get_column_letter
 
     def candidate(bounds: Merge, basis: str, source: str, headers=()):
-        r1, c1, r2, c2 = bounds
-        ref = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
-        return {
-            "candidate_id": f"{segmentation.sheet}!{ref}:{basis}:{source}",
-            "sheet": segmentation.sheet,
-            "range": ref,
-            "basis": basis,
-            "source": source,
-            "header_rows": list(headers),
-            "status": "candidate",
-        }
+        return _candidate(segmentation.sheet, bounds, basis, source, headers)
 
-    for bounds, basis, name in segmentation.native_regions:
+    for bounds, basis, name in (*segmentation.native_regions, *segmentation.geometry_regions):
         yield candidate(bounds, basis, name)
     table_bounds = {}
     for table in segmentation.tables:
@@ -82,14 +127,24 @@ def iter_structure_candidates(segmentation: SheetSegmentation):
 
     # Sparse row runs for every position not reliably attributed to a table body/header.
     # Do not inflate a disconnected sparse sheet into one enormous rectangle.
+    def unresolved():
+        for row, col in segmentation.source_positions:
+            role, table_id = segmentation.cells.get((row, col), ("unknown", ""))
+            assigned_bounds = table_bounds.get(table_id)
+            if role in {"data", "header", "parent_header", "repeated_header"} and assigned_bounds:
+                r1, c1, r2, c2 = assigned_bounds
+                if r1 <= row <= r2 and c1 <= col <= c2:
+                    continue
+            yield row, col
+
+    for bounds in _occupied_regions(unresolved()):
+        yield candidate(bounds, "unresolved_occupied", "")
+
+
+def _occupied_regions(positions: Iterable[tuple[int, int]]) -> Iterator[Merge]:
+    """Reuse sparse occupied-run coalescing for fallback and model navigation."""
     runs: list[Merge] = []
-    for row, col in sorted(segmentation.source_positions):
-        role, table_id = segmentation.cells.get((row, col), ("unknown", ""))
-        assigned_bounds = table_bounds.get(table_id)
-        if role in {"data", "header", "parent_header", "repeated_header"} and assigned_bounds:
-            r1, c1, r2, c2 = assigned_bounds
-            if r1 <= row <= r2 and c1 <= col <= c2:
-                continue
+    for row, col in sorted(positions):
         if runs and runs[-1][0] == row and runs[-1][3] + 1 == col:
             r1, c1, r2, _ = runs[-1]
             runs[-1] = (r1, c1, r2, col)
@@ -106,13 +161,13 @@ def iter_structure_candidates(segmentation: SheetSegmentation):
                 current[key] = (previous[0], c1, r2, c2)
             else:
                 if previous is not None:
-                    yield candidate(previous, "unresolved_occupied", "")
+                    yield previous
                 current[key] = (r1, c1, r2, c2)
         for bounds in active.values():
-            yield candidate(bounds, "unresolved_occupied", "")
+            yield bounds
         active = current
     for bounds in active.values():
-        yield candidate(bounds, "unresolved_occupied", "")
+        yield bounds
 
 
 def validate_candidate_selection(

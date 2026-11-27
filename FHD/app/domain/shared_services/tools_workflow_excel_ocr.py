@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -99,6 +100,17 @@ def _registered_router_excel_analysis(
             from app.application.tools.workflow_spreadsheet_scope import export_workflow_spreadsheet
 
             result = export_workflow_spreadsheet(payload, runtime_context, handle_excel_analysis)
+        elif "_actor_authorization" in runtime_context and (
+            (action == "read" and payload.get("view") in {"pages", "regions", "tables", "cells"})
+            or ("table_id" in payload and action in {"read", "query", "aggregate", "statistics"})
+        ):
+            from app.mod_sdk.host_services import read_document_facts_page
+
+            result = read_document_facts_page(payload, runtime_context)
+        elif (action == "read" and payload.get("view") in {"pages", "regions", "tables"}) or (
+            "table_id" in payload and action in {"read", "query", "aggregate", "statistics"}
+        ):
+            return {"success": False, "error_code": "document_access_denied", "status": "blocked"}
         elif (
             action in {"read", "structure", "query", "aggregate", "statistics"}
             and "_actor_authorization" in runtime_context
@@ -143,6 +155,9 @@ def _registered_router_excel_analysis(
         ):
             mismatches.append("明细行数")
         summary = result.get("numeric_summary") or {}
+        native_table = isinstance(result.get("data"), dict) and (
+            result["data"].get("projection") == "native_coordinate_table"
+        )
         for column, expected in (params.get("expected_totals") or {}).items():
             # Sales exports name the money column amount. Plans often say total_amount.
             summary_column = column
@@ -153,9 +168,13 @@ def _registered_router_excel_analysis(
             ):
                 summary_column = "amount"
             actual = summary.get(summary_column, {}).get("sum")
-            if actual is None or not isclose(
-                float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
-            ):
+            if native_table and (type(actual) is int or type(expected) is int):
+                equal = type(expected) in {int, float} and actual == expected
+            else:
+                equal = actual is not None and isclose(
+                    float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
+                )
+            if not equal:
                 mismatches.append(str(column))
         result["verification"] = {"verified": not mismatches, "mismatches": mismatches}
         if mismatches:
@@ -185,6 +204,23 @@ def _registered_router_excel_analysis(
             "sheet": result.get("sheet_name"),
             "header_row": result.get("header_row"),
             **(result.get("source_rows") or {}),
+        }
+    result_data = result.get("data")
+    budget = result_data.get("response_budget_bytes") if isinstance(result_data, dict) else None
+    if (
+        type(budget) is int
+        and budget > 0
+        and len(
+            json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
+        )
+        > budget
+    ):
+        # Statistics verification can add fields after the native host has
+        # paged its result; that final registered envelope obeys the same cap.
+        return {
+            "success": False,
+            "error_code": "document_response_budget_exceeded",
+            "status": "blocked",
         }
     return result
 

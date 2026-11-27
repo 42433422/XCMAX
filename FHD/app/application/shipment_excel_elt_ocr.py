@@ -10,6 +10,8 @@ import logging
 import os
 import re
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from io import BufferedReader, BytesIO
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -100,7 +102,40 @@ def _workbook_output_path(output_path: str | Path | None) -> Path:
         descriptor, temp_name = tempfile.mkstemp(prefix="elt_ocr_", suffix=".xlsx", dir=temp_root)
         os.close(descriptor)
         raw_output_path = Path(temp_name)
-    return elt_security.resolve_elt_output_path(raw_output_path)
+    validated = False
+    try:
+        path = elt_security.resolve_elt_output_path(raw_output_path)
+        validated = True
+        return path
+    finally:
+        if not output_path and not validated:
+            Path(raw_output_path).unlink(missing_ok=True)
+
+
+def _save_workbook(workbook: Any, output_path: str | Path | None) -> Path:
+    path = None
+    saved = False
+    try:
+        path = _workbook_output_path(output_path)
+        with elt_security.open_elt_output_file(path) as output_file:
+            workbook.save(output_file)
+        saved = True
+        return path
+    finally:
+        workbook.close()
+        if not saved and not output_path and path is not None:
+            path.unlink(missing_ok=True)
+
+
+@contextmanager
+def temporary_ocr_workbook() -> Iterator[Path]:
+    """Own only the intermediate workbook consumed before this scope exits."""
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    root = Path(get_app_data_dir()) / "temp_excel"
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="elt_ocr_out_", dir=root) as directory:
+        yield Path(directory) / "ocr.xlsx"
 
 
 def grid_to_workbook_path(
@@ -112,7 +147,6 @@ def grid_to_workbook_path(
 ) -> Path:
     from openpyxl import Workbook
 
-    path = _workbook_output_path(output_path)
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -128,10 +162,7 @@ def grid_to_workbook_path(
         for col, value in enumerate(row, start=1):
             ws.cell(row_idx, col, value).data_type = "s"
         row_idx += 1
-    with elt_security.open_elt_output_file(path) as output_file:
-        wb.save(output_file)
-    wb.close()
-    return path
+    return _save_workbook(wb, output_path)
 
 
 def _table_sheet_name(sheet_name: str, index: int) -> str:
@@ -149,7 +180,6 @@ def tables_to_workbook_path(
     """Write each recognized table to its own sheet and keep merge ranges."""
     from openpyxl import Workbook
 
-    path = _workbook_output_path(output_path)
     base_name = sheet_name or "OCR"
     wb = Workbook()
     default_sheet = wb.active
@@ -179,10 +209,7 @@ def tables_to_workbook_path(
             )
     if not wb.worksheets:
         wb.create_sheet(base_name[:31])
-    with elt_security.open_elt_output_file(path) as output_file:
-        wb.save(output_file)
-    wb.close()
-    return path
+    return _save_workbook(wb, output_path)
 
 
 class OcrInputLimitError(ValueError):
@@ -565,7 +592,6 @@ def parse_ocr_document(
     from app.application.shipment_excel_elt_app_service import parse_delivery_notes
     from app.application.shipment_excel_elt_security import (
         ShipmentEltPathError,
-        resolve_elt_output_path,
         resolve_elt_path,
     )
 
@@ -579,35 +605,27 @@ def parse_ocr_document(
             "notes": [],
         }
 
-    from app.utils.path_io.path_utils import get_app_data_dir
-
-    temp_root = Path(get_app_data_dir()) / "temp_excel"
-    temp_root.mkdir(parents=True, exist_ok=True)
-    out_dir = Path(tempfile.mkdtemp(prefix="elt_ocr_out_", dir=temp_root))
-    try:
-        out_xlsx = resolve_elt_output_path(
-            out_dir / f"{src.stem}_ocr.xlsx",
-            workspace_root=workspace_root or out_dir,
+    with temporary_ocr_workbook() as out_xlsx:
+        ocr_result = ocr_source_to_workbook(src, output_path=out_xlsx)
+        if not ocr_result.get("success"):
+            return {**ocr_result, "notes": [], "ocr": ocr_result}
+        parsed = parse_delivery_notes(
+            ocr_result["file_path"],
+            include_ledger=include_ledger,
+            unit_name_hint=unit_name_hint or src.stem,
+            profile_id=profile_id,
+            allow_ocr=False,
         )
-    except ShipmentEltPathError:
-        out_xlsx = out_dir / f"{src.stem}_ocr.xlsx"
-
-    ocr_result = ocr_source_to_workbook(src, output_path=out_xlsx)
-    if not ocr_result.get("success"):
-        return {**ocr_result, "notes": [], "ocr": ocr_result}
-
-    parsed = parse_delivery_notes(
-        ocr_result["file_path"],
-        include_ledger=include_ledger,
-        unit_name_hint=unit_name_hint or src.stem,
-        profile_id=profile_id,
-        allow_ocr=False,
-    )
+    evidence = {key: value for key, value in ocr_result.items() if key != "file_path"}
+    evidence["message"] = "OCR 候选已读取，临时工作簿已清理"
     return {
         **parsed,
-        "ocr": ocr_result,
+        "file_path": str(src),
+        "file_name": src.name,
+        "ocr": evidence,
         "source_kind_input": "ocr",
         "source_path": str(src),
+        "source_sha256": ocr_result.get("source_sha256"),
         "message": f"OCR→解析：{parsed.get('message')}",
     }
 
@@ -615,6 +633,7 @@ def parse_ocr_document(
 __all__ = [
     "grid_to_workbook_path",
     "tables_to_workbook_path",
+    "temporary_ocr_workbook",
     "is_ocr_source",
     "ocr_source_to_workbook",
     "parse_ocr_document",

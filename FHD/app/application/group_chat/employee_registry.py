@@ -48,9 +48,102 @@ def _default_employee_executor(
             raise AgentModAuthorizationError("group actor mismatch")
     except AgentModAuthorizationError:
         return {"success": False, "error_code": "tool_identity_required"}
+    from app.application.employee_runtime.loader import candidate_pack_ids
+    from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
+
+    reader = next(
+        (name for name in candidate_pack_ids(employee_id) if name in EMPLOYEE_BY_SUFFIX.values()),
+        None,
+    )
+    if reader:
+        return _execute_admitted_group_reader(
+            reader, task, input_data, user_id, dict(runtime_context or {})
+        )
     return execute_employee_task_local(
         employee_id, task, input_data, user_id=user_id, runtime_context=runtime_context
     )
+
+
+def _execute_admitted_group_reader(
+    employee_id: str,
+    task: str,
+    input_data: dict[str, Any],
+    user_id: int,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    from app.application.admin_control.employee_run import EmployeeWork, execute_admitted_employee
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.unified_task import UnifiedTaskConflictError
+    from app.application.employee_runtime.executor import execute_employee_task_local
+
+    identity = {key: input_data.get(key) for key in ("group_id", "work_order_id")}
+    if any(not isinstance(value, str) or not value.strip() for value in identity.values()):
+        return {
+            "success": False,
+            "error_code": "task_identity_required",
+            "execution_state": "not_started",
+            "retryable": False,
+            "message": "群聊读取需要原群组和工单身份",
+        }
+    service = AgentOrchestrator()
+    context.update(identity)
+    work = EmployeeWork(
+        employee_id=employee_id,
+        task=task,
+        payload=dict(input_data),
+        user_id=user_id,
+        tenant_id=int(context["tenant_id"]),
+        session_id=str(context.get("session_id") or ""),
+        workspace_root=context.get("workspace_root"),
+        idempotency_key="ai_group_reader_" + canonical_hash([identity, employee_id]),
+        runtime_context=context,
+    )
+
+    def execute(admitted: EmployeeWork) -> dict[str, Any]:
+        original = service.get_run(str(admitted.runtime_context["run_id"]))
+        if original is None or len(original.steps) != 1 or len(original.tool_calls) != 1:
+            raise ValueError("群聊读取缺少原任务调用")
+        if original.status != "running":
+            return {"success": False, "execution_state": original.status, "retryable": False}
+        step, call = original.steps[0], original.tool_calls[0]
+        if (step.step_id, step.node_id, step.params) != (
+            call.step_id,
+            call.node_id,
+            call.params,
+        ):
+            raise ValueError("群聊读取原调用身份不一致")
+        runtime = {
+            **original.metadata["runtime_context"],
+            "run_id": original.run_id,
+            "agent_run_id": original.run_id,
+            "step_id": call.step_id,
+            "node_id": call.node_id,
+            "call_id": call.call_id,
+            "input_sha256": canonical_hash(call.params),
+        }
+        return execute_employee_task_local(
+            admitted.employee_id,
+            admitted.task,
+            admitted.payload,
+            user_id=admitted.user_id,
+            session_id=admitted.session_id,
+            workspace_root=admitted.workspace_root,
+            runtime_context=runtime,
+        )
+
+    try:
+        return execute_admitted_employee(
+            work, execute, orchestrator=service, source="ai_group_chat"
+        )
+    except UnifiedTaskConflictError:
+        return {
+            "success": False,
+            "error_code": "execution_idempotency_conflict",
+            "execution_state": "blocked",
+            "retryable": False,
+            "message": "原工单已绑定不同输入或授权范围，未再次读取。",
+        }
 
 
 def _xiaoc_assistant_member() -> dict[str, Any]:

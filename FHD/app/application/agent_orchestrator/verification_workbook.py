@@ -190,6 +190,7 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
     valid = (
         report.get("verdict") == "PASS"
         and checked.get("conformance") == checked.get("formulas") == "pass"
+        and conformance_stats.get("original_content_checked") is True
         and (not plan.get("protected_ranges") or checked.get("protection") == "pass")
         and (not native_count or conformance_stats.get("native_phases_checked") == native_count)
         # 旧版 QC 不检查样式/结构操作时不能静默放行已声明的计划。
@@ -216,6 +217,7 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
         template_sha256=original["sha256"],
         artifact_sha256=artifacts[0]["metadata"]["sha256"],
         sections=checked,
+        unapproved_cell_changes_verified=valid,
         formula_recalculation_verified=False,
         formula_evidence=formula_evidence,
     )

@@ -1,9 +1,9 @@
 {
   "id": "pdf-full-read-employee",
   "name": "PDF 全量读取员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
-  "description": "制作 PDF 全量读取员工包",
+  "description": "PDF 全量读取：原生文字写入 outputs/document_full.txt；内嵌图片本地导出至 outputs/images/，结构与来源写入 outputs/document_meta.json。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义描述标记 blocked，原生读取结果仍保留。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -14,8 +14,7 @@
     "label": "PDF 全量读取员",
     "capabilities": [
       "pdf.native_text",
-      "pdf.image_extract",
-      "vision.vlm"
+      "pdf.image_extract"
     ]
   },
   "workflow_employees": [
@@ -23,11 +22,10 @@
       "id": "pdf-full-read-employee",
       "label": "PDF 全量读取员",
       "panel_title": "PDF 全量读取员",
-      "panel_summary": "上传 .pdf，只读原生文字；图片分类存储并 VLM 描述。",
+      "panel_summary": "本地读取原生文字、表格和图片；图片语义描述需独立外发授权。",
       "capabilities": [
         "pdf.native_text",
-        "pdf.image_extract",
-        "vision.vlm"
+        "pdf.image_extract"
       ],
       "api_base_path": "employees/pdf-full-read-employee",
       "entry_action": "run"
@@ -40,10 +38,10 @@
   "employee_config_v2": {
     "identity": {
       "id": "pdf-full-read-employee",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "PDF 全量读取员",
-      "description": "制作 PDF 全量读取员工包"
+      "description": "PDF 全量读取：原生文字写入 outputs/document_full.txt；内嵌图片本地导出至 outputs/images/，结构与来源写入 outputs/document_meta.json。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义描述标记 blocked，原生读取结果仍保留。"
     },
     "perception": {
       "type": "file_or_text",
@@ -56,21 +54,21 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是PDF 生成员。你负责读取 PDF 原生文字并导出分类图片目录；正文禁止 LLM 编造；图片须走 VLM 描述（ctx.call_llm vision）。",
+        "system_prompt": "PDF 全量读取：原生文字写入 outputs/document_full.txt；内嵌图片本地导出至 outputs/images/，结构与来源写入 outputs/document_meta.json。读取不隐式调用模型；缺少逐文件内容外发授权时图片语义描述标记 blocked，原生读取结果仍保留。禁止编造原生正文，必须执行 direct_python 并保留未完成状态。",
         "role": {
           "name": "PDF 生成员",
           "persona": "严谨的 PDF 全量读取员工",
           "tone": "professional",
           "expertise": [
             "PDF 原生文字",
-            "图片分类",
-            "VLM 描述"
+            "本地图片提取",
+            "结构与来源"
           ]
         },
         "behavior_rules": [
-          "正文必须来自 PDF 原生文字层，禁止 LLM 编造。",
-          "图片须写入 outputs/images/<category>/ 并尽量生成 VLM sidecar。",
-          "成功必须以写出 document_full.txt 与 images_index.json 为准。"
+          "正文和已有备注必须来自原件，禁止编造。",
+          "图片只在本地导出；不能把 call_llm 可用、文档文字或文件读取权限视为内容外发授权。",
+          "未执行模型增强必须显式标记 blocked/partial，保留原生事实与实际产物。"
         ],
         "few_shot_examples": [],
         "model": {
@@ -84,7 +82,7 @@
       "skills": [
         {
           "name": "pdf.full_read",
-          "brief": "上传 pdf，原生文字 + 图片分类目录 + VLM sidecar。"
+          "brief": "原生文字、表格、图片与来源的本地读取；不隐式向模型发送内容。"
         }
       ]
     },

@@ -540,6 +540,9 @@ def _native_workbook_page(path: Path, args: Payload) -> Payload:
         offset=offset,
         limit=limit,
         expected_sha256=args.get("expected_sha256"),
+        value_match=args.get("value_match"),
+        style_id=args.get("style_id"),
+        cursor=args.get("cursor"),
     )
     return {"success": True, "action": "read", "file_path": str(path), **data, "data": data}
 
@@ -559,6 +562,10 @@ class ExcelAnalysis:
 
         file_path = str(args.get("file_path") or "")
         action = str(args.get("action") or "read")
+        if (args.get("value_match") is not None or args.get("style_id") is not None) and (
+            action != "read" or args.get("view") != "cells"
+        ):
+            return {"success": False, "error": "native_lookup_requires_cells_read"}
         sheet = args.get("sheet_name")
         raw_header = args.get("header_row")
         if raw_header is not None and (type(raw_header) is not int or raw_header < 0):

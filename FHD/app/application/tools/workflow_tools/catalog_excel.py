@@ -21,11 +21,11 @@ def excel_tool_specs() -> list[Payload]:
     return [
         tool_spec(
             "excel_analysis",
-            "分析 Excel 文件内容，支持读取、结构识别、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。不确定表头或列名时先用 action=structure 获取列名/类型/样例/日期列，再用 action=query 提自然语言问题。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。需要原生坐标、公式或隐藏表时，用 read 的 view=sheets 列举，再用 view=cells 和 sheet_name 读取稀疏原始单元格；分页必须绑定上页 source_sha256。",
+            "分析 Excel 文件内容，支持读取、结构识别、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。不确定表头或列名时先用 action=structure 获取列名/类型/样例/日期列，再用 action=query 提自然语言问题。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。需要原生坐标、公式或隐藏表时，用 read 的 view=sheets 列举，再用 view=cells 和 sheet_name 读取稀疏原始单元格；分页必须绑定上页 source_sha256。非Excel先read的pages/regions/tables/cells；选定table_id及expected_sha256后，view=table可read/query/aggregate/statistics，按原生坐标列c1、c2使用完整选中数据，不推断表头。非Excel续页须next_cursor，数值转换须column_types显式指定。",
             {
                 "file_path": {
                     "type": "string",
-                    "description": "当前账号的上传 ID/文件名，或同原任务已核验的工作簿产物 URI；宿主核对归属和原文件哈希后读取，不需要猜测本机路径。",
+                    "description": "当前账号的上传 ID/文件名，或同原任务已核验的文件产物 URI；宿主核对归属和原文件哈希后读取，不需要猜测本机路径。",
                 },
                 "sheet_name": {
                     "type": "string",
@@ -33,26 +33,164 @@ def excel_tool_specs() -> list[Payload]:
                 },
                 "view": {
                     "type": "string",
-                    "enum": ["table", "sheets", "cells"],
-                    "description": "read默认table保持原数据表；sheets分页列举所有工作表（含隐藏）；cells按原坐标分页读取统一原生事实，必须指定sheet_name。原生视图的max_rows为项目数。",
+                    "enum": ["table", "sheets", "cells", "pages", "regions", "tables"],
+                    "description": "read默认table保持Excel原数据表；sheets列举工作表；Excel cells必须指定sheet_name。非Excel的pages/regions/tables/cells从data.items回读原生事实；tables仅列元数据，选定table_id后view=table可读取坐标行或查询统计，items.values是派生值。Word没有渲染页，扫描PDF仍partial。",
                 },
                 "cell_range": {
                     "type": "string",
-                    "description": "view=cells可选原生A1范围（如B2:Z100）；稀疏空隙不物化，显式空值/样式空白仍保留。",
+                    "description": "Excel view=cells可选原生A1范围（如B2:Z100）；稀疏空隙不物化，显式空值/样式空白仍保留。非Excel使用page/table_id/fact_id定位。",
+                },
+                "value_match": {
+                    "type": "object",
+                    "required": ["value_type", "value_state", "value"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "value_type": {
+                            "enum": [
+                                "number",
+                                "duration_seconds",
+                                "boolean",
+                                "text",
+                                "rich_text",
+                                "formula",
+                                "error",
+                                "date",
+                                "datetime",
+                                "time",
+                                "null",
+                                "unknown",
+                            ]
+                        },
+                        "value_state": {"enum": ["present", "empty_string", "blank", "unknown"]},
+                        "value": {"type": ["string", "number", "boolean", "null"], "minLength": 0},
+                    },
+                    "oneOf": [
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["number", "duration_seconds"]},
+                                "value_state": {"enum": ["present"]},
+                                "value": {"type": "number"},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["boolean"]},
+                                "value_state": {"enum": ["present"]},
+                                "value": {"type": "boolean"},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {
+                                    "enum": [
+                                        "text",
+                                        "rich_text",
+                                        "formula",
+                                        "error",
+                                        "date",
+                                        "datetime",
+                                        "time",
+                                    ]
+                                },
+                                "value_state": {"enum": ["present"]},
+                                "value": {"type": "string", "minLength": 1, "maxLength": 16384},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {
+                                    "enum": [
+                                        "text",
+                                        "rich_text",
+                                        "formula",
+                                        "error",
+                                        "date",
+                                        "datetime",
+                                        "time",
+                                    ]
+                                },
+                                "value_state": {"enum": ["empty_string"]},
+                                "value": {"enum": [""]},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["null"]},
+                                "value_state": {"enum": ["blank"]},
+                                "value": {"enum": [None]},
+                            }
+                        },
+                        {
+                            "properties": {
+                                "value_type": {"enum": ["unknown", "formula"]},
+                                "value_state": {"enum": ["unknown"]},
+                                "value": {"enum": [None]},
+                            }
+                        },
+                    ],
+                    "description": "仅Excel read/view=cells：按原生value_type/value_state/value精确定位，必须同时指定sheet_name与expected_sha256；可与style_id及cell_range取交集。number的1和1.0相等，boolean与number严格区分；空字符串、显式blank和unknown不混合。formula匹配原公式，不能用缓存值代替。查询JSON最多16KiB，返回完整原单元格供精确回读。",
+                },
+                "style_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "仅Excel read/view=cells：精确匹配先前原单元格的style_id，必须绑定同一原件expected_sha256与sheet_name。样式ID只在该原件中解释；可与value_match及cell_range取交集。",
                 },
                 "expected_sha256": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$",
                     "description": "原生事实分页延续时必须传前页source_sha256；源文件变化则拒绝拼接旧页。它不是授权凭据，每次仍校验原账号文件权限。",
                 },
+                "cursor": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "description": "非Excel续页，以及Excel值/样式过滤续页，必须原样携带data.next_cursor及expected_sha256；Excel过滤续页还须next_offset。游标绑定解析版本、当前权限和完整筛选条件，不能跨账号、源版本或过滤条件复用。",
+                },
+                "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "非Excel原生页号（从1开始）；只适用于具有实际页或幻灯片的格式。",
+                },
+                "table_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "非Excel使用先前tables返回的稳定table_id，必须同时传expected_sha256；view=cells读取原事实，view=table按坐标读取/查询/统计整个选中表。",
+                },
+                "fact_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "非Excel精确读取先前返回的page_id/region_id/table_id/cell_id，必须同时传expected_sha256，保持原view。",
+                },
+                "row_range": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+                    "description": "非Excel选中table_id后的原生行号闭区间[start,end]，CSV/TSV按逻辑record号；不会隐式删除首行，请显式排除表头。",
+                },
+                "native_columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1000,
+                    "uniqueItems": True,
+                    "items": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+                    "description": "非Excel选中表的原生列号（从1开始），顺序即派生表列顺序；查询列名为c<原列号>。",
+                },
+                "column_types": {
+                    "type": "object",
+                    "maxProperties": 1000,
+                    "propertyNames": {"pattern": "^c[1-9][0-9]{0,9}$"},
+                    "additionalProperties": {"enum": ["number"]},
+                    "description": "非Excel view=table的显式严格数值转换，如{c2:number}；非法/空字符串/布尔/非有限数和转换精度损失均拒绝，不静默改值或置空。未指定列保留原值。",
+                },
                 "header_row": EXCEL_HEADER_ROW,
                 "offset": {
                     "type": "integer",
-                    "description": "分页起始数据行（从 0 开始，默认 0）。上一次结果 has_more=true 时，传 next_offset 继续读取。",
+                    "description": "分页起始项目（从0开始，默认0）。上一次结果has_more=true时传next_offset；非Excel续页同时传next_cursor与expected_sha256。",
                 },
                 "max_rows": {
                     "type": "integer",
-                    "description": "本次最多返回的数据行数（默认 1000，服务端可配置上限），不要一次性拉全表。",
+                    "description": "本次最多返回的数据行数（默认1000，Excel服务端可配置上限）；非Excel原生视图最多1000个项目且受响应字节预算限制。",
                 },
                 "action": {
                     "type": "string",

@@ -1,4 +1,4 @@
-"""employee_runtime 本地 loader / executor / registry 集成。"""
+"""本地 pack/内存机制直测 EmployeeAgent；宿主授权回执另由 reader handoff 回归验证。"""
 
 from __future__ import annotations
 
@@ -150,12 +150,11 @@ def test_employee_override_trust(
     assert selected == (bundled_pack if use_bundle else user_pack).resolve()
     assert verify_direct_python_pack_trust(selected)[0] is trusted
     assert user_pack.is_dir()
-    from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.agent import EmployeeAgent
 
     csv_file = tmp_path / "sample.csv"
     csv_file.write_text("a,b\n1,2\n", encoding="utf-8")
-    result = execute_employee_task_local(
-        "csv-full-read-employee",
+    result = EmployeeAgent("csv-full-read-employee").run(
         "读取 CSV",
         {"file_path": str(csv_file)},
         workspace_root=str(tmp_path),
@@ -190,7 +189,7 @@ def test_execution_memory_uses_trusted_runtime_provenance(
     employee_mods_root, tmp_path, monkeypatch, ambient_tenant, declared_actor, expected_memories
 ):
     from app.application import user_memory_vector_app_service as memory_service
-    from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.agent import EmployeeAgent
     from app.application.employee_runtime.memory import EmployeeMemoryManager
     from app.domain.employee.memory_scope import MemoryScope
     from app.infrastructure.mods.package import compute_directory_hash
@@ -218,8 +217,7 @@ def test_execution_memory_uses_trusted_runtime_provenance(
     monkeypatch.setattr(memory_service, "get_user_memory_vector_ingest_app_service", lambda: ingest)
 
     with tenant_scope(ambient_tenant):
-        result = execute_employee_task_local(
-            pack_id,
+        result = EmployeeAgent(pack_id).run(
             "读取 CSV",
             {"file_path": str(source), "tenant_id": 2, "user_id": 42, "run_id": "untrusted-input"},
             user_id=41,
@@ -244,10 +242,9 @@ def test_untrusted_writable_employee_python_is_blocked(employee_mods_root, tmp_p
     _write_csv_read_pack(employee_mods_root, pack_id)
     csv_file = tmp_path / "sample.csv"
     csv_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
-    from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.agent import EmployeeAgent
 
-    result = execute_employee_task_local(
-        pack_id,
+    result = EmployeeAgent(pack_id).run(
         "读取 CSV",
         {"file_path": str(csv_file)},
         workspace_root=str(tmp_path),

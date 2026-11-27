@@ -389,6 +389,47 @@ def test_router_keeps_plain_text_but_never_calls_it_complete_structure(tmp_path,
     assert "document_facts" not in metadata
 
 
+@pytest.mark.parametrize(
+    "suffix,backend",
+    [(".docx", "docx"), (".pptx", "pptx"), (".pdf", "pdfplumber"), (".html", "lxml")],
+)
+def test_each_native_format_marks_missing_backend_as_blocked(
+    tmp_path, monkeypatch, suffix, backend
+):
+    """An available text lane cannot qualify a missing native structure backend."""
+    source = tmp_path / f"document{suffix}"
+    if suffix == ".docx":
+        doc = Document()
+        doc.add_table(rows=1, cols=1).cell(0, 0).text = "native value"
+        doc.save(source)
+    elif suffix == ".pptx":
+        presentation = Presentation()
+        slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+        slide.shapes.add_table(1, 1, 0, 0, Inches(2), Inches(1)).table.cell(
+            0, 0
+        ).text = "native value"
+        presentation.save(source)
+    elif suffix == ".pdf":
+        canvas = Canvas(str(source))
+        canvas.drawString(20, 40, "native value")
+        canvas.save()
+    else:
+        source.write_text("<table><tr><td>native value</td></tr></table>")
+    original = source.read_bytes()
+    assert native.read_native_document(source)["status"] == "complete"
+    monkeypatch.setenv("XCAGI_DOC_PARSER", "auto")
+    monkeypatch.setattr(router, "docling_available", lambda: False)
+    monkeypatch.setitem(sys.modules, backend, None)
+    text, parser, metadata = router.parse_document(
+        source, lambda: ("retained text", "independent-text-lane", {})
+    )
+    assert (text, parser) == ("retained text", "independent-text-lane")
+    assert metadata["structure_status"] == "blocked"
+    assert "document_facts" not in metadata
+    assert "ModuleNotFoundError" in metadata["structure_error"]
+    assert source.read_bytes() == original
+
+
 @pytest.mark.parametrize("suffix", [".docx", ".pptx"])
 def test_unsafe_office_package_is_rejected_before_legacy_parser(tmp_path, monkeypatch, suffix):
     path = tmp_path / f"bad{suffix}"

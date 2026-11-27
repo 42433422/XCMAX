@@ -19,6 +19,7 @@ from typing import Any
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
 from app.application.elt.table_structure_candidates import (
     iter_structure_candidates,
+    summarize_structure_candidates,
     validate_candidate_selection,
     worksheet_native_regions,
 )
@@ -122,6 +123,7 @@ class SheetSegmentation:
     row_roles: list[dict[str, Any]]
     source_positions: frozenset[tuple[int, int]]
     native_regions: tuple[tuple[Merge, str, str], ...] = ()
+    geometry_regions: tuple[tuple[Merge, str, str], ...] = ()
 
     def groups(self) -> dict[str, list[SegmentedTable]]:
         result: dict[str, list[SegmentedTable]] = {}
@@ -155,6 +157,7 @@ class SheetSegmentation:
             "sheet": self.sheet,
             "tables": [table.public() for table in self.tables],
             "structure_status": "fallback",
+            **summarize_structure_candidates(iter_structure_candidates(self)),
             "coverage": self.coverage(),
             "excluded_rows": [item for item in self.row_roles if item["role"] in EXCLUDED_ROLES],
         }
@@ -913,9 +916,12 @@ def segment_sheet(
     merges: list[Merge],
     *,
     native_regions: tuple[tuple[Merge, str, str], ...] = (),
+    geometry_regions: tuple[tuple[Merge, str, str], ...] = (),
 ) -> SheetSegmentation:
     """Segment one sheet; legacy table roles remain fallback interpretations."""
-    return _Segmenter(_Sheet(cells, merges), sheet_name, native_regions).run()
+    result = _Segmenter(_Sheet(cells, merges), sheet_name, native_regions).run()
+    result.geometry_regions = geometry_regions
+    return result
 
 
 def worksheet_grid(worksheet: Any) -> tuple[Grid, list[Merge]]:
