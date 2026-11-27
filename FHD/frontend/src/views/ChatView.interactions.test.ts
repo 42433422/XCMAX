@@ -4,6 +4,7 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
+import Sender from 'vue-element-plus-x/es/Sender/index.js'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
@@ -340,20 +341,15 @@ const ChatHistoryModalStub = defineComponent({
 const ChatInputToolbarStub = defineComponent({
   name: 'ChatInputToolbar',
   props: {
-    proactiveSuggestionsEnabled: { type: Boolean, default: false },
-    ttsEnabled: { type: Boolean, default: false },
     attachmentUploading: { type: Boolean, default: false },
     multimodalPendingCount: { type: Number, default: 0 },
     officeDockingProcessing: { type: Boolean, default: false },
   },
-  emits: ['new-conversation', 'trigger-office-docking', 'attachment-file-change', 'proactive-suggestions-change', 'toggle-tts'],
+  emits: ['trigger-office-docking', 'attachment-file-change'],
   setup(_props, { emit }) {
     return () => h('div', { class: 'input-toolbar' }, [
-      button('stub-new-conversation', '新对话', () => emit('new-conversation')),
       button('stub-office-docking', '办公对接', () => emit('trigger-office-docking')),
       button('stub-excel-change', '上传 Excel', () => emit('attachment-file-change', { target: { files: [] } })),
-      button('stub-proactive-toggle', '主动意识', () => emit('proactive-suggestions-change', true)),
-      button('stub-tts-toggle', '朗读', () => emit('toggle-tts', true)),
     ])
   },
 })
@@ -831,7 +827,7 @@ describe('ChatView interactions', () => {
     expect(voiceUi.stopVoiceRecording).toHaveBeenCalledWith(false)
     await button.trigger('touchcancel')
     expect(voiceUi.stopVoiceRecording).toHaveBeenCalledWith(true)
-    expect(wrapper.get('.voice-input-btn').text()).toContain('语音')
+    expect(wrapper.get('.voice-input-btn').attributes('aria-label')).toContain('语音')
   })
 
   it('侧边栏切换视图与打开发货记录派发全局事件', async () => {
@@ -871,13 +867,13 @@ describe('ChatView interactions', () => {
     expect(showHistoryRef.value).toBe(false)
   })
 
-  it('拖入支持的表格文件进入统一上传入口', async () => {
+  it.each(['发货明细.xlsx', '对账单.docx'])('拖入 %s 进入统一上传入口', async (filename) => {
     const wrapper = await mountChatView()
-    const file = new File(['a'], '发货明细.xlsx')
+    const file = new File(['a'], filename)
     await dropFiles(wrapper, { items: [], files: [file] })
     expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledTimes(1)
     const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
-    expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx'])
+    expect(event.target.files.map((item: File) => item.name)).toEqual([filename])
     expect(event.target.value).toBe('')
   })
 
@@ -886,7 +882,7 @@ describe('ChatView interactions', () => {
     await dropFiles(wrapper, { items: [], files: [new File(['a'], 'setup.exe')] })
     expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
     expect(mockChatViewApi.addAndSaveMessage).toHaveBeenCalledWith(
-      '[附件] 不支持的文件类型，请拖入 Excel、图片、PDF 或包含它们的文件夹', 'ai')
+      '[附件] 不支持的文件类型，请拖入 Excel、Word（.docx）、图片、PDF 或包含它们的文件夹', 'ai')
   })
 
   it('拖入文件夹时递归收集受支持文件', async () => {
@@ -1023,24 +1019,23 @@ describe('ChatView interactions', () => {
     expect(wrapper.get('.sheet-link-bar .sheet-link-btn').classes()).toContain('active')
   })
 
-  it('工具栏按钮触发新对话、办公对接、上传与朗读开关', async () => {
+  it('附件操作保持独立，语音播报图标反映状态并切换播报', async () => {
     const wrapper = await mountChatView()
-    await wrapper.get('.stub-new-conversation').trigger('click')
     await wrapper.get('.stub-office-docking').trigger('click')
     await wrapper.get('.stub-excel-change').trigger('click')
-    await wrapper.get('.stub-tts-toggle').trigger('click')
-    expect(mockChatViewApi.newConversation).toHaveBeenCalled()
+    const toggle = wrapper.get('.chat-speech-controls button')
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+    expect(toggle.get('i').classes()).toContain('speech-icon--muted')
+    await toggle.trigger('click')
+    expect(mockChatViewApi.setTtsEnabled).toHaveBeenCalledWith(true)
+    ttsEnabledRef.value = true
+    await wrapper.vm.$nextTick()
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    expect(toggle.get('i').classes()).not.toContain('speech-icon--muted')
+    await toggle.trigger('click')
+    expect(mockChatViewApi.setTtsEnabled).toHaveBeenCalledWith(false)
     expect(officeDocking.triggerOfficeDocking).toHaveBeenCalled()
     expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledWith({ target: { files: [] } })
-    expect(mockChatViewApi.setTtsEnabled).toHaveBeenCalledWith(true)
-  })
-
-  it('主动意识开关写入本地偏好', async () => {
-    const wrapper = await mountChatView()
-    await wrapper.get('.stub-proactive-toggle').trigger('click')
-    expect(localStorage.getItem('xcagi_proactive_suggestions')).toBe('1')
-    const toolbar = wrapper.findComponent({ name: 'ChatInputToolbar' })
-    expect(toolbar.props('proactiveSuggestionsEnabled')).toBe(true)
   })
 
   it('办公文件复核面板可切换入库目标、选择模板、提交与关闭', async () => {
@@ -1119,14 +1114,14 @@ describe('ChatView interactions', () => {
     isLoadingRef.value = true
     const wrapper = await mountChatView()
     expect(wrapper.get('#chat-composer-status').text()).toContain('可停止回复或发送纠正')
-    expect(wrapper.get('#sendMessageBtn').text()).toBe('发送纠正')
+    expect(wrapper.get('#sendMessageBtn').attributes('aria-label')).toBe('发送纠正')
     await wrapper.get('[data-testid="stop-reply"]').trigger('click')
     expect(mockChatViewApi.stopReply).toHaveBeenCalled()
   })
 
   it('拖动任务面板分隔条与重置会走布局逻辑', async () => {
     const wrapper = await mountChatView()
-    expect(wrapper.get('.chat-container').attributes('style')).toContain('--chat-right-pane-width')
+    expect(wrapper.get('#view-chat').attributes('style')).toContain('--chat-right-pane-width')
     await wrapper.get('.stub-resize-start').trigger('click')
     await wrapper.get('.stub-resize-reset').trigger('click')
     expect(wrapper.get('.chat-pane-handle-slot').exists()).toBe(true)
@@ -1234,11 +1229,11 @@ describe('ChatView interactions', () => {
     expect((wrapper.vm as any).messageInput).toBe('候选词已确认')
   })
 
-  it('回车发送与输入内容联动', async () => {
+  it('Sender 提交与输入内容联动', async () => {
     const wrapper = await mountChatView()
     await wrapper.get('#messageInput').setValue('补发这批订单')
     expect(wrapper.get('#sendMessageBtn').attributes('disabled')).toBeUndefined()
-    await wrapper.get('#messageInput').trigger('keydown', { key: 'Enter', shiftKey: false })
+    wrapper.getComponent(Sender).vm.$emit('submit')
     await flushPromises()
     expect(mockChatViewApi.sendMessage).toHaveBeenCalledWith('补发这批订单')
     expect((wrapper.vm as any).messageInput).toBe('')

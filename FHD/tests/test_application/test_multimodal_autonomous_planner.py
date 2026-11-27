@@ -52,6 +52,7 @@ def signed_actor(tmp_path):
 )
 def test_owned_multimodal_xiaox_goals_preserve_effects_and_approval(tmp_path, task_id):
     from app.domain.task_lifecycle.agent_runtime_contract import validate_goal_contract
+    from app.domain.task_lifecycle.goal_review_models import GoalReview
     from evals.run_agent_eval import load_tasks, run_eval
 
     task = next(task for task in load_tasks() if task["id"] == task_id)
@@ -85,7 +86,18 @@ def test_owned_multimodal_xiaox_goals_preserve_effects_and_approval(tmp_path, ta
         assert events.index("step.approved") < events.index("tool.started")
     if task["attachment_kind"] != "excel":
         report = run["metadata"]["runtime_goal_verification"]
-        assert report["accepted"] is True and report["status"] == "verified"
+        if task["attachment_kind"] == "image":
+            assert source["preview"]["coverage"]["method"] == "ocr_unverified"
+            assert run["status"] == "blocked"
+            assert report["accepted"] is False and report["status"] == "needs_work"
+            assert report["error_code"] == "goal_verification_required"
+            assert all(attempt["state"] == "reviewed" for attempt in report["attempts"])
+            assert report["review"]["feedback_disposition"] == "blocking"
+            assert report["review"]["goals"][0]["status"] == "unmet"
+            assert report["review"]["goals"][0]["file_basis"] == "passages"
+            assert report["review"]["goals"][0]["file_citations"] == []
+        else:
+            assert report["accepted"] is True and report["status"] == "verified"
         assert report["goal_digest"] == contract["digest"]
         expected_review = copy.deepcopy(task["runtime_review"])
         for goal in expected_review["goals"]:
@@ -95,7 +107,7 @@ def test_owned_multimodal_xiaox_goals_preserve_effects_and_approval(tmp_path, ta
                 if goal["kind"] == "reply"
                 else [children[index]["run_id"] for index in indexes]
             )
-        assert report["review"] == expected_review
+        assert report["review"] == GoalReview.model_validate(expected_review).model_dump()
     if task["attachment_kind"] == "excel":
         # This owned-upload fixture tests dispatch, not a real product repository.
         assert run["status"] == "blocked"
@@ -347,11 +359,12 @@ def test_owned_attachment_requires_original_goal_review_after_approved_effect(
     assert run["metadata"]["runtime_goal_contract"]["request"]["text"] == task["message"]
     report = run["metadata"]["runtime_goal_verification"]
     assert report["accepted"] is False
-    assert report["status"] == ("unavailable" if invalid_review == "missing" else "needs_work")
+    # A foreign goal is invalid provenance, not a valid request to compensate.
+    assert report["status"] == "unavailable"
     assert report["error_code"] == (
         "goal_verification_format_invalid"
         if invalid_review == "missing"
-        else "goal_verification_required"
+        else "goal_verification_invalid_gap"
     )
     # The approved effect remains real and independently verified. Missing or
     # unrelated goal review neither completes the parent nor replays that write.
@@ -401,11 +414,12 @@ def reviewed_document_goal(tmp_path_factory):
 def test_attachment_review_fixture_is_bound_to_real_request_and_receipts(
     reviewed_document_goal, mutation
 ):
+    from app.domain.task_lifecycle.goal_review_models import GoalReview
     from evals.owned_attachment_eval import _scripted_model_response
 
     task, prompt, review = copy.deepcopy(reviewed_document_goal)
     accepted = _scripted_model_response(task, prompt)
-    assert accepted == review
+    assert GoalReview.model_validate(accepted).model_dump() == review
     if mutation == "source":
         prompt["original_request"]["text"] = "删除所有客户"
     elif mutation == "response":

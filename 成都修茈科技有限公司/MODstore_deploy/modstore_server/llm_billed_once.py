@@ -154,13 +154,17 @@ async def _execute_billed_chat(
         if billing_row is not None
         else JavaWalletClient(request=request)
     )
-    journaled = billing_row is not None and not is_byok and wallet.enabled
+    # Provider billing can be uncertain even when the platform wallet is not
+    # involved. Use the same request ownership as the streaming/Responses path.
+    journaled = billing_row is not None
     auth = authorization_header(request)
     upstream_messages = model_runtime_messages(route, messages, max_tokens)
     if is_byok:
         if getattr(request.state, "llm_pat_user_id", None) is not None:
             wallet.validate_pat(authorization_header(request))
         hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
+        if journaled:
+            ledger.mark_settling(db, billing_row)
     else:
         preauth_amount = estimate_preauthorization(
             db, provider, model, upstream_messages, max_tokens
@@ -201,6 +205,7 @@ async def _execute_billed_chat(
             raise
     charge = Decimal("0")
     upstream_started = False
+    definite_rejection = False
     settlement_started = False
     try:
         remaining_percent = await personal_provider_quota(route)
@@ -224,6 +229,7 @@ async def _execute_billed_chat(
                 status_code = int(status) if status is not None else None
             except (TypeError, ValueError):
                 status_code = None
+            definite_rejection = status_code in {400, 401, 402, 403, 404, 422, 429}
             save_failure_log(
                 db,
                 user_id=user.id,
@@ -232,11 +238,7 @@ async def _execute_billed_chat(
                 error=str(error),
                 hold_no=hold.hold_no,
             )
-            if (
-                journaled
-                and billing_row is not None
-                and status_code in {400, 401, 403, 404, 422, 429}
-            ):
+            if journaled and billing_row is not None and definite_rejection:
                 await wallet.release(auth, hold, "model provider rejected request", request_id)
                 ledger.confirmed_no_charge(db, billing_row)
             raise HTTPException(status_code or 502, str(error))
@@ -311,7 +313,13 @@ async def _execute_billed_chat(
         if (
             settlement_started
             or journaled
-            or (upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None)
+            or (
+                upstream_started
+                and (
+                    not definite_rejection
+                    or getattr(request.state, "llm_pat_user_id", None) is not None
+                )
+            )
         ):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
@@ -322,6 +330,7 @@ async def _execute_billed_chat(
                 409,
                 {
                     "message": "模型请求已发送，计费状态待核对",
+                    "error": str(exc.detail),
                     "request_id": request_id,
                     "hold_no": hold.hold_no,
                 },
@@ -347,11 +356,7 @@ async def _execute_billed_chat(
                 )
                 if recovered is not None:
                     return recovered
-        if (
-            settlement_started
-            or journaled
-            or (upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None)
-        ):
+        if settlement_started or journaled or (upstream_started and not definite_rejection):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
                 request_id,

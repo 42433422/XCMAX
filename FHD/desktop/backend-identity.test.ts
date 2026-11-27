@@ -416,6 +416,10 @@ describe('packaged backend build identity resource handoff', () => {
     const env = desktopBackendEnv({}, path.join(root, 'FHD'))
     expect(env.XCAGI_DESKTOP_RESOURCES).toBeUndefined()
     expect(env.XCAGI_MODS_ROOT).toBe(path.join(root, 'FHD', 'mods'))
+    const sourcePaths = env.PYTHONPATH!.split(path.delimiter)
+    expect(sourcePaths[0]).toBe(path.join(root, 'FHD'))
+    expect(sourcePaths[1]).toBe(path.join(root, 'FHD', 'packages', 'xcagi_langgraph_core'))
+    expect(sourcePaths).toContain(path.join(root, 'FHD', 'packages', 'xcagi_langgraph_checkpoint_backends', 'checkpoint-sqlite'))
   })
 
   it('hands Resources to the actual packaged normal startup spawn', async () => {

@@ -2,18 +2,13 @@ import { computed } from 'vue';
 import type { Ref } from 'vue';
 import type { MarketAccountOverviewData, MarketLlmCatalogData, MarketLlmProvider } from '@/api/marketAccount';
 
-/** 模型目录展示逻辑（拆分自 ModelPaymentView.vue，逻辑不变） */
-
-export type CatalogModelRow = {
+type CatalogModelRow = {
   provider: string;
   id: string;
-  category: string;
   runtime_selectable?: boolean;
   chat_compatible?: boolean;
   priceText?: string;
 };
-
-export const CATEGORY_ORDER = ['llm', 'vlm', 'image', 'video', 'audio', 'embedding', 'rerank', 'other'];
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   llm: '语言大模型 (LLM)',
@@ -26,7 +21,7 @@ const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   other: '其他',
 };
 
-export function formatModelPrice(pricing: Record<string, unknown> | undefined): string {
+function formatModelPrice(pricing: Record<string, unknown> | undefined): string {
   if (!pricing || typeof pricing !== 'object') return '';
   const inn = pricing.input_per_1k ?? pricing.input_price_per_1k ?? pricing.in;
   const out = pricing.output_per_1k ?? pricing.output_price_per_1k ?? pricing.out;
@@ -50,36 +45,13 @@ export function formatInteger(value: unknown): string {
 }
 
 export function providersFromOverview(data: MarketAccountOverviewData | null): MarketLlmProvider[] {
-  const raw = (data as any)?.llm?.providers;
+  const raw = data?.llm?.providers;
   if (!Array.isArray(raw)) return [];
   return raw.filter((p) => p && p.provider);
 }
 
-export function providerModelCount(provider: MarketLlmProvider): number {
-  if (Array.isArray(provider.models_detailed) && provider.models_detailed.length) {
-    return provider.models_detailed.length;
-  }
-  return Array.isArray(provider.models) ? provider.models.length : 0;
-}
-
-export function providerInitials(provider: MarketLlmProvider): string {
-  const label = (provider.label || provider.provider || '').trim();
-  if (!label) return '?';
-  const parts = label.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return label.slice(0, 2).toUpperCase();
-}
-
-export function providerState(provider: MarketLlmProvider): 'ok' | 'warn' {
-  return provider.error ? 'warn' : 'ok';
-}
-
 export function useMpCatalog(llmCatalog: Ref<MarketLlmCatalogData | null>) {
-  const llmProviders = computed<MarketLlmProvider[]>(() => (
-    (llmCatalog.value?.providers || [])
-      .filter((p) => p && p.provider)
-      .sort((a, b) => providerModelCount(b) - providerModelCount(a))
-  ));
+  const llmProviders = computed(() => (llmCatalog.value?.providers || []).filter(row => row?.provider));
 
   const modelsByCategory = computed(() => {
     const labels = {
@@ -88,46 +60,22 @@ export function useMpCatalog(llmCatalog: Ref<MarketLlmCatalogData | null>) {
     };
     const buckets = new Map<string, CatalogModelRow[]>();
     for (const provider of llmProviders.value) {
-      const detailed = Array.isArray(provider.models_detailed) ? provider.models_detailed : [];
-      if (detailed.length) {
-        for (const row of detailed) {
-          if (!row || typeof row !== 'object') continue;
-          const id = String((row as Record<string, unknown>).id || '').trim();
-          if (!id) continue;
-          const category = String((row as Record<string, unknown>).category || 'other').toLowerCase();
-          const pricing = (row as Record<string, unknown>).pricing;
-          const list = buckets.get(category) || [];
-          list.push({
-            provider: provider.provider,
-            id,
-            category,
-            runtime_selectable: Boolean((row as Record<string, unknown>).runtime_selectable),
-            chat_compatible: category === 'llm' || category === 'vlm',
-            priceText: formatModelPrice(
-              pricing && typeof pricing === 'object'
-                ? (pricing as Record<string, unknown>)
-                : undefined,
-            ),
-          });
-          buckets.set(category, list);
-        }
-        continue;
-      }
-      // 无 detailed 时退化为 models 列表，归入 llm
-      for (const mid of provider.models || []) {
-        const id = String(mid || '').trim();
+      const rows: Array<Record<string, unknown>> = provider.models_detailed?.length
+        ? provider.models_detailed
+        : (provider.models || []).map(id => ({ id, category: 'llm' }));
+      for (const row of rows) {
+        const id = String(row?.id || '').trim();
         if (!id) continue;
-        const list = buckets.get('llm') || [];
-        list.push({
-          provider: provider.provider,
-          id,
-          category: 'llm',
-          chat_compatible: true,
+        const category = String(row.category || 'other').toLowerCase();
+        const list = buckets.get(category) || [];
+        list.push({ provider: provider.provider, id, runtime_selectable: row.runtime_selectable === true,
+          chat_compatible: category === 'llm' || category === 'vlm',
+          priceText: formatModelPrice(row.pricing as Record<string, unknown> | undefined),
         });
-        buckets.set('llm', list);
+        buckets.set(category, list);
       }
     }
-    return CATEGORY_ORDER
+    return Object.keys(DEFAULT_CATEGORY_LABELS)
       .filter((c) => (buckets.get(c) || []).length > 0)
       .map((category) => ({
         category,
@@ -136,12 +84,5 @@ export function useMpCatalog(llmCatalog: Ref<MarketLlmCatalogData | null>) {
       }));
   });
 
-  const catalogCategorySummary = computed(() => {
-    if (!modelsByCategory.value.length) return '';
-    return modelsByCategory.value
-      .map((b) => `${b.label.split(' ')[0]}${b.models.length}`)
-      .join(' · ');
-  });
-
-  return { llmProviders, modelsByCategory, catalogCategorySummary };
+  return { llmProviders, modelsByCategory };
 }

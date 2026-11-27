@@ -1,4 +1,6 @@
 import multiprocessing
+import threading
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
@@ -14,6 +16,78 @@ from app.application.agent_orchestrator.worker_repository import (
     WorkerLeaseLost,
 )
 from app.db.models.agent import AgentTaskExecutionRecord
+
+
+def test_late_worker_cleanup_keeps_replacement_heartbeat(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import task_dispatcher
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'dispatcher-takeover.db'}")
+    factory = sessionmaker(bind=engine)
+    runs = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    run = AgentRun(user_id="owner", message="overlapping worker generations")
+    runs.save(run)
+    queue.enqueue(run)
+    entered = [threading.Event(), threading.Event()]
+    release = [threading.Event(), threading.Event()]
+
+    def orchestrator(repository):
+        generation = repository._execution.execution_count - 1
+
+        def execute(run_id, **_kwargs):
+            entered[generation].set()
+            assert release[generation].wait(10)
+            result = repository.get(run_id)
+            result.status = "paused"
+            repository.save(result)
+            return result
+
+        return SimpleNamespace(execute_dispatched_run=execute)
+
+    dispatcher = task_dispatcher.AgentTaskDispatcher(
+        run_repository=runs,
+        execution_repository=queue,
+        max_workers=2,
+        orchestrator_factory=orchestrator,
+        lease_seconds=60,
+        heartbeat_seconds=20,
+    )
+    monkeypatch.setattr(dispatcher, "_recover_outcomes", lambda: None)
+    monkeypatch.setattr(
+        task_dispatcher, "uuid", SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="same-owner"))
+    )
+    try:
+        dispatcher._dispatch_available()
+        assert entered[0].wait(5)
+        first = dispatcher._active[run.run_id]
+        with factory.begin() as db:
+            db.query(AgentTaskExecutionRecord).filter_by(run_id=run.run_id).update(
+                {"lease_expires_at": "2000-01-01T00:00:00+00:00"}
+            )
+        dispatcher._dispatch_available()
+        assert entered[1].wait(5)
+        second = dispatcher._active[run.run_id]
+        assert first.owner_id == second.owner_id
+        assert second.execution.execution_count == first.execution.execution_count + 1
+        release[0].set()
+        first.thread.join(5)
+        assert not first.thread.is_alive()
+        assert dispatcher._active[run.run_id] is second
+        second.last_heartbeat = float("-inf")
+        previous = queue.get(run.run_id).heartbeat_at
+        dispatcher._prune_and_heartbeat()
+        assert queue.get(run.run_id).heartbeat_at > previous
+        assert queue.get(run.run_id).execution_count == second.execution.execution_count
+        release[1].set()
+        second.thread.join(5)
+        assert not second.thread.is_alive()
+        assert dispatcher.snapshot()["active_count"] == 0
+        assert runs.get(run.run_id).status == queue.get(run.run_id).state == "paused"
+    finally:
+        for event in release:
+            event.set()
+        dispatcher.stop(timeout=2)
+        engine.dispose()
 
 
 def _delayed_worker_save(url, ready, resume, result):
@@ -109,6 +183,8 @@ def test_expired_and_replaced_workers_cannot_overwrite_run(tmp_path):
         with pytest.raises(WorkerLeaseLost):
             old.save(run)
         assert runs.get(run.run_id).status == "paused"
+        with pytest.raises(WorkerLeaseLost):
+            old.save_if_unchanged(run, newest)
         with pytest.raises(WorkerLeaseLost, match="another run"):
             fresh.save(AgentRun(user_id="owner", message="unrelated"))
         assert len(runs.list_recent()) == 1

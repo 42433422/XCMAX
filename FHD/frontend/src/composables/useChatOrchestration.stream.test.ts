@@ -24,7 +24,7 @@ const {
   attachApprovalCardToLastAiMessage,
   attachBusinessResultToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
-  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, listEvents, continueRun, cancelRun, streamMode, modState,
+  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, listTasks, listEvents, continueRun, cancelRun, streamMode, modState,
   approvalGetMyRequests, approvalApprove,
 } = vi.hoisted(() => ({
   applyPlainTextToMessageIndex: vi.fn(),
@@ -43,13 +43,15 @@ const {
   attachAgentRunTraceToLastAiMessage: vi.fn(),
   queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
-  getRun: vi.fn(), listEvents: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
+  getRun: vi.fn(), listTasks: vi.fn(), listEvents: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
   approvalGetMyRequests: vi.fn(), approvalApprove: vi.fn(),
 }))
 
-vi.mock('./useChatMessages', async () => {
+vi.mock('./useChatMessages', async importOriginal => {
   const { ref } = await import('vue')
+  const { chatMessageExtrasFromServerRow } = await importOriginal<typeof import('./useChatMessages')>()
   return {
+    chatMessageExtrasFromServerRow,
     useChatMessages: () => ({
       messages: ref([]),
       addMessage,
@@ -58,6 +60,7 @@ vi.mock('./useChatMessages', async () => {
       pushStreamingAiShell,
       applyPlainTextToMessageIndex,
       clearMessages: vi.fn(),
+      flushMessagesCache: vi.fn(),
       loadMessages: vi.fn(),
       syncFromServer: vi.fn().mockResolvedValue(undefined),
       queueVoice,
@@ -217,7 +220,7 @@ vi.mock('@/api/chat', () => ({
 }))
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
-vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, listEvents, continueRun, cancelRun } }))
+vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, listTasks, listEvents, continueRun, cancelRun } }))
 vi.mock('@/api/approval', () => ({
   approvalApi: { getMyRequests: approvalGetMyRequests, approve: approvalApprove },
 }))
@@ -247,6 +250,9 @@ describe('useChatOrchestration stream', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     vi.clearAllMocks()
+    getRun.mockReset()
+    listTasks.mockReset().mockResolvedValue({ success: true, data: [] })
+    applyPlainTextToMessageIndex.mockReset()
     productReadAccountEpoch.value++
     streamMode.enabled = true
     streamMode.realShipment = false
@@ -275,47 +281,112 @@ describe('useChatOrchestration stream', () => {
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
-  it('follows the original queued run and renders its persisted reply once without resubmitting', async () => {
-    listEvents.mockResolvedValueOnce({ data: [{ event_id: 'terminal-event' }] })
-    getRun.mockResolvedValueOnce({ data: {
-      run_id: 'queued-original', status: 'completed', final_output: { xiaox_result: {
-        ok: true, output: '任务已完成并保存回执', execution_state: 'completed', verified_operations: true,
-      } },
-    } })
+  it.each(['ready', 'offline', 'pending'])('follows the original queued run through a %s receipt and renders only its persisted reply', async state => {
+    vi.useFakeTimers()
     readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
       onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox',
         run_id: 'queued-original', execution_state: 'queued' } })
     })
     const api = useChatOrchestration({ sessionId: ref('queued-session') })
     api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
-    await api.sendMessage('整理订单')
-    await vi.waitFor(() => expect(saveMessage).toHaveBeenCalledOnce())
-    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '任务已完成并保存回执', expect.anything())
-    expect(saveMessage).toHaveBeenCalledWith('ai', '任务已完成并保存回执', 'queued-session', expect.anything())
-    expect(listEvents).toHaveBeenCalledExactlyOnceWith('queued-original', {})
-    expect(getRun).toHaveBeenCalledExactlyOnceWith('queued-original')
-    expect(sendChatStream).toHaveBeenCalledOnce()
-    expect(continueRun).not.toHaveBeenCalled()
-    expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+    if (state === 'offline') getConversation.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    if (state === 'pending') getConversation.mockResolvedValueOnce({ success: true, durable: true, messages: [] })
+    getConversation.mockImplementation((_sid, params) => Promise.resolve({ success: true, durable: true,
+      turn_receipt: { turn_id: params.turn_id, run_id: 'queued-original', message_id: 7,
+        status: 'completed', durable: true, receipt_kind: 'run' },
+      messages: [{ id: 7, role: 'assistant', content: '任务已完成并保存回执' }],
+    }))
+    applyPlainTextToMessageIndex.mockImplementation((index, text, extras) => {
+      Object.assign(api.messages.value[index], { content: text }, extras)
+    })
+    try {
+      await api.sendMessage('整理订单')
+      await vi.advanceTimersByTimeAsync(15_000)
+      await api.refreshTasks()
+      await nextTick()
+      expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '任务已完成并保存回执', expect.objectContaining({
+        workflowAction: 'completed', serverMessageId: 7, persistence: { id: 'server:7', status: 'saved', durable: true },
+      }))
+      expect(applyPlainTextToMessageIndex.mock.calls.filter(([, text]) => text === '任务已完成并保存回执')).toHaveLength(1)
+      expect(getConversation).toHaveBeenCalledTimes(state === 'ready' ? 1 : 2)
+      expect(getRun).not.toHaveBeenCalled()
+      expect(resumeChatStream).not.toHaveBeenCalled()
+      expect(saveMessage).not.toHaveBeenCalled()
+      expect(sendChatStream).toHaveBeenCalledOnce()
+      expect(continueRun).not.toHaveBeenCalled()
+      expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+    } finally { api.stopReply(); vi.useRealTimers() }
   })
 
   it('does not publish a queued reply that returns after the account switches', async () => {
-    listEvents.mockResolvedValueOnce({ data: [{ event_id: 'terminal-event' }] })
-    getRun.mockImplementationOnce(async () => {
+    getConversation.mockImplementationOnce(async (_sid, params) => {
       productReadAccountEpoch.value++
-      return { data: { run_id: 'old-run', status: 'completed', final_output: { xiaox_result: {
-        ok: true, output: '旧账号结果', execution_state: 'completed',
-      } } } }
+      return { success: true, durable: true,
+        turn_receipt: { turn_id: params.turn_id, run_id: 'old-run', status: 'completed', message_id: 8 },
+        messages: [{ id: 8, role: 'assistant', content: '旧账号结果' }],
+      }
     })
     readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
       onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox',
         run_id: 'old-run', execution_state: 'queued' } })
     })
-    await useChatOrchestration({ sessionId: ref('old-session') }).sendMessage('整理订单')
-    await vi.waitFor(() => expect(getRun).toHaveBeenCalledExactlyOnceWith('old-run'))
+    const api = useChatOrchestration({ sessionId: ref('old-session') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('整理订单')
+    await vi.waitFor(() => expect(getConversation).toHaveBeenCalledOnce())
     await nextTick()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(addMessage.mock.calls.some(([text]) => text === '旧账号结果')).toBe(false)
+    expect(continueRun).not.toHaveBeenCalled()
+  })
+
+  it.each(['offline', 'forbidden'])('bounds receipt retries and stops showing queued after %s delivery reads', async mode => {
+    vi.useFakeTimers()
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox', run_id: 'original', execution_state: 'queued' } })
+    })
+    getConversation.mockRejectedValue(Object.assign(new Error('unavailable'), { status: mode === 'forbidden' ? 403 : 0 }))
+    const api = useChatOrchestration({ sessionId: ref('receipt-session') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    applyPlainTextToMessageIndex.mockImplementation((index, text, extras) => Object.assign(api.messages.value[index], { content: text }, extras))
+    try {
+      await api.sendMessage('整理订单')
+      await vi.advanceTimersByTimeAsync(2_000)
+      await api.refreshTasks()
+      await vi.advanceTimersByTimeAsync(30_000)
+      await api.refreshTasks()
+      await nextTick()
+      expect(getConversation).toHaveBeenCalledTimes(mode === 'forbidden' ? 1 : 3)
+      expect(api.messages.value[0].workflowAction).toBe(mode === 'forbidden' ? 'waiting_auth' : 'unknown')
+      expect(api.messages.value[0].content).not.toContain('等待后台执行')
+      expect(saveMessage).not.toHaveBeenCalled()
+      expect(sendChatStream).toHaveBeenCalledOnce()
+      expect(continueRun).not.toHaveBeenCalled()
+    } finally { api.stopReply(); vi.useRealTimers() }
+  })
+
+  it.each(['owner', 'session', 'stop'])('discards a persisted queued reply after a %s change during receipt lookup', async change => {
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox', run_id: 'original', execution_state: 'queued' } })
+    })
+    let resolveReceipt!: (value: unknown) => void
+    getConversation.mockImplementationOnce(() => new Promise(resolve => { resolveReceipt = resolve }))
+    const sessionId = ref('receipt-session')
+    const api = useChatOrchestration({ sessionId })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('整理订单')
+    await vi.waitFor(() => expect(getConversation).toHaveBeenCalledOnce())
+    const turnId = api.messages.value[0].turnId
+    if (change === 'owner') productReadAccountEpoch.value++
+    else if (change === 'session') sessionId.value = 'other-session'
+    else api.stopReply()
+    resolveReceipt({ success: true, durable: true,
+      turn_receipt: { turn_id: turnId, run_id: 'original', status: 'completed', message_id: 8, durable: true, receipt_kind: 'run' },
+      messages: [{ id: 8, role: 'assistant', content: '迟到的交付结果' }],
+    })
+    await nextTick()
+    expect(applyPlainTextToMessageIndex.mock.calls.some(([, text]) => text === '迟到的交付结果')).toBe(false)
+    expect(saveMessage).not.toHaveBeenCalled()
     expect(continueRun).not.toHaveBeenCalled()
   })
 
@@ -450,6 +521,23 @@ describe('useChatOrchestration stream', () => {
     expect(getRun).toHaveBeenCalledWith('run-budget')
     expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, error)
     expect(api.messages.value[0].workflowAction).toBe('failed')
+  })
+
+  it('reads the original durable result when legacy replay lacks an authorization scope', async () => {
+    readPlannerSseResponse.mockImplementationOnce(async (_res, onEvent) => {
+      onEvent({ type: 'error', code: 'REPLAY_SCOPE_UNAVAILABLE', message: '原回放范围不可用' })
+    })
+    const api = useChatOrchestration({ sessionId: ref('legacy-scope') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    getConversation.mockImplementationOnce(async (_sid, params) => ({ success: true,
+      turn_receipt: { turn_id: params.turn_id, run_id: 'original', status: 'completed', message: '服务端保存的原任务结果' },
+    }))
+    await api.sendMessage('核对订单')
+    expect(api.messages.value[0].workflowAction).toBe('completed')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '服务端保存的原任务结果')
+    expect(sendChatStream).toHaveBeenCalledOnce()
+    expect(continueRun).not.toHaveBeenCalled()
+    expect(saveMessage).not.toHaveBeenCalled()
   })
 
   it.each(['owner', 'conversation', 'stop'])('discards dropped-stream history after a %s change', async action => {

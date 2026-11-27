@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 import weakref
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal as Decimal
@@ -567,11 +568,17 @@ def _set_debit_result(entry, status, debit, backend):
         entry["billing_source"] = "market_wallet" if backend == "market" else "local_model_wallet"
 
 
-def _record_usage_entry(entry: dict[str, Any]) -> dict[str, Any]:
+def _record_usage_entry(
+    entry: dict[str, Any], *, validate_existing: Callable[[dict[str, Any]], None] | None = None
+) -> dict[str, Any]:
     key = entry["usage_key"]
     with _usage_key_lock(key):
         with _usage_db(write=True) as db:
             existing, state = _read_entry(db, key)
+            if existing is not None and validate_existing is not None:
+                # Validate the persisted request under its writer lock before a
+                # pending entry can resume any external wallet operation.
+                validate_existing(existing)
             if state == "complete":
                 return dict(existing)
             # A crash-recovered market request must reuse the persisted owner,

@@ -29,6 +29,7 @@ from app.application.employee_runtime.handoff_identity import load_identity_card
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.domain.task_lifecycle.results import (
     execution_result_error,
+    execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
     execution_result_wait_reason,
 )
@@ -326,24 +327,28 @@ def _read_handoff(
         action=request["action"],
         params=request["params"],
     )
-    if receipt.get("success") or (
-        receipt.get("error_code") == "handoff_child_failed"
-        and (
-            child.status in {"failed", "cancelled", "rejected"}
-            or (
-                child.status == "blocked"
-                and all(
-                    step.status == "failed" and step.output.get("success") is False
-                    for step in child.steps
+    if (
+        receipt.get("success")
+        or receipt.get("in_progress")
+        or (
+            receipt.get("error_code") == "handoff_child_failed"
+            and (
+                child.status in {"failed", "cancelled", "rejected"}
+                or (
+                    child.status == "blocked"
+                    and all(
+                        step.status == "failed" and step.output.get("success") is False
+                        for step in child.steps
+                    )
                 )
             )
-        )
-        and not execution_result_requires_reconciliation(child.final_output)
-        and not execution_result_wait_reason(child.final_output)
-        and all(
-            not execution_result_requires_reconciliation(step.output)
-            and not execution_result_wait_reason(step.output)
-            for step in child.steps
+            and not execution_result_requires_reconciliation(child.final_output)
+            and not execution_result_wait_reason(child.final_output)
+            and all(
+                not execution_result_requires_reconciliation(step.output)
+                and not execution_result_wait_reason(step.output)
+                for step in child.steps
+            )
         )
     ):
         return {
@@ -558,8 +563,13 @@ def _child_receipt(
         step is None
         or child.run_id == parent.run_id
         or not isinstance(linked, dict)
-        or linked.get("status") != child.status
-        or linked.get("final_output") != child.final_output
+        or (
+            linked.get("status") in {"completed", "failed", "cancelled", "rejected"}
+            and (
+                linked.get("status") != child.status
+                or linked.get("final_output") != child.final_output
+            )
+        )
         or any(
             linked.get(key) != context.get(key)
             for key in ("parent_task_id", "parent_run_id", "tenant_id", "employee_id")
@@ -584,6 +594,34 @@ def _child_receipt(
             "parent_task_id": task_id,
             "child_task_id": child.run_id,
             "execution_status": child.status,
+        }
+    from app.application.agent_orchestrator.run_audit_scope import child_result_state
+
+    state = child_result_state(child)
+    if state == "unknown" or execution_result_outcome_unknown(linked):
+        return _unknown_handoff(task_id, parent.run_id, child.run_id)
+    if state in {
+        "queued",
+        "planning",
+        "running",
+        "retrying",
+        "pending",
+        "accepted",
+        "processing",
+        "waiting_input",
+        "waiting_approval",
+        "waiting_auth",
+        "paused",
+    }:
+        return _rejected("handoff_pending", "原子任务仍在执行或等待，未重新派发") | {
+            "parent_task_id": task_id,
+            "child_task_id": child.run_id,
+            "execution_status": child.status,
+            "execution_state": state,
+            "status": state,
+            "in_progress": True,
+            "pending_approval": state == "waiting_approval",
+            "needs_user_input": state == "waiting_input",
         }
     if (
         child.status != "completed"

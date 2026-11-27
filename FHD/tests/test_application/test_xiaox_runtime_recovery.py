@@ -53,9 +53,213 @@ def test_owned_deadline_interrupts_verification_without_cancelling_worker(
 
     result = asyncio.run(scenario())
     assert not result["ok"]
-    assert result["error_code"] == "xiaox_timeout"
+    assert result["error_code"] == "goal_verification_interrupted"
+    assert result["execution_state"] == "blocked" and result["retryable"] is True
+    assert store.run.metadata["runtime_goal_verification_task"]["state"] == "pending"
     assert store.run.metadata["xiaox_runtime"]["runtime_status"] == "interrupted"
     assert store.log.index("interrupt") < store.log.index("exit")
+
+
+def test_paused_verification_resumes_only_its_frozen_candidate(setup_runtime, monkeypatch):
+    from app.application.agent_runtime import goal_verifier
+
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    original_verifier = goal_verifier.verify_runtime_goal
+
+    def paused(*_args, **_kwargs):
+        store.run.status = "paused"
+        raise XiaoxBindingError("paused", "原任务已暂停")
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", paused)
+    first = asyncio.run(invoke(store, Transport(store)))
+    assert first["exit_status"] == store.run.status == "paused"
+    job = copy.deepcopy(store.run.metadata["runtime_goal_verification_task"])
+    assert job["state"] == "pending"
+    assert first["verification_state"] == "pending"
+    original_rows = copy.deepcopy(store.rows)
+
+    # The existing control flow explicitly resumes the original run.
+    store.run.status = "queued"
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", original_verifier)
+    transport = Transport(store)
+    second = asyncio.run(invoke(store, transport))
+    assert second["ok"] and second["verification_state"] == "verified"
+    assert transport.config is None and transport.inputs == []
+    assert transport.started == transport.resumed == []
+    assert store.run.metadata["runtime_goal_verification_task"]["job_id"] == job["job_id"]
+    assert second["output"] == job["output"]
+    assert store.rows == original_rows
+
+
+def test_third_recoverable_verification_failure_is_terminal(setup_runtime, monkeypatch):
+    from app.application.agent_runtime import goal_verifier
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    original_verifier = goal_verifier.verify_runtime_goal
+
+    def timeout(*args, **kwargs):
+        report = original_verifier(*args, **kwargs)
+        report.update(
+            status="unavailable",
+            accepted=False,
+            review=None,
+            error_code="goal_verification_timeout",
+        )
+        report["report_digest"] = canonical_digest(
+            {key: value for key, value in report.items() if key != "report_digest"}
+        )
+        return report
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", timeout)
+    for attempt in range(1, 4):
+        transport = Transport(store)
+        result = asyncio.run(invoke(store, transport))
+        job = store.run.metadata["runtime_goal_verification_task"]
+        assert job["attempts"] == attempt
+        assert job["error_code"] == "goal_verification_timeout"
+        assert job["state"] == ("pending" if attempt < 3 else "blocked")
+        assert result["retryable"] is (attempt < 3)
+        if attempt > 1:
+            assert transport.config is None and transport.inputs == []
+    assert result["verification_state"] == "blocked"
+    assert result["terminal_code"] == job["terminal_code"] == "goal_verification_budget_exhausted"
+    rejected_transport = Transport(store)
+    rejected = asyncio.run(invoke(store, rejected_transport))
+    assert rejected["exit_status"] == "goal_verification_not_resumable"
+    assert rejected_transport.config is None
+
+
+@pytest.mark.parametrize("exhausted", [False, True])
+def test_original_active_time_controls_verification_recovery_not_waiting_wall_time(
+    setup_runtime,
+    monkeypatch,
+    exhausted,
+):
+    import time
+
+    from app.application.agent_runtime import goal_verifier
+
+    invoke, config = setup_runtime
+    store = Store(rows=[receipt()])
+    original_verifier = goal_verifier.verify_runtime_goal
+
+    def interrupted(*_args, **_kwargs):
+        if exhausted:
+            store.run.metadata["xiaox_runtime"]["active_seconds"] = config.turn_timeout_seconds
+        raise TimeoutError("injected review deadline")
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", interrupted)
+    first = asyncio.run(invoke(store, Transport(store)))
+    job = store.run.metadata["runtime_goal_verification_task"]
+    assert first["retryable"] is (not exhausted)
+    assert job["state"] == ("blocked" if exhausted else "pending")
+    if exhausted:
+        assert first["terminal_code"] == job["terminal_code"] == "runtime_budget_exhausted"
+        assert job["error_code"] == "goal_verification_interrupted"
+    else:
+        # A long blocked wait expires the old invocation, not the active budget.
+        store.run.metadata["xiaox_runtime"]["deadline_at"] = time.time() - 10000
+        monkeypatch.setattr(goal_verifier, "verify_runtime_goal", original_verifier)
+        transport = Transport(store)
+        resumed = asyncio.run(invoke(store, transport))
+        assert resumed["ok"] and transport.config is None
+        assert resumed["active_seconds"] < config.turn_timeout_seconds
+
+
+@pytest.mark.parametrize("verification_calls_remaining", [True, False])
+def test_recovered_missing_goals_reach_next_execution_only_with_a_review_budget(
+    setup_runtime,
+    monkeypatch,
+    verification_calls_remaining,
+):
+    from app.application.agent_runtime import goal_verifier
+    from app.domain.task_lifecycle.agent_runtime_contract import (
+        build_goal_contract,
+        canonical_digest,
+    )
+    from tests.test_application.test_xiaox_goal_verifier import goal, review
+
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    store.run.message = "整理销售数据并说明统计口径"
+    original_rows = copy.deepcopy(store.rows)
+    contract = build_goal_contract(store.run)
+    store.run.metadata.update(
+        runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
+    )
+    original_verifier = goal_verifier.verify_runtime_goal
+
+    def interrupted(*_args, **_kwargs):
+        raise TimeoutError("injected first review timeout")
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", interrupted)
+    assert not asyncio.run(invoke(store, Transport(store)))["ok"]
+    done = goal("整理销售数据", goal_id="sales", evidence_ids=["run-child"])
+    missing = goal("说明统计口径", goal_id="explain", kind="reply", status="unmet", evidence_ids=[])
+    store.reviews = [review(done, missing, feedback="数据回执已核验，只补统计口径说明。")]
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", original_verifier)
+    verification_only_transport = Transport(store)
+    second = asyncio.run(invoke(store, verification_only_transport))
+    assert not second["ok"] and second["verification_state"] == "needs_work"
+    assert verification_only_transport.config is None and verification_only_transport.inputs == []
+    assert store.run.metadata["runtime_goal_verification_task"]["gaps"][0]["goal_id"] == "explain"
+    if not verification_calls_remaining:
+        metadata = store.run.metadata["xiaox_runtime"]
+        metadata["model_requests"] = {
+            str(index): {"purpose": "verification", "state": "completed"}
+            for index in range(metadata["verification_budget"]["model_calls"])
+        }
+    store.reviews = [review(done, {**missing, "status": "satisfied", "evidence_ids": ["response"]})]
+    compensation = Transport(store, completed("销售统计口径为已确认订单。"))
+    last = asyncio.run(invoke(store, compensation))
+    if verification_calls_remaining:
+        assert last["ok"]
+        feedback = json.loads(compensation.inputs[0])
+        assert feedback["completed_goal_ids"] == ["sales"]
+        assert [item["goal_id"] for item in feedback["remaining_goals"]] == ["explain"]
+    else:
+        assert not last["ok"] and last["retryable"] is False
+        assert last["terminal_code"] == "goal_verification_budget_exhausted"
+        assert last["verification_state"] == "blocked" and compensation.config is None
+    assert store.rows == original_rows
+    assert canonical_digest(contract) == canonical_digest(
+        store.run.metadata["runtime_goal_contract"]
+    )
+
+
+def test_review_calls_consumed_by_format_repair_stop_same_turn_compensation(
+    setup_runtime, monkeypatch
+):
+    from app.application.agent_runtime import goal_verifier
+
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    store.review_missing = True
+    original_rows = copy.deepcopy(store.rows)
+    original_verifier = goal_verifier.verify_runtime_goal
+
+    def consumed_review(*args, **kwargs):
+        report = original_verifier(*args, **kwargs)
+        metadata = store.run.metadata["xiaox_runtime"]
+        metadata["model_requests"] = {
+            "settled-review-" + str(index): {"purpose": "verification", "state": "completed"}
+            for index in range(metadata["verification_budget"]["model_calls"])
+        }
+        return report
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", consumed_review)
+    transport = Transport(store)
+    result = asyncio.run(invoke(store, transport))
+    job = store.run.metadata["runtime_goal_verification_task"]
+    assert len(transport.inputs) == 1
+    assert result["execution_state"] == result["verification_state"] == job["state"] == "blocked"
+    assert result["retryable"] is False
+    assert result["terminal_code"] == "goal_verification_budget_exhausted"
+    assert store.run.metadata["runtime_goal_verification"]["status"] == "needs_work"
+    assert job["gaps"] and store.rows == original_rows
 
 
 @pytest.mark.parametrize(
@@ -104,6 +308,10 @@ def test_unexpected_task_error_finalizes_original_run_before_propagating(
     assert result["ok"] is False and result["runtime_completed"] is False
     assert result.get("reconciliation_required", False) is uncertain
     assert "private callback bug" not in json.dumps(result)
+    if failure_stage == "verification":
+        job = store.run.metadata["runtime_goal_verification_task"]
+        assert job["state"] == result["verification_state"] == "blocked"
+        assert job["error_code"] == "xiaox_runtime_failed" and result["retryable"] is False
     if uncertain:
         assert store.run.metadata["non_retryable"] is True
         assert released == []

@@ -1,6 +1,6 @@
 import { TUTORIAL_DEPT_EMPLOYEE_SAMPLE_XLSX, TUTORIAL_SAMPLE_NAME_PREFIX } from '@/constants/tutorialSamples'
 import type { TutorialStep } from './types'
-import { createStep } from './stepFactory'
+import { chatUploadAttachmentSelector, createStep } from './stepFactory'
 
 /**
  * 进阶教程末尾：智能对话基础用法 → 办公员工包装齐后 → Excel 导入库 → 清理教学样本。
@@ -28,7 +28,7 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       description: `本步使用含「部门」「人员」两张工作表的教学文件（行名均以「${prefix}」开头，便于事后清理）。请在新标签页打开 ${sampleFile} 下载到本机，稍后在对话页上传。`,
       routeName: 'chat',
       targetSelector: '[data-tour="chat-input-area"]',
-      highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
+      highlightSelector: chatUploadAttachmentSelector,
       actionType: 'observe',
       track: 'advanced',
       allowCardNext: true,
@@ -36,10 +36,9 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
     createStep({
       id: 'tutorial-excel-upload',
       title: '分析 Excel',
-      description: `点击「分析 Excel」上传刚下载的样本。解析完成后在输入区上方选择工作表「部门」或「人员」。`,
+      description: '点击输入框内的「上传附件」图标，选择刚下载的样本。解析完成后在输入区上方选择工作表「部门」或「人员」。',
       routeName: 'chat',
-      targetSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
-      highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
+      targetSelector: chatUploadAttachmentSelector,
       actionType: 'click',
       track: 'advanced',
       allowCardNext: true,

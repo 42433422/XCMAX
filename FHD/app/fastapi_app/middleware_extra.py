@@ -162,10 +162,12 @@ def register_prometheus_metrics(app: FastAPI) -> None:
         from fastapi.responses import Response
         from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+        from app.infrastructure.observability.metrics import render as render_agent_metrics
+
         @app.get("/metrics")
         async def metrics_endpoint():
             return Response(
-                content=generate_latest(),
+                content=generate_latest() + render_agent_metrics(),
                 media_type=CONTENT_TYPE_LATEST,
             )
 

@@ -13,11 +13,75 @@ from app.application.agent_orchestrator.run_models import AgentRun, agent_run_fr
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.session_renewal import renew_approval_session
+from app.application.agent_orchestrator.task_execution_models import xiaox_queue_outcome
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
-from app.application.agent_orchestrator.task_models import TaskControlCommand
+from app.application.agent_orchestrator.task_models import TaskControlCommand, tenant_id_of_run
 from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTaskExecutionRecord
+from app.domain.task_lifecycle.adapters import WAITING_STATES
+
+
+def _verified_xiaox_child_effects(db: Any, run: AgentRun, effects: list[str]) -> set[str]:
+    """Settle only an exact delegated step from its current independent SQL receipt."""
+    from app.application.agent_orchestrator.result_verification import verified_effect_receipt
+    from app.application.agent_orchestrator.task_models import mod_id_of_run, tenant_id_of_run
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+
+    metadata = run.metadata.get("xiaox_runtime")
+    if run.metadata.get("runtime_type") != "xiaox" or not isinstance(metadata, dict):
+        return set()
+    try:
+        XiaoxBindingStore._validate_goal(run, metadata)
+    except XiaoxBindingError:
+        return set()
+    completed = set()
+    for effect in effects:
+        parts = effect.split(":")
+        if len(parts) != 3 or parts[0] != "child":
+            continue
+        _, child_id, step_id = parts
+        calls = [
+            call
+            for call in (metadata.get("calls") or {}).values()
+            if call.get("child_run_id") == child_id
+        ]
+        if not calls:
+            continue
+        record = db.query(AgentRunRecord).filter_by(run_id=child_id).with_for_update().one_or_none()
+        child = agent_run_from_dict(json.loads(record.payload_json)) if record is not None else None
+        if (
+            child is None
+            or child.status != "completed"
+            or len(child.steps) != 1
+            or child.user_id != run.user_id
+            or tenant_id_of_run(child) != tenant_id_of_run(run)
+            or mod_id_of_run(child) != mod_id_of_run(run)
+            or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != run.run_id
+        ):
+            continue
+        step = child.steps[0]
+        task_id = (child.metadata.get("task_context") or {}).get("task_id")
+        operation = {"tool_id": step.tool_id, "action": step.action, "params": step.params}
+        nodes = (child.metadata.get("plan") or {}).get("nodes") or []
+        if (
+            step.step_id != step_id
+            or not task_id
+            or len(nodes) != 1
+            or nodes[0].get("node_id") != step.node_id
+            or {key: nodes[0].get(key) for key in operation} != operation
+            or any(
+                call.get("child_task_id") != task_id
+                or call.get("fingerprint") != canonical_digest(operation)
+                or {key: call.get(key) for key in operation} != operation
+                for call in calls
+            )
+            or not verified_effect_receipt(child, step)
+        ):
+            continue
+        completed.add(effect)
+    return completed
 
 
 def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False) -> list[str]:
@@ -30,11 +94,192 @@ def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False)
     tenant = tenant_id_of_run(run)
     body = book.get("agent", tenant, run.run_id)
     completed = {step.step_id for step in run.steps if verified_effect_receipt(run, step)}
+    completed.update(_verified_xiaox_child_effects(db, run, body.get("effects") or []))
     remaining = sorted(set(body.get("effects") or []) - completed)
     if clear_confirmed and not remaining and body.get("effects"):
         body["effects"] = []
         book.put("agent", tenant, run.run_id, body)
     return remaining
+
+
+def reconcile_xiaox_receipts(
+    queue: SQLAlchemyTaskExecutionRepository, run_repository: Any, previous: AgentRun
+) -> AgentRun | None:
+    """Project verified delegated results without claiming or replaying a worker.
+
+    This restricted reconciliation event is not a general lifecycle edge.
+    A stopped parent's original children and frozen goal are independently
+    checked, then its run, Task view and unleased waiting queue row commit
+    together. Callers cannot supply a desired state or replacement result.
+    """
+    from app.application.agent_orchestrator.run_sql_repository import (
+        SQLAlchemyAgentRunRepository,
+    )
+    from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentTaskRecord
+    from app.domain.task_lifecycle.agent_runtime_results import (
+        model_unsettled,
+        receipt_verified,
+    )
+    from app.domain.task_lifecycle.control import SessionBook, remember
+    from app.infrastructure.xiaox.binding import (
+        XiaoxBinding,
+        XiaoxBindingError,
+        XiaoxBindingStore,
+    )
+    from app.infrastructure.xiaox.receipt_projection import (
+        project_receipt_state,
+        projection_allowed,
+    )
+    from app.infrastructure.xiaox.receipts import read_call_receipt
+
+    if not isinstance(run_repository, SQLAlchemyAgentRunRepository) or not projection_allowed(
+        previous
+    ):
+        return None
+    store = XiaoxBindingStore(run_repository)
+    binding = XiaoxBinding(previous)
+    store._validate_goal(previous, binding.metadata)
+    rows, children = [], {}
+    for call_id, call in binding.metadata["calls"].items():
+        receipt = read_call_receipt(store, binding, call)
+        if receipt != call.get("receipt"):
+            return None  # A child changed since the caller's receipt snapshot.
+        rows.append({"call_id": call_id, **call})
+        if child_id := receipt.get("run_id"):
+            child = run_repository.get(child_id)
+            if child is None or child.updated_at != receipt.get("child_updated_at"):
+                return None
+            children[child_id] = child
+    previous_result = previous.final_output.get("xiaox_result") or {}
+    prior = {str(row.get("call_id")): row for row in previous_result.get("business_receipts") or []}
+    recovered_writes = [
+        row
+        for row in rows
+        if row.get("read_only") is not True
+        and (prior.get(str(row["call_id"])) or {}).get("state")
+        in {"waiting_user", "waiting_approval", "running"}
+    ]
+    verified_child_recovery = bool(
+        (previous.metadata.get("recovery") or {}) == {"state": "manual_reconciliation_required"}
+        and previous.metadata.get("non_retryable") is True
+        and previous.status in {"running", "waiting_user", "unknown"}
+        and not previous.metadata.get("stream_interruption")
+        and not model_unsettled(binding.metadata)
+        and previous_result.get("exit_status") in {"waiting_user", "running"}
+        and not any(
+            (request.get("result") or {}).get("execution_state") == "unknown"
+            for request in (previous.metadata.get("runtime_requests") or {}).values()
+        )
+        and recovered_writes
+        and all(receipt_verified(row) for row in rows)
+    )
+    projected = project_receipt_state(
+        previous, rows, verified_child_recovery=verified_child_recovery
+    )
+    if projected is None:
+        return None
+    result = projected.final_output["xiaox_result"]
+    if projected.status == "completed" and not (
+        result.get("business_completed") is True
+        and result.get("verified_operations") is True
+        and (result.get("goal_coverage") or {}).get("completed") is True
+    ):
+        return None
+    target, code = xiaox_queue_outcome(result)
+    code = code or "xiaox_receipt_projection"
+    now = utc_now_iso()
+    with queue.transaction() as db, run_repository.transaction(read_only=True) as runs:
+        if db.get_bind() is not runs.get_bind():
+            raise XiaoxBindingError("durable_storage_required", "父任务与队列不属于同一数据库")
+        execution = db.get(AgentTaskExecutionRecord, previous.run_id)
+        if execution is not None:
+            if (
+                execution.state not in WAITING_STATES
+                or execution.lease_owner
+                or execution.lease_expires_at
+            ):
+                return None
+            fenced = (
+                db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.run_id == previous.run_id,
+                    AgentTaskExecutionRecord.state == execution.state,
+                    AgentTaskExecutionRecord.execution_count == execution.execution_count,
+                    AgentTaskExecutionRecord.lease_owner == execution.lease_owner,
+                    AgentTaskExecutionRecord.lease_expires_at == execution.lease_expires_at,
+                )
+                .update(
+                    {AgentTaskExecutionRecord.updated_at: execution.updated_at},
+                    synchronize_session=False,
+                )
+            )
+            if fenced != 1:
+                return None
+            book = SessionBook(db)
+            body = book.get("agent", str(execution.tenant_id or ""), previous.run_id)
+            if body.get("effects") or execution.last_error_code == "needs_verification":
+                return None
+        for child_id, child in children.items():
+            record = db.get(AgentRunRecord, child_id)
+            current = run_repository._record_to_run(record) if record is not None else None
+            if current is None or current.to_dict() != child.to_dict():
+                return None
+            assert record is not None
+            if (
+                db.query(AgentRunRecord)
+                .filter(
+                    AgentRunRecord.run_id == child_id,
+                    AgentRunRecord.payload_json == record.payload_json,
+                )
+                .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+                != 1
+            ):
+                return None
+        if verified_child_recovery:
+            for row in recovered_writes:
+                child_id, task_id = row["child_run_id"], row["child_task_id"]
+                child = children[child_id]
+                tasks = (
+                    db.query(AgentTaskRecord)
+                    .filter(
+                        AgentTaskRecord.task_id == task_id,
+                        AgentTaskRecord.user_id == previous.user_id,
+                        AgentTaskRecord.tenant_id == tenant_id_of_run(previous),
+                    )
+                    .limit(2)
+                    .all()
+                )
+                if (
+                    len(tasks) != 1
+                    or tasks[0].active_run_id != child_id
+                    or tasks[0].root_run_id != previous.run_id
+                    or tasks[0].attempt != 1
+                    or tasks[0].run_count != 1
+                    or child.status != "completed"
+                    or child.metadata.get("non_retryable")
+                    or child.metadata.get("recovery")
+                ):
+                    return None
+        if not run_repository.save_if_unchanged_in_session(
+            db,
+            projected,
+            previous,
+            allow_verified_xiaox_recovery=verified_child_recovery,
+        ):
+            return None
+        if projected.status != result["execution_state"] and not (
+            projected.status == "blocked" and result["execution_state"] in {"unknown", "partial"}
+        ):
+            raise XiaoxBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
+        if execution is not None:
+            remember(body, at=now, source=str(execution.state), target=target, code=code, actor="")
+            book.put("agent", str(execution.tenant_id or ""), previous.run_id, body)
+            execution.state = target
+            execution.last_error_code = None if target == "succeeded" else code
+            execution.updated_at = now
+            if target in {"succeeded", "failed"}:
+                execution.finished_at = now
+    return run_repository.get(previous.run_id)
 
 
 def retry_and_enqueue(

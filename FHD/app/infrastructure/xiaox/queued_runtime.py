@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
+import logging
+import math
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.run_models import AgentRun, RunContextScope, utc_now_iso
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_execution_models import AgentTaskExecution
 from app.application.agent_orchestrator.task_execution_repository import (
@@ -26,6 +31,9 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     withhold_runtime_output,
 )
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def durable_queue(repository: SQLAlchemyAgentRunRepository) -> SQLAlchemyTaskExecutionRepository:
@@ -64,6 +72,365 @@ def stage_queued_request(
     run.final_output["xiaox_result"] = copy.deepcopy(result)
     run.add_event("runtime.queued", "原任务已进入后台执行队列")
     return result
+
+
+def interrupted_queue_result(run: AgentRun, request_key: str) -> dict[str, Any] | None:
+    """Use the committed result only for the interrupted worker that owned this queue turn."""
+    pending = run.metadata.get("_xiaox_queued_request") or {}
+    binding = run.metadata.get("xiaox_runtime") or {}
+    requests = run.metadata.get("runtime_requests") or {}
+    generation = pending.get("generation")
+    worker_turn = pending.get("worker_turn_id")
+    if (
+        run.status != "blocked"
+        or pending.get("request_key") != request_key
+        or pending.get("state") != "queued"
+        or (requests.get(request_key) or {}).get("state") != "queued"
+        or type(generation) is not int
+        or binding.get("generation") != generation + 1
+        or binding.get("coordinator_active") is not False
+        or binding.get("revoked") is not True
+        or not isinstance(worker_turn, str)
+        or not worker_turn
+    ):
+        return None
+    worker_key = canonical_digest({"turn_id": worker_turn, "owner": run.user_id})
+    worker = requests.get(worker_key) or {}
+    result = run.final_output.get("xiaox_result")
+    if (
+        worker.get("state") == "interrupted"
+        and worker.get("turn_id") == worker_turn
+        and isinstance(result, dict)
+        and result.get("run_id") == run.run_id
+        and result.get("execution_state") == "unknown"
+        and result.get("reconciliation_required") is True
+        and result.get("ok") is False
+    ):
+        return copy.deepcopy(result)
+    return None
+
+
+def _return_queue_result(run: AgentRun, key: str, result: dict[str, Any]) -> None:
+    run.metadata["_xiaox_queued_request"]["state"] = "returned"
+    run.metadata["runtime_requests"][key].update(
+        state="returned", result=copy.deepcopy(result), returned_at=utc_now_iso()
+    )
+
+
+def recover_abandoned_goal_verification(
+    store: XiaoxBindingStore,
+    run_id: str,
+    *,
+    claimed: bool = False,
+    now: float | None = None,
+) -> bool:
+    """Retire a lost review owner; the existing lease and queue own its continuation."""
+    from app.application.agent_runtime.goal_verification_task import (
+        _current_rows,
+        _identity,
+        compensable_verification,
+        interrupted_verification,
+        verify_artifact_bytes,
+    )
+    from app.application.agent_runtime.verification_budget import JOB_KEY, VERIFIER_VERSION
+    from app.domain.task_lifecycle.agent_runtime_contract import goal_answers, goal_report_coverage
+    from app.domain.task_lifecycle.agent_runtime_results import (
+        classification_metadata,
+        classify_runtime_result,
+        released_runtime_artifacts,
+    )
+    from app.infrastructure.xiaox.receipts import project_child_calls, resume_error
+
+    observed = store.get(run_id)
+    metadata = observed.metadata
+    job = observed.run.metadata.get(JOB_KEY) or {}
+    current_time = time.time() if now is None else now
+    if (
+        observed.run.status not in {"planning", "running", "retrying"}
+        or job.get("state") not in {"running", "pending", "needs_work", "verified", "blocked"}
+        or job.get("generation") != metadata.get("generation")
+        or not metadata.get("coordinator_active")
+        or (not claimed and float(metadata.get("expires_at") or 0) > current_time)
+    ):
+        return False
+    pending = observed.run.metadata.get("_xiaox_queued_request") or {}
+    requests = observed.run.metadata.get("runtime_requests") or {}
+    admitted = [
+        key
+        for key, request in requests.items()
+        if request.get("state") == "admitted"
+        and isinstance(request.get("turn_id"), str)
+        and key == canonical_digest({"turn_id": request["turn_id"], "owner": observed.run.user_id})
+    ]
+    if len(admitted) != 1:
+        return False
+    worker_key = admitted[0]
+    if claimed and (
+        pending.get("state") != "queued"
+        or pending.get("generation", -1) + 1 != metadata.get("generation")
+        or worker_key
+        != canonical_digest(
+            {
+                "turn_id": pending.get("worker_turn_id"),
+                "owner": observed.run.user_id,
+            }
+        )
+        or (requests.get(pending.get("request_key")) or {}).get("state") != "queued"
+    ):
+        return False
+    if not claimed and pending.get("state") == "queued":
+        return False
+    store._validate_authority(observed.run, metadata)
+    store._validate_control(observed.run)
+    rows = store.receipt_snapshot(run_id)
+    binding = store.get(run_id)
+    if job.get("job_id") != _identity(binding.run, rows, job.get("output", ""))[
+        "job_id"
+    ] or resume_error(store, binding, rows):
+        return False
+    verify_artifact_bytes(rows)
+    # Only already observed active time survives a crash. A fresh receipt read
+    # above must not charge offline time or reduce the original accumulated use.
+    last_observed = max(
+        datetime.fromisoformat(observed.run.updated_at).timestamp(),
+        float(job.get("observed_at") or job.get("started_at") or 0),
+    )
+
+    def recover(run: AgentRun, current: dict[str, Any]) -> None:
+        checkpoint = run.metadata.get(JOB_KEY) or {}
+        if (
+            current.get("generation") != metadata.get("generation")
+            or checkpoint.get("job_id") != job.get("job_id")
+            or checkpoint.get("state") != job.get("state")
+            or run.metadata.get("_xiaox_queued_request", {}) != pending
+            or (run.metadata.get("runtime_requests", {}).get(worker_key) or {}).get("state")
+            != "admitted"
+            or model_unsettled(current)
+            or checkpoint.get("job_id")
+            != _identity(run, _current_rows(current), checkpoint.get("output", ""))["job_id"]
+        ):
+            raise XiaoxBindingError("goal_verification_changed", "原核验检查点或请求已变化")
+        store._validate_authority(run, current)
+        store._validate_control(run)
+        current_rows = _current_rows(current)
+        if checkpoint["state"] != "running":
+            report = run.metadata.get("runtime_goal_verification") or {}
+            if (
+                report.get("verifier_version") != VERIFIER_VERSION
+                or report.get("report_digest") != checkpoint.get("report_digest")
+                or report.get("report_digest")
+                != canonical_digest(
+                    {key: value for key, value in report.items() if key != "report_digest"}
+                )
+                or any(
+                    report.get(key) != checkpoint.get(key)
+                    for key in (
+                        "goal_digest",
+                        "evidence_digest",
+                        "response_digest",
+                    )
+                )
+                or (
+                    checkpoint["state"] == "verified"
+                    and not goal_report_coverage(
+                        run.metadata["runtime_goal_contract"],
+                        current_rows,
+                        checkpoint["output"],
+                        goal_answers(run),
+                        report,
+                    )["completed"]
+                )
+            ):
+                raise XiaoxBindingError("goal_verification_changed", "原核验结论或证据已变化")
+        accumulated = float(current.get("active_seconds") or 0)
+        started = float(current.get("active_started_at") or last_observed)
+        stopped = min(last_observed, float(current.get("deadline_at") or last_observed))
+        if (
+            not all(math.isfinite(value) for value in (accumulated, started, stopped))
+            or accumulated < 0
+        ):
+            raise XiaoxBindingError("runtime_budget_exhausted", "原任务活跃预算记录无效")
+        current["active_seconds"] = accumulated + max(0, stopped - started)
+        current.pop("active_started_at", None)
+        interrupted_verification(run, current, cancelled=False)
+        checkpoint["next_attempt_at"] = 0
+        limit = float((current.get("runtime_config") or {}).get("max_active_seconds") or 0)
+        if checkpoint["state"] != "verified" and (
+            not math.isfinite(limit) or limit <= 0 or current["active_seconds"] >= limit
+        ):
+            checkpoint.update(state="blocked", terminal_code="runtime_budget_exhausted")
+        compensating = checkpoint.get("state") == "needs_work"
+        if compensating and not compensable_verification(run, current_rows):
+            raise XiaoxBindingError("goal_verification_changed", "原核验缺口或剩余预算已变化")
+        retryable = checkpoint.get("state") in {"pending", "needs_work"}
+        current.update(
+            revoked=True,
+            coordinator_active=False,
+            token_hashes={},
+            close_reason="goal_verification_interrupted",
+        )
+        result = {
+            **base_runtime_result(run.run_id),
+            "execution_state": "blocked",
+            "exit_status": "goal_verification_required",
+            "verification_state": checkpoint["state"],
+            "retryable": retryable,
+            "resume_required": retryable,
+            "error_code": "goal_verification_interrupted",
+            "output": (
+                "原业务回执已保留，独立核验将在原任务继续。"
+                if retryable
+                else "原业务回执已保留，独立核验的原任务预算已耗尽。"
+            ),
+            **(
+                {"terminal_code": checkpoint["terminal_code"]}
+                if checkpoint.get("terminal_code")
+                else {}
+            ),
+        }
+        run.status = "blocked"
+        run.error = ""
+        if checkpoint["state"] == "verified":
+            result = {
+                **base_runtime_result(run.run_id),
+                "output": checkpoint["output"],
+                "goal_response": checkpoint["output"],
+                "thread_id": current.get("thread_id", ""),
+                "verification_state": "verified",
+                "active_seconds": current["active_seconds"],
+                "model_request_attempts": len(current.get("model_requests") or {}),
+            }
+            run.status = classify_runtime_result(
+                result,
+                current_rows,
+                classification_metadata(run),
+                str(run.metadata.get("runtime_completion_mode") or "auto"),
+                "completed",
+            )
+            if not result["ok"] or run.status != "completed":
+                raise XiaoxBindingError("goal_verification_changed", "原已核验结果尚不满足交付条件")
+            project_child_calls(run, current_rows)
+            files = released_runtime_artifacts(result)
+            result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts] + files
+            if files:
+                result["output_artifacts"] = files
+            result["session_messages"] = [{"role": "assistant", "content": result["output"]}]
+            current["runtime_status"] = "completed"
+            current["close_reason"] = "completed"
+        run.final_output["xiaox_result"] = copy.deepcopy(result)
+        run.metadata["runtime_requests"][worker_key].update(
+            state="returned",
+            result=copy.deepcopy(result),
+            returned_at=utc_now_iso(),
+        )
+        if claimed:
+            _return_queue_result(run, pending["request_key"], result)
+        if claimed and retryable:
+            key = f"{'compensate_' if compensating else ''}{checkpoint['job_id']}_{checkpoint['attempts']}"
+            if key in run.metadata["runtime_requests"]:
+                raise XiaoxBindingError("binding_conflict", "原核验恢复请求已存在")
+            run.metadata["runtime_requests"][key] = {
+                "digest": checkpoint["job_id"],
+                "state": "admitted",
+                "created_at": utc_now_iso(),
+                "source": "independent_goal_compensation"
+                if compensating
+                else "independent_goal_verification",
+            }
+            stage_queued_request(
+                run,
+                key,
+                {
+                    "task": run.message,
+                    "input_data": copy.deepcopy(run.metadata.get("_xiaox_input_data")),
+                    "history": copy.deepcopy(run.metadata.get("_xiaox_history")),
+                    "answer_to_waiting_input": False,
+                },
+            )
+        run.add_event(
+            "runtime.goal.verification.recovered",
+            "原核验执行者已退出，仅恢复核验",
+            {
+                "job_id": checkpoint["job_id"],
+                "generation": current["generation"],
+            },
+        )
+
+    store.update(run_id, recover)
+    return True
+
+
+def recover_interrupted_queue_request(
+    repository: SQLAlchemyAgentRunRepository, run: AgentRun, key: str
+) -> dict[str, Any] | None:
+    """After owner authorization, publish only this terminal queue receipt in the host DB."""
+    from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
+    from app.domain.shared_services.conversation_service import (
+        ConversationRevisionError,
+        lock_conversation_session,
+    )
+
+    if not isinstance(repository, SQLAlchemyAgentRunRepository) or not interrupted_queue_result(
+        run, key
+    ):
+        return None
+    context = run.metadata.get("runtime_context") or {}
+    owner = run.user_id
+    session = str(context.get("session_id") or context.get("conversation_id") or "")
+    revision = context.get("_conversation_revision")
+    if not session or type(revision) is not int or not owner.isdecimal():
+        return None
+    scope = RunContextScope(
+        str(context.get("tenant_id")),
+        str(context.get("mod_id") or context.get("active_mod_id") or ""),
+        session,
+        revision,
+    )
+    with repository.transaction() as db:
+        row = db.get(AgentRunRecord, run.run_id)
+        current = repository._record_to_run(row) if row is not None else None
+        if current is None or current.user_id != owner or not scope.matches(current):
+            return None
+        receipt = (current.metadata.get("runtime_requests") or {}).get(key) or {}
+        turn = receipt.get("turn_id")
+        if not turn or canonical_digest({"turn_id": turn, "owner": owner}) != key:
+            return None
+        if receipt.get("state") == "returned":
+            return copy.deepcopy(receipt.get("result"))
+        result = interrupted_queue_result(current, key)
+        if (
+            result is None
+            or current.metadata.get("non_retryable") is not True
+            or (current.metadata.get("recovery") or {}).get("state")
+            != "manual_reconciliation_required"
+        ):
+            return None
+        try:
+            lock_conversation_session(
+                db, session_id=session, user_id=int(owner), expected_revision=revision
+            )
+        except (ConversationRevisionError, PermissionError):
+            return None
+        execution = AgentTaskExecutionRecord
+        # The conditional write fences claim/requeue on SQLite as well as SQL engines with row locks.
+        fenced = (
+            db.query(execution)
+            .filter(
+                execution.run_id == current.run_id,
+                execution.user_id == owner,
+                execution.tenant_id == scope.tenant_id,
+                execution.state == "failed",
+                execution.finished_at.is_not(None),
+                execution.lease_owner.is_(None),
+                execution.lease_expires_at.is_(None),
+            )
+            .update({execution.state: "failed"}, synchronize_session=False)
+        )
+        if fenced != 1:
+            return None
+        returned = copy.deepcopy(current)
+        _return_queue_result(returned, key, result)
+        return result if repository.save_if_unchanged_in_session(db, returned, current) else None
 
 
 def enqueue_resume(
@@ -193,6 +560,8 @@ def _execute_queued_runtime(
 
     claimed = _ClaimedRuntimeRepository(repository, execution, owner)
     store = XiaoxBindingStore(claimed)
+    if execution.recovery_count:
+        recover_abandoned_goal_verification(store, execution.run_id, claimed=True)
     binding = store.get(execution.run_id)
     run, metadata = binding.run, binding.metadata
     pending = run.metadata.get("_xiaox_queued_request")
@@ -206,6 +575,8 @@ def _execute_queued_runtime(
     result: dict[str, Any]
     if previous is not None:
         stored_result = previous.get("result")
+        if not isinstance(stored_result, dict):
+            stored_result = interrupted_queue_result(run, pending["request_key"])
         if isinstance(stored_result, dict):
             result = copy.deepcopy(stored_result)
         else:
@@ -232,19 +603,27 @@ def _execute_queued_runtime(
             )
             if sorted(restored) != sorted(actions or []):
                 raise XiaoxBindingError("owner_changed", "原员工能力范围已变化")
-        result = run_runtime_task(
-            run_id=run.run_id,
-            task=pending["task"],
-            system_prompt=run.metadata["_xiaox_system_prompt"],
-            runtime_context=context,
-            history=copy.deepcopy(pending.get("history")),
-            input_data=copy.deepcopy(pending.get("input_data")),
-            completion_mode=run.metadata["runtime_completion_mode"],
-            allowed_actions=actions,
-            gate=gate,
-            answer_to_waiting_input=pending.get("answer_to_waiting_input", False),
-            _repository=claimed,
-        )
+        try:
+            result = run_runtime_task(
+                run_id=run.run_id,
+                task=pending["task"],
+                system_prompt=run.metadata["_xiaox_system_prompt"],
+                runtime_context=context,
+                history=copy.deepcopy(pending.get("history")),
+                input_data=copy.deepcopy(pending.get("input_data")),
+                completion_mode=run.metadata["runtime_completion_mode"],
+                allowed_actions=actions,
+                gate=gate,
+                answer_to_waiting_input=pending.get("answer_to_waiting_input", False),
+                _repository=claimed,
+            )
+        except asyncio.CancelledError:
+            interrupted = interrupted_queue_result(
+                store.get(run.run_id).run, pending["request_key"]
+            )
+            if interrupted is None:
+                raise
+            result = interrupted
 
     def finish(parent: AgentRun, current: dict[str, Any]) -> None:
         request = parent.metadata.get("_xiaox_queued_request") or {}
@@ -266,10 +645,7 @@ def _execute_queued_runtime(
                 exit_status="unknown",
                 reconciliation_required=True,
             )
-        request["state"] = "returned"
-        parent.metadata["runtime_requests"][pending["request_key"]].update(
-            state="returned", result=copy.deepcopy(result), returned_at=utc_now_iso()
-        )
+        _return_queue_result(parent, pending["request_key"], result)
         if result.get("reconciliation_required"):
             parent.metadata.update(
                 non_retryable=True, recovery={"state": "manual_reconciliation_required"}
@@ -281,7 +657,9 @@ def _execute_queued_runtime(
             state = result.get("execution_state")
             if state in {"completed", "waiting_user", "running", "paused", "cancelled"}:
                 parent.status = state
-            elif result.get("reconciliation_required"):
+            elif state in {"waiting_input", "waiting_auth", "waiting_approval"}:
+                parent.status = "waiting_user"
+            elif state == "blocked" or result.get("reconciliation_required"):
                 parent.status = "blocked"
             else:
                 parent.status = "failed"
@@ -297,7 +675,7 @@ def execute_queued_runtime(
     from app.application.agent_runtime.gateway import _failure
 
     try:
-        return _execute_queued_runtime(repository, execution, owner)
+        result = _execute_queued_runtime(repository, execution, owner)
     except XiaoxBindingError as exc:
         code, message = exc.code, str(exc)
         result = _failure(code, message, run_id=execution.run_id)
@@ -315,10 +693,7 @@ def execute_queued_runtime(
                 run.final_output["xiaox_result"] = copy.deepcopy(result)
             pending = run.metadata.get("_xiaox_queued_request") or {}
             if pending.get("request_key") in (run.metadata.get("runtime_requests") or {}):
-                pending["state"] = "returned"
-                run.metadata["runtime_requests"][pending["request_key"]].update(
-                    state="returned", result=copy.deepcopy(result), returned_at=utc_now_iso()
-                )
+                _return_queue_result(run, pending["request_key"], result)
             if result.get("reconciliation_required"):
                 run.metadata.update(
                     non_retryable=True, recovery={"state": "manual_reconciliation_required"}
@@ -328,4 +703,33 @@ def execute_queued_runtime(
         XiaoxBindingStore(_ClaimedRuntimeRepository(repository, execution, owner)).update(
             execution.run_id, blocked
         )
+    # A semantic timeout is not an unknown business effect. Close only exact
+    # delegated effects proven by their current independent SQL receipts before
+    # the queue decides whether this worker's result requires reconciliation.
+    from app.application.agent_orchestrator.resume_transaction import unresolved_effects
+    from app.db.models.agent import AgentRunRecord
+
+    claimed = _ClaimedRuntimeRepository(repository, execution, owner)
+    with claimed.transaction() as db:
+        record = db.get(AgentRunRecord, execution.run_id)
+        current = claimed._record_to_run(record) if record is not None else None
+        if current is not None:
+            unresolved_effects(db, current, clear_confirmed=True)
+    # The claim-fenced run receipt has committed before touching the originating
+    # conversation database. A detached chat view does not own that write.
+    try:
+        run = repository.get(execution.run_id)
+    except RECOVERABLE_ERRORS:
+        logger.warning("queued runtime receipt could not be read for chat history", exc_info=True)
         return result
+    if run is not None:
+        context = run.metadata.get("runtime_context") or {}
+        pending = run.metadata.get("_xiaox_queued_request") or {}
+        original = (run.metadata.get("runtime_requests") or {}).get(pending.get("request_key"), {})
+        if context.get("session_id") or context.get("conversation_id"):
+            from app.application.ai_chat.conversation_history import reconcile_queued_chat_reply
+
+            reconcile_queued_chat_reply(
+                context, str(original.get("turn_id") or ""), run.run_id, run=run
+            )
+    return result

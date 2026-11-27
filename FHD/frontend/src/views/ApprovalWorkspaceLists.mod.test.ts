@@ -29,6 +29,13 @@ async function openWorkspace() {
   return wrapper
 }
 
+async function selectQueue(wrapper: Awaited<ReturnType<typeof openWorkspace>>, label: string) {
+  const tab = wrapper.findAll('[role="tab"]').find(item => item.text().startsWith(label))
+  if (!tab) throw new Error(`Missing approval queue ${label}`)
+  await tab.trigger('keydown', { key: 'Enter' })
+  expect(tab.attributes('aria-selected')).toBe('true')
+}
+
 describe('actual approval Mod complete lists', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -123,12 +130,18 @@ describe('actual approval Mod complete lists', () => {
     if (change !== 'unmount') wrapper.unmount()
   })
 
-  it.each([['pending', 0, '待审批', 'approver_id'], ['initiated', 1, '我发起', 'applicant_id']] as const)(
-    'opens and pages the %s list using the authenticated user and returns to the workspace', async (_type, index, label, filter) => {
+  it.each([
+    ['待我审批', '待审批', 'approver_id', '我发起'],
+    ['我发起的', '我发起', 'applicant_id', '待审批'],
+  ] as const)(
+    'opens and pages the %s list using the authenticated user and restores the selected queue', async (tabLabel, label, filter, otherLabel) => {
       const wrapper = await openWorkspace()
+      await selectQueue(wrapper, tabLabel)
+      expect(wrapper.text()).toContain(`${label}第1页`)
+      expect(wrapper.text()).not.toContain(`${otherLabel}第1页`)
       const buttons = wrapper.findAll('button').filter(button => button.text() === '查看全部')
-      expect(buttons).toHaveLength(2)
-      await buttons[index].trigger('click')
+      expect(buttons).toHaveLength(1)
+      await buttons[0].trigger('click')
       await flushPromises()
       expect(wrapper.get('[aria-label="完整审批列表"]').text()).toContain('第 1 / 3 页')
       expect(get).toHaveBeenLastCalledWith('/api/approval/requests', { [filter]: 42, page: 1, page_size: 50 }, { headers: { 'X-User-ID': '42' } })
@@ -138,12 +151,41 @@ describe('actual approval Mod complete lists', () => {
       expect(get).toHaveBeenLastCalledWith('/api/approval/requests', { [filter]: 42, page: 2, page_size: 50 }, { headers: { 'X-User-ID': '42' } })
       await wrapper.findAll('button').find(button => button.text() === '返回工作台')!.trigger('click')
       expect(wrapper.find('[aria-label="完整审批列表"]').exists()).toBe(false)
-      expect(wrapper.findAll('button').filter(button => button.text() === '查看全部')).toHaveLength(2)
-      expect(wrapper.text()).toContain('待审批第1页')
-      expect(wrapper.text()).toContain('我发起第1页')
+      expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain(tabLabel)
+      expect(wrapper.findAll('button').filter(button => button.text() === '查看全部')).toHaveLength(1)
+      expect(wrapper.text()).toContain(`${label}第1页`)
+      expect(wrapper.text()).not.toContain(`${otherLabel}第1页`)
       wrapper.unmount()
     },
   )
+
+  it.each([
+    ['已通过', 'approved', '通过的采购单', '拒绝的报销单'],
+    ['已拒绝', 'rejected', '拒绝的报销单', '通过的采购单'],
+  ] as const)('filters the %s preview and passes the status through pagination', async (tabLabel, status, title, otherTitle) => {
+    get.mockImplementation(async (_path, params) => {
+      if (params.page_size === 50) {
+        const page = response(title, params.page)
+        return { ...page, data: page.data.map(item => ({ ...item, status })) }
+      }
+      const item = response('事项', 1).data[0]
+      return { success: true, data: params.approver_id ? [] : [
+        { ...item, id: 10, title: '通过的采购单', status: 'approved' },
+        { ...item, id: 11, title: '拒绝的报销单', status: 'rejected' },
+      ] }
+    })
+    const wrapper = await openWorkspace()
+    await selectQueue(wrapper, tabLabel)
+    expect(wrapper.get('[data-tutorial-id="approval-initiated-list"]').text()).toContain(title)
+    expect(wrapper.text()).not.toContain(otherTitle)
+    await wrapper.findAll('button').find(button => button.text() === '查看全部')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '下一页')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(`${title}第2页`)
+    expect(get).toHaveBeenLastCalledWith('/api/approval/requests', { applicant_id: 42, status, page: 2, page_size: 50 }, { headers: { 'X-User-ID': '42' } })
+    wrapper.unmount()
+  })
 
   it('shows localized AI operation titles and Chinese status labels', async () => {
     get.mockResolvedValue({ success: true, pagination: { page: 1, page_size: 50, total: 2 }, data: [
@@ -151,6 +193,7 @@ describe('actual approval Mod complete lists', () => {
       { id: 2, request_no: 'r2', title: `${'超长自定义标题'.repeat(10)}`, status: 'withdrawn', business_type: 'expense', created_at: '' },
     ] })
     const wrapper = await openWorkspace()
+    await selectQueue(wrapper, '我发起的')
     expect(wrapper.text()).toContain('数据导入 · 预演')
     expect(wrapper.text()).not.toContain('智能对话写操作')
     expect(wrapper.text()).toContain('已取消')

@@ -23,6 +23,8 @@ vi.mock('@/utils/chatSseStream', () => ({
 import chatApi, { parseChatStreamErrorResponse } from './chat'
 import { persistMarketTokensFromHandoff } from './marketAccount'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
+import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 function setMarketToken(token: string) {
   setRuntimeTenantStorageScopeInput({ tenantId: 9, marketUserId: 1, accountKind: 'enterprise' })
@@ -143,6 +145,20 @@ describe('parseChatStreamErrorResponse', () => {
 })
 
 describe('chatApi stream methods', () => {
+  it.each(['send', 'resume'])('binds a %s stream to the current tenant-scoped Mod header', async mode => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    invalidateTenantStorageScopeCache()
+    writeActiveExtensionModIdToStorage('finance-mod')
+    vi.mocked(fetch).mockResolvedValue({ ok: true } as Response)
+    if (mode === 'send') await chatApi.sendChatStream({ message: 'hi' } as never)
+    else await chatApi.resumeChatStream('original-turn')
+    expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ 'X-XCAGI-Active-Mod-Id': 'finance-mod' })
+    setRuntimeTenantStorageScopeInput({ tenantId: 10, localUserId: 2 })
+    invalidateTenantStorageScopeCache()
+    await chatApi.resumeChatStream('other-turn')
+    expect(new Headers(vi.mocked(fetch).mock.calls[1][1]?.headers).has('X-XCAGI-Active-Mod-Id')).toBe(false)
+  })
+
   it('sendChatStream issues POST fetch', async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true } as Response)
     await chatApi.sendChatStream({ message: 'hi' } as never)

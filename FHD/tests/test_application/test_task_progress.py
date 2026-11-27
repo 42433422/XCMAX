@@ -169,6 +169,25 @@ def test_employee_snapshot_preserves_serial_and_parallel_assignment_status() -> 
     assert task_from_run(run).metadata["reconciliation_required"] is True
 
 
+def test_verified_read_only_reply_does_not_inherit_business_write_warning() -> None:
+    run = AgentRun(user_id="owner", message="比较两个文件", status="completed")
+    run.metadata.update(
+        runtime_type="xiaox",
+        runtime_goal_verification={"status": "verified", "accepted": True, "mode": "reply"},
+    )
+    run.final_output = {
+        "xiaox_result": {"ok": True, "execution_state": "completed", "output": "两份有差异"},
+        "business_result": {
+            "status": "reply_completed",
+            "success": False,
+            "summary": "尚未核验业务写入",
+        },
+    }
+    assert task_from_run(run).metadata["reconciliation_required"] is False
+    run.metadata["runtime_goal_verification"]["accepted"] = False
+    assert task_from_run(run).metadata["reconciliation_required"] is True
+
+
 @pytest.fixture
 def elt_progress_engine():
     from app.db.db_base import Base

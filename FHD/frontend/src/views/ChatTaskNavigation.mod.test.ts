@@ -8,14 +8,22 @@ import type { TaskItem } from '@/composables/useChatPersistence'
 import { useChatTaskRuntimeBridge } from '@/composables/useChatTaskRuntimeBridge'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 import type { UiChatMessage } from '@/types/chat-ui'
+import { useAccountProfileStore } from '@/stores/accountProfile'
 
 const api = vi.hoisted(() => ({
   listTasks: vi.fn(), listRuns: vi.fn(), markTaskRead: vi.fn(), getRun: vi.fn(),
   continueRun: vi.fn(), pauseRun: vi.fn(), resumeRun: vi.fn(), retryRun: vi.fn(), cancelRun: vi.fn(),
 }))
 vi.mock('@/api/agentRuns', () => ({ default: api }))
-const { resolveRoute, followPlatform } = vi.hoisted(() => ({ resolveRoute: vi.fn(), followPlatform: vi.fn() }))
+const { resolveRoute, followPlatform, intelligenceFetch } = vi.hoisted(() => ({
+  resolveRoute: vi.fn(), followPlatform: vi.fn(), intelligenceFetch: vi.fn(),
+}))
 vi.mock('@/api/chat', () => ({ default: { getModelStatus: resolveRoute, followPlatformModel: followPlatform } }))
+vi.mock('@/utils/apiBase', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/utils/apiBase')>()
+  return { ...actual, apiFetch: (path: string, options?: Parameters<typeof actual.apiFetch>[1]) =>
+    path === '/api/workspace/intelligence' ? intelligenceFetch(path, options) : actual.apiFetch(path, options) }
+})
 vi.mock('pinia', async () => ({
   ...await vi.importActual<typeof import('pinia')>('pinia'),
   storeToRefs: (store: unknown) => store,
@@ -113,7 +121,11 @@ async function mountView(task = summary(), feedback = false, component: Componen
   ] })
   await router.push('/chat')
   await router.isReady()
-  wrapper = mount(component, { global: { plugins: [createPinia(), router], stubs: {
+  const pinia = createPinia()
+  if (renderSuggestions) useAccountProfileStore(pinia).$patch({
+    loaded: true, tenantId: 42, accountKind: 'enterprise', userRole: 'tenant:owner',
+  })
+  wrapper = mount(component, { attachTo: document.body, global: { plugins: [pinia, router], stubs: {
     PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: !feedback && !renderSuggestions, ChatInputToolbar: !renderSuggestions,
     ChatSidePanel: true, TaskWorkspaceContextBar: true,
     ChatHistoryModal: !feedback, ChatOfficeDockingReview: true,
@@ -126,6 +138,11 @@ beforeEach(() => {
   localStorage.clear()
   resolveRoute.mockReset().mockResolvedValue({ ok: true })
   followPlatform.mockReset().mockResolvedValue({ ok: true })
+  intelligenceFetch.mockReset().mockImplementation(async (_path, options) => Response.json({
+    owner_id: 'tenant:42', editable: true,
+    level: options?.method === 'PUT' ? JSON.parse(options.body).level : 1,
+    revision: options?.method === 'PUT' ? 2 : 1,
+  }))
   Object.values(api).forEach(mock => mock.mockReset().mockResolvedValue({ success: true }))
   activeTaskId.value = ''; expandedTaskIds.value = []
   loadConversation.mockClear(); toggleExpanded.mockClear()
@@ -182,7 +199,16 @@ describe('shipped chat Mod task navigation', () => {
         { role: 'ai', content: 'Excel 映射完成', time: '12:01', persistence: { id: 'excel', status: 'saved' } },
       ]
       await flushPromises()
-      await wrapper!.get('[data-testid="proactive-suggestions-toggle"] input').setValue(true)
+      expect(wrapper!.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
+      await wrapper!.get('.enterprise-level-trigger').trigger('click')
+      await flushPromises()
+      const slider = document.querySelector<HTMLElement>('.enterprise-level-track [role="slider"]')!
+      slider.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
+      await flushPromises()
+      expect(intelligenceFetch).toHaveBeenLastCalledWith('/api/workspace/intelligence', expect.objectContaining({
+        method: 'PUT', body: JSON.stringify({ level: 2, expected_owner_id: 'tenant:42', expected_revision: 1 }),
+      }))
+      expect(wrapper!.get('.enterprise-level-trigger').text()).toContain('L2')
       const rows = wrapper!.findAll('#chatMessages [data-message-index]')
       expect(rows[0]!.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
       expect(rows[1]!.get('[data-testid="proactive-suggestions"]').text()).toContain('客户')

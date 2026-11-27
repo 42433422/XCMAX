@@ -2,6 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { modRouteGlob } from './modRouteGlob.enterprise'
 
 describe('modRouteGlob.enterprise loaders', () => {
+  it('bundles the physical Kellai route used by the tenant guard', async () => {
+    const load = modRouteGlob['../../../mods/tools/kellai/frontend/routes.js']
+    const { modRoutes } = await load()
+    expect(modRoutes).toEqual([
+      expect.objectContaining({
+        path: '/mod/kellai/workspace',
+        name: 'mod-kellai',
+        component: expect.any(Function),
+      }),
+    ])
+  })
+
   it('exports a record of route module loaders', () => {
     expect(modRouteGlob).toBeDefined()
     expect(typeof modRouteGlob).toBe('object')

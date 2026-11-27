@@ -84,6 +84,25 @@ describe('useChatRequest', () => {
     expect(body.user_id).toBe('web_normal_session-1')
   })
 
+  it('carries current desktop navigation in SSE, JSON and batch request context', async () => {
+    const chat = (await import('@/api/chat')).default
+    const desktopNavigation = [{ id: 'settings', label: '系统设置', breadcrumb: [], kind: 'page' as const }]
+    const readDesktopNavigation = vi.fn(() => desktopNavigation)
+    const scoped = useChatRequest({ ...makeDeps(), readDesktopNavigation })
+    const scope = { sessionId: 'session-1', messages: [], turnId: 'turn-1', isCurrent: () => true }
+    const payload = scoped.buildPlannerChatRequestPayload('怎么进设置', undefined, scope).body
+    expect(payload).toMatchObject({ message: '怎么进设置', context: { desktop_navigation: desktopNavigation } })
+    await scoped.requestChatByMode('怎么进设置', {}, undefined, scope)
+    await scoped.requestChatByModeBatch(['怎么进设置'], {}, scope)
+    const expected = expect.objectContaining({ context: expect.objectContaining({ desktop_navigation: desktopNavigation }) })
+    expect(chat.sendUnifiedChat).toHaveBeenCalledWith(expected, expect.any(Object))
+    expect(chat.sendUnifiedChatBatch).toHaveBeenCalledWith(expected, expect.any(Object))
+    readDesktopNavigation.mockClear()
+    const stale = scoped.buildPlannerChatRequestPayload('怎么进设置', undefined, { ...scope, isCurrent: () => false }).body
+    expect(stale.context).not.toHaveProperty('desktop_navigation')
+    expect(readDesktopNavigation).not.toHaveBeenCalled()
+  })
+
   it('marks auto approval mode in the planner context', async () => {
     const { useApprovalMode } = await import('./useApprovalMode')
     const mode = useApprovalMode()

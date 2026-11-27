@@ -22,6 +22,7 @@
         class="panel-tab"
         role="tab"
         :aria-selected="activeTab === 'conversation'"
+        data-tutorial-id="chat-conversation-tab"
         :class="{ 'panel-tab--active': activeTab === 'conversation' }"
         @click="activateConversationTab"
       >
@@ -198,35 +199,34 @@ onMounted(() => {
 
 .panel-header-tabs {
   display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 0 10px;
 }
 
 .panel-tab {
   flex: 1;
-  border: 1px solid transparent;
+  min-height: 40px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--app-text-muted, #64748b);
-  border-radius: 8px;
-  padding: 7px 10px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition:
-    background 150ms ease,
-    color 150ms ease,
-    border-color 150ms ease;
 }
 
 .panel-tab:hover {
-  background: rgba(0, 0, 0, 0.04);
   color: var(--app-text-strong, #1f2329);
 }
 
 .panel-tab--active {
-  background: rgba(0, 82, 217, 0.08);
   color: var(--app-interactive, #0052d9);
-  border-color: rgba(0, 82, 217, 0.18);
+  border-bottom-color: currentColor;
+}
+
+.panel-tab:focus-visible {
+  outline: 2px solid var(--app-interactive, #0052d9);
+  outline-offset: -3px;
 }
 </style>

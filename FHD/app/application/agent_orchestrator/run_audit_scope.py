@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
@@ -26,11 +27,16 @@ def attach_child_result(parent: Any, child: Any) -> bool:
     """Attach a snapshot only for the same authenticated owner, tenant and Mod."""
     scope = _result_scope(parent)
     child_context = child.metadata.get("runtime_context") or {}
-    if scope is None or scope != _result_scope(child):
+    if (
+        scope is None
+        or scope != _result_scope(child)
+        or child.run_id == parent.run_id
+        or child_context.get("parent_run_id") != parent.run_id
+    ):
         return False
     parent.metadata.setdefault("child_results", {})[child.run_id] = {
         "status": child.status,
-        "final_output": child.final_output,
+        "final_output": copy.deepcopy(child.final_output),
         "parent_task_id": child_context.get("parent_task_id"),
         "parent_run_id": child_context.get("parent_run_id"),
         "tenant_id": scope[1],
@@ -42,6 +48,35 @@ def attach_child_result(parent: Any, child: Any) -> bool:
     return True
 
 
+def child_result_state(child: Any) -> str:
+    """Classify the original child without confusing a known wait with an unknown effect."""
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    outputs = {
+        "final_output": child.final_output,
+        "outputs": [step.output for step in child.steps],
+    }
+    state = execution_result_pending_state(outputs) or _payload_status(
+        {"agent_status": child.status, **outputs}
+    )
+    recovery = child.metadata.get("recovery")
+    if state == "unknown" or (
+        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    ):
+        return "unknown"
+    if child.status in {"cancelled", "rejected", "paused"}:
+        return str(child.status)
+    if state == "waiting_user":
+        waiting = next((step for step in child.steps if step.status == "waiting_user"), None)
+        return (
+            "waiting_input"
+            if waiting is None or waiting.tool_id == "clarify"
+            else "waiting_approval"
+        )
+    return state
+
+
 def project_child_results(
     parent: Any,
     read_run: Callable[[str], Any],
@@ -49,9 +84,6 @@ def project_child_results(
     require_verified_completion: bool = False,
 ) -> dict[str, Any]:
     """Refresh only already bound children; missing or out-of-scope receipts stay unknown."""
-    from app.application.agent_orchestrator.trace_payloads import _payload_status
-    from app.domain.task_lifecycle.results import execution_result_pending_state
-
     children = parent.metadata.get("child_results") or {}
     parent_scope = _result_scope(parent)
     projected: dict[str, Any] = {}
@@ -88,28 +120,7 @@ def project_child_results(
                 )
             ):
                 continue
-            outputs = {
-                "final_output": child.final_output,
-                "outputs": [step.output for step in child.steps],
-            }
-            state = execution_result_pending_state(outputs) or _payload_status(
-                {"agent_status": child.status, **outputs}
-            )
-            recovery = child.metadata.get("recovery")
-            if (
-                isinstance(recovery, dict)
-                and recovery.get("state") == "manual_reconciliation_required"
-            ):
-                state = "unknown"
-            if state == "waiting_user":
-                waiting = next(
-                    (step for step in child.steps if step.status == "waiting_user"), None
-                )
-                state = (
-                    "waiting_input"
-                    if waiting is None or waiting.tool_id == "clarify"
-                    else "waiting_approval"
-                )
+            state = child_result_state(child)
             if state == "completed" and require_verified_completion:
                 from app.application.agent_orchestrator.result_verification import (
                     latest_step_call,

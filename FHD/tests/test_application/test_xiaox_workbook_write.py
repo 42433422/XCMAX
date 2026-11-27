@@ -1,7 +1,4 @@
-"""Owned workbook -> approved bundled writer -> independent QC -> next action.
-
-Fixtures are synthetic workbooks, not the unavailable original customer corpus.
-"""
+"""Owned workbook writes through approved tools and independent structural QC."""
 
 from __future__ import annotations
 
@@ -10,180 +7,94 @@ import hashlib
 import io
 import json
 from pathlib import Path
-from types import SimpleNamespace
+from urllib.parse import unquote
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 
-from app.application.agent_orchestrator import set_agent_run_repository_for_tests
-from app.application.agent_orchestrator.approval_grant import issue_approval_grant
-from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
 from app.application.agent_orchestrator.artifact_files import artifact_path, read_verified_run_file
-from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
-from app.application.agent_orchestrator.run_models import AgentRun
-from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
-from app.application.agent_orchestrator.task_execution_sql_repository import (
-    SQLAlchemyTaskExecutionRepository,
-)
-from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.employee_runtime.executor import execute_employee_task_local
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
-from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
-from app.domain.workbook_write_contract import WORKBOOK_WRITER
-from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    _batch_goal_capacity,
+    goal_evidence_snapshot,
+    runtime_file_evidence,
+)
+from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY
+from app.domain.workbook_write_contract import WORKBOOK_READER
 from app.infrastructure.tenant_scope import tenant_scope
-from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
-from app.infrastructure.xiaox.tools import XiaoxToolBridge
+from app.infrastructure.xiaox.binding import XiaoxBindingError
 from app.mod_sdk.employee_tool_registry import office_output_paths
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.xiaox_workbook_runtime import workbook_runtime as workbook_runtime
 
 
-@pytest.fixture
-def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
-    workspace = tmp_path / "workspace"
-    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
-    actor = trusted_actor(permissions=["employee.execute", "tool.excel_analysis.read"])
-    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
-    parent = AgentRun(
-        str(actor.user_id), "按原模板写入两格并保存公式，然后读回工作簿", status="running"
+@pytest.mark.parametrize("workbook_runtime", [1], indirect=True)
+def test_l1_retry_reads_owned_workbook_without_write_approval(workbook_runtime):
+    state = workbook_runtime
+    parent = state.repository.get(state.parent.run_id)
+    parent.metadata["runtime_context"]["mutation_policy"] = "model_only"
+    state.repository.save(parent)
+
+    structure = state.invoke(
+        "structure",
+        {"file_path": state.upload["upload_id"]},
+        tool="excel_analysis",
+        action="structure",
     )
-    parent.metadata.update(runtime_type="xiaox", runtime_context=actor.context)
-    contract = build_goal_contract(parent)
-    parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
-    repository.save(parent)
-    store = XiaoxBindingStore(repository)
-    grant = store.create(parent.run_id)
-    book = Workbook()
-    sheet = book.active
-    sheet.title = "Data"
-    sheet["A1"], sheet["B1"], sheet["C1"] = "name", "amount", "formula"
-    sheet["A2"], sheet["B2"], sheet["D2"] = "old", 1, "protected"
-    sheet["C2"] = "=B2+1"
-    with io.BytesIO() as stream:
-        book.save(stream)
-        original = stream.getvalue()
-    book.close()
-    app = FastAPI()
-    app.include_router(platform_shell_router)
-    with TestClient(app, headers=actor.headers) as client:
-        response = client.post(
-            "/api/platform-shell/chat-office-file-upload",
-            files={
-                "file": (
-                    "template.xlsx",
-                    original,
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            },
-        )
-    assert response.status_code == 200, response.text
-    upload = response.json()["data"]
-    assert upload.get("upload_id"), response.text
-
-    def forbid_model(*args, **kwargs):
-        pytest.fail("the bundled writer/QC must not add a model planner")
-
-    monkeypatch.setattr("app.application.employee_runtime.executor._cognition_fhd", forbid_model)
-    monkeypatch.setattr(
-        "app.application.employee_runtime.agent_runner._chat_completion", forbid_model
-    )
-
-    def orchestrator(repo):
-        return AgentOrchestrator(
-            repository=repo, tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute)
-        )
-
-    bridge = XiaoxToolBridge(store, orchestrator(repository))
-    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
-
-    def invoke(call_id, params, tool="employee", action="execute"):
-        spec = bridge.invoke(
-            grant.mcp_token, "capability_describe", {"tool_id": tool, "action": action}
-        )["capability"]
-        return bridge.invoke(
-            grant.mcp_token,
-            "execute_action",
-            {
-                "tool_id": tool,
-                "action": action,
-                "params": params,
-                "call_id": call_id,
-                "schema_digest": spec["schema_digest"],
-            },
-        )
-
-    def approve(receipt):
-        child = repository.get(receipt["run_id"])
-        approval = issue_approval_grant(child, principal_id=str(actor.user_id))
-        approve_and_enqueue(
-            repository,
-            queue,
-            run_id=child.run_id,
-            token=approval["grant"],
-            principal_id=str(actor.user_id),
-            runtime_context=actor.context,
-            authenticated_actor_binding=actor.context["_actor_authorization"],
-        )
-        claimed = queue.claim("workbook-worker", lease_seconds=30)
-        assert claimed is not None
-        AgentTaskDispatcher(
-            execution_repository=queue, run_repository=repository, orchestrator_factory=orchestrator
-        )._execute_claim(claimed, "workbook-worker")
-        return repository.get(child.run_id)
-
-    params = {
-        "employee_id": WORKBOOK_WRITER,
-        "task": "执行明确模板回填并保存公式",
-        "input": {
-            "template_path": upload["upload_id"],
-            "plan": {
-                "plan_version": 1,
-                "protected_ranges": ["Data!D:D"],
-                "phases": [
-                    {
-                        "phase": "cell_writes",
-                        "writes": [
-                            {"sheet": "Data", "ref": "A2", "value": "observed-name"},
-                            {"sheet": "Data", "ref": "B2", "value": 5},
-                        ],
-                    },
-                    {
-                        "phase": "formula_writes",
-                        "writes": [
-                            {"sheet": "Data", "ref": "C2", "formula": "=B2*2"},
-                        ],
-                    },
-                ],
-            },
+    # The synthetic sheet may need header confirmation, but policy must not
+    # misclassify this registered read as a write during a model-only retry.
+    assert structure.get("message") == "header_confirmation_required", structure
+    reader = state.invoke(
+        "reader",
+        {
+            "employee_id": WORKBOOK_READER,
+            "task": "读取上传的工作簿",
+            "input": {"upload_id": state.upload["upload_id"]},
         },
-    }
-    set_agent_run_repository_for_tests(repository)
-    try:
-        yield SimpleNamespace(
-            actor=actor,
-            repository=repository,
-            parent=parent,
-            store=store,
-            bridge=bridge,
-            grant=grant,
-            upload=upload,
-            workspace_copy=workspace / upload["file_path"],
-            original=original,
-            params=params,
-            invoke=invoke,
-            approve=approve,
-        )
-    finally:
-        set_agent_run_repository_for_tests(None)
+    )
+    assert reader["status"] == "completed" and reader["verified"] is True, reader
+    assert reader.get("pending_approval") is not True
+
+
+def test_reader_bad_file_reference_is_terminal_failure_without_reconciliation(workbook_runtime):
+    state = workbook_runtime
+    result = state.invoke(
+        "missing-reader",
+        {
+            "employee_id": WORKBOOK_READER,
+            "task": "读取上传的工作簿",
+            "input": {"upload_id": "missing-upload-id"},
+        },
+    )
+    assert result["status"] == "failed"
+    assert result["reconciliation_required"] is False
+    assert result["message"] == "文件不属于当前账号或当前任务，请明确选择 upload_id"
+
+
+def test_writer_missing_sheet_reports_original_plan_error_before_dispatch(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"]["phases"][0]["writes"][0]["sheet"] = "不存在的汇总页"
+    result = state.invoke("missing-sheet", params)
+    assert result["status"] == "not_started"
+    assert result["error_code"] == "workbook_plan_invalid"
+    assert "不存在的汇总页" in result["message"]
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+def test_invalid_formula_is_rejected_before_workbook_approval(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"]["phases"][1]["writes"][0]["formula"] = "=SUM(A1;B1)"
+    result = state.invoke("invalid-formula", params)
+    assert result["status"] == "not_started"
+    assert result["error_code"] == "workbook_formula_syntax_invalid"
+    assert result["field_path"] == "input.plan.phases[1].writes[0].formula"
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
 
 
 def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_runtime):
@@ -210,6 +121,9 @@ def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_
     assert cells[2, 2] == 1
     pending = state.invoke("write", state.params)
     assert pending["pending_approval"] is True and not pending["artifacts"]
+    [review] = pending["approval_card"]["todo"]
+    assert 'Data · A2  "old" → "observed-name"' in review
+    assert "Data · B2  1 → 5" in review
     child = state.approve(pending)
     receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
     assert child.status == "completed" and receipt["verified"] is True, [
@@ -247,6 +161,15 @@ def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_
     assert quality["template_sha256"] == hashlib.sha256(state.original).hexdigest()
     assert quality["artifact_sha256"] == hashlib.sha256(downloaded.content).hexdigest()
     assert quality["formula_recalculation_verified"] is False
+    assert quality["formula_recalculation"]["code"] == "formula_recalculation_engine_unavailable"
+    changes = quality["cell_changes"]
+    assert changes["scan_complete"] is True
+    assert {example["ref"] for group in changes["groups"] for example in group["examples"]} == {
+        "A2",
+        "B2",
+        "C2",
+    }
+    assert "observed-name" not in json.dumps(changes)
     assert quality["sections"]["conformance"] == quality["sections"]["protection"] == "pass"
     next_action = state.invoke(
         "read-written", {"file_path": artifact["uri"]}, "excel_analysis", "read"
@@ -269,8 +192,11 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
         source_digest = upload.sha256
     assert source_digest == hashlib.sha256(state.original).hexdigest()
     assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
+
     params = copy.deepcopy(state.params)
     assert params["input"]["template_path"] == upload_id
+    output_name = "小C-Excel制表考卷.xlsx"
+    params["input"]["output_name"] = output_name
     params["input"]["plan"] = {
         "plan_version": 1,
         "phases": [
@@ -295,9 +221,11 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
     pending = state.invoke("structure", params)
     assert pending["pending_approval"] is True and not pending["artifacts"]
     child = state.approve(pending)
+    assert child.metadata["runtime_context"]["attachment_upload_ids"] == [upload_id]
     receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
     assert child.status == "completed" and receipt["verified"] is True, (child.error, receipt)
     [artifact] = receipt["artifacts"]
+    assert artifact["name"] == output_name
     raw = read_verified_run_file(child.run_id, artifact)
     from app.fastapi_routes.domains.agent.artifact_routes import router as artifact_router
 
@@ -307,12 +235,17 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
         response = client.get(artifact["uri"])
     assert response.status_code == 200, response.text
     assert response.content == raw != state.original
+    assert (
+        unquote(response.headers["content-disposition"])
+        == f"attachment; filename*=UTF-8''{output_name}"
+    )
     checks = receipt["verification"]["steps"][0]["checks"]
     quality = next(row["evidence"] for row in checks if row["source"] == "workbook_qc")
     assert quality["template_sha256"] == source_digest
     assert quality["artifact_sha256"] == hashlib.sha256(response.content).hexdigest()
     assert quality["sections"]["conformance"] == quality["sections"]["formulas"] == "pass"
     assert quality["formula_recalculation_verified"] is False
+    assert quality["formula_recalculation"]["code"] == "formula_recalculation_engine_unavailable"
     with io.BytesIO(response.content) as stream:
         book = load_workbook(stream, data_only=False)
         try:
@@ -343,14 +276,234 @@ def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_
     assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
 
 
-@pytest.mark.parametrize("override", ["workspace_root", "output_relpath", "template_relpath"])
-def test_model_cannot_override_writer_paths_or_output_authority(workbook_runtime, override):
+def test_new_sheet_is_written_and_independently_verified(workbook_runtime):
     state = workbook_runtime
     params = copy.deepcopy(state.params)
-    params["input"][override] = "/outside/private.xlsx"
+    params["input"]["plan"] = {
+        "plan_version": 1,
+        "template": {"sheet_names": ["Data"]},
+        "phases": [
+            {"phase": "create_sheet", "sheet": "Summary"},
+            {
+                "phase": "cell_writes",
+                "writes": [
+                    {"sheet": "Summary", "ref": "A1", "value": "Total"},
+                ],
+            },
+            {
+                "phase": "formula_writes",
+                "writes": [
+                    {"sheet": "Summary", "ref": "B1", "formula": "=SUM(Data!B2:B3)"},
+                ],
+            },
+        ],
+    }
+    pending = state.invoke("new-sheet", params)
+    assert pending["pending_approval"] is True, pending
+    child = state.approve(pending)
+    receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
+    assert child.status == "completed" and receipt["verified"] is True, (child.error, receipt)
+    [artifact] = receipt["artifacts"]
+    with io.BytesIO(read_verified_run_file(child.run_id, artifact)) as stream:
+        book = load_workbook(stream, data_only=False)
+        try:
+            assert book.sheetnames == ["Data", "Summary"]
+            assert book["Summary"]["A1"].value == "Total"
+            assert book["Summary"]["B1"].value == "=SUM(Data!B2:B3)"
+        finally:
+            book.close()
+    checks = receipt["verification"]["steps"][0]["checks"]
+    quality = next(row["evidence"] for row in checks if row["source"] == "workbook_qc")
+    assert quality["sections"]["conformance"] == "pass"
+    assert state.workspace_copy.read_bytes() == state.original
+
+
+def test_verified_workbook_readback_reaches_goal_evidence(workbook_runtime):
+    state = workbook_runtime
+    written = state.approve(state.invoke("write-for-readback", state.params))
+    assert written.status == "completed"
+    write_row = state.store.receipt_snapshot(state.parent.run_id)[0]
+    assert _batch_goal_capacity(write_row) >= 2
+    artifact = write_row["receipt"]["artifacts"][0]
+    read = state.invoke(
+        "read-answer-copy",
+        {
+            "employee_id": WORKBOOK_READER,
+            "task": "回读已验证的答题副本",
+            "input": {"file_path": artifact["uri"]},
+        },
+    )
+    assert read["status"] == "completed" and read["verified"] is True, read
+    rows = state.store.receipt_snapshot(state.parent.run_id)
+    contract = state.repository.get(state.parent.run_id).metadata["runtime_goal_contract"]
+    snapshot = goal_evidence_snapshot(contract, rows, "副本已回读")
+    sources = runtime_file_evidence(contract, snapshot)
+    assert sources is not None
+    source = sources[read["run_id"]]
+    assert source["origin"] == "verified_workbook_readback"
+    assert source["coverage"]["truncated"] is False
+    assert '"ref":"C2","value":null,"formula":"=B2*2"' in source["text"]
+
+
+def test_unverified_workbook_readback_cannot_be_cited(workbook_runtime):
+    state = workbook_runtime
+    written = state.approve(state.invoke("write-for-untrusted-readback", state.params))
+    assert written.status == "completed"
+    artifact = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]["artifacts"][0]
+    read = state.invoke(
+        "read-untrusted",
+        {
+            "employee_id": WORKBOOK_READER,
+            "task": "回读已验证的答题副本",
+            "input": {"file_path": artifact["uri"]},
+        },
+    )
+    assert read["status"] == "completed"
+    rows = state.store.receipt_snapshot(state.parent.run_id)
+    read_row = next(row for row in rows if row["child_run_id"] == read["run_id"])
+    read_row["receipt"]["tool_calls"][0]["output"]["data"]["readback"]["sha256"] = "0" * 64
+    contract = state.repository.get(state.parent.run_id).metadata["runtime_goal_contract"]
+    snapshot = goal_evidence_snapshot(contract, rows, "副本已回读")
+    assert read["run_id"] not in (runtime_file_evidence(contract, snapshot) or {})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("workspace_root", "/outside/private.xlsx"),
+        ("output_relpath", "/outside/private.xlsx"),
+        ("template_relpath", "/outside/private.xlsx"),
+        ("output_name", "../答题.xlsx"),
+        ("output_name", r"其他目录\答题.xlsx"),
+    ],
+)
+def test_model_cannot_override_writer_paths_or_output_authority(workbook_runtime, field, value):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"][field] = value
     result = state.invoke("invalid", params)
     assert result["status"] == "not_started"
     assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+def test_writer_rejects_output_name_with_different_workbook_format(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["output_name"] = "答题.xlsm"
+    child = state.approve(state.invoke("format-mismatch", params))
+    assert child.status != "completed" and not child.artifacts
+    assert not any(record.output.get("success") is True for record in child.tool_calls)
+
+
+def test_writer_rejects_conflicting_writes_before_approval(workbook_runtime):
+    state = workbook_runtime
+    params = copy.deepcopy(state.params)
+    params["input"]["plan"]["phases"][1]["writes"].append(
+        {"sheet": "Data", "ref": "A2", "formula": "=B2*2"}
+    )
+    denied = state.invoke("conflicting-cell", params)
+    assert denied["status"] == "not_started"
+    assert denied["error_code"] == "workbook_plan_invalid"
+    assert "Data!A2" in denied["message"]
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+@pytest.mark.parametrize("workbook_runtime", range(1, 7), indirect=True)
+def test_auto_workbook_review_refuses_unbound_values_and_accepts_a_corrected_plan(workbook_runtime):
+    state = workbook_runtime
+    parent = state.repository.get(state.parent.run_id)
+    parent.metadata["runtime_context"]["chat_approval_mode"] = "auto"
+    state.repository.save(parent)
+    params = copy.deepcopy(state.params)
+    plan = params["input"]["plan"]
+    plan["phases"][0]["writes"].append({"sheet": "Data", "ref": "B6", "value": 99})
+    denied = state.invoke("edit", params)
+    assert denied["status"] == "not_started" and denied["required_approval"] == "manual"
+    assert denied["error_code"] == "workbook_manual_approval_required"
+    assert {change["ref"]: change["kind"] for change in denied["changes"]} == {
+        "A2": "replace",
+        "B2": "replace",
+        "B6": "fill_blank",
+    }
+    assert "observed-name" not in json.dumps(denied)
+    assert state.store.get(parent.run_id).metadata["calls"] == {}
+
+    read = state.invoke(
+        "read-owned",
+        {
+            "employee_id": WORKBOOK_READER,
+            "task": "读取原工作簿",
+            "input": {"upload_id": state.upload["upload_id"]},
+        },
+    )
+    if read.get("pending_approval"):
+        state.approve(read)
+        read = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
+    assert read["status"] == "completed" and read["verified"] is True, read
+    workbook = json.loads(read_verified_run_file(read["run_id"], read["artifacts"][0]))
+    [sheet] = workbook["sheets"]
+    assert sheet["name"] == "Data"
+    cells = {(cell["row"], cell["col"]): cell["value"] for cell in sheet["cells"]}
+    assert cells[2, 1] == "old" and cells[2, 2] == 1
+
+    plan["phases"] = [
+        {"phase": "insert_rows", "sheet": "Data", "row": 1, "count": 1},
+        {"phase": "merge_cells", "sheet": "Data", "range": "A1:C1"},
+        {
+            "phase": "cell_writes",
+            "writes": [
+                {"sheet": "Data", "ref": "A1", "value": "Report"},
+                {"sheet": "Data", "ref": "B3", "value": "1", "value_type": "number"},
+            ],
+        },
+        {
+            "phase": "formula_writes",
+            "writes": [
+                {"sheet": "Data", "ref": "C3", "formula": "=B3*2"},
+            ],
+        },
+    ]
+    result = state.invoke("edit", params)
+    if result.get("pending_approval"):
+        state.approve(result)
+        result = state.store.receipt_snapshot(state.parent.run_id)[-1]["receipt"]
+    child = state.repository.get(result.get("run_id", ""))
+    assert result["status"] == "completed" and result["verified"] is True, (
+        child.status,
+        [call.metadata.get("verification") for call in child.tool_calls],
+    )
+    calls = state.store.get(parent.run_id).metadata["calls"]
+    assert calls["edit"]["isolated_artifact"] and not calls["edit"]["read_only"]
+    assert calls["read-owned"]["read_only"]
+    replay = state.invoke("repeat", params)
+    assert replay["run_id"] == result["run_id"] and replay["artifacts"] == result["artifacts"]
+    [artifact] = result["artifacts"]
+    with io.BytesIO(read_verified_run_file(result["run_id"], artifact)) as stream:
+        book = load_workbook(stream)
+        try:
+            sheet = book["Data"]
+            assert [sheet[ref].value for ref in ("A1", "A3", "B3", "C3", "D3", "B6")] == [
+                "Report",
+                "old",
+                1,
+                "=B3*2",
+                "protected",
+                None,
+            ]
+        finally:
+            book.close()
+    assert state.workspace_copy.read_bytes() == state.original
+
+
+@pytest.mark.parametrize("workbook_runtime", [1], indirect=True)
+def test_plan_mode_does_not_create_workbook_write_or_approval(workbook_runtime):
+    state = workbook_runtime
+    parent = state.repository.get(state.parent.run_id)
+    parent.metadata["runtime_context"][CONTEXT_KEY] = "plan"
+    state.repository.save(parent)
+    denied = state.invoke("edit", state.params)
+    assert denied["error_code"] == "execution_mode_plan_blocked"
+    assert state.store.get(parent.run_id).metadata["calls"] == {}
 
 
 def test_replaced_upload_is_rejected_before_signed_writer_runs(workbook_runtime):
@@ -404,6 +557,43 @@ def test_writer_context_reports_the_input_contract_instead_of_a_write_denial(mon
     assert result["input_schema"]["required"] == ["template_path", "plan"]
 
 
+def test_multiterm_capability_search_finds_authorized_workbook_writer(workbook_runtime):
+    state = workbook_runtime
+    result = state.bridge.invoke(
+        state.grant.mcp_token,
+        "capability_search",
+        {"query": "Excel 工作簿 生成 公式 导出 回读 下载"},
+    )
+    assert result["success"] is True
+    assert ("employee", "execute") in {
+        (row["tool_id"], row["action"]) for row in result["capabilities"]
+    }
+
+
+def test_native_employee_mcp_tool_keeps_review_and_approval(workbook_runtime):
+    from jsonschema import Draft202012Validator
+
+    from app.infrastructure.xiaox.tools import mcp_tool_definitions
+
+    state = workbook_runtime
+    tools = mcp_tool_definitions([("employee", "execute")])
+    direct = next(tool for tool in tools if tool.name == "execute_employee")
+    assert "execute_employee" not in {
+        tool.name for tool in mcp_tool_definitions([("customers", "query")])
+    }
+    digest = state.bridge.invoke(
+        state.grant.mcp_token,
+        "capability_describe",
+        {"tool_id": "employee", "action": "execute"},
+    )["capability"]["schema_digest"]
+    args = {**state.params, "call_id": "direct-writer", "schema_digest": digest}
+    assert not list(Draft202012Validator(direct.input_schema).iter_errors(args))
+    result = state.bridge.invoke(state.grant.mcp_token, "execute_employee", args)
+    assert result["status"] == "waiting_user"
+    assert result["pending_approval"] is True
+    assert not state.workspace_copy.with_name("answer.xlsx").exists()
+
+
 def test_write_contract_declares_which_structural_capabilities_exist():
     """卷二 A2 需要插入行、合并、字号、行高与冻结；契约必须如实声明。
 
@@ -421,6 +611,7 @@ def test_write_contract_declares_which_structural_capabilities_exist():
         "cell_writes",
         "formula_writes",
         "cell_styles",
+        "create_sheet",
         "insert_rows",
         "merge_cells",
         "set_row_height",

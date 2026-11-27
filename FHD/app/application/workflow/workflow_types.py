@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from graphlib import CycleError, TopologicalSorter
 from typing import Any, Literal, cast
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -343,7 +344,11 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
             if branch.target == node.node_id:
                 return f"节点 {node.node_id} 的 branch 不能指向自身"
 
-    return _find_conditional_cycle(plan.nodes, node_ids)
+    try:
+        _plan_sorter(plan.nodes).prepare()
+    except CycleError as exc:
+        return f"计划依赖或条件边形成环: {' -> '.join(exc.args[1])}"
+    return None
 
 
 def step_plan_nodes(plan: PlanGraph) -> tuple[list[WorkflowNode], str | None]:
@@ -351,57 +356,28 @@ def step_plan_nodes(plan: PlanGraph) -> tuple[list[WorkflowNode], str | None]:
     error = validate_plan_graph(plan) if plan.nodes else None
     if error:
         return [], error
-    predecessors = {node.node_id: set(node.depends_on) for node in plan.nodes}
-    for node in plan.nodes:
-        for target in [node.next, *(branch.target for branch in node.branches)]:
-            if target is not None:
-                predecessors[target].add(node.node_id)
+    sorter = _plan_sorter(plan.nodes)
+    sorter.prepare()
+    positions = {node.node_id: index for index, node in enumerate(plan.nodes)}
     ordered: list[WorkflowNode] = []
-    remaining = list(plan.nodes)
-    completed: set[str] = set()
-    while remaining:
-        ready = [node for node in remaining if predecessors[node.node_id] <= completed]
-        ordered.extend(ready)
-        completed.update(node.node_id for node in ready)
-        remaining = [node for node in remaining if node.node_id not in completed]
+    while sorter.is_active():
+        ready = sorter.get_ready()
+        # Keep the existing per-layer declaration order for independent nodes.
+        ordered.extend(
+            plan.nodes[positions[node_id]] for node_id in sorted(ready, key=positions.__getitem__)
+        )
+        sorter.done(*ready)
     return ordered, None
 
 
-def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
-    """Detect cycles across dependency and conditional successor edges."""
-    adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
+def _plan_sorter(nodes: list[WorkflowNode]) -> TopologicalSorter[str]:
+    """Use the standard graph implementation for both data and control edges."""
+    predecessors = {node.node_id: set(node.depends_on) for node in nodes}
     for node in nodes:
-        for dependency in node.depends_on:
-            adj[dependency].append(node.node_id)
-        if node.next is not None:
-            adj[node.node_id].append(node.next)
-        for branch in node.branches:
-            adj[node.node_id].append(branch.target)
-
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[str, int] = dict.fromkeys(node_ids, WHITE)
-
-    def dfs(u: str, stack: list[str]) -> str | None:
-        color[u] = GRAY
-        for v in adj[u]:
-            if color[v] == GRAY:
-                start = stack.index(v) if v in stack else 0
-                return f"计划依赖或条件边形成环: {' -> '.join(stack[start:] + [v])}"
-            if color[v] == WHITE:
-                stack.append(v)
-                err = dfs(v, stack)
-                if err is not None:
-                    return err
-                stack.pop()
-        color[u] = BLACK
-        return None
-
-    for nid in node_ids:
-        if color[nid] == WHITE:
-            err = dfs(nid, [nid])
-            if err is not None:
-                return err
-    return None
+        for target in [node.next, *(branch.target for branch in node.branches)]:
+            if target is not None:
+                predecessors[target].add(node.node_id)
+    return TopologicalSorter(predecessors)
 
 
 def plan_to_dict(plan: PlanGraph) -> dict[str, Any]:

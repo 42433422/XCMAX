@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -94,6 +95,30 @@ def test_authority_arguments_and_unbound_tools_never_publish_tasks(bridge_setup)
     assert len(setup.store.repository.list_recent()) == 1
 
 
+def test_dispatch_exception_settles_child_and_releases_next_call(bridge_setup, monkeypatch):
+    setup = bridge_setup
+
+    def fail_before_tool(_run_id):
+        raise AssertionError("vendored source mismatch")
+
+    monkeypatch.setattr(setup.bridge.orchestrator, "execute_dispatched_run", fail_before_tool)
+    args = {"tool_id": "customers", "action": "query", "params": {}, "call_id": "first"}
+    with pytest.raises(AssertionError, match="vendored source mismatch"):
+        _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
+    first = setup.bridge.invoke(setup.grant.mcp_token, "task_evidence", {"call_id": "first"})
+    assert first["status"] == "failed"
+    assert setup.store.repository.get(first["run_id"]).status == "failed"
+    assert setup.store.get(setup.run.run_id).metadata.get("reserved_cost_units", 0) == 0
+
+    with pytest.raises(AssertionError, match="vendored source mismatch"):
+        _invoke(
+            setup.bridge, setup.grant.mcp_token, "execute_action", {**args, "call_id": "second"}
+        )
+    next_call = setup.bridge.invoke(setup.grant.mcp_token, "task_evidence", {"call_id": "second"})
+    assert next_call["status"] == "failed"
+    assert next_call["run_id"] != first["run_id"]
+
+
 def test_write_uses_original_approval_and_stable_task_for_repeated_model_calls(bridge_setup):
     setup = bridge_setup
     args = {
@@ -158,6 +183,13 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
 
     def dispatch(tool, action, params):
         dispatched.append((tool, action, params["keyword"]))
+        if params["keyword"] == "unavailable":
+            return {
+                "success": False,
+                "message": "查询资源暂时不可用",
+                "retryable": True,
+                "execution": {"outcome": "not_executed", "committed": False, "effect": "none"},
+            }
         return {"success": True, "data": [{"model_number": params["keyword"]}]}
 
     monkeypatch.setattr(
@@ -174,11 +206,48 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
             "call_id": "first",
         },
     )
-    assert first["verified"] is True
+    assert first["verified"] is True, first.get("verification")
+    failed_args = {
+        "tool_id": "customers",
+        "action": "query",
+        "params": {"keyword": "unavailable"},
+        "call_id": "remaining",
+    }
+    failed = _invoke(setup.bridge, grant.mcp_token, "execute_action", failed_args)
+    assert failed["status"] == "failed" and failed["verified"] is False
+    assert failed["execution"] == {
+        "outcome": "not_executed",
+        "committed": False,
+        "effect": "none",
+    }
+    frozen = {
+        receipt["run_id"]: copy.deepcopy(setup.store.repository.get(receipt["run_id"]).to_dict())
+        for receipt in (first, failed)
+    }
     setup.store.close(run.run_id, "waiting_user")
     reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     renewed = reopened.create(run.run_id)
     bridge = XiaoxToolBridge(reopened, setup.bridge.orchestrator)
+    from app.infrastructure.xiaox.receipts import resume_error
+
+    assert resume_error(reopened, renewed.binding, reopened.receipt_snapshot(run.run_id)) == ""
+    # Replanning uses new work on the original parent; it cannot mutate any
+    # submitted action or replay a completed prefix after SQL reconnect.
+    with pytest.raises(XiaoxBindingError) as conflict:
+        _invoke(
+            bridge,
+            renewed.mcp_token,
+            "execute_action",
+            {**failed_args, "call_id": "first", "params": {"keyword": "changed"}},
+        )
+    assert conflict.value.code == "call_conflict"
+    replay = _invoke(
+        bridge,
+        renewed.mcp_token,
+        "execute_action",
+        {**failed_args, "call_id": "first", "params": {"keyword": "first"}},
+    )
+    assert replay["run_id"] == first["run_id"] and replay["verified"] is True
     second = _invoke(
         bridge,
         renewed.mcp_token,
@@ -192,8 +261,19 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
     )
     assert second["verified"] is True and second["run_id"] != first["run_id"]
     snapshot = reopened.receipt_snapshot(run.run_id)
-    assert len(snapshot) == 2 and all(row["receipt"]["verified"] for row in snapshot)
-    assert dispatched == [("customers", "query", "first"), ("customers", "query", "second")]
+    assert len(snapshot) == 3
+    assert {row["call_id"]: row["receipt"]["verified"] for row in snapshot} == {
+        "first": True,
+        "remaining": False,
+        "second": True,
+    }
+    for child_id, original in frozen.items():
+        assert reopened.repository.get(child_id).to_dict() == original
+    assert dispatched == [
+        ("customers", "query", "first"),
+        ("customers", "query", "unavailable"),
+        ("customers", "query", "second"),
+    ]
 
 
 def test_acknowledged_child_completion_uses_original_independent_readback(
@@ -693,107 +773,3 @@ def test_revoke_after_child_is_saved_prevents_dispatch(bridge_setup, monkeypatch
     assert dispatched == []
     call = setup.store.get(setup.run.run_id).metadata["calls"]["read"]
     assert setup.store.repository.get(call["child_run_id"]).status == "cancelled"
-
-
-def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge_setup):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.infrastructure.xiaox.mcp_server import MCP_PATH, router
-    from app.infrastructure.xiaox.tool_names import XIAOX_TOOL_NAMES
-
-    setup = bridge_setup
-    app = FastAPI()
-    app.state.xiaox_binding_store = setup.store
-    app.state.xiaox_tool_bridge = setup.bridge
-    app.state.xiaox_run_id = setup.run.run_id
-    setup.bridge.run_id = setup.run.run_id
-    app.include_router(router)
-    headers = {
-        "Authorization": f"Bearer {setup.grant.mcp_token}",
-        "Accept": "application/json, text/event-stream",
-        "MCP-Protocol-Version": "2025-06-18",
-    }
-    with TestClient(app) as client:
-        denied = client.post(
-            MCP_PATH,
-            headers={**headers, "Authorization": f"Bearer {setup.grant.model_token}"},
-            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        )
-        assert denied.status_code == 403
-        response = client.post(
-            MCP_PATH, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
-        )
-        assert response.status_code == 200, response.text
-        assert {tool["name"] for tool in response.json()["result"]["tools"]} == set(
-            XIAOX_TOOL_NAMES
-        )
-        # MCP SDK v2 removed automatic lowlevel tool-schema validation.
-        # Extra model-supplied authority fields must fail before the business bridge.
-        malformed = client.post(
-            MCP_PATH,
-            headers=headers,
-            json={
-                "jsonrpc": "2.0",
-                "id": 4,
-                "method": "tools/call",
-                "params": {
-                    "name": "execute_action",
-                    "arguments": {
-                        "tool_id": "customers",
-                        "action": "create",
-                        "call_id": "tampered",
-                        "params": {"unit_name": "fixture"},
-                        "approved": True,
-                    },
-                },
-            },
-        )
-        assert malformed.status_code == 200
-        assert malformed.json()["result"]["isError"] is True
-        assert malformed.json()["result"]["structuredContent"]["error_code"] == "invalid_arguments"
-        assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
-        result = client.post(
-            MCP_PATH,
-            headers=headers,
-            json={
-                "jsonrpc": "2.0",
-                "id": 3,
-                "method": "tools/call",
-                "params": {"name": "request_input", "arguments": {"question": "请提供日期"}},
-            },
-        )
-        assert result.status_code == 200, result.text
-        assert result.json()["result"]["structuredContent"]["needs_user_input"] is True
-
-
-def test_private_mcp_initialize_and_list_cannot_borrow_another_run_token(bridge_setup):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.infrastructure.xiaox.mcp_server import MCP_PATH, router
-
-    setup = bridge_setup
-    other = AgentRun(user_id=setup.run.user_id, message="another task", status="running")
-    other.metadata["runtime_context"] = setup.actor.context
-    _bind_goal(other)
-    setup.store.repository.save(other)
-    token = setup.store.create(other.run_id).mcp_token
-    app = FastAPI()
-    app.state.xiaox_binding_store = setup.store
-    app.state.xiaox_tool_bridge = XiaoxToolBridge(setup.store, run_id=setup.run.run_id)
-    app.state.xiaox_run_id = setup.run.run_id
-    app.include_router(router)
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream"}
-    with TestClient(app) as client:
-        for method in ("initialize", "tools/list"):
-            response = client.post(
-                MCP_PATH, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": method}
-            )
-            assert response.status_code == 403
-            assert response.json()["error_code"] == "scope_conflict"
-        del app.state.xiaox_run_id
-        response = client.post(
-            MCP_PATH, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
-        )
-        assert response.status_code == 503

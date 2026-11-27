@@ -468,16 +468,23 @@ async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe)
         # the original user instruction into a new conversation.
         probe.phase = "resumed"
         async with XiaoxTransport(config) as resumed:
-            resumed_id = await resumed.resume_thread(thread_id, developer_instructions=instructions)
+            resumed_id = await resumed.resume_thread(
+                thread_id,
+                developer_instructions=(
+                    instructions + " The restart checkpoint is now complete. Step 2 is pending. "
+                    "Only fresh tool results in the current turn count toward verification."
+                ),
+            )
             second_pid = resumed.process_id
             await _completed_turn(
                 resumed,
-                "Continue this same task using its original nonce from the persisted context. "
-                "First call task_evidence with step 1 and verify its existing receipt; step 1 "
-                "already committed and must never execute again. Then call execute_action "
-                "exactly once with step 2, followed by task_evidence with step 2. Finish only "
-                "after both steps' receipts are verified. Always include that original nonce; "
-                "never invent or replace it.",
+                "Run the pending step 2 of the same task now. Use the original nonce from "
+                "the resumed context in each of these tool calls, in this order:\n"
+                "1. Call task_evidence with step=1 now. Prior text about step 1 is not a "
+                "receipt for this turn. Never call execute_action with step=1 again.\n"
+                "2. On a verified step 1 receipt, call execute_action with step=2 exactly once.\n"
+                "3. On its success, call task_evidence with step=2. Finish only after that "
+                "tool verifies the step 2 receipt. Do not stop after acknowledging step 1.",
             )
         probe.recovery = {
             "thread_id": thread_id,

@@ -450,12 +450,16 @@ def test_pending_send_converges_on_original_run_without_resending(approved, monk
         lambda: queue,
     )
     queue.enqueue(run)
-    queue.claim("original-worker", lease_seconds=60)
-    queue.mark_open_effect(run.run_id, step.step_id)
+    claim = queue.claim("original-worker", lease_seconds=60)
+    queue.mark_open_effect(
+        run.run_id, step.step_id, execution_count=claim.execution_count, owner_id="original-worker"
+    )
     from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
 
     state, code = dispatched_run_state(run)
-    queue.finish(run.run_id, "original-worker", state, error_code=code)
+    queue.finish(
+        run.run_id, "original-worker", state, error_code=code, execution_count=claim.execution_count
+    )
     assert queue.get(run.run_id).state == "unknown"
 
     _mock_transport(monkeypatch, _provider(context, "delivered", calls))

@@ -61,9 +61,19 @@ def task_runtime(trusted_actor, monkeypatch):
 
     original = save("original-task", owner)
     queue.enqueue(original)
-    assert queue.claim("worker", lease_seconds=30) is not None
-    queue.mark_open_effect(original.run_id, original.steps[0].step_id)
-    assert queue.finish(original.run_id, "worker", "failed").state == "unknown"
+    assert (claim := queue.claim("worker", lease_seconds=30)) is not None
+    queue.mark_open_effect(
+        original.run_id,
+        original.steps[0].step_id,
+        execution_count=claim.execution_count,
+        owner_id="worker",
+    )
+    assert (
+        queue.finish(
+            original.run_id, "worker", "failed", execution_count=claim.execution_count
+        ).state
+        == "unknown"
+    )
     foreign = save("foreign-owner", other)
     tenant = save("foreign-tenant", owner, tenant="8")
     mod = save("foreign-mod", other_mod)

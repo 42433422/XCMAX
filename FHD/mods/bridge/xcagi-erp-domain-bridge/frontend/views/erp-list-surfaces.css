@@ -1,0 +1,12 @@
+.card.erp-list,
+.search-box.erp-filters {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.erp-filters > :is(input, select):not(:focus) {
+  box-shadow: var(--xc-shadow-xs);
+}

@@ -124,6 +124,7 @@ def _scope_claims(run: AgentRun, step: AgentStep) -> dict[str, str]:
 
 
 def authorization_scope_hash(context: dict[str, Any]) -> str:
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_REVIEW
     from app.infrastructure.workspace import workspace_root
 
     scope = {
@@ -151,6 +152,8 @@ def authorization_scope_hash(context: dict[str, Any]) -> str:
     # The executor always rebinds this field from server configuration. Bind the
     # same effective root, including for old runs with a stale serialized path.
     scope["workspace_root"] = str(workspace_root())
+    if WORKBOOK_WRITE_REVIEW in context:
+        scope[WORKBOOK_WRITE_REVIEW] = context[WORKBOOK_WRITE_REVIEW]
     preview, previews = scope["_bulk_preview_scope"], scope["_bulk_preview_scopes"]
     if (
         isinstance(preview, dict)

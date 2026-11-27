@@ -32,8 +32,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(focused, 'focused input must visibly differ from its idle state').not.toBe(unfocused)
       await capture(page, 'a11y-composer-focused-' + colorScheme + '-' + width, 'device')
       await page.keyboard.press('Tab')
+      await expect(composer).not.toBeFocused()
       expect(await page.evaluate(() => !!document.activeElement && document.activeElement !== document.body)).toBe(true)
       expect(await page.evaluate(() => document.activeElement?.matches(':focus-visible'))).toBe(true)
+      const tabIndicator = await page.evaluate(() => {
+        const element = document.activeElement as HTMLElement
+        const style = getComputedStyle(element)
+        return { label: element.getAttribute('aria-label') || element.title || element.tagName,
+          outlineStyle: style.outlineStyle, outlineWidth: Number.parseFloat(style.outlineWidth), boxShadow: style.boxShadow }
+      })
+      expect(tabIndicator.outlineStyle, 'Tab focus outline: ' + tabIndicator.label).toBe('solid')
+      expect(tabIndicator.outlineWidth, 'Tab focus width: ' + tabIndicator.label).toBeGreaterThan(0)
+      expect(tabIndicator.boxShadow, 'Tab focus outer ring: ' + tabIndicator.label).not.toBe('none')
       await capture(page, 'a11y-composer-tab-' + colorScheme + '-' + width, 'device')
     })
   }

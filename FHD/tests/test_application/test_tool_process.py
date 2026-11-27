@@ -6,7 +6,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import psutil
 import pytest
@@ -62,7 +61,7 @@ class FixtureExecutor(AgentToolExecutor):
         if step.action == "invalid_result":
             return {"success": True, "live_object": object()}
         if step.action == "raised_error":
-            raise RuntimeError("password=do-not-export-this-secret")
+            raise TypeError("password=do-not-export-this-secret")
         if step.action == "hang":
             script = (
                 "import os,time,json;from pathlib import Path;"
@@ -375,8 +374,14 @@ def test_idempotency_payload_encodes_decimal_prices():
     assert json.loads(encoded) == {"price": 100.0, "quantity": 2}
 
 
-@pytest.mark.parametrize("failure_action", ["invalid_result", "raised_error"])
-def test_real_adapter_transports_database_scalars_and_reports_unsupported_result(failure_action):
+@pytest.mark.parametrize(
+    ("failure_action", "failure_stage"),
+    [("invalid_result", "result_encoding"), ("raised_error", "tool_execution")],
+)
+def test_real_adapter_transports_database_scalars_and_reports_unsupported_result(
+    failure_action,
+    failure_stage,
+):
     executor = FixtureExecutor()
     result = execute_with_tool_deadline(
         executor,
@@ -395,7 +400,9 @@ def test_real_adapter_transports_database_scalars_and_reports_unsupported_result
     )
     assert time.monotonic() - started < 10
     assert invalid["outcome"] == "unknown" and invalid["retryable"] is False
-    assert "tool_result_transport_failed" in str(invalid)
+    assert invalid["error_code"] == "tool_result_transport_failed"
+    assert invalid["exception_type"] == "TypeError" and invalid["failure_stage"] == failure_stage
+    assert invalid["reconciliation_required"] is True
     assert "exception_hint" not in str(invalid)
     assert "do-not-export-this-secret" not in str(invalid)
 
@@ -558,6 +565,40 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
     assert "private-token" not in encoded and "private-mask" not in encoded
     if resource is not None:
         assert resource.getrlimit(resource.RLIMIT_CPU) == cpu_before
+
+
+@pytest.mark.parametrize(
+    ("action", "stage"),
+    [("raised_error", "tool_execution"), ("invalid_result", "result_encoding")],
+)
+def test_worker_failure_report_distinguishes_execute_from_encode(tmp_path, action, stage):
+    from unittest.mock import Mock
+
+    from app.application.agent_orchestrator.tool_process import _worker
+
+    control = Mock()
+    payload = json.dumps({"step": _step(action).to_dict(), "context": {}})
+    _worker(
+        FixtureExecutor,
+        payload,
+        str(tmp_path),
+        control,
+        Mock(),
+        time.monotonic() + 5,
+        initialize=False,
+    )
+    encoded = (tmp_path / "result").read_text()
+    control.send_bytes.assert_called_with(b"d")
+    assert "do-not-export-this-secret" not in encoded
+    assert json.loads(encoded)["output"] == {
+        "success": False,
+        "outcome": "unknown",
+        "error_code": "tool_result_transport_failed",
+        "failure_stage": stage,
+        "exception_type": "TypeError",
+        "retryable": False,
+        "reconciliation_required": True,
+    }
 
 
 def test_finance_writes_restore_the_task_tenant():

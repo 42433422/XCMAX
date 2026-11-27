@@ -4,6 +4,8 @@ export const createStep = (step: TutorialStep): TutorialStep => ({
   ...step,
 })
 
+export const chatUploadAttachmentSelector = '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]'
+
 export const advancedSidebarNavStep = (viewKey: string, title: string, description: string): TutorialStep =>
   createStep({
     id: `nav-${viewKey.replace(/[^a-z0-9-]/gi, '-')}`,

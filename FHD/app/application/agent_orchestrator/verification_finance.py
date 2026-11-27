@@ -8,6 +8,7 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
 from app.db.models import FinancialTransaction
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 FINANCE_ACTIONS = frozenset({"create_transaction", "update_transaction", "delete_transaction"})
 _FINANCE_UPDATABLE_FIELDS = frozenset(
@@ -35,6 +36,34 @@ def _positive_int(value: Any) -> int | None:
         parsed = int(value.strip())
         return parsed if parsed > 0 else None
     return None
+
+
+def capture_finance_deletion_baseline(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]:
+    """Freeze original tenant visibility before the host dispatches a deletion."""
+    from app.application.agent_orchestrator.verification_transactions import (
+        _order,
+        _transaction_read_scope,
+    )
+
+    txn_id = _positive_int(step.params.get("transaction_id"))
+    if txn_id is None:
+        return {"status": "unavailable", "code": "result_finance_identity_missing"}
+    try:
+        with _transaction_read_scope(context, {"tool.finance.ledger_query"}, "finance_sql") as (
+            db,
+            tenant,
+        ):
+            row = _order(db, tenant, txn_id, FinancialTransaction)
+            if row is None:
+                return {"status": "unavailable", "code": "result_finance_record_unavailable"}
+            return {
+                "status": "observed",
+                "source": "finance_sql",
+                "tenant_id": str(tenant),
+                "transaction_id": row.id,
+            }
+    except (KeyError, ValueError, TypeError, PermissionError) + RECOVERABLE_ERRORS:
+        return {"status": "unavailable", "code": "result_finance_baseline_unavailable"}
 
 
 def verify_finance_creation(
@@ -166,7 +195,24 @@ def verify_finance_deletion(
         row = _order(db, tenant, txn_id, FinancialTransaction)
         if row is not None:
             return _report("failed", "result_finance_effect_mismatch", source)
-        return _report("verified", "result_verified", source, transaction_id=txn_id, deleted=True)
+        before = (call.metadata.get("verification_contract") or {}).get("authority_baseline")
+        if not isinstance(before, dict) or before.get("status") != "observed":
+            return _report("inconclusive", "result_finance_baseline_unavailable", source)
+        if (
+            before.get("source") != source
+            or before.get("tenant_id") != str(tenant)
+            or type(before.get("transaction_id")) is not int
+            or before["transaction_id"] != txn_id
+        ):
+            return _report("failed", "result_finance_effect_mismatch", source)
+        return _report(
+            "verified",
+            "result_verified",
+            source,
+            tenant_id=str(tenant),
+            transaction_id=txn_id,
+            deleted=True,
+        )
 
 
 def verify_finance_result(

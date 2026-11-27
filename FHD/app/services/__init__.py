@@ -33,10 +33,10 @@ else:
         BertIntentClassifier = None
 from app.ai_engines.deepseek.intent_service import DeepseekIntentClassifier
 from app.ai_engines.rasa.nlu_service import RasaNLUService, get_rasa_nlu_service
+from app.bootstrap import get_unified_intent_recognizer
 from app.di.registry import get_service_registry
 from app.domain.shared_services.unified_intent_recognizer import (
     UnifiedIntentRecognizer,
-    get_unified_intent_recognizer,
 )
 from app.infrastructure.session.session_manager import SessionManager, get_session_manager
 from app.domain.shared_services.ai_conversation_service import (

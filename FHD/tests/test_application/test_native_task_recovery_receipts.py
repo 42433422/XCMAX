@@ -332,8 +332,14 @@ def test_original_write_receipt_settles_open_effect_before_another_worker_takes_
         attach_fixture_verified_write(run, monkeypatch)
     repository.save(run)
     queue.enqueue(run)
-    assert queue.claim("dead-worker", lease_seconds=60)
-    queue.mark_open_effect(run.run_id, run.steps[0].step_id)
+    original = queue.claim("dead-worker", lease_seconds=60)
+    assert original is not None
+    assert queue.mark_open_effect(
+        run.run_id,
+        run.steps[0].step_id,
+        owner_id=original.lease_owner,
+        execution_count=original.execution_count,
+    )
     future = (datetime.now(UTC) + timedelta(seconds=120)).isoformat()
     claimed = queue.claim("replacement", lease_seconds=60, now=future)
     if verified:

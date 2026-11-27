@@ -25,6 +25,7 @@ const mockResolveExcelFilePathFromAnalysis = vi.fn()
 const mockResolveExcelSheetOptionsFromContext = vi.fn()
 const mockResolveLinkedSheetGridPreview = vi.fn()
 const mockFilesToMultimodalRows = vi.fn()
+const mockUploadChatWordAttachment = vi.fn()
 
 vi.mock('./useChatPersistence', () => ({
   readPersistedExcelAnalysisContext: (...args: unknown[]) => mockReadPersistedExcelAnalysisContext(...args),
@@ -36,6 +37,9 @@ vi.mock('./useChatPersistence', () => ({
 
 vi.mock('@/utils/multimodalAttachments', () => ({
   filesToMultimodalRows: (...args: unknown[]) => mockFilesToMultimodalRows(...args),
+}))
+vi.mock('@/utils/officeEmployeeReadApi', () => ({
+  uploadChatWordAttachment: (...args: unknown[]) => mockUploadChatWordAttachment(...args),
 }))
 
 // ── helpers ──────────────────────────────────────────────────────
@@ -617,6 +621,31 @@ describe('attachment ownership during asynchronous file reads', () => {
     expect(ctx.multimodalPendingCount.value).toBe(0)
     scope.stop()
   })
+  it('stages Word receipts in the current composer without registering multimodal data', async () => {
+    const deps = makeDeps(), ctx = useChatExcelContext(deps)
+    const file = new File(['private'], '对账单.docx')
+    mockUploadChatWordAttachment.mockResolvedValueOnce({ uploadId: 'word-1', name: file.name })
+    await expect(ctx.stageArtifactFiles([file])).resolves.toBe(1)
+    expect(ctx.artifactStaging.value).toEqual([{ filename: file.name, artifact_id: 'word-1' }])
+    expect(ctx.captureChatArtifacts()).toMatchObject({ ids: [], uploadIds: ['word-1'] })
+    expect(mockFilesToMultimodalRows).not.toHaveBeenCalled()
+    expect(deps.addAndSaveMessage).not.toHaveBeenCalled()
+  })
+
+  it('drops a Word upload response after the composer switches conversations', async () => {
+    let finish!: (value: unknown) => void
+    mockUploadChatWordAttachment.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const deps = makeDeps(), ctx = useChatExcelContext(deps)
+    const pending = ctx.stageArtifactFiles([new File(['private'], '对账单.docx')])
+    await Promise.resolve()
+    expect(mockUploadChatWordAttachment).toHaveBeenCalledTimes(1)
+    deps.sessionId.value = 'next-conversation'
+    finish({ uploadId: 'old-word', name: '对账单.docx' })
+    await expect(pending).resolves.toBe(0)
+    expect(ctx.captureChatArtifacts()).toMatchObject({ ids: [], uploadIds: [] })
+    expect(ctx.multimodalPendingCount.value).toBe(0)
+  })
+
   it.each(['session', 'dispose', 'capture'] as const)('discards in-flight attachment reads after %s invalidation', async invalidation => {
     let finish!: (value: unknown) => void
     mockFilesToMultimodalRows.mockReturnValue(new Promise(resolve => { finish = resolve }))

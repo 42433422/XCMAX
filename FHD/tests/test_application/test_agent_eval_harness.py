@@ -29,17 +29,17 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert result["score"] == 1.0
     assert result["coverage"] == {
         "fixture_contract_passed": 123,
-        "business_effect_verified": 17,
+        "business_effect_verified": 16,
         "artifact_integrity_verified": 2,
         "task_admission_verified": 1,
         "read_only_contract": 8,
-        "unverified": 44,
+        "unverified": 45,
         "not_exercised": 51,
     }
     dispatch_only = [
         row for row in result["results"] if row["coverage_scope"] == "dispatch_contract_only"
     ]
-    assert len(dispatch_only) == 38
+    assert len(dispatch_only) == 39
     assert all(row["business_goal_expected"] for row in dispatch_only)
     assert all(row["result_coverage"] == "unverified" for row in dispatch_only)
     denied = [
@@ -95,6 +95,28 @@ def test_owned_attachment_reply_review_is_bound_to_its_explicit_fixture(invalid_
     else:
         prompt["original_request"]["text"] = "unrelated request"
     assert _scripted_model_response(task, prompt) is None
+
+
+@pytest.mark.parametrize("missing_field", ["feedback_disposition", "file_basis"])
+def test_ocr_eval_does_not_count_a_malformed_blocked_review_as_success(tmp_path, missing_field):
+    task = next(
+        row
+        for row in eval_module.load_tasks()
+        if row["id"] == "multimodal_ocr_artifact_autonomous_plan"
+    )
+    if missing_field == "feedback_disposition":
+        task["runtime_review"].pop(missing_field)
+    else:
+        task["runtime_review"]["goals"][0].pop(missing_field)
+    path = tmp_path / "invalid-ocr-review.jsonl"
+    path.write_text(json.dumps(task) + "\n", encoding="utf-8")
+    result = run_eval(path)["results"][0]
+    assert result["passed"] is False
+    assert result["details"]["run"]["status"] == "blocked"
+    assert {check["name"] for check in result["failed_checks"]} == {
+        "ocr_review_status",
+        "ocr_review_error_code",
+    }
 
 
 @pytest.mark.parametrize("fail_task", [False, True])

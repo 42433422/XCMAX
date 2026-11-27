@@ -456,6 +456,31 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(loaded[0].content).not.toContain('&amp;quot;')
     })
 
+    it('excludes old server copies and sidebar metadata from owned-history recovery', async () => {
+      setRuntimeTenantStorageScopeInput({ tenantId: 8, localUserId: 2 })
+      const sid = 'owned-sid'
+      localStorage.setItem(`xcagi_chat_messages_${sid}`, JSON.stringify([
+        { role: 'ai', content: 'stale server history', serverMessageId: 12 },
+        { role: 'user', content: 'local draft', persistence: { id: 'draft', status: 'local' } },
+      ]))
+      localStorage.setItem(`xcagi_chat_session_meta_${sid}`, JSON.stringify({ title: 'stale title', message_count: 4 }))
+      const { deps, mocks } = makeDeps()
+      const history = makeHistory(deps)
+      chatApiMock.getConversations.mockResolvedValueOnce({ success: true, sessions: [{ session_id: sid, title: 'confirmed title', message_count: 2 }] })
+      await history.showHistoryPanel()
+      expect(history.historySessions.value[0]).toMatchObject({ title: 'confirmed title', message_count: 2 })
+
+      chatApiMock.getConversation.mockRejectedValueOnce(new Error('offline'))
+      await history.loadSession(sid)
+      expect(mocks.loadMessages.mock.lastCall?.[0].map((row: ChatMessage) => row.content)).toEqual(['local draft'])
+
+      chatApiMock.getConversation.mockResolvedValueOnce({ success: true, durable: true, revision: 0, id: sid, messages: [
+        { id: 20, role: 'assistant', content: 'verified reply' },
+      ] })
+      await history.loadSession(sid)
+      expect(mocks.loadMessages.mock.lastCall?.[0].map((row: ChatMessage) => row.content)).toEqual(['local draft', '<p>verified reply</p>'])
+    })
+
     it('loads placeholder when server success, no messages, no local', async () => {
       chatApiMock.getConversation.mockResolvedValue({
         success: true,

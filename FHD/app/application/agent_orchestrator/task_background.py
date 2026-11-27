@@ -367,24 +367,44 @@ class BackgroundTaskExecutionMixin:
         run.metadata["dispatch"] = dispatch
         return cast("AgentRun | None", self._repo.save(run))
 
-    def fail_dispatched_run(self, run_id: str) -> AgentRun | None:
+    def fail_dispatched_run(self, run_id: str, *, open_effects: bool = True) -> AgentRun | None:
         run = self._repo.get(run_id)
-        if run is None or run.status in {"completed", "failed", "cancelled", "rejected"}:
+        if run is None or run.status not in {"queued", "running", "retrying"}:
             return cast("AgentRun | None", run)
         previous = copy.deepcopy(run)
-        run.status = "blocked"
+        # A persisted tool-start marker always precedes dispatch. Once present,
+        # an exception cannot prove whether the operation took effect.
+        unsubmitted = (
+            bool(run.steps)
+            and not (open_effects or run.tool_calls or run.artifacts or run.final_output)
+            and not requires_retry_reconciliation(run)
+            and all(
+                step.status == "pending"
+                and not (step.started_at or step.attempt_count or step.output)
+                for step in run.steps
+            )
+        )
+        run.status = "failed" if unsubmitted else "blocked"
         run.error = _WORKER_EXECUTION_FAILED
-        recovery = run.metadata.get("recovery")
-        run.metadata["recovery"] = {
-            **(recovery if isinstance(recovery, dict) else {}),
-            "state": "manual_reconciliation_required",
-            "reason": _WORKER_EXECUTION_FAILED,
-        }
-        run.metadata["non_retryable"] = True
+        if isinstance(dispatch := run.metadata.get("dispatch"), dict):
+            dispatch.update(state=run.status, finished_at=utc_now_iso())
+        if not unsubmitted:
+            recovery = run.metadata.get("recovery")
+            run.metadata["recovery"] = {
+                **(recovery if isinstance(recovery, dict) else {}),
+                "state": "manual_reconciliation_required",
+                "reason": _WORKER_EXECUTION_FAILED,
+            }
+            run.metadata["non_retryable"] = True
         run.add_event(
             "task.worker_failed",
-            "执行工作线程已退出，原业务结果待核对，禁止自动重放",
-            {"error_code": _WORKER_EXECUTION_FAILED, "execution_state": "unknown"},
+            "工作流执行器在工具启动前失败"
+            if unsubmitted
+            else "执行工作线程已退出，原业务结果待核对，禁止自动重放",
+            {
+                "error_code": _WORKER_EXECUTION_FAILED,
+                "execution_state": "failed" if unsubmitted else "unknown",
+            },
         )
         self._repo.save_if_unchanged(run, previous)
         return cast("AgentRun | None", self._repo.get(run_id))

@@ -192,6 +192,22 @@ def task_from_run(run: AgentRun, *, existing: AgentTask | None = None) -> AgentT
         if row["status"] in {"running", "retrying"}
     }
     current_ids = active_employee_ids or employee_ids
+    goal_review = run.metadata.get("runtime_goal_verification")
+    goal_review = goal_review if isinstance(goal_review, dict) else {}
+    reply_result = run.final_output.get("xiaox_result")
+    reply_result = reply_result if isinstance(reply_result, dict) else {}
+    verified_reply = (
+        run.metadata.get("runtime_type") == "xiaox"
+        and run.status == "completed"
+        and goal_review.get("status") == "verified"
+        and goal_review.get("accepted") is True
+        and goal_review.get("mode") == "reply"
+        and reply_result.get("ok") is True
+        and reply_result.get("execution_state") == "completed"
+    )
+    # A verified reply has no business write to complete; its business summary
+    # must not turn a successful read-only answer into an unknown task outcome.
+    outcome = reply_result if verified_reply else run.final_output
     current.metadata = {
         **dict(current.metadata or {}),
         "task_model_version": int(runtime.get("task_model_version") or 1),
@@ -212,7 +228,7 @@ def task_from_run(run: AgentRun, *, existing: AgentTask | None = None) -> AgentT
                     or execution_result_requires_reconciliation(output)
                 )
             )
-            for output in [run.final_output, *(step.output for step in run.steps)]
+            for output in [outcome, *(step.output for step in run.steps)]
         ),
         "parent_run_id": str(context.get("parent_run_id") or ""),
         "parent_task_id": str(runtime.get("parent_task_id") or ""),

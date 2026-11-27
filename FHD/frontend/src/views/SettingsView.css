@@ -1,13 +1,7 @@
-/* 豆包式分组列表：浅灰底 + 白卡片 + 左图标右箭头 */
 .settings-page {
-  --settings-bg: #f3f4f6;
-  --settings-card-bg: #ffffff;
-  --settings-card-border: rgba(0, 0, 0, 0.06);
-  --settings-divider: rgba(0, 0, 0, 0.06);
-  --settings-accent: #2d6df6;
-  --settings-accent-soft: #eff6ff;
-  --settings-radius: 14px;
-  --settings-main-max: 640px;
+  --settings-divider: var(--xc-color-border);
+  --settings-accent: var(--xc-color-primary);
+  --settings-accent-soft: var(--xc-color-primary-soft);
   --settings-profile-width: 168px;
   --settings-row-pad-x: 16px;
   --settings-icon-size: 36px;
@@ -15,7 +9,6 @@
 
 .settings-page__scroll {
   padding: 0;
-  background: var(--settings-bg);
   container-type: inline-size;
   container-name: settings;
 }
@@ -199,10 +192,8 @@
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid #f3f4f6;
-  background: #f9fafb;
+  padding-block-start: 12px;
+  border-block-start: 1px solid var(--settings-divider);
 }
 
 .settings-profile-form__readonly-value {
@@ -398,7 +389,7 @@
   width: 100%;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid var(--settings-card-border);
+  border-top: 1px solid var(--settings-divider);
 }
 
 .settings-nav__item {
@@ -416,13 +407,13 @@
 }
 
 .settings-nav__item:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text);
 }
 
 .settings-nav__item.is-active {
-  background: #eff6ff;
-  color: #0b72d9;
+  background: var(--settings-accent-soft);
+  color: var(--settings-accent);
   font-weight: 600;
 }
 
@@ -444,6 +435,10 @@
 
 .settings-group {
   scroll-margin-top: 16px;
+  padding: 12px 0 0;
+  border-radius: var(--xc-radius-lg);
+  background: var(--xc-color-surface);
+  box-shadow: var(--xc-shadow-xs);
 }
 
 .settings-group + .settings-group {
@@ -451,7 +446,7 @@
 }
 
 .settings-group__title {
-  margin: 0 0 10px;
+  margin: 0 var(--settings-row-pad-x) 10px;
   font-size: 13px;
   font-weight: 600;
   color: #64748b;
@@ -468,32 +463,20 @@
     padding-top: 0;
     border-top: 0;
   }
-
-  .settings-nav__item {
-    border: 1px solid var(--settings-card-border);
-  }
 }
 
 .settings-card {
   margin: 0;
-  border: 1px solid var(--settings-card-border);
-  border-radius: var(--settings-radius);
-  background: var(--settings-card-bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  overflow: hidden;
+  border-block-end: 1px solid var(--settings-divider);
+}
+
+.settings-group > .settings-card:last-child {
+  border-block-end: 0;
 }
 
 .settings-card--nested {
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  border-top: 1px solid var(--settings-divider);
-}
-
-.settings-card--about {
-  border-style: dashed;
-  background: #fafafa;
+  border-block-start: 1px solid var(--settings-divider);
+  border-block-end: 0;
 }
 
 .settings-row {
@@ -514,7 +497,12 @@
 }
 
 .settings-row:hover {
-  background: #f9fafb;
+  background: var(--xc-color-surface-2);
+}
+
+.settings-row:focus-visible {
+  outline: 2px solid var(--settings-accent);
+  outline-offset: -2px;
 }
 
 .settings-rbac-link {
@@ -669,7 +657,6 @@
 
 .settings-card__body--list {
   padding: 0;
-  border-top: 1px solid var(--settings-divider);
 }
 
 .settings-card__body--compact {
@@ -678,8 +665,6 @@
 
 .settings-card__body--nested {
   padding: 12px var(--settings-row-pad-x) 14px;
-  border-top: 1px solid var(--settings-divider);
-  background: #fafafa;
 }
 
 .settings-card__footer {
@@ -965,8 +950,6 @@ select.settings-item__control,
 
 .settings-table-wrap {
   overflow-x: auto;
-  border-radius: 10px;
-  border: 1px solid #f1f5f9;
 }
 
 .settings-table {
@@ -982,10 +965,6 @@ select.settings-item__control,
 /* ========== 拟人 Persy 系统 ========== */
 .persy-profile {
   margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #f9fafb;
 }
 
 .persy-profile__state {
@@ -1158,18 +1137,11 @@ select.settings-item__control,
   color: #111827;
 }
 
-.settings-model-service-empty__lead {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.settings-model-service-empty__list {
-  margin: 10px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  line-height: 1.65;
-}
+.settings-model-runtime { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.enterprise-model + .settings-model-runtime { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--settings-divider); }
+.settings-model-runtime p { margin: 0; }
+.settings-model-billing { border-top: 1px solid var(--settings-divider); }
+.settings-model-billing > summary { padding: 12px 16px; cursor: pointer; font-weight: 600; }
 
 .settings-model-service-empty__actions {
   display: flex;
@@ -1187,20 +1159,8 @@ select.settings-item__control,
   padding: 0;
 }
 
-#settings-model-payment :deep(.mp-embedded-toolbar) {
-  align-items: center;
-  gap: 16px;
-  margin: 0 0 12px;
-  padding: 10px 4px 14px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-#settings-model-payment :deep(.mp-embedded-intro) {
-  font-size: 13px;
-}
-
 #settings-model-payment :deep(.mp-hero-actions--embedded) {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 #settings-model-payment :deep(.mp-hero-btn) {
@@ -1258,9 +1218,10 @@ select.settings-item__control,
 }
 
 #settings-model-payment :deep(.mp-panel.mp-balance) {
-  border-radius: 12px;
-  border-color: #e2e8f0;
+  border: 0;
+  background: transparent;
   box-shadow: none;
+  backdrop-filter: none;
   margin-bottom: 0;
 }
 
@@ -1282,14 +1243,13 @@ select.settings-item__control,
 }
 
 #settings-model-payment :deep(.mp-market-quota > div) {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #fff;
-  border: 1px solid #e8eef5;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   text-align: center;
 }
 
-#settings-model-payment :deep(.mp-market-quota span) {
+#settings-model-payment :deep(.mp-market-quota dt) {
   display: block;
   font-size: 11px;
   color: #64748b;
@@ -1328,24 +1288,12 @@ select.settings-item__control,
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(203, 213, 225, 0.85);
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.intent-showcase-tile.is-enabled {
-  border-color: rgba(59, 130, 246, 0.35);
-  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+  padding: 8px 0 12px;
+  border-block-end: 1px solid var(--settings-divider);
 }
 
 .intent-showcase-tile.is-disabled {
   opacity: 0.72;
-  background: #f8fafc;
 }
 
 .intent-tile-top {
@@ -1536,9 +1484,7 @@ select.settings-item__control,
   justify-content: space-between;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid var(--app-border-subtle);
+  border-block-end: 1px solid var(--settings-divider);
 }
 
 .mod-host-pack-name {
@@ -1567,25 +1513,17 @@ select.settings-item__control,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--app-border-subtle);
-  border-radius: 10px;
-  background: var(--card-bg);
+  border-block-end: 1px solid var(--settings-divider);
   padding: 8px 10px 8px 12px;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    box-shadow 0.16s ease;
 }
 
 .mod-single-item:hover {
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  background: var(--xc-color-surface-2);
 }
 
 .mod-single-item.active {
-  border-color: var(--app-interactive);
-  background: var(--app-interactive-bg);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  background: var(--settings-accent-soft);
+  box-shadow: var(--xc-shadow-xs);
 }
 
 .mod-single-main {
@@ -1645,11 +1583,7 @@ select.settings-item__control,
     justify-content: flex-start;
     gap: 12px 16px;
     text-align: left;
-    padding: 12px 14px;
-    border-radius: var(--settings-radius);
-    background: var(--settings-card-bg);
-    border: 1px solid var(--settings-card-border);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    padding: 12px 0;
   }
 
   .settings-profile__avatar {
@@ -1702,10 +1636,6 @@ select.settings-item__control,
 
   .intent-showcase-grid {
     grid-template-columns: 1fr;
-  }
-
-  #settings-model-payment :deep(.mp-embedded-toolbar) {
-    flex-direction: column;
   }
 
   #settings-model-payment :deep(.mp-hero-actions) {

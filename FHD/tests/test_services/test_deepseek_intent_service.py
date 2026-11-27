@@ -338,6 +338,35 @@ class TestRecognizeAsync:
         assert out["intent"] is None
         assert out["source"] == "deepseek"
 
+    @pytest.mark.parametrize("failure", ["read", "write", "sdk_read", "auth", "admission"])
+    async def test_recognize_preserves_denial_and_unknown_without_replay(self, recognizer, failure):
+        from openai import APIConnectionError, AuthenticationError
+
+        from app.domain.model_admission_errors import ModelConcurrencyLimitError
+
+        request = httpx.Request("POST", "https://model.invalid")
+        sdk_error = APIConnectionError(request=request)
+        sdk_error.__cause__ = httpx.ReadTimeout("response lost")
+        error = {
+            "read": httpx.ReadTimeout("response lost"),
+            "write": httpx.WriteTimeout("dispatch unknown"),
+            "sdk_read": sdk_error,
+            "auth": AuthenticationError(
+                "denied", response=httpx.Response(401, request=request), body=None
+            ),
+            "admission": ModelConcurrencyLimitError(),
+        }[failure]
+        message = f"RECOGNIZE_DENIAL_OR_UNKNOWN_{failure}"
+        with patch(
+            "app.infrastructure.llm.invoke.chat_completion_openai_format",
+            new=AsyncMock(side_effect=error),
+        ) as transport:
+            with pytest.raises(type(error)) as caught:
+                await recognizer.recognize(message)
+        assert caught.value is error
+        transport.assert_awaited_once()
+        assert ds._intent_recognition_cache.get(ds._make_intent_cache_key(message)) is None
+
 
 # --------------------------------------------------------------------------- #
 # HybridIntentWithDeepSeek.recognize (async)

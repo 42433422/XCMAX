@@ -1,8 +1,9 @@
-"""Owned attachment boundary with real sessions, database rows and pinned file IO."""
+"""Owned file boundaries and pinned workbook reads with real sessions and file IO."""
 
 import hashlib
 import io
-from datetime import UTC, datetime, timedelta
+import json
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -14,56 +15,8 @@ from app.db.models.elt import EltUpload
 from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
 from app.infrastructure.auth.agent_principal import require_agent_principal
 from app.infrastructure.tenant_scope import tenant_scope
-from evals.run_agent_eval import _authenticated_route_fixture
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-
-
-@pytest.fixture
-def owned(monkeypatch, tmp_path):
-    from app.utils.path_io import path_utils
-
-    monkeypatch.setattr(path_utils, "get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(
-        "app.application.tools.workflow_spreadsheet_scope.get_app_data_dir",
-        lambda: str(tmp_path),
-    )
-    monkeypatch.setattr(
-        "app.application.elt.service_uploads.get_app_data_dir", lambda: str(tmp_path)
-    )
-    client = SimpleNamespace(headers={})
-    with _authenticated_route_fixture(client, role_name="admin"):
-        request = Request(
-            {
-                "type": "http",
-                "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
-            }
-        )
-        principal = require_agent_principal(request, x_user_id=None)
-        context = authenticated_runtime_context(
-            {"attachment_upload_ids": ["owned-file"]}, principal
-        )
-        root = tmp_path / "elt" / "uploads" / principal.tenant_id / principal.user_id
-        root.mkdir(parents=True)
-        file = root / "owned-file.csv"
-        raw = b"product,price\npaint,120\n"
-        file.write_bytes(raw)
-        from app.db.session import get_db
-
-        with tenant_scope(int(principal.tenant_id)), get_db() as db:
-            db.add(
-                EltUpload(
-                    id="owned-file",
-                    tenant_id=int(principal.tenant_id),
-                    owner_user_id=int(principal.user_id),
-                    file_name="price.csv",
-                    suffix=".csv",
-                    storage_path=str(file),
-                    size_bytes=len(raw),
-                    sha256=hashlib.sha256(raw).hexdigest(),
-                    expires_at=datetime.now(UTC) + timedelta(hours=1),
-                )
-            )
-        yield context, file
+from tests.fixtures.owned_attachments import owned as owned
 
 
 def test_owned_input_is_readable_without_path_or_implicit_ingestion(owned):
@@ -470,16 +423,78 @@ def test_workbook_preview_preserves_zero_false_and_declares_partial_coverage():
     raw = io.BytesIO()
     workbook.save(raw)
     text, coverage = _decode(raw.getvalue(), ".xlsx")
-    assert "0 | False |  | value" in text
+    _, row = text.splitlines()
+    assert row.startswith("[A1:D1] ")
+    assert json.loads(row.split("] ", 1)[1]) == ["0", "False", "", "value"]
     assert coverage["truncated"] is False
     sheet.cell(201, 1, "outside preview")
+    sheet.cell(2, 41, "outside column budget")
     raw = io.BytesIO()
     workbook.save(raw)
     text, coverage = _decode(raw.getvalue(), ".xlsx")
     assert "outside preview" not in text
+    assert "outside column budget" not in text
     assert coverage["truncated"] is True
     assert coverage["max_rows_per_sheet"] == 200
     assert "部分" in coverage["notice"]
+
+
+def test_workbook_preview_preserves_sparse_physical_addresses_and_sheet_boundaries():
+    import io
+
+    from openpyxl import Workbook
+
+    from app.application.agent_orchestrator.attachment_inputs import _decode
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "First"
+    sheet.merge_cells("B2:D2")
+    sheet["B2"] = "Merged title"
+    sheet["B4"] = "  spaced  "
+    sheet["C4"] = "=1+1"
+    sheet["D5"] = "multiline\nvalue | literal separator"
+    second = workbook.create_sheet("Second")
+    second["C1"] = "independent position"
+    raw = io.BytesIO()
+    workbook.save(raw)
+    workbook.close()
+
+    text, coverage = _decode(raw.getvalue(), ".xlsx")
+    lines = text.splitlines()
+    assert lines[0] == '[工作表] "First"'
+    first = [line.split("] ", 1) for line in lines[1:6]]
+    assert [address + "]" for address, _ in first] == [f"[A{r}:D{r}]" for r in range(1, 6)]
+    assert json.loads(first[1][1]) == ["", "Merged title", "", ""]
+    assert json.loads(first[2][1]) == ["", "", "", ""]
+    assert json.loads(first[3][1]) == ["", "  spaced  ", "", ""]
+    assert json.loads(first[4][1]) == ["", "", "", "multiline\nvalue | literal separator"]
+    assert lines[6] == '[工作表] "Second"'
+    assert lines[7].startswith("[A1:C1] ")
+    assert json.loads(lines[7].split("] ", 1)[1]) == ["", "", "independent position"]
+    assert coverage["truncated"] is False
+
+
+def test_workbook_character_cap_never_returns_part_of_an_addressed_row():
+    import io
+
+    from openpyxl import Workbook
+
+    from app.application.agent_orchestrator.attachment_inputs import MAX_TEXT, _decode
+
+    workbook = Workbook()
+    for _ in range(6):
+        workbook.active.append(["x" * 500] * 40)
+    raw = io.BytesIO()
+    workbook.save(raw)
+    workbook.close()
+
+    text, coverage = _decode(raw.getvalue(), ".xlsx")
+    assert coverage["truncated"] is True and len(text) <= MAX_TEXT
+    header, row = text.splitlines()
+    assert header.startswith("[工作表] ")
+    assert row.startswith("[A1:AN1] ")
+    assert json.loads(row.split("] ", 1)[1]) == ["x" * 500] * 40
 
 
 def test_text_preview_reports_character_limit():
@@ -731,152 +746,3 @@ def test_expired_unbound_filename_does_not_resolve(owned):
         with pytest.raises(PermissionError, match="文件不属于"):
             with workflow_file_snapshot("price.csv", unbound):
                 pytest.fail("an expired upload must never match a bare filename")
-
-
-def _docx_bytes(document):
-    import io
-
-    stream = io.BytesIO()
-    document.save(stream)
-    return stream.getvalue()
-
-
-def test_docx_preview_keeps_body_order_and_cell_coordinates():
-    from docx import Document
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-
-    from app.application.agent_orchestrator.attachment_inputs import _decode
-
-    document = Document()
-    document.add_paragraph("Introduction")
-    table = document.add_table(rows=3, cols=4)
-    table.cell(0, 0).text = "SKU | Item"
-    table.cell(0, 2).merge(table.cell(0, 3)).text = "Quoted price"
-    table.cell(1, 0).merge(table.cell(2, 0)).text = "Paint"
-    table.cell(1, 2).text = "0"
-    table.cell(2, 2).text = "120"
-    row = table.rows[2]._tr
-    row.remove(row.tc_lst[0])
-    before = OxmlElement("w:gridBefore")
-    before.set(qn("w:val"), "1")
-    row.get_or_add_trPr().append(before)
-    document.add_paragraph("Terms")
-    document.add_table(rows=1, cols=1).cell(0, 0).text = "Net 30"
-
-    text, coverage = _decode(_docx_bytes(document), ".docx")
-    assert text.splitlines() == [
-        "Introduction",
-        "[表格 1 行 1 列 1] SKU | Item",
-        "[表格 1 行 1 列 3] Quoted price",
-        "[表格 1 行 2 列 1] Paint",
-        "[表格 1 行 2 列 3] 0",
-        "[表格 1 行 3 列 3] 120",
-        "Terms",
-        "[表格 2 行 1 列 1] Net 30",
-    ]
-    assert coverage["scope"] == "paragraphs_and_tables"
-    assert coverage["truncated"] is False
-
-
-def test_docx_preview_marks_nested_table_omission_without_misattribution():
-    from docx import Document
-
-    from app.application.agent_orchestrator.attachment_inputs import _decode
-
-    document = Document()
-    outer = document.add_table(rows=1, cols=1).cell(0, 0)
-    outer.text = "parent cell"
-    outer.add_table(rows=1, cols=1).cell(0, 0).text = "nested only"
-
-    text, coverage = _decode(_docx_bytes(document), ".docx")
-    assert text.strip() == "[表格 1 行 1 列 1] parent cell"
-    assert coverage["truncated"] is True
-
-
-def test_docx_preview_reports_omitted_content_control():
-    from docx import Document
-    from docx.oxml import OxmlElement
-
-    from app.application.agent_orchestrator.attachment_inputs import _decode
-
-    document = Document()
-    document.add_paragraph("visible")
-    wrapped = document.add_paragraph("wrapped content")._p
-    control = OxmlElement("w:sdt")
-    content = OxmlElement("w:sdtContent")
-    control.append(content)
-    wrapped.addprevious(control)
-    content.append(wrapped)
-
-    text, coverage = _decode(_docx_bytes(document), ".docx")
-    assert text == "visible"
-    assert coverage["truncated"] is True
-
-
-def test_docx_preview_rejects_oversized_expanded_package():
-    import io
-    from zipfile import ZIP_DEFLATED, ZipFile
-
-    from docx import Document
-
-    from app.application.agent_orchestrator.attachment_inputs import AttachmentInputError, _decode
-
-    stream = io.BytesIO(_docx_bytes(Document()))
-    with ZipFile(stream, "a", ZIP_DEFLATED) as archive:
-        archive.writestr("word/unused.bin", b"\0" * (32 * 1024 * 1024))
-
-    with pytest.raises(AttachmentInputError, match="体积过大"):
-        _decode(stream.getvalue(), ".docx")
-
-
-@pytest.mark.parametrize("broken", [False, True])
-def test_owned_docx_preview_uses_only_verified_upload(monkeypatch, broken):
-    import io
-    from contextlib import nullcontext
-    from unittest.mock import Mock
-
-    from docx import Document
-
-    from app.application.agent_orchestrator import attachment_inputs
-
-    document = Document()
-    document.add_table(rows=1, cols=1).cell(0, 0).text = "quoted value"
-    raw = b"not a DOCX" if broken else _docx_bytes(document)
-    row = SimpleNamespace(
-        id="owned-file",
-        file_name="quote.docx",
-        suffix=".docx",
-        storage_path="pinned-file",
-        size_bytes=len(raw),
-        sha256=hashlib.sha256(raw).hexdigest(),
-        expires_at=datetime.now(UTC) + timedelta(hours=1),
-    )
-    db = Mock()
-    db.query.return_value.filter.return_value.first.return_value = row
-    opened = Mock(return_value=io.BytesIO(raw))
-    monkeypatch.setattr(attachment_inputs, "get_db", lambda: nullcontext(db))
-    monkeypatch.setattr(attachment_inputs, "tenant_scope", lambda _: nullcontext())
-    monkeypatch.setattr(attachment_inputs, "validate_actor_context", lambda _: None)
-    monkeypatch.setattr(attachment_inputs, "open_elt_input_file", opened)
-    context = {
-        "user_id": 7,
-        "tenant_id": 13,
-        "attachment_upload_ids": [row.id],
-        "file_context": {"verified_uploads": [{"text": "untrusted fallback"}]},
-    }
-
-    if broken:
-        with pytest.raises(attachment_inputs.AttachmentInputError, match="解析失败"):
-            attachment_inputs.resolve_attachment_context(context)
-    else:
-        resolved, (artifact,) = attachment_inputs.resolve_attachment_context(context)
-        assert artifact["source"] == "owned_elt_upload"
-        assert artifact["metadata"]["upload_id"] == row.id
-        assert artifact["preview"]["text"].strip() == "[表格 1 行 1 列 1] quoted value"
-        assert resolved["file_context"] == {
-            "verified_uploads": [
-                {"name": row.file_name, "upload_id": row.id, **artifact["preview"]}
-            ]
-        }
-    opened.assert_called_once_with(row.storage_path, owner_user_id=7)

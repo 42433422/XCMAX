@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from app.application.agent_orchestrator.run_models import AgentRun
 
@@ -61,6 +61,38 @@ def dispatched_run_state(run: AgentRun) -> tuple[str, str]:
         # A worker returning is not a completion receipt for the work it accepted.
         return "unknown", "worker_incomplete_state"
     return state, "needs_verification" if state == "unknown" else ""
+
+
+def xiaox_queue_outcome(result: dict[str, Any]) -> tuple[str, str]:
+    """Project the original Xiaox receipt onto the existing SQL queue contract.
+
+    A stopped worker is not evidence of failure, approval, or completion.
+    Preserve known waits and fence unresolved outcomes against automatic replay.
+    """
+    state = str(result.get("execution_state") or "").strip()
+    if state in {"cancelled", "rejected"}:
+        return state, ""
+    if result.get("reconciliation_required") is True or state in {"unknown", "partial"}:
+        return "unknown", "needs_verification"
+    if state == "completed":
+        if result.get("ok") is True:
+            return "succeeded", ""
+        return "unknown", "needs_verification"
+    if state in {"paused", "blocked", "waiting_input", "waiting_auth", "waiting_approval"}:
+        return state, str(result.get("error_code") or "")
+    if state == "waiting_user":
+        if result.get("requires_token") is True:
+            return "waiting_auth", ""
+        if result.get("needs_user_input") is True:
+            return "waiting_input", ""
+        return "waiting_approval", ""
+    if state == "running":
+        # Preserve the existing unleased child-continuation queue marker.
+        # A dedicated child-wait state requires coordinated lifecycle migration.
+        return "waiting_approval", ""
+    if state == "failed":
+        return "failed", str(result.get("error_code") or "xiaox_request_failed")
+    return "unknown", "needs_verification"
 
 
 def _task_id_of(run: AgentRun) -> str:
@@ -156,6 +188,7 @@ class TaskExecutionRepository(Protocol):
         run_id: str,
         owner_id: str,
         *,
+        execution_count: int,
         lease_seconds: float,
         now: str | None = None,
     ) -> bool: ...
@@ -166,8 +199,18 @@ class TaskExecutionRepository(Protocol):
         owner_id: str,
         state: str,
         *,
+        execution_count: int,
         error_code: str = "",
     ) -> AgentTaskExecution | None: ...
+
+    def mark_open_effect(
+        self,
+        run_id: str,
+        effect_id: str = "dispatch",
+        *,
+        owner_id: str,
+        execution_count: int,
+    ) -> bool: ...
 
     def transition(
         self,
@@ -177,6 +220,8 @@ class TaskExecutionRepository(Protocol):
         error_code: str = "",
     ) -> AgentTaskExecution | None: ...
 
+    def lifecycle(self, run_id: str) -> dict[str, object]: ...
+
     def clear(self) -> None: ...
 
 
@@ -185,4 +230,5 @@ __all__ = [
     "ExecutionState",
     "TaskExecutionRepository",
     "dispatched_run_state",
+    "xiaox_queue_outcome",
 ]

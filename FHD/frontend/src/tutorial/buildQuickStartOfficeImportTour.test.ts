@@ -8,6 +8,10 @@ describe('buildQuickStartOfficeImportSteps', () => {
     expect(ids[0]).toBe('quickstart-import-go-chat')
     expect(ids).toContain('quickstart-import-excel-a')
     expect(ids).toContain('quickstart-import-excel-b')
+    for (const id of ['quickstart-import-excel-a', 'quickstart-import-excel-b']) {
+      const uploadIndex = ids.indexOf(id)
+      expect(steps[uploadIndex].targetSelector).toContain('toolbar-excel-analyze')
+    }
     expect(ids).toContain('quickstart-import-word')
     expect(ids[ids.length - 1]).toBe('quickstart-import-word-result')
     expect(steps.every((s) => s.routeName === 'chat')).toBe(true)

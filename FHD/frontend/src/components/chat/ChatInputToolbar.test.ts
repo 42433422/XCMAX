@@ -8,8 +8,6 @@ function mountToolbar(propsOverrides = {}) {
     props: {
       attachmentUploading: false,
       multimodalPendingCount: 0,
-      proactiveSuggestionsEnabled: false,
-      ttsEnabled: false,
       ...propsOverrides,
     },
     global: {
@@ -30,13 +28,7 @@ describe('ChatInputToolbar', () => {
   it('renders toolbar container', () => {
     const wrapper = mountToolbar()
     expect(wrapper.find('.input-toolbar').exists()).toBe(true)
-  })
-
-  it('renders new conversation button', () => {
-    const wrapper = mountToolbar()
-    const btn = wrapper.find('#newConversationBtn')
-    expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('shell.newChat')
+    expect(wrapper.find('#newConversationBtn').exists()).toBe(false)
   })
 
   it('renders approval mode toggle button', () => {
@@ -51,17 +43,16 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.find('.approval-mode__choices').exists()).toBe(false)
   })
 
-  it('renders upload button', () => {
+  it('renders separate icon-only upload and office parsing buttons', () => {
     const wrapper = mountToolbar()
-    const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('chat.uploadAttachment')
-  })
-
-  it('emits new-conversation when new chat button clicked', async () => {
-    const wrapper = mountToolbar()
-    await wrapper.find('#newConversationBtn').trigger('click')
-    expect(wrapper.emitted('new-conversation')).toHaveLength(1)
+    const upload = wrapper.get('button[data-tutorial-id="toolbar-excel-analyze"]')
+    const parse = wrapper.get('button[data-tutorial-id="toolbar-office-docking"]')
+    expect(upload.attributes('aria-label')).toBe('chat.uploadAttachment')
+    expect(parse.attributes('aria-label')).toBe('chat.officeDocking')
+    for (const button of [upload, parse]) {
+      expect(button.get('svg').attributes()).toHaveProperty('viewBox')
+      expect(button.text()).toBe('')
+    }
   })
 
   it('shows manual/auto choices when approval toggled on', async () => {
@@ -89,6 +80,13 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('trigger-upload')).toBeUndefined()
   })
 
+  it('routes office parsing separately from attachment upload', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.get('[data-tutorial-id="toolbar-office-docking"]').trigger('click')
+    expect(wrapper.emitted('trigger-office-docking')).toHaveLength(1)
+    expect(wrapper.emitted('attachment-file-change')).toBeUndefined()
+  })
+
   it('only keeps the attachment input so folder upload is not duplicated', () => {
     const wrapper = mountToolbar()
     const inputs = wrapper.findAll('input[type="file"]')
@@ -114,26 +112,24 @@ describe('ChatInputToolbar', () => {
   it('shows upload progress', () => {
     const wrapper = mountToolbar({ attachmentUploading: true })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.text()).toContain('shell.uploadingAttachment')
+    expect(btn.attributes('aria-label')).toBe('shell.uploadingAttachment')
+    expect(btn.find('.is-loading').exists()).toBe(true)
   })
 
-  it('shows upload text when not uploading', () => {
-    const wrapper = mountToolbar({ attachmentUploading: false })
-    const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.text()).toContain('chat.uploadAttachment')
-    expect(btn.text()).not.toContain('shell.uploadingAttachment')
+  it('shows office parsing progress independently of upload', () => {
+    const wrapper = mountToolbar({ officeDockingProcessing: true })
+    const parse = wrapper.get('[data-tutorial-id="toolbar-office-docking"]')
+    expect(parse.attributes('disabled')).toBeDefined()
+    expect(parse.attributes('aria-label')).toBe('chat.officeDockingBusy')
+    expect(parse.find('.is-loading').exists()).toBe(true)
+    expect(wrapper.get('[data-tutorial-id="toolbar-excel-analyze"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('shows pending count when multimodalPendingCount > 0', () => {
+  it('announces the attachment count while keeping the button icon-only', () => {
     const wrapper = mountToolbar({ multimodalPendingCount: 3 })
-    const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.text()).toContain('(3)')
-  })
-
-  it('does not show pending count when multimodalPendingCount is 0', () => {
-    const wrapper = mountToolbar({ multimodalPendingCount: 0 })
-    const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.text()).not.toContain('(')
+    const upload = wrapper.get('[data-tutorial-id="toolbar-excel-analyze"]')
+    expect(upload.attributes('aria-label')).toBe('chat.uploadAttachment (3)')
+    expect(upload.text()).toBe('')
   })
 
   it('renders hidden file input with correct accept attribute', () => {
@@ -163,68 +159,10 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('attachment-file-change')).toHaveLength(1)
   })
 
-  it('renders auto-refresh toggle', () => {
-    const wrapper = mountToolbar()
-    const toggle = wrapper.find('[data-tutorial-id="proactive-suggestions-toggle"]')
-    expect(toggle.exists()).toBe(true)
-  })
-
-  it('proactive checkbox reflects proactiveSuggestionsEnabled prop', () => {
-    const wrapper = mountToolbar({ proactiveSuggestionsEnabled: true })
-    const checkbox = wrapper.find('[data-tutorial-id="proactive-suggestions-toggle"] input[type="checkbox"]')
-    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('emits proactive-suggestions-change when checkbox toggled', async () => {
-    const wrapper = mountToolbar({ proactiveSuggestionsEnabled: false })
-    const checkbox = wrapper.find('[data-tutorial-id="proactive-suggestions-toggle"] input[type="checkbox"]')
-    await checkbox.setValue(true)
-    expect(wrapper.emitted('proactive-suggestions-change')).toBeTruthy()
-    expect(wrapper.emitted('proactive-suggestions-change')![0]).toEqual([true])
-  })
-
-  it('renders TTS toggle', () => {
-    const wrapper = mountToolbar()
-    const labels = wrapper.findAll('label')
-    const ttsLabel = labels.find((l) => l.text().includes('chat.ttsToggle'))
-    expect(ttsLabel).toBeTruthy()
-  })
-
-  it('TTS checkbox reflects ttsEnabled prop', () => {
-    const wrapper = mountToolbar({ ttsEnabled: true })
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    const ttsCheckbox = checkboxes.find((c) => (c.element as HTMLInputElement).checked === true)
-    expect(ttsCheckbox).toBeTruthy()
-  })
-
-  it('emits toggle-tts when TTS checkbox toggled', async () => {
-    const wrapper = mountToolbar({ ttsEnabled: false })
-    const labels = wrapper.findAll('label')
-    const ttsLabel = labels.find((l) => l.text().includes('chat.ttsToggle'))
-    const checkbox = ttsLabel!.find('input[type="checkbox"]')
-    await checkbox.setValue(true)
-    expect(wrapper.emitted('toggle-tts')).toBeTruthy()
-    expect(wrapper.emitted('toggle-tts')![0]).toEqual([true])
-  })
-
-  it('emits toggle-tts with false when unchecking TTS', async () => {
-    const wrapper = mountToolbar({ ttsEnabled: true })
-    const labels = wrapper.findAll('label')
-    const ttsLabel = labels.find((l) => l.text().includes('chat.ttsToggle'))
-    const checkbox = ttsLabel!.find('input[type="checkbox"]')
-    await checkbox.setValue(false)
-    expect(wrapper.emitted('toggle-tts')![0]).toEqual([false])
-  })
-
   it('upload button has correct title', () => {
     const wrapper = mountToolbar()
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
     expect(btn.attributes('title')).toBe('chat.uploadTitle')
-  })
-
-  it('new conversation button has correct title', () => {
-    const wrapper = mountToolbar()
-    expect(wrapper.find('#newConversationBtn').attributes('title')).toBe('chat.newConversationTitle')
   })
 
   it('approval mode button has correct title', () => {

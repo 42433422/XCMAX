@@ -21,10 +21,16 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.page import PageMargins
 
 from app.domain.workbook_write_contract import (
+    WORKBOOK_BANDED_TABLE_STYLE as WORKBOOK_BANDED_TABLE_STYLE,
+)
+from app.domain.workbook_write_contract import (
     WORKBOOK_CONTROL_PHASES as WORKBOOK_CONTROL_PHASES,
 )
 from app.domain.workbook_write_contract import (
     WORKBOOK_NATIVE_PHASES as WORKBOOK_NATIVE_PHASES,
+)
+from app.domain.workbook_write_contract import (
+    WORKBOOK_STRUCTURAL_PHASES as WORKBOOK_STRUCTURAL_PHASES,
 )
 
 _MARGINS = {

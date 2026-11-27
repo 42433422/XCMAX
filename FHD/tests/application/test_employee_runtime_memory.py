@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
 from app.domain.employee.memory_scope import MemoryScope
@@ -40,11 +40,12 @@ class TestEmployeeMemoryManager:
         with patch(
             "app.domain.shared_services.conversation_service.ConversationService"
         ) as conv_cls:
-            conv_cls.return_value.get_session_messages.return_value = rows
+            conv_cls.return_value.get_employee_memory.return_value = rows
             ctx = mgr.recall("task", session_id="sid-1", user_id=7)
-            conv_cls.return_value.get_session_messages.assert_called_once_with(
-                "sid-1", limit=50, user_id="7"
+            conv_cls.return_value.get_employee_memory.assert_called_once_with(
+                "sid-1", limit=50, user_id="7", tenant_id="1", employee_id="emp-x"
             )
+            conv_cls.return_value.get_session_messages.assert_not_called()
         assert len(ctx.short_term_messages) == 1
         assert ctx.short_term_messages[0]["content"] == "hello"
         assert "provenance=unlinked" in ctx.as_system_suffix()
@@ -72,8 +73,17 @@ class TestEmployeeMemoryManager:
             "app.domain.shared_services.conversation_service.ConversationService", return_value=svc
         ):
             mgr.remember("do thing", "done", user_id=5, session_id="sess")
-        assert svc.save_message.call_count == 2
-        metadata = json.loads(svc.save_message.call_args.kwargs["metadata"])
+        svc.save_employee_memory.assert_called_once_with(
+            "sess",
+            user_id="5",
+            tenant_id="1",
+            employee_id="emp-z",
+            task="do thing",
+            summary="done",
+            metadata=ANY,
+        )
+        svc.save_message.assert_not_called()
+        metadata = json.loads(svc.save_employee_memory.call_args.kwargs["metadata"])
         assert metadata["tenant_id"] == "1" and metadata["user_id"] == "5"
         assert metadata["source_component"] == "employee_runtime"
         assert metadata["verified_business_result"] is False

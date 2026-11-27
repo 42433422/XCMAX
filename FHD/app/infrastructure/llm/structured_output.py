@@ -1,6 +1,6 @@
 """Structured Output：JSON 提取 → schema 校验 → 带错误反馈的修复重试。
 
-- schema 校验复用 tool_spec 的轻量实现（零新增生产依赖）。
+- schema 校验复用已锁定的 jsonschema，禁止类型强制转换和远程引用。
 - LLM 调用经 invoke 统一入口（自动获得遥测 + guardrails）。
 - 终败抛 ``StructuredOutputError``，由调用方决定降级策略。
 """
@@ -11,23 +11,35 @@ import asyncio
 import contextvars
 import json
 import logging
+import math
 import os
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any, cast
 
+from jsonschema.exceptions import ValidationError
+from jsonschema.validators import validator_for
 from openai import APIError
+from referencing import Registry
 
+from app.application.tool_execution_deadline import (
+    check_invocation_deadline,
+    invocation_deadline,
+    remaining_invocation_seconds,
+)
 from app.infrastructure.llm import invoke
+from app.infrastructure.llm.response_completion import normal_finish_reason
+from app.infrastructure.llm.retry_policy import is_safe_transport_retry, retry_delay
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _PROVIDER_ERRORS: tuple[type[Exception], ...] = (APIError,) + RECOVERABLE_ERRORS
+_MAX_REPAIRS = 2
 
 _REPAIR_TEMPLATE = (
     "你上次返回的内容未通过 JSON Schema 校验。\n"
     "校验错误：{errors}\n"
-    "原始输出：{raw}\n"
     "请只返回修正后的 JSON，不要解释、不要 markdown 代码块。"
 )
 
@@ -105,21 +117,25 @@ def extract_json(content: str) -> dict[str, Any] | None:
 
 
 def validate_payload(schema: dict[str, Any], payload: dict[str, Any]) -> tuple[bool, str]:
-    """复用 tool_spec 轻量 schema 校验。"""
-    from app.application.agent_orchestrator.tool_spec import _validate_schema_payload
-
-    return _validate_schema_payload(schema, payload, subject="LLM 输出")
+    """Validate the complete declared schema without rewriting model output."""
+    validator = validator_for(schema)
+    validator.check_schema(schema)
+    try:
+        validator(schema, registry=Registry()).validate(payload)
+    except ValidationError as exc:
+        return False, f"LLM 输出不符合 JSON Schema：{exc.message[:1000]}"
+    return True, ""
 
 
 def _max_repairs_default() -> int:
     raw = (os.environ.get("XCAGI_STRUCTURED_OUTPUT_MAX_REPAIRS") or "").strip()
     try:
-        return max(0, int(raw))
+        return min(_MAX_REPAIRS, max(0, int(raw)))
     except ValueError:
-        return 2
+        return _MAX_REPAIRS
 
 
-async def complete_structured(
+async def _complete_structured(
     messages: list[dict[str, str]],
     *,
     schema: dict[str, Any],
@@ -131,10 +147,13 @@ async def complete_structured(
     provider: Any | None = None,
 ) -> StructuredResult:
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
-    repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
+    validator_for(schema).check_schema(schema)  # Configuration errors must fail before paid I/O.
+    repairs = (
+        _max_repairs_default() if max_repairs is None else min(_MAX_REPAIRS, max(0, max_repairs))
+    )
     total_attempts = 1 + repairs
-    # 429 是传输层限流，与 schema 修复无关：给独立的重试预算（带退避），
-    # 否则 max_repairs=0 的调用方（如意图门）遇到限流即永久失败。
+    # Only a definite rejection or pre-dispatch connection failure can retry.
+    # Response loss, admission denial and guardrail blocks are not JSON errors.
     transport_retries_left = 2
     attempt_messages = list(messages)
     last_errors: list[str] = ["尚未调用"]
@@ -157,42 +176,32 @@ async def complete_structured(
                 **routing,
             )
         except _PROVIDER_ERRORS as exc:
-            from app.infrastructure.llm.model_admission import (
-                ModelCircuitOpenError,
-                ModelConcurrencyLimitError,
-                ModelRateLimitError,
-            )
-            from app.utils.resilience.rate_limiter import RateLimitBackendError
-
-            admission_failure = isinstance(
-                exc,
-                (
-                    ModelCircuitOpenError,
-                    ModelConcurrencyLimitError,
-                    ModelRateLimitError,
-                    RateLimitBackendError,
-                ),
-            )
-            if admission_failure:
-                # Quota/backend admission errors are control-plane outcomes.
-                # Preserve their type so the HTTP boundary can return 429/503
-                # with retry guidance instead of disguising them as model output.
+            if transport_retries_left <= 0 or not (
+                is_safe_transport_retry(exc) or _is_rate_limited(exc)
+            ):
+                # Preserve admission, cancellation and uncertain usage outcomes.
                 raise
-            last_errors = [f"LLM 调用异常: {type(exc).__name__}: {exc}"]
-            logger.warning("complete_structured attempt %s failed: %s", attempts_used, exc)
-            if _is_rate_limited(exc) and transport_retries_left > 0:
-                transport_retries_left -= 1
-                delay = 2.0 if transport_retries_left == 1 else 5.0
-                logger.warning("complete_structured rate-limited, backing off %.1fs", delay)
-                await asyncio.sleep(delay)
-                attempts_used -= 1  # 传输级重试不消耗 schema 修复预算
-                continue
+            transport_retries_left -= 1
+            headers = getattr(getattr(exc, "response", None), "headers", {})
+            delay = retry_delay(2 - transport_retries_left, headers.get("retry-after"))
+            logger.warning("complete_structured %s, retry in %.1fs", type(exc).__name__, delay)
+            await asyncio.sleep(delay)
+            attempts_used -= 1  # Transport retries share one budget across every repair.
             continue
         if result is None:
-            last_errors = ["LLM 调用失败或被 guardrail 拦截"]
-            continue
+            raise StructuredOutputError(attempts_used, ["LLM 调用失败或被 guardrail 拦截"], "")
         choices = result.get("choices") or []
-        raw = str((choices[0].get("message") or {}).get("content") or "") if choices else ""
+        first = choices[0] if isinstance(choices, list) and choices else {}
+        if not isinstance(first, dict):
+            first = {}
+        message = first.get("message")
+        if isinstance(message, dict) and message.get("refusal"):
+            raise StructuredOutputError(attempts_used, ["模型明确拒绝本次请求"], "")
+        if "finish_reason" in first and not normal_finish_reason(first["finish_reason"]):
+            raise StructuredOutputError(
+                attempts_used, ["模型响应未正常完成，禁止将局部 JSON 认定为成功"], ""
+            )
+        raw = message_text({"choices": [first]})
         last_raw = raw
         data = extract_json(raw)
         if data is None:
@@ -220,10 +229,10 @@ async def complete_structured(
             last_errors = [message]
         attempt_messages = [
             *messages,
-            {"role": "assistant", "content": raw},
+            {"role": "assistant", "content": raw[:2000]},
             {
                 "role": "user",
-                "content": _REPAIR_TEMPLATE.format(errors="；".join(last_errors), raw=raw[:2000]),
+                "content": _REPAIR_TEMPLATE.format(errors="；".join(last_errors)),
             },
         ]
 
@@ -231,12 +240,8 @@ async def complete_structured(
 
 
 def _is_rate_limited(exc: BaseException) -> bool:
-    """识别 HTTP 429（httpx.HTTPStatusError 或其字符串形态）。"""
-    status = getattr(exc, "response", None)
-    code = getattr(status, "status_code", None)
-    if code == 429:
-        return True
-    return "429" in str(exc) and "Too Many Requests" in str(exc)
+    """Only structured provider status can authorize replay, never error text."""
+    return getattr(getattr(exc, "response", None), "status_code", None) == 429
 
 
 def _current_trace_id() -> str | None:
@@ -248,23 +253,37 @@ def _current_trace_id() -> str | None:
         return None
 
 
-async def complete_structured_bounded(
+async def complete_structured(
     messages: list[dict[str, str]], *, timeout_seconds: float = 120.0, **kwargs: Any
 ) -> StructuredResult:
-    """Bound completion and its retries; cancellation must reach the provider."""
-    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    """Bound every completion, retry and repair; cancellation reaches the provider."""
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("structured completion timeout must be positive and finite")
+    timeout_seconds = remaining_invocation_seconds(timeout_seconds)
+    deadline = time.monotonic() + timeout_seconds
+    timer = asyncio.timeout(timeout_seconds)
     try:
-        result = await asyncio.wait_for(
-            complete_structured(messages, **kwargs), timeout=timeout_seconds
-        )
+        with invocation_deadline(deadline):
+            check_invocation_deadline()
+            async with timer:
+                result = await _complete_structured(messages, **kwargs)
         task = asyncio.current_task()
         if task is not None and task.cancelling():
             raise asyncio.CancelledError
-        if asyncio.get_running_loop().time() >= deadline:
+        if time.monotonic() >= deadline:
             raise TimeoutError
         return result
     except TimeoutError as exc:
+        if not timer.expired() and time.monotonic() < deadline:
+            raise  # A provider timeout is an uncertain request, not invalid JSON.
         raise StructuredOutputError(0, ["structured completion timeout"], "") from exc
+
+
+async def complete_structured_bounded(
+    messages: list[dict[str, str]], *, timeout_seconds: float = 120.0, **kwargs: Any
+) -> StructuredResult:
+    """Compatibility entry; the direct completion API now shares the same bound."""
+    return await complete_structured(messages, timeout_seconds=timeout_seconds, **kwargs)
 
 
 def complete_structured_sync(
@@ -311,6 +330,8 @@ def message_text(response: dict[str, Any] | None) -> str:
     if not choices or not isinstance(choices[0], dict):
         return ""
     message = choices[0].get("message") or {}
+    if not isinstance(message, dict):
+        return ""
     content = message.get("content")
     if isinstance(content, list):
         parts = [

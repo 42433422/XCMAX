@@ -59,14 +59,14 @@ def _verifier_module():
     return _load_module("production_slo_verifier", "verify_production_slo_window.py")
 
 
-def _sample_query(collector, expr, values):
+def _sample_query(collector, expr, values, *, window="90d"):
     if expr in collector.SCRAPE_QUERIES.values():
         return "5760"
     for slo_id, template in collector.SAMPLE_QUERIES.items():
-        if expr == template.format(w="90d"):
+        if expr == template.format(w=window):
             return str(collector.SAMPLE_MINIMUMS[slo_id])
     for slo_id, template in collector.QUERIES.items():
-        if expr == template.format(w="90d"):
+        if expr == template.format(w=window):
             return str(values[slo_id])
     raise AssertionError(expr)
 
@@ -610,20 +610,21 @@ def test_seven_day_observation_ledger_records_every_gap(tmp_path: Path, monkeypa
     assert ledger["retention"] == {"days": 120.0, "source": "prometheus_flags"}
 
 
-def _complete_observation(tmp_path, monkeypatch, *, count=1):
+def _complete_observation(tmp_path, monkeypatch, *, count=1, window="90d"):
     collector = _module(live_retention=True)
     monkeypatch.setattr(collector, "measure_retention_days", lambda *_a, **_k: 120.0)
     values = dict.fromkeys(collector.TARGETS, 1.0)
     values.update({"SLO-API-03": 0.0, "SLO-BIZ-02": 0.0})
 
     def query(_url, expr, **_kwargs):
-        return _sample_query(collector, expr, values)
+        return _sample_query(collector, expr, values, window=window)
 
     monkeypatch.setattr(collector, "prom_query", query)
     for offset in range(count):
         _collect(
             collector,
             tmp_path / f"{offset:03d}.json",
+            window=window,
             now=datetime(2026, 11, 1, 12, tzinfo=UTC) + timedelta(days=offset),
         )
     return collector
@@ -672,7 +673,7 @@ def test_observation_rejects_unproven_scrape_coverage(tmp_path, monkeypatch, mut
     "mutation", ["unknown_metric", "sample_count", "sample_floor", "reading", "declared_retention"]
 )
 def test_formal_window_recomputes_actual_slo_results(tmp_path, monkeypatch, mutation):
-    collector = _complete_observation(tmp_path, monkeypatch)
+    collector = _complete_observation(tmp_path, monkeypatch, window="1d")
     mutations = {
         "unknown_metric": lambda p: p["readings"].update(
             {"wrong": p["readings"].pop("SLO-BIZ-05")}
@@ -702,10 +703,12 @@ def test_formal_window_recomputes_actual_slo_results(tmp_path, monkeypatch, muta
 def test_concurrent_collections_keep_one_chain_independent_of_filenames(tmp_path, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
-    collector = _complete_observation(tmp_path, monkeypatch)
+    collector = _complete_observation(tmp_path, monkeypatch, window="1d")
 
     def append(filename):
-        return _collect(collector, tmp_path / filename, now=datetime(2026, 11, 1, 12, tzinfo=UTC))
+        return _collect(
+            collector, tmp_path / filename, window="1d", now=datetime(2026, 11, 1, 12, tzinfo=UTC)
+        )
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(append, ["z.json", "b.json", "q.json", "c.json"]))

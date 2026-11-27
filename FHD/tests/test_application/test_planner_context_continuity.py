@@ -224,6 +224,22 @@ def test_sql_projection_reads_only_uncovered_suffix_and_keeps_whole_long_message
     assert result["_chat_history_messages"][0]["content"].endswith("FACT_0")
 
 
+@pytest.mark.parametrize("status", ["failed", "blocked", "unknown"])
+def test_host_failure_is_not_replayed_as_a_native_assistant_answer(status):
+    from app.application.ai_chat.chat_evidence import _history_row_content
+
+    ids = {"run_id": "run-one", "turn_id": "turn-one"}
+    meta = {
+        "business_harness": {**ids, "recall_bound": True, "conversation_key": "room"},
+        "summary": {**ids, "action": "runtime_reply", "success": False, "status": status},
+    }
+    row = {"role": "assistant", "content": "arbitrary display text", "metadata": json.dumps(meta)}
+    assert _history_row_content(row, "room") is None
+    assert _history_row_content({**row, "role": "user"}, "room") == row["content"]
+    meta["summary"].update(success=True, status="completed")
+    assert _history_row_content({**row, "metadata": json.dumps(meta)}, "room") == row["content"]
+
+
 def test_later_finishing_old_summary_cannot_move_sql_cursor_backwards(monkeypatch):
     from contextlib import nullcontext
 

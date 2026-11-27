@@ -21,6 +21,8 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from openpyxl.utils.cell import column_index_from_string
+
 from .infer import instantiate_formula
 
 PLAN_VERSION = 1
@@ -31,13 +33,6 @@ _REF_RE = re.compile(r"^([A-Z]{1,3})(\d+)$")
 
 class CompileError(ValueError):
     """规则或记录不满足编译条件（fail-fast）。"""
-
-
-def _col_to_index(letters: str) -> int:
-    idx = 0
-    for ch in letters:
-        idx = idx * 26 + (ord(ch) - ord("A") + 1)
-    return idx
 
 
 def _index_to_col(idx: int) -> str:
@@ -82,7 +77,7 @@ def _resolve_col(spec: Dict[str, Any]) -> int:
         return raw
     text = str(raw or "").strip().upper()
     if _COL_RE.match(text):
-        return _col_to_index(text)
+        return column_index_from_string(text)
     raise CompileError(f"直写记录 col 非法：{raw!r}（需要列字母或 ≥1 的列号）")
 
 
@@ -108,7 +103,7 @@ def _month_writes(
             {
                 "sheet": sheet,
                 "row": int(m.group(2)),
-                "col": _col_to_index(m.group(1)),
+                "col": column_index_from_string(m.group(1)),
                 "value": year if part == "year" else month,
             }
         )
@@ -142,7 +137,7 @@ def compile_plan(
     formula_zone_min = min((int(z["col_start"]) for z in zones), default=0)
     templates = [t for t in (rules.get("formula_templates") or []) if isinstance(t, dict)]
     template_cols = {
-        _col_to_index(str(t.get("col") or "").strip().upper())
+        column_index_from_string(str(t.get("col") or "").strip().upper())
         for t in templates
         if _COL_RE.match(str(t.get("col") or "").strip().upper())
     }

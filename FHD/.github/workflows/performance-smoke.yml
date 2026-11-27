@@ -11,7 +11,16 @@ on:
       - "FHD/scripts/observability/k6_7d_contract.js"
       - "FHD/scripts/observability/run_staging_7d_acceptance.sh"
       - "FHD/tests/stability/**"
+      - "FHD/tests/test_application/**"
+      - "FHD/tests/test_scripts/test_agent_fault_regression.py"
+      - "FHD/scripts/dev/run_agent_fault_regression.py"
       - "FHD/app/application/agent_orchestrator/**"
+      - "FHD/app/application/agent_runtime/**"
+      - "FHD/app/infrastructure/xiaox/**"
+      - "FHD/app/domain/task_lifecycle/**"
+      - "FHD/pyproject.toml"
+      - "FHD/uv.lock"
+      - "FHD/ops/deploy/requirements-dev.txt"
       - "FHD/app/application/chat_stream_replay.py"
       - "FHD/app/application/task_conversation_store.py"
       - "成都修茈科技有限公司/MODstore_deploy/chaos/**"
@@ -38,6 +47,20 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agent_test
+          POSTGRES_PASSWORD: agent-test-only
+          POSTGRES_DB: agent_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent_test -d agent_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      XCAGI_TEST_AGENT_POSTGRES_URL: postgresql+psycopg://agent_test:agent-test-only@127.0.0.1:5432/agent_test
     steps:
       - uses: actions/checkout@v4
 
@@ -70,14 +93,13 @@ jobs:
           REQUIRE_RESILIENCE_TOOLS: "1"
           XCAGI_SKIP_INTENT_LLM: "1"
         run: |
+          python scripts/dev/run_agent_fault_regression.py --faults-only \
+            --output performance-results/agent-faults
           python -m pytest tests/stability \
-            tests/test_application/test_tool_idempotency.py \
+            --ignore=tests/stability/test_model_transport_faults.py \
+            --ignore=tests/stability/test_continuity_fault_injection.py \
             tests/test_application/test_chat_stream_replay.py \
-            tests/test_application/test_conversation_turn_receipts.py \
             tests/test_application/test_task_conversation_store.py::test_task_conversation_survives_store_recreation_and_lists_metadata \
-            tests/test_application/test_native_task_recovery.py::test_process_exit_real_startup_resumes_native_checkpoint_without_repeating_receipt \
-            tests/test_application/test_native_task_recovery.py::test_restart_preserves_exact_queued_approval_before_first_write \
-            tests/test_application/test_native_task_recovery_receipts.py::test_concurrent_retry_preserves_original_write_receipt_and_atomically_requeues_same_run \
             tests/test_desktop/test_startup_schema_migration_real_db.py \
             -q --junitxml=performance-results/resilience.xml
 

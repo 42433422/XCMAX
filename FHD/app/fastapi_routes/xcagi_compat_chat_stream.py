@@ -214,6 +214,7 @@ def _heartbeats(
     notes: _StreamNoteQueue | None = None,
     deltas: _StreamNoteQueue | None = None,
     streamed: list[str] | None = None,
+    model_activity: _StreamNoteQueue | None = None,
 ) -> Iterator[bytes]:
     """Run blocking local work off the producer and keep the stream observably alive."""
     box: dict = {}
@@ -249,6 +250,11 @@ def _heartbeats(
             delivered.append(text)
             yield encode({"type": "token", "text": text})
 
+    def model_lines() -> Iterator[bytes]:
+        if model_activity is not None:
+            for _ in model_activity.drain():
+                yield encode({"type": "model_activity"})
+
     thread = threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True)
     thread.start()
     interval = _tool_heartbeat_seconds()
@@ -259,6 +265,7 @@ def _heartbeats(
         thread.join(slice_seconds)
         yield from tool_lines()
         yield from note_lines()
+        yield from model_lines()
         yield from delta_lines()
         waited += slice_seconds
         if thread.is_alive() and waited >= interval:
@@ -266,6 +273,7 @@ def _heartbeats(
             yield _progress(encode, "running", label)
     yield from tool_lines()
     yield from note_lines()
+    yield from model_lines()
     yield from delta_lines()
     if "error" in box:
         raise box["error"]
@@ -411,11 +419,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         # 前端据此实时长出「执行链」，不必等整轮结束回填。
         tool_records: _ToolRecordQueue | None = _ToolRecordQueue()
         notes: _StreamNoteQueue | None = _StreamNoteQueue()
+        model_activity: _StreamNoteQueue | None = _StreamNoteQueue()
         deltas: _StreamNoteQueue | None = _StreamNoteQueue()
         streamed: list[str] = []
         try:
             from app.infrastructure.chat_stream_lifetime import (
                 watch_stream_deltas,
+                watch_stream_model_activity,
                 watch_stream_notes,
                 watch_stream_tool_records,
             )
@@ -423,13 +433,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
 
             assert tool_records is not None
             assert notes is not None
+            assert model_activity is not None
             assert deltas is not None
             watch_stream_tool_records(tool_records.push)
             watch_stream_notes(notes.push)
+            watch_stream_model_activity(lambda: model_activity.push("active"))
             watch_stream_deltas(deltas.push)
         except BOUNDARY_ERRORS:  # 观测通道不可用时不阻断对话
             tool_records = None
             notes = None
+            model_activity = None
             deltas = None
         yield from _heartbeats(
             _chat,
@@ -440,6 +453,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             notes,
             deltas,
             streamed,
+            model_activity,
         )
         payload = sink["value"]
     except facade.RECOVERABLE_ERRORS as exc:

@@ -65,6 +65,7 @@ def paid(monkeypatch, image_store):
     monkeypatch.setattr(image.ledger, "completed_receipt", Mock(return_value=None))
     monkeypatch.setattr(image.ledger, "existing_state", Mock(return_value="not_found"))
     monkeypatch.setattr(image.ledger, "mark_settling", Mock())
+    monkeypatch.setattr(image.ledger, "prepare_settlement", Mock())
     monkeypatch.setattr(image.ledger, "lock_request", Mock(return_value=row))
     monkeypatch.setattr(image.ledger, "finish", Mock())
     db = Mock()

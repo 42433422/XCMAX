@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from contextlib import aclosing
 from typing import Any
 
@@ -28,6 +29,8 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
+from app.infrastructure.auth.agent_principal import AgentPrincipal
+from app.infrastructure.auth.agent_stream import StreamAuthorizer, require_stream_authorizer
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -181,6 +184,7 @@ async def _follow_replay(
     *,
     owner: str,
     tenant: str,
+    authorize: StreamAuthorizer,
     idle_timeout: float = 600.0,
 ):
     """从回放缓冲跟随一个 turn，直到它落终态；客户端断开只会停止本协程。"""
@@ -188,21 +192,33 @@ async def _follow_replay(
     started = time.monotonic()
     deadline = started + idle_timeout
     idle_ticks = 0
+    revoked = _replay_error_line("STREAM_ACCESS_REVOKED", "会话或授权已变化，已停止接收回复。")
     while True:
+        if not await authorize():
+            yield revoked
+            return
         try:
             rows = chat_stream_replay.events_after(turn_id, cursor, owner=owner, tenant=tenant)
             for row in rows:
+                if not await authorize():
+                    yield revoked
+                    return
                 seq = row.get("seq")
                 if seq and seq != cursor:
                     cursor = seq
                     deadline = time.monotonic() + idle_timeout
-                yield _replay_line(row)
+                if (row.get("payload") or {}).get("type") != "stream_scope":
+                    yield _replay_line(row)
             if chat_stream_replay.finish_status(turn_id, owner=owner, tenant=tenant):
                 for row in chat_stream_replay.events_after(
                     turn_id, cursor, owner=owner, tenant=tenant
                 ):
+                    if not await authorize():
+                        yield revoked
+                        return
                     cursor = row.get("seq") or cursor
-                    yield _replay_line(row)
+                    if (row.get("payload") or {}).get("type") != "stream_scope":
+                        yield _replay_line(row)
                 return
             # 租约消失且无终态：生产端已失联，明确落中断事件而不是空等到超时。
             if (
@@ -221,6 +237,107 @@ async def _follow_replay(
         if idle_ticks % 150 == 0:
             yield b": ping\n\n"
         await asyncio.sleep(0.1)
+
+
+async def _follow_scoped_replay(
+    request: Request,
+    principal: AgentPrincipal,
+    turn_id: str,
+    after: str | int = 0,
+    *,
+    expected_scope: dict[str, Any] | None = None,
+):
+    """Bind delivery to the original cached producer and SQL conversation revision."""
+    from app.application.task_conversation_store import task_conversation_store
+
+    authorize = require_stream_authorizer(request, principal)
+    owner, tenant = principal.user_id, str(principal.tenant_id or "")
+    revoked = _replay_error_line(
+        "STREAM_ACCESS_REVOKED", "无法确认原会话访问权限，已停止接收回复。"
+    )
+    deadline = time.monotonic() + chat_stream_replay.LEASE_TTL_SECONDS + 5
+    try:
+        while True:
+            if not await authorize():
+                yield revoked
+                return
+            rows = chat_stream_replay.events_after(turn_id, owner=owner, tenant=tenant, limit=1)
+            if rows:
+                break
+            if (
+                time.monotonic() >= deadline
+                or chat_stream_replay.finish_status(turn_id, owner=owner, tenant=tenant)
+                or not chat_stream_replay.lease_alive(turn_id, owner=owner, tenant=tenant)
+            ):
+                raise chat_stream_replay.ReplayBackendUnavailable("原流缺少范围证据")
+            await asyncio.sleep(0.1)
+        marker = rows[0]
+        payload = marker["payload"]
+        scope = payload.get("scope")
+        if (
+            payload.get("type") != "stream_scope"
+            or not isinstance(payload.get("stream_id"), str)
+            or not payload["stream_id"]
+            or not isinstance(scope, dict)
+            or set(scope) != {"owner", "tenant", "mod", "session", "revision"}
+            or any(
+                not isinstance(scope[field], str) for field in ("owner", "tenant", "mod", "session")
+            )
+            or not scope["session"]
+            or type(scope["revision"]) is not int
+            or scope["revision"] < 0
+        ):
+            raise chat_stream_replay.ReplayBackendUnavailable("原流缺少范围证据")
+    except chat_stream_replay.ReplayBackendUnavailable:
+        yield _replay_error_line(
+            "REPLAY_SCOPE_UNAVAILABLE", "原流范围证据已失效，请核对原任务回执。"
+        )
+        return
+    if (
+        scope["owner"] != owner
+        or scope["tenant"] != tenant
+        or scope["mod"] != str((principal.mod_authorization or {}).get("mod_id") or "")
+        or expected_scope is not None
+        and scope != expected_scope
+    ):
+        yield revoked
+        return
+    # Freeze primitives: mutable local cache entries cannot replace the captured proof.
+    scope, stream_id = dict(scope), payload["stream_id"]
+
+    async def authorized_original() -> bool:
+        if not await authorize():
+            return False
+        try:
+            snapshot = await asyncio.to_thread(
+                task_conversation_store.memory_snapshot,
+                session_id=scope["session"],
+                user_id=int(owner),
+            )
+            if snapshot is None or snapshot["revision"] != scope["revision"]:
+                return False
+            # The producer can change while SQL is awaited. Check the captured
+            # generation last, with no further await before releasing its event.
+            current = chat_stream_replay.events_after(turn_id, owner=owner, tenant=tenant, limit=1)
+            return bool(current) and current[0]["payload"] == {
+                "type": "stream_scope",
+                "scope": scope,
+                "stream_id": stream_id,
+            }
+        except chat_stream_replay.ReplayBackendUnavailable:
+            return False
+        except RECOVERABLE_ERRORS:
+            return False
+
+    cursor = marker["seq"] if str(after or "0") in {"0", "0-0"} else after
+    async for chunk in _follow_replay(
+        turn_id,
+        cursor,
+        owner=owner,
+        tenant=tenant,
+        authorize=authorized_original,
+    ):
+        yield chunk
 
 
 async def _stream_live(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
@@ -336,7 +453,8 @@ def _replay_unavailable_response() -> JSONResponse:
 @router.post("/ai/unified_chat/stream")
 @router.post("/ai/chat/stream")
 async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
-    from app.middleware.chat_stream_limit import acquire_chat_stream_slot
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from app.middleware.chat_stream_limit import acquire_chat_stream_slot, release_chat_stream_slot
 
     body = _prepare_compat_chat_body(request, body)
     context = body.context or {}
@@ -359,13 +477,27 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
             )
         return _sse_response(_stream_live(request, body, ai_tier=tier))
 
+    principal = require_agent_principal(request, x_user_id=None)
+    if principal.user_id != owner or str(principal.tenant_id or "") != tenant:
+        raise HTTPException(status_code=403, detail="会话身份已变化，请重新读取原任务。")
+    scope = {
+        "owner": owner,
+        "tenant": tenant,
+        "mod": str((principal.mod_authorization or {}).get("mod_id") or ""),
+        "session": str(context.get("conversation_id") or context.get("session_id") or ""),
+        "revision": context.get("_conversation_revision"),
+    }
+    if not scope["session"] or type(scope["revision"]) is not int or scope["revision"] < 0:
+        raise HTTPException(status_code=409, detail="原会话版本不可用，请核对原任务回执。")
     try:
         claimed = chat_stream_replay.claim_runner(turn_id, owner=owner, tenant=tenant)
     except chat_stream_replay.ReplayBackendUnavailable:
         return _replay_unavailable_response()
     # 同一 turn 仍在生产：本次连接只跟随，不重复执行（断线重连）。
     if not claimed:
-        return _sse_response(_follow_replay(turn_id, owner=owner, tenant=tenant))
+        return _sse_response(
+            _follow_scoped_replay(request, principal, turn_id, expected_scope=scope)
+        )
     # 抢占已原子清除旧回放；此处不得再次清除新生产周期的数据。
     runner = chat_stream_replay.runner_for(turn_id, owner=owner, tenant=tenant)
 
@@ -379,6 +511,20 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
                 "message": "流式对话并发已满，请稍后重试",
             },
         )
+    try:
+        # Persist scope before scheduling any business work. This is cache metadata,
+        # never a new task or a client-visible model event.
+        chat_stream_replay.append(
+            turn_id,
+            {"type": "stream_scope", "scope": scope, "stream_id": uuid.uuid4().hex},
+            owner=owner,
+            tenant=tenant,
+            runner=runner,
+        )
+    except chat_stream_replay.ReplayBackendUnavailable:
+        chat_stream_replay.release_runner(turn_id, owner=owner, tenant=tenant, runner=runner)
+        release_chat_stream_slot()
+        return _replay_unavailable_response()
     asyncio.create_task(
         _produce_replay(
             request,
@@ -390,7 +536,7 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
             runner=runner,
         )
     )
-    return _sse_response(_follow_replay(turn_id, owner=owner, tenant=tenant))
+    return _sse_response(_follow_scoped_replay(request, principal, turn_id, expected_scope=scope))
 
 
 @router.get("/ai/chat/stream/resume")
@@ -412,7 +558,7 @@ async def ai_chat_stream_resume(
         raise HTTPException(status_code=503, detail="断线续传服务暂不可用，请稍后重试。") from None
     if not has_replay and not status:
         raise HTTPException(status_code=404, detail="没有可续传的流")
-    return _sse_response(_follow_replay(turn_id, after, owner=owner, tenant=tenant))
+    return _sse_response(_follow_scoped_replay(request, principal, turn_id, after))
 
 
 @router.post("/ai/chat")

@@ -33,17 +33,16 @@
           </button>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header">
-          {{ selectedUnit ? `${selectedUnit} - 共 ${filteredRecords.length} 条` : `选择${unitFieldLabel}后点击「查看记录」加载数据` }}
-        </div>
+      <div class="card erp-list">
+        <p v-if="selectedUnit && !loading" class="shipment-records-summary">
+          {{ selectedUnit }} · {{ filteredRecords.length }} 条
+        </p>
         <div class="table-responsive table-responsive-shipment-records">
           <table class="data-table data-table-shipment-records">
-            <thead>
+            <thead v-if="columns.length">
               <tr>
-                <th v-if="columns.length === 0">暂无数据</th>
                 <th v-for="col in columns" :key="col">{{ colLabels[col] || col }}</th>
-                <th v-if="columns.length > 0">操作</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -51,7 +50,9 @@
                 <td :colspan="Math.max(columns.length + 1, 1)" class="empty-state">加载中...</td>
               </tr>
               <tr v-else-if="filteredRecords.length === 0">
-                <td :colspan="Math.max(columns.length + 1, 1)" class="empty-state">请先选择{{ unitFieldLabel }}并加载</td>
+                <td :colspan="Math.max(columns.length + 1, 1)" class="empty-state">
+                  {{ selectedUnit ? '暂无记录' : `请选择${unitFieldLabel}` }}
+                </td>
               </tr>
               <tr v-for="row in filteredRecords" :key="row.id || JSON.stringify(row)">
                 <td v-for="col in columns" :key="col">
@@ -495,3 +496,4 @@ function templateBadge(tpl) {
 </script>
 
 <style scoped src="./shipment-records/shipment-records.css"></style>
+<style scoped src="./erp-list-surfaces.css"></style>

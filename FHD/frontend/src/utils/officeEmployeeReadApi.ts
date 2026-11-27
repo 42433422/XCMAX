@@ -47,7 +47,7 @@ async function resolveWorkspaceRoot(fromUpload?: string): Promise<string> {
   return root
 }
 
-async function uploadOfficeFile(file: File, endpoint: string): Promise<OfficeFileUploadResult> {
+async function postOfficeFile(file: File, endpoint: string): Promise<Record<string, unknown>> {
   await ensureCsrf()
   const fd = new FormData()
   fd.append('file', file)
@@ -56,7 +56,11 @@ async function uploadOfficeFile(file: File, endpoint: string): Promise<OfficeFil
   if (!res.ok || body?.success === false) {
     throw new Error(String(body?.message || body?.error || `上传失败 HTTP ${res.status}`))
   }
-  const data = asRecord(body?.data || body)
+  return asRecord(body?.data || body)
+}
+
+async function uploadOfficeFile(file: File, endpoint: string): Promise<OfficeFileUploadResult> {
+  const data = await postOfficeFile(file, endpoint)
   const file_path = asString(data.file_path).trim()
   const workspace_root = await resolveWorkspaceRoot(asString(data.workspace_root))
   if (!file_path || !workspace_root) {
@@ -69,6 +73,13 @@ async function uploadOfficeFile(file: File, endpoint: string): Promise<OfficeFil
     workspace_root,
     filename: asString(data.filename || file.name).trim() || file.name,
   }
+}
+
+export async function uploadChatWordAttachment(file: File): Promise<{ uploadId: string; name: string }> {
+  const data = await postOfficeFile(file, `${CHAT_OFFICE_UPLOAD}?attachment_only=true`)
+  const uploadId = asString(data.upload_id).trim()
+  if (!uploadId) throw new Error('上传未返回附件凭证')
+  return { uploadId, name: asString(data.filename).trim() || file.name }
 }
 
 function isMissingPlatformShellUpload(err: unknown): boolean {

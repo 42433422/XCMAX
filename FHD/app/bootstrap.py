@@ -27,8 +27,16 @@ if TYPE_CHECKING:
     from app.domain.shared_services.product_import_service import ProductImportService
     from app.domain.shared_services.products_service import ProductsService
 
-# Intent recognition is now provided by domain layer - see get_intent_recognition_service()
-# in app/domain/services/intent_recognition_service.py
+
+def get_unified_intent_recognizer():
+    """Wire the existing LLM port for HTTP-independent SDK and worker consumers."""
+    from app.domain.shared_services.unified_intent_recognizer import (
+        get_unified_intent_recognizer as get_recognizer,
+    )
+    from app.infrastructure.llm.providers.registry import _register_llm_port_source
+
+    _register_llm_port_source()
+    return get_recognizer()
 
 
 def get_shipment_application_service_core() -> ShipmentApplicationService:

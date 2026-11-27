@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.application.agent_orchestrator.chat_trace import _resolved_user_id
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_context import apply_task_context
@@ -114,6 +116,39 @@ def test_phase_observation_preserves_original_exception_and_restores_context() -
     assert observed["error_type"] == "RuntimeError"
     assert "do-not-log" not in str(observed)
     assert observed["duration_ms"] >= 0
+
+
+@pytest.mark.parametrize("status", ["unknown", "timed_out"])
+def test_uncertain_or_expired_phase_does_not_export_success(monkeypatch, status):
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app.application.agent_orchestrator.task_context import observe_run_phase
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(
+        "app.infrastructure.llm.trace_store.get_runtime_tracer",
+        lambda *args, **kwargs: provider.get_tracer("test"),
+    )
+    try:
+        run = AgentRun(
+            user_id="owner",
+            message="execute",
+            metadata={"trace_id": "a" * 32, "span_id": "b" * 16, "trace_flags": "01"},
+        )
+        with observe_run_phase(run, "execution"):
+            run.status = status
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].status.status_code == trace.StatusCode.ERROR
+        assert run.status == run.events[-1].data["status"] == status
+        assert run.events[-1].data["error_code"] == "agent_run_" + status
+    finally:
+        provider.shutdown()
 
 
 def test_legacy_runs_keep_exact_cas_snapshots_when_adding_observations() -> None:

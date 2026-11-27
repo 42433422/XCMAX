@@ -12,6 +12,45 @@ function ev(event_type: AgentRunEvent['event_type'], overrides: Partial<AgentRun
 }
 
 describe('buildAgentRunTraceFromEvents', () => {
+  it('correlates model failures and retries without closing the enclosing SDK turn', () => {
+    const events = [
+      ev('runtime.xiaox.turn.started', { event_id: 'turn-start', data: { turn_id: 'turn-1' } }),
+      ev('runtime.model.started', { event_id: 'model-start-1', data: { request_id: 'model-1' } }),
+      ev('runtime.model.failure', { data: { request_id: 'http-request', failure_kind: 'connection_error' } }),
+      ev('runtime.model.failed', { data: { request_id: 'model-1' } }),
+      ev('runtime.model.started', { event_id: 'model-start-2', data: { request_id: 'model-2' } }),
+      ev('runtime.model.failed', { data: { request_id: 'model-1' } }),
+    ]
+    const trace = buildAgentRunTraceFromEvents(events, 'run_test')
+    expect(trace.phases).toEqual([
+      expect.objectContaining({ started_event_id: 'turn-start', status: 'running' }),
+      expect.objectContaining({ started_event_id: 'model-start-1', status: 'failed' }),
+      expect.objectContaining({ started_event_id: 'model-start-2', status: 'running' }),
+    ])
+    events.push(ev('runtime.model.completed', { data: { request_id: 'model-2' } }))
+    expect(buildAgentRunTraceFromEvents(events, 'run_test').phases.map(phase => phase.status)).toEqual(['running', 'failed', 'success'])
+    events.push(ev('runtime.xiaox.turn.completed', { data: { turn_id: 'turn-1', status: 'completed' } }))
+    const completed = buildAgentRunTraceFromEvents(events, 'run_test')
+    expect(completed.phases.map(phase => phase.status)).toEqual(['success', 'failed', 'success'])
+    expect(completed.terminal).toBe(false)
+  })
+
+  it.each([
+    ['failed', 'failed'], ['completed', 'success'], ['interrupted', 'cancelled'],
+    ['cancelled', 'cancelled'], [undefined, 'waiting'], ['', 'waiting'], ['future_status', 'waiting'],
+  ])('matches overlapping SDK turns and projects reported status %s as %s', (status, expected) => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('runtime.xiaox.turn.started', { event_id: 'turn-start-1', data: { turn_id: 'turn-1' } }),
+      ev('runtime.xiaox.turn.started', { event_id: 'turn-start-2', data: { turn_id: 'turn-2' } }),
+      ev('runtime.xiaox.turn.completed', { data: { turn_id: 'turn-1', status } }),
+    ], 'run_test')
+    expect(trace.phases).toEqual([
+      expect.objectContaining({ started_event_id: 'turn-start-1', status: expected }),
+      expect.objectContaining({ started_event_id: 'turn-start-2', status: 'running' }),
+    ])
+    expect(trace.terminal).toBe(false)
+  })
+
   it('keeps trace identity, errors and zero durations across failed attempts and a successful retry', () => {
     const trace = buildAgentRunTraceFromEvents([
       ev('run.created', { trace_id: 'trace-a', data: { task_id: 'task-a' } }),

@@ -284,12 +284,6 @@ export function useMpMarketData(deps: {
     return `已同步修茈市场钱包与会员信息${source}（${age}更新）`;
   });
 
-  const marketEmptyHint = computed(() => {
-    if (marketSyncWarning.value) return marketSyncWarning.value;
-    if (!lastSyncTime.value) return '正在加载账户信息…';
-    return '尚未绑定修茈市场账号，请登录软件后在设置中同步市场 Token';
-  });
-
   const marketMembershipLabel = computed(() => (
     marketOverview.value?.membership?.label
     || marketOverview.value?.membership?.tier
@@ -327,7 +321,6 @@ export function useMpMarketData(deps: {
     forceRefreshAll,
     marketBalanceText,
     marketBalanceHint,
-    marketEmptyHint,
     marketMembershipLabel,
     marketMembershipReferenceText,
     marketExperienceText,

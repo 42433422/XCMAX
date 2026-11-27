@@ -319,6 +319,39 @@ def test_timeout_unknown_releases_worker_slot_and_prevents_repair_replay(monkeyp
         dispatcher.stop()
 
 
+@pytest.mark.parametrize("open_effect", [False, True])
+def test_worker_assertion_persists_matching_run_task_and_queue(monkeypatch, actor, open_effect):
+    repository = InMemoryAgentRunRepository()
+    queue = InMemoryTaskExecutionRepository()
+    run = _queued_run(actor, "worker-assertion")
+    repository.save(run)
+    queue.enqueue(run)
+    claim = queue.claim("worker", lease_seconds=30)
+
+    def fail_before_tool(*_args, **_kwargs):
+        if open_effect:
+            assert queue.mark_open_effect(
+                run.run_id, "external", owner_id="worker", execution_count=claim.execution_count
+            )
+        raise AssertionError("workflow initialization failed")
+
+    monkeypatch.setattr(AgentOrchestrator, "_execute_ready_steps", fail_before_tool)
+    AgentTaskDispatcher(execution_repository=queue, run_repository=repository)._execute_claim(
+        claim, "worker"
+    )
+    saved = repository.get(run.run_id)
+    task = repository.get_task(user_id=run.user_id, task_id="worker-assertion")
+    execution = queue.get(run.run_id)
+    assert saved.status == task.status == ("blocked" if open_effect else "failed")
+    assert execution.state == ("unknown" if open_effect else "failed")
+    assert execution.last_error_code == (
+        "needs_verification" if open_effect else "worker_execution_failed"
+    )
+    assert bool(saved.metadata.get("non_retryable")) is open_effect
+    assert not saved.tool_calls
+    assert queue.claim("another-worker", lease_seconds=30) is None
+
+
 @pytest.mark.parametrize(
     "status, tool, output, expected",
     [
@@ -406,3 +439,47 @@ def test_real_step_preserves_accepted_wait_without_inventing_unknown(actor, stat
     ) is uncertain
     assert len(calls) == 1
     assert queue.claim("another-worker", lease_seconds=30) is None
+
+
+@pytest.mark.parametrize(
+    ("receipt", "expected"),
+    [
+        ({"execution_state": "paused"}, ("paused", "")),
+        ({"execution_state": "blocked"}, ("blocked", "")),
+        (
+            {"execution_state": "blocked", "error_code": "runtime_policy_blocked"},
+            ("blocked", "runtime_policy_blocked"),
+        ),
+        (
+            {"execution_state": "blocked", "error_code": "owner_changed"},
+            ("blocked", "owner_changed"),
+        ),
+        ({"execution_state": "waiting_user", "needs_user_input": True}, ("waiting_input", "")),
+        ({"execution_state": "waiting_user", "requires_token": True}, ("waiting_auth", "")),
+        ({"execution_state": "waiting_user", "pending_approval": True}, ("waiting_approval", "")),
+        ({"execution_state": "waiting_input"}, ("waiting_input", "")),
+        ({"execution_state": "waiting_auth"}, ("waiting_auth", "")),
+        ({"execution_state": "waiting_approval"}, ("waiting_approval", "")),
+        ({"execution_state": "running"}, ("waiting_approval", "")),
+        ({"execution_state": "cancelled"}, ("cancelled", "")),
+        ({"execution_state": "rejected"}, ("rejected", "")),
+        ({"execution_state": "unknown"}, ("unknown", "needs_verification")),
+        ({"execution_state": "partial"}, ("unknown", "needs_verification")),
+        (
+            {"execution_state": "blocked", "reconciliation_required": True},
+            ("unknown", "needs_verification"),
+        ),
+        ({"execution_state": "completed", "ok": False}, ("unknown", "needs_verification")),
+        (
+            {"execution_state": "completed", "ok": True, "reconciliation_required": True},
+            ("unknown", "needs_verification"),
+        ),
+        ({"execution_state": "completed", "ok": True}, ("succeeded", "")),
+        ({"execution_state": "failed", "error_code": "model_error"}, ("failed", "model_error")),
+        ({"execution_state": "unexpected"}, ("unknown", "needs_verification")),
+    ],
+)
+def test_xiaox_queue_outcome_preserves_receipt_state(receipt, expected):
+    from app.application.agent_orchestrator.task_execution_models import xiaox_queue_outcome
+
+    assert xiaox_queue_outcome(receipt) == expected

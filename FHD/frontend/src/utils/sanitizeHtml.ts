@@ -72,6 +72,30 @@ const CHAT_BUBBLE_CONFIG: Config = {
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 }
 
+// Plain model text can contain markup-shaped tokens (for example a C++ header).
+// A historical HTML fragment has a chat formatting tag with a closing tag or a line break.
+const CHAT_HTML_FRAGMENT = /<br\s*\/?>|<\/(?:a|b|blockquote|code|div|em|h[1-6]|i|li|ol|p|pre|span|strong|table|td|th|tr|ul)>/i
+const FENCED_CHAT_CODE = /(^|\n)(```[^\n]*\n[\s\S]*?(?:\n```(?=\n|$)|(?![\s\S])))/g
+
+function mapOutsideChatCode(text: string, transform: (text: string) => string, code = (text: string) => text): string {
+  let from = 0
+  let result = ''
+  for (const match of text.matchAll(FENCED_CHAT_CODE)) {
+    const codeStart = (match.index ?? 0) + match[1].length
+    result += transform(text.slice(from, codeStart)) + code(match[2])
+    from = codeStart + match[2].length
+  }
+  return result + transform(text.slice(from))
+}
+
+export function normalizeServerContentToHtml(raw: unknown): string {
+  const text = String(raw ?? '')
+  if (CHAT_HTML_FRAGMENT.test(mapOutsideChatCode(text, prose => prose.replace(/`+[^`\n]*`+/g, ''), () => ''))) return text
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML.replace(/\r\n?|\n/g, '<br>')
+}
+
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
 const CHAT_MARKDOWN_CONFIG: Config = {
   ...CHAT_BUBBLE_CONFIG,
@@ -145,15 +169,27 @@ function sanitizedHtmlToPlainText(sanitizedHtml: string): string {
   }
   const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html')
   doc.body.querySelectorAll('br').forEach((node) => node.replaceWith(doc.createTextNode('\n')))
-  const text = String(doc.body.textContent || '').replace(/\u00a0/g, ' ')
-  if (!text.includes('&')) return text
-  const decoded = new DOMParser().parseFromString(text, 'text/html')
-  return String(decoded.body.textContent || '').replace(/\u00a0/g, ' ')
+  return String(doc.body.textContent || '').replace(/\u00a0/g, ' ')
 }
 
 /** 将不可信 HTML 转成纯文本；先由 DOMPurify 消毒，再由 DOM 解析器提取 textContent。 */
 export function plainTextFromChatHtml(raw: string | undefined | null): string {
   return sanitizedHtmlToPlainText(sanitizeChatBubbleHtml(raw))
+}
+
+/** Recover message storage without ever feeding decoded literal code back into the HTML parser. */
+export function chatMarkdownFromContent(raw: string | undefined | null): string {
+  const text = mapOutsideChatCode(String(raw ?? ''), prose => {
+    if (CHAT_HTML_FRAGMENT.test(prose)) return plainTextFromChatHtml(prose)
+    if (!prose.includes('&')) return prose
+    return DOMPurify.sanitize(prose.replaceAll('<', '&lt;'), {
+      ALLOWED_TAGS: [], ALLOWED_ATTR: [], RETURN_DOM_FRAGMENT: true,
+    }).textContent ?? ''
+  })
+  // Older clients escaped already-encoded quotation marks. Only normalize the
+  // legacy quote entities in prose so code can display and copy literal entities.
+  return mapOutsideChatCode(text, prose => prose
+    .replace(/&(?:quot|#34|#x22);/gi, '"').replace(/&(?:apos|#39|#x27);/gi, "'"))
 }
 
 /** 将不可信 Markdown 转成纯文本，供预览、TTS 与请求上下文使用。 */

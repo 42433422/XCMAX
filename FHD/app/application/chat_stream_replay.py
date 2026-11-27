@@ -44,25 +44,24 @@ class ReplayBackendUnavailable(RuntimeError):
 
 def _backend() -> tuple[Any, str, bool]:
     """返回 ``(client, prefix, configured)``；``client`` 为 None 表示不可用。"""
+    from app.utils.deployment import redis_url_from_env
+
+    configured = bool(redis_url_from_env())
+    prefix = ""
     try:
         from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
         client = getattr(cache, "_redis", None)
         prefix = str(getattr(cache, "_prefix", "") or "")
-        configured = client is not None
-        if not configured:
-            from app.utils.deployment import redis_url_from_env
-
-            env_url = (os.environ.get("CACHE_REDIS_URL") or "").strip() or redis_url_from_env()
-            configured = bool(env_url)
+        configured = configured or client is not None
         if not configured:
             return None, prefix, False
         if not cache.is_available:
             return None, prefix, True
         return client, prefix, True
     except RECOVERABLE_ERRORS:
-        return None, "", False
+        return None, prefix, configured
 
 
 def _require_client() -> tuple[Any, str]:
@@ -119,11 +118,18 @@ def append(
 
 
 def events_after(
-    turn_id: str, after: str | int = 0, *, owner: str = "", tenant: str = ""
+    turn_id: str,
+    after: str | int = 0,
+    *,
+    owner: str = "",
+    tenant: str = "",
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """返回游标之后的事件，元素形如 ``{"seq": str, "payload": dict}``。"""
     if not turn_id:
         return []
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError("replay limit must be a positive integer")
     scoped = scope_key(turn_id, owner, tenant)
     cursor = str(after or "")
     from_start = cursor in {"", "0", "0-0"}
@@ -133,7 +139,23 @@ def events_after(
         try:
             if not from_start and not _STREAM_ID.fullmatch(cursor):
                 raise ReplayBackendUnavailable("无效的回放游标")
-            raw = client.xrange(stream_key, min="-" if from_start else cursor, max="+")
+            raw = client.xrange(
+                stream_key,
+                min="-" if from_start else cursor,
+                max="+",
+                count=None if limit is None else limit + int(not from_start),
+            )
+            if from_start and raw:
+                # Redis 7 retains entries-added even after MAXLEN/XDEL removes
+                # the prefix. Check the same first entry across the two reads.
+                info = client.xinfo_stream(stream_key)
+                first = info.get("first-entry")
+                if (
+                    info.get("entries-added") != info.get("length")
+                    or not first
+                    or first[0] != raw[0][0]
+                ):
+                    raise ReplayBackendUnavailable("回放历史不完整，请核对原任务回执")
         except RECOVERABLE_ERRORS:
             raise ReplayBackendUnavailable("回放流读取失败") from None
         if not from_start:
@@ -165,7 +187,7 @@ def events_after(
         if from_start and bucket and int(bucket[0]["seq"]) != 1:
             raise ReplayBackendUnavailable("回放历史不完整，请核对原任务回执")
         _touched[scoped] = time.time()
-        return [dict(row) for row in bucket if int(row["seq"]) > after_int]
+        return [dict(row) for row in bucket if int(row["seq"]) > after_int][:limit]
 
 
 def has_replay(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:

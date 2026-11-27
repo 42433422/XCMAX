@@ -199,6 +199,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
                     **actor8.context,
                     "tenant_id": "8",
                     "service_source": "fastapi_shipment_records_route",
+                    "idempotency_key": "shipment-background:create",
                 },
             ).result(timeout=20)
             assert created["success"], created
@@ -210,6 +211,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
                     **actor8.context,
                     "tenant_id": None,
                     "service_source": "fastapi_shipment_records_route",
+                    "idempotency_key": "shipment-background:create",
                 },
             ).result(timeout=20)
             assert denied["success"] is False

@@ -1,10 +1,10 @@
 <template>
-  <details v-if="isLoggedIn && isLocalAdmin" class="settings-card" data-tutorial-id="settings-audit-logs">
+  <details v-if="isLoggedIn && isLocalAdmin" class="settings-card" :data-tutorial-id="`settings-${SETTINGS_ENTRIES.audit.id}`">
     <summary class="settings-row">
       <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
         <img class="settings-row__icon-art" :src="auditArtSrc" alt="" />
       </span>
-      <span class="settings-row__label">{{ $t('settings.securityAudit') }}</span>
+      <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.audit.labelKey) }}</span>
       <span class="settings-row__meta">{{ $t('settings.auditCount', { count: auditLogsTotal }) }}</span>
       <span class="settings-row__arrow" aria-hidden="true"></span>
     </summary>
@@ -45,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import { SETTINGS_ENTRIES } from './settingsNavigation'
 import type { AuditLogEntry } from '@/api/adminAudit'
 import auditArtSrc from '@/assets/icons/settings/r2c3.png'
 

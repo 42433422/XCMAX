@@ -1,20 +1,11 @@
 <template>
   <div class="tyn-settings page-view">
     <header class="tyn-settings__head">
-      <h2>转换规则 · 太阳鸟定制</h2>
-      <p class="muted">
-        钉钉导出表 →「明细」工作表的裁窗与符号规则。配置保存在
-        <code>resources/config/approval_config.yaml</code> 的 <code>attendance_policy</code> 段。
-      </p>
-      <router-link class="back-link" :to="{ name: 'attendance-industry-home' }">← 返回考勤首页</router-link>
+      <h2>转换规则</h2>
     </header>
 
     <section class="card-block">
-      <p class="hint">
-        周一到周六正班默认 08:00–12:00、13:30–17:30；晚上 18:00 后按最后一次打卡计加班；周日按加班处理。
-      </p>
-
-      <div v-if="loadError" class="flash flash-err">{{ loadError }}</div>
+      <div v-if="loadError" class="flash flash-err" role="alert">{{ loadError }}</div>
 
       <div class="attendance-grid">
         <div class="form-group full-width">
@@ -169,25 +160,6 @@ onMounted(async () => {
 
 .tyn-settings__head h2 {
   margin: 0 0 0.35rem;
-}
-
-.back-link {
-  display: inline-block;
-  margin-top: 0.75rem;
-  font-size: 0.875rem;
-  color: var(--wb-accent, #60a5fa);
-  text-decoration: none;
-}
-
-.back-link:hover {
-  text-decoration: underline;
-}
-
-.hint {
-  margin: 0 0 1rem;
-  font-size: 0.875rem;
-  line-height: 1.55;
-  color: var(--text-secondary, #6b7280);
 }
 
 .attendance-grid {

@@ -282,7 +282,11 @@ def test_metrics_failure_cannot_change_completed_tool(exporter, step_execution, 
         "app.application.agent_orchestrator.step_execution.observe_tool_call", fail_metrics
     )
     execution.execute_step(run, step, runtime_context={}, node_outputs={})
-    assert step.status == "completed" and run.events[-1].event_type == "tool.completed"
+    assert step.status == "completed"
+    completed = next(
+        event for event in reversed(run.events) if event.event_type == "tool.completed"
+    )
+    assert completed.data["call_id"] == run.tool_calls[-1].call_id
     assert exporter.get_finished_spans()[0].attributes["gen_ai.tool.call.result"] == "success"
 
 

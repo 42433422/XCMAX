@@ -10,6 +10,8 @@ import {
 import { filesToMultimodalRows, type MultimodalAttachmentRow } from '@/utils/multimodalAttachments'
 import { createChatArtifactContext, uploadChatArtifactsDetailed } from '@/utils/chatArtifactContext'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
+import { isChatWordAttachment } from '@/utils/documentIntake'
+import { uploadChatWordAttachment } from '@/utils/officeEmployeeReadApi'
 
 export interface UseChatExcelContextDeps {
   sessionId: Ref<string>
@@ -27,7 +29,6 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   const linkedExcelSheet = ref<LinkedExcelSheet | null>(null)
   const linkedExcelAllSheets = ref(false)
   const multimodalStaging = ref<MultimodalAttachmentRow[]>([])
-  /** 已上传成后端工件的文件（如整批 Excel）：在输入框以芯片展示，发送时随 artifact_ids 提交。 */
   const artifactStaging = ref<Array<{ filename: string; artifact_id: string }>>([])
   /** 后端暂不支持、已被跳过的文件（如 .xls）：在输入框明确提示，避免静默丢失。 */
   const unsupportedStaging = ref<string[]>([])
@@ -133,17 +134,27 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     return () => capturedRevision === revision && capturedScope === scopeKey() && isCurrent()
   }
 
-  /** 上传工作簿为后端工件，并在输入框逐个显示可移除的附件。 */
+  /** 暂存可移除的本轮文件，Word 只使用原件上传凭证。 */
   async function stageArtifactFiles(list: File[]): Promise<number> {
     if (!list.length) return 0
     const isCurrent = captureAttachmentScope()
-    const uploaded = await uploadChatArtifactsDetailed(list, isCurrent, artifacts.addChatArtifactIds)
-    if (!uploaded.length || !isCurrent()) return 0
-    artifactStaging.value = [
-      ...artifactStaging.value,
-      ...uploaded.map((row) => ({ filename: row.name, artifact_id: row.id })),
-    ].slice(-50)
-    return uploaded.length
+    const workbooks = list.filter(file => !isChatWordAttachment(file.name))
+    const uploaded = await uploadChatArtifactsDetailed(workbooks, isCurrent, artifacts.addChatArtifacts)
+    const chips = uploaded.map(row => ({ filename: row.name, artifact_id: row.id }))
+    for (const file of list.filter(file => isChatWordAttachment(file.name))) {
+      if (!isCurrent()) return 0
+      try {
+        const receipt = await uploadChatWordAttachment(file)
+        if (!isCurrent()) return 0
+        artifacts.addChatArtifacts([receipt])
+        chips.push({ filename: receipt.name, artifact_id: receipt.uploadId })
+      } catch {
+        if (isCurrent()) noteUnsupportedFiles([file.name])
+      }
+    }
+    if (!isCurrent()) return 0
+    artifactStaging.value = [...artifactStaging.value, ...chips].slice(-50)
+    return chips.length
   }
 
   function removeArtifactFile(artifactId: string) {
@@ -173,7 +184,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     if (!list.length) return
     const isCurrent = captureAttachmentScope()
     // 额外登记后端工件（失败静默）：对话侧可用 artifact_id 取数，不影响现有解析与摘要。
-    void uploadChatArtifactsDetailed(list, isCurrent, artifacts.addChatArtifactIds)
+    void uploadChatArtifactsDetailed(list, isCurrent, artifacts.addChatArtifacts)
     const res = await filesToMultimodalRows(list, { skipUnsupported: list.length > 1 })
     if (!isCurrent()) return
     if (!res.ok) {

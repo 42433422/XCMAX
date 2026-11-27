@@ -1,304 +1,79 @@
-"""Runtime/ledger boundary tests: model events cannot forge business outcomes."""
+"""Runtime reply delivery, original history and trustworthy terminal receipts."""
 
 from __future__ import annotations
 
 import asyncio
 import copy
+import json
 from types import SimpleNamespace
 
 import pytest
 
-from app.application.agent_orchestrator import run_lifecycle
-from app.application.agent_orchestrator.run_models import AgentRun, ToolCall
+from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_runtime import xiaox_runtime as runtime
-from app.domain.task_lifecycle.agent_runtime_contract import (
-    GOAL_PROTOCOL,
-    build_goal_contract,
-    canonical_digest,
-    goal_answers,
-    goal_evidence_snapshot,
-    validate_goal_review,
-    validate_runtime_goal,
-)
-from app.infrastructure.xiaox import XiaoxTransportConfig, XiaoxTransportError
-from app.infrastructure.xiaox.binding import (
-    XiaoxBinding,
-    XiaoxBindingError,
-    XiaoxGrant,
-)
+from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+from app.infrastructure.xiaox import XiaoxTransportConfig
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.test_application.test_xiaox_goal_verifier import goal, response, review
-from tests.test_application.test_xiaox_goal_verifier import verifier as verifier
+from tests.fixtures.xiaox_goal_review import goal, response, review
+from tests.fixtures.xiaox_goal_review import verifier as verifier
+from tests.fixtures.xiaox_runtime import Bridge as Bridge
+from tests.fixtures.xiaox_runtime import Store as Store
+from tests.fixtures.xiaox_runtime import Transport as Transport
+from tests.fixtures.xiaox_runtime import completed as completed
+from tests.fixtures.xiaox_runtime import event as event
+from tests.fixtures.xiaox_runtime import receipt as receipt
+from tests.fixtures.xiaox_runtime import setup_runtime as setup_runtime
 
 
-class Store:
-    """In-process substitute only for the durable, separately tested bridge API."""
-
-    def __init__(self, *, rows=None, metadata=None):
-        self.run = AgentRun(user_id="71", message="整理销售数据", run_id="run-runtime")
-        self.rows = copy.deepcopy(rows or [])
-        self.log = []
-        self.auth_error = None
-        self.child = None
-        self.review_kind = "read"
-        self.review_missing = False
-        self.reviews = []
-        contract = build_goal_contract(self.run)
-        self.run.metadata.update(
-            runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
-        )
-        self.repository = SimpleNamespace(get=self.get_run)
-        if metadata is not None:
-            self.run.metadata["xiaox_runtime"] = copy.deepcopy(metadata)
-
-    def get_run(self, run_id):
-        return copy.deepcopy(self.run if run_id == self.run.run_id else self.child)
-
-    def get(self, run_id):
-        assert run_id == self.run.run_id
-        if "xiaox_runtime" not in self.run.metadata:
-            raise XiaoxBindingError("binding_missing", "no binding yet")
-        return XiaoxBinding(copy.deepcopy(self.run))
-
-    def create(self, run_id, *, runtime_config, **_options):
-        self.log.append("create")
-        if self.auth_error:
-            raise XiaoxBindingError(self.auth_error, "authority unavailable")
-        old = self.run.metadata.get("xiaox_runtime", {})
-        if old.get("coordinator_active"):
-            raise XiaoxBindingError("binding_conflict", "another coordinator owns the run")
-        if old.get("runtime_config") and old["runtime_config"] != runtime_config:
-            raise XiaoxBindingError("runtime_changed", "pinned route changed")
-        self.run.metadata["xiaox_runtime"] = {
-            **old,
-            "generation": old.get("generation", 0) + 1,
-            "coordinator_active": True,
-            "runtime_config": runtime_config,
-            "revoked": False,
-        }
-        return XiaoxGrant(self.get(run_id), "mcp-token", "model-token")
-
-    def authenticate(self, token, audience="mcp"):
-        assert (token, audience) == ("model-token", "model")
-        if self.auth_error:
-            raise XiaoxBindingError(self.auth_error, "authority revoked")
-        return self.get(self.run.run_id)
-
-    def record_thread(self, run_id, thread_id, *, generation=None):
-        assert generation == self.run.metadata["xiaox_runtime"]["generation"]
-        self.run.metadata["xiaox_runtime"]["thread_id"] = thread_id
-        return self.get(run_id)
-
-    def _validate_current(self, run, metadata, generation):
-        assert metadata["generation"] == generation
-        validate_runtime_goal(run)
-        if self.auth_error:
-            raise XiaoxBindingError(self.auth_error, "authority revoked")
-
-    def update(self, run_id, fn):
-        current = copy.deepcopy(self.run)
-        fn(current, current.metadata["xiaox_runtime"])
-        self.run = current
-        return self.get(run_id)
-
-    def receipt_snapshot(self, _run_id):
-        return copy.deepcopy(self.rows)
-
-    def close(self, run_id, reason="cancelled", *, generation=None, release_coordinator=True):
-        self.log.append("revoke")
-        metadata = self.run.metadata["xiaox_runtime"]
-        if generation == metadata["generation"]:
-            metadata.update(revoked=True, close_reason=reason)
-            if release_coordinator:
-                metadata["coordinator_active"] = False
-        return self.get(run_id)
-
-
-def event(method, payload=None, *, thread_id="thread-one", turn_id="turn-one", item_id=None):
-    return {
-        "method": method,
-        "payload": payload or {},
-        "thread_id": thread_id,
-        "turn_id": turn_id,
-        "item_id": item_id,
-    }
-
-
-def completed(text="已整理"):
-    return [
-        event("turn/started", {"turn": {"id": "turn-one", "status": "inProgress"}}),
-        event(
-            "item/completed", {"item": {"id": "message-one", "type": "agentMessage", "text": text}}
-        ),
-        event("turn/completed", {"turn": {"id": "turn-one", "status": "completed"}}),
+@pytest.mark.parametrize("history_revision", [3, 2])
+def test_native_history_requires_frozen_sql_snapshot(setup_runtime, history_revision):
+    invoke, _ = setup_runtime
+    store = Store()
+    summary = {"role": "user", "content": "retained summary evidence"}
+    prior = [
+        {"role": "user", "content": "prior user preference"},
+        {"role": "assistant", "content": "previous published reply"},
     ]
-
-
-class Transport:
-    def __init__(self, store, events=None, *, hang=False, error=None):
-        self.store = store
-        self.events = completed() if events is None else events
-        self.hang = hang
-        self.error = error
-        self.inputs = []
-        self.schemas = []
-        self.started = []
-        self.resumed = []
-        self.active = asyncio.Event()
-        self.config = None
-
-    def factory(self, config):
-        self.config = config
-        return self
-
-    async def __aenter__(self):
-        self.store.log.append("enter")
-        return self
-
-    async def __aexit__(self, *_exc):
-        self.store.log.append("exit")
-
-    async def start_thread(self, *, developer_instructions):
-        self.started.append(developer_instructions)
-        return "thread-one"
-
-    async def resume_thread(self, thread_id, *, developer_instructions):
-        self.resumed.append(thread_id)
-        return thread_id
-
-    async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
-        self.inputs.append(text if goal_feedback is None else goal_feedback)
-        self.schemas.append(output_schema)
-        self.active.set()
-        for item in self.events:
-            yield item
-        if self.error:
-            raise self.error
-        if self.hang:
-            await asyncio.Event().wait()
-
-    async def interrupt(self):
-        self.store.log.append("interrupt")
-        assert self.store.run.metadata["xiaox_runtime"]["revoked"] is True
-
-
-@pytest.fixture
-def setup_runtime(tmp_path, monkeypatch):
-    monkeypatch.setattr(run_lifecycle, "continuation_conversation_error", lambda *_args: "")
-    config = XiaoxTransportConfig(
-        runtime_root=tmp_path.resolve(),
-        scope_id="must-be-replaced",
-        model="qualified-model",
-        provider_url="http://127.0.0.1:41111/v1",
-        provider_token="unused-placeholder",
-        mcp_url="http://127.0.0.1:41111/mcp",
-        mcp_token="unused-placeholder",
-        context_window=32000,
-        turn_timeout_seconds=30,
-    )
-
-    def review(binding, _config, *, rows, output, consume_format_retry):
-        store = stores[binding.run_id]
-        contract = binding.run.metadata["runtime_goal_contract"]
-        snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
-        ids = [
-            row["evidence_id"]
-            for row in snapshot["evidence"]
-            if row["state"] == "completed"
-            and row["receipt"].get("verified")
-            and row["receipt"].get("success")
-        ]
-        raw = (
-            store.reviews.pop(0)
-            if store.reviews
-            else {
-                "goals": [
-                    {
-                        "goal_id": "original",
-                        "source_id": "request",
-                        "source": binding.run.message,
-                        "kind": store.review_kind,
-                        "status": "unmet" if store.review_missing else "satisfied",
-                        "evidence_ids": ["response"] if store.review_kind == "reply" else ids,
-                        "reason": "Controlled semantic fixture; host validates original receipts",
-                    }
-                ],
-                "violations": [],
-                "uncovered_sources": [],
-                "feedback": "继续核对原始目标",
-            }
-        )
-        reviewed, errors = validate_goal_review(raw, contract, snapshot, output)
-        accepted = not errors and not any(goal["status"] == "unmet" for goal in reviewed["goals"])
-        report = {
-            "protocol": GOAL_PROTOCOL,
-            "goal_digest": contract["digest"],
-            "evidence_digest": snapshot["digest"],
-            "response_digest": canonical_digest(output),
-            "review": reviewed,
-            "status": "verified" if accepted else "needs_work",
-            "accepted": accepted,
-            "feedback": raw["feedback"],
-        }
-        return {**report, "report_digest": canonical_digest(report)}
-
-    stores = {}
-    monkeypatch.setattr("app.application.agent_runtime.goal_verifier.verify_runtime_goal", review)
-
-    def invoke(store, transport, **kwargs):
-        stores[store.run.run_id] = store
-        if kwargs.get("completion_mode") == "reply":
-            store.review_kind = "reply"
-        return runtime.run_xiaox_agent(
-            run_id=store.run.run_id,
-            task=store.run.message,
-            system_prompt="可信员工说明",
-            config=config,
-            binding_store=store,
-            transport_factory=transport.factory,
-            runtime_config={"provider_id": "qualified-provider", "route_identity": "route-v1"},
-            **kwargs,
-        )
-
-    return invoke, config
-
-
-def receipt(
-    *,
-    status="completed",
-    verified=True,
-    success=True,
-    child_run_id="run-child",
-    child_task_id="task-child",
-):
-    call = ToolCall(
-        step_id="step-child",
-        node_id="node-child",
-        tool_id="sales",
-        action="query",
-        status="completed",
-        output={"success": True, "row_count": 3},
-        call_id="call-child",
-    )
-    return {
-        "call_id": "model-call",
-        "tool_id": "sales",
-        "action": "query",
-        "params": {},
-        "state": status,
-        "read_only": True,
-        "fingerprint": canonical_digest({"tool_id": "sales", "action": "query", "params": {}}),
-        "child_task_id": child_task_id,
-        "child_run_id": child_run_id,
-        "receipt": {
-            "run_id": child_run_id,
-            "task_id": child_task_id,
-            "status": status,
-            "verified": verified,
-            "success": success,
-            "tool_calls": [call.to_dict()] if status == "completed" else [],
+    history = [summary, *prior]
+    store.run.metadata.update(
+        _xiaox_history=history,
+        runtime_context={
+            "session_id": "tenant-owned-session",
+            "_conversation_revision": 3,
+            "_chat_history_revision": history_revision,
+            "_chat_history_source": "sql",
+            "_chat_history_ids": [None, 17, 18],
+            "_chat_history_messages": history,
         },
-    }
+    )
+    contract = build_goal_contract(store.run)
+    store.run.metadata.update(
+        runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
+    )
+    transport = Transport(store)
+    result = asyncio.run(invoke(store, transport, completion_mode="reply"))
+    assert result["ok"] is True
+    native = history_revision == 3
+    assert transport.initial_history == (prior if native else [])
+    assert summary["content"] in transport.inputs[0]
+    assert all((row["content"] in transport.inputs[0]) is not native for row in prior)
+
+
+def test_missing_runtime_component_is_identified_before_model_start(setup_runtime, monkeypatch):
+    from app.application.agent_runtime import goal_admission
+
+    def unavailable(*args, **kwargs):
+        raise ImportError("private installation path", name="internal_component")
+
+    monkeypatch.setattr(goal_admission, "prepare_runtime_goal", unavailable)
+    invoke, _ = setup_runtime
+    store = Store(rows=[])
+    del store.run.metadata["runtime_goal_contract"], store.run.metadata["runtime_goal_digest"]
+    transport = Transport(store)
+    result = asyncio.run(invoke(store, transport, completion_mode="reply"))
+    assert result["failure_kind"] == "runtime_component_unavailable"
+    assert "private installation path" not in result["failure_reason"]
+    assert not transport.started and not result["ok"]
 
 
 def test_model_call_budget_exhaustion_is_a_distinguishable_stop_reason(setup_runtime):
@@ -348,6 +123,18 @@ def test_reply_delivers_final_answer_without_commentary(setup_runtime):
     events = completed("第一天游故宫，第二天游颐和园。")
     events[1]["payload"]["item"]["phase"] = "final_answer"
     events[1:1] = [
+        event(
+            "item/started",
+            {
+                "item": {
+                    "id": "tool-progress",
+                    "type": "mcpToolCall",
+                    "server": "excel_analysis",
+                    "tool": "read",
+                    "arguments": {"secret": "must-stay-private"},
+                }
+            },
+        ),
         event("item/agentMessage/delta", {"delta": "我先检索"}, item_id="progress"),
         event(
             "item/completed",
@@ -368,7 +155,13 @@ def test_reply_delivers_final_answer_without_commentary(setup_runtime):
         )
     )
     assert "我先检索" not in repr(public_events)
+    assert "must-stay-private" not in repr(public_events)
     assert "第一天游故宫" not in repr(public_events)
+    started = [row for row in store.run.events if row.event_type == "runtime.xiaox.item.started"]
+    assert len(started) == 1
+    assert started[0].data["tool_id"] == "excel_analysis"
+    assert started[0].data["item_id"] == "tool-progress"
+    assert "must-stay-private" not in repr(started)
     assert any(event["method"] == "turn/completed" for event in public_events)
     assert result["ok"] is True
     assert result["output"] == "第一天游故宫，第二天游颐和园。"
@@ -411,7 +204,7 @@ def test_email_revision_delivers_only_the_reviewed_english_draft(setup_runtime):
             if goal_feedback is None:
                 assert "Subject: Annual Leave Request" in text and request in text
             else:
-                assert text is None and goal_feedback == feedback
+                assert text is None and json.loads(goal_feedback)["feedback"] == feedback
                 self.events = completed(approved)
             async for item in super().stream_turn(text, goal_feedback=goal_feedback):
                 yield item
@@ -430,157 +223,15 @@ def test_email_revision_delivers_only_the_reviewed_english_draft(setup_runtime):
     ]
 
 
-class Bridge:
-    """Records only the public MCP entry calls; no authority is simulated."""
-
-    def __init__(self):
-        self.calls = []
-
-    def invoke(self, token, name, arguments):
-        self.calls.append((token, name, copy.deepcopy(arguments)))
-        if name == "capability_describe":
-            return {"capability": {"schema_digest": "digest-live"}}
-        return {"success": True, "verified": False, "status": "pending_approval"}
-
-
-class DenyingBridge(Bridge):
-    """Rejects an invented tool; only the real catalog stays executable."""
-
-    def invoke(self, token, name, arguments):
-        self.calls.append((token, name, copy.deepcopy(arguments)))
-        if name == "capability_search":
-            return {
-                "capabilities": [
-                    {
-                        "tool_id": "employee",
-                        "action": "execute",
-                        "description": "执行员工",
-                        "read_only": False,
-                    },
-                    {
-                        "tool_id": "excel_analysis",
-                        "action": "structure",
-                        "description": "读取结构",
-                        "read_only": True,
-                    },
-                ]
-            }
-        raise XiaoxBindingError("permission_denied", "能力不存在")
-
-
-def test_write_goal_without_any_action_requires_business_action(setup_runtime):
-    invoke, _ = setup_runtime
-    store = Store()
-    store.review_kind = "write"
-    feedback = "原任务要求的写入尚无任何业务回执。"
-    store.reviews = [
-        review(
-            goal(store.run.message, kind="write", status="unmet", evidence_ids=[]),
-            feedback=feedback,
-        )
-    ] * 3
-    transport = Transport(store, completed("已按要求改好工作簿。"))
-    public_events = []
-    result = asyncio.run(
-        invoke(
-            store,
-            transport,
-            completion_mode="business",
-            on_event=public_events.append,
-            tool_bridge=Bridge(),
-        )
-    )
-    assert len(transport.inputs) == 3
-    assert all("不得再次只回复" in text for text in transport.inputs[1:])
-    assert transport.schemas[0] is None and all(schema for schema in transport.schemas[1:])
-    assert result["ok"] is False and result["business_completed"] is False
-    assert result["failure_kind"] == "business_action_required"
-    assert store.run.status == "blocked"
-    assert "已完成" not in repr(public_events)
-
-
-def test_write_goal_proposal_is_submitted_once_through_mcp_entry(setup_runtime):
-    invoke, _ = setup_runtime
-    store = Store()
-    store.review_kind = "write"
-    store.reviews = [
-        review(
-            goal(store.run.message, kind="write", status="unmet", evidence_ids=[]),
-            feedback="需要实际写入。",
-        )
-    ] * 3
-    bridge = Bridge()
-    proposal = '{"tool_id": "employee", "action": "execute", "params": {"employee_id": "x"}}'
-    transport = Transport(store, completed(proposal))
-    result = asyncio.run(invoke(store, transport, completion_mode="business", tool_bridge=bridge))
-    names = [name for _, name, _ in bridge.calls]
-    assert names == ["capability_search", "capability_describe", "execute_action"]
-    _, _, execute_args = bridge.calls[2]
-    assert execute_args["schema_digest"] == "digest-live"
-    assert execute_args["call_id"].startswith("host-")
-    assert execute_args["params"] == {"employee_id": "x"}
-    events = [event.event_type for event in store.run.events]
-    assert events.count("runtime.action.proposed") == 1
-    assert result["ok"] is False
-    # Proposals are internal: they must never become the public reply.
-    assert "tool_id" not in str(result.get("output") or "")
-
-
-def test_denied_proposal_returns_error_and_real_write_capabilities(setup_runtime):
-    invoke, _ = setup_runtime
-    store = Store()
-    store.review_kind = "write"
-    store.reviews = [
-        review(
-            goal(store.run.message, kind="write", status="unmet", evidence_ids=[]),
-            feedback="需要实际写入。",
-        )
-    ] * 3
-    bridge = DenyingBridge()
-    proposal = '{"tool_id": "excel.edit", "action": "edit_workbook", "params": {}}'
-    transport = Transport(store, completed(proposal))
-    result = asyncio.run(invoke(store, transport, completion_mode="business", tool_bridge=bridge))
-    names = [name for _, name, _ in bridge.calls]
-    assert names[0] == "capability_search" and "execute_action" not in names
-    second = transport.inputs[2]
-    assert "excel.edit.edit_workbook" in second and "permission_denied" in second
-    assert "employee.execute" in second and "excel_analysis.structure" not in second
-    # 被拒绝的提案不得被当作已提交，也不得据此发布“已完成”。
-    assert "tool_id" not in str(result.get("output") or "")
-    assert result["ok"] is False and store.run.status == "blocked"
-
-
-def test_write_goal_feedback_surfaces_definite_write_failure(setup_runtime):
-    invoke, _ = setup_runtime
-    operation = {"tool_id": "employee", "action": "execute", "params": {}}
-    failed = receipt(status="failed", verified=False, success=False)
-    failed.update(**operation, read_only=False, fingerprint=canonical_digest(operation))
-    failed["receipt"].update(retryable=True, message="非法 Excel 表格名称：'销售明细表'")
-    store = Store(rows=[failed])
-    store.review_kind = "write"
-    store.reviews = [
-        review(
-            goal(store.run.message, kind="write", status="unmet", evidence_ids=[]),
-            feedback="需要写入。",
-        )
-    ] * 2
-    transport = Transport(store, completed("已改好。"))
-    result = asyncio.run(invoke(store, transport, completion_mode="business", tool_bridge=Bridge()))
-    assert "非法 Excel 表格名称" in transport.inputs[1]
-    assert "上次业务动作明确失败" in transport.inputs[1]
-    assert transport.schemas[1] is None
-    assert result["ok"] is False
-
-
 def test_model_completion_without_receipt_cannot_complete_business(setup_runtime):
     invoke, _ = setup_runtime
     store = Store()
     result = asyncio.run(invoke(store, Transport(store, completed("已出库并记账成功"))))
     assert result["ok"] is False and result["business_completed"] is False
-    assert result["exit_status"] == "goal_verification_required"
+    assert result["exit_status"] == "goal_verification_invalid_gap"
     assert store.run.status == "blocked"
     assert result["failure_stage"] == "goal_verification"
-    assert result["failure_kind"] == "goal_verification_required"
+    assert result["failure_kind"] == "goal_verification_invalid_gap"
     assert result["failure_reason"] == "继续核对原始目标"
     assert store.run.metadata["runtime_failure_kind"] == result["failure_kind"]
 
@@ -591,7 +242,7 @@ def test_empty_model_turn_is_not_a_completed_reply(setup_runtime, text):
     store = Store()
     result = asyncio.run(invoke(store, Transport(store, completed(text)), completion_mode="reply"))
     assert result["ok"] is False and result["reply_completed"] is False
-    assert result["exit_status"] == "goal_verification_required"
+    assert result["exit_status"] == "goal_verification_invalid_gap"
     assert store.run.status == "blocked"
 
 
@@ -605,9 +256,49 @@ def test_approval_wait_survives_turn_completion(setup_runtime, state):
     assert store.run.metadata["xiaox_runtime"]["coordinator_active"] is False
 
 
-def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime):
+def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime, monkeypatch, tmp_path):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    from app.application.agent_orchestrator import artifact_files
+    from app.domain.task_lifecycle.agent_runtime_results import verified_receipt_artifacts
+
     invoke, _ = setup_runtime
     row = receipt()
+    monkeypatch.setattr(artifact_files, "get_app_data_dir", lambda: str(tmp_path))
+    book, content = Workbook(), BytesIO()
+    book.active["A1"] = "真实落盘的回归制品"
+    book.save(content)
+    book.close()
+    file = artifact_files.store_run_file("run-child", content.getvalue(), name="明细.xlsx")
+    digest = file["metadata"]["sha256"]
+    row["receipt"].update(
+        artifacts=[
+            file,
+            {**file, "artifact_id": "unverified"},
+            {**file, "artifact_type": "file_analysis"},
+            {**file, "metadata": {"sha256": "b" * 64}},
+        ],
+        verification={
+            "accepted": True,
+            "steps": [
+                {
+                    "checks": [
+                        {
+                            "source": "run_artifact",
+                            "status": "passed",
+                            "evidence": {
+                                "run_id": "run-child",
+                                "artifact_id": file["artifact_id"],
+                                "sha256": digest,
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+    )
     store = Store(rows=[row, {**copy.deepcopy(row), "call_id": "duplicate-model-call"}])
     result = asyncio.run(invoke(store, Transport(store)))
     assert result["ok"] is True and result["business_completed"] is True
@@ -616,6 +307,10 @@ def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime):
     assert projected.output == {"success": True, "row_count": 3}
     assert projected.metadata["child_run_id"] == "run-child"
     assert projected.metadata["child_call_id"] == "call-child"
+    assert result["output_artifacts"] == result["artifacts"] == verified_receipt_artifacts([row])
+    assert len(result["output_artifacts"]) == 1
+    assert store.run.final_output["xiaox_result"]["output_artifacts"] == result["output_artifacts"]
+    assert not store.run.artifacts  # The file is owned by the original child only.
     assert result["run_events"][-1]["event_type"] == "runtime.xiaox.finished"
 
 
@@ -638,67 +333,6 @@ def test_legacy_child_receipt_projection_preserves_original_record(same_provenan
     assert len(run.tool_calls) == (1 if same_provenance else 2)
     if not same_provenance:
         assert run.tool_calls[1].metadata["child_run_id"] == "run-child"
-
-
-def test_verified_operations_do_not_satisfy_a_missing_original_goal(setup_runtime):
-    invoke, _ = setup_runtime
-    store = Store(rows=[receipt()])
-    store.review_missing = True
-    store.run.metadata.update(
-        runtime_failure_kind="rate_limit", runtime_failure_reason="已恢复的先前限流"
-    )
-    result = asyncio.run(invoke(store, Transport(store, completed("已全部完成"))))
-    assert result["verified_operations"] is True and result["business_completed"] is False
-    assert result["exit_status"] == "goal_verification_required"
-    assert result["output"] == (
-        "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
-    )
-    assert all(message["role"] == "user" for message in result["session_messages"])
-    assert store.run.status == "blocked"
-
-
-def test_verifier_feedback_completes_missing_work_in_same_thread(setup_runtime):
-    invoke, _ = setup_runtime
-    store = Store(rows=[receipt()])
-    store.review_missing = True
-    store.run.metadata.update(
-        runtime_failure_kind="rate_limit", runtime_failure_reason="已恢复的先前限流"
-    )
-    original = copy.deepcopy(store.run.metadata["runtime_goal_contract"])
-
-    class CorrectingTransport(Transport):
-        async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
-            if not self.inputs:
-                assert text and goal_feedback is None
-                assert "继续核对原始目标" not in text
-            else:
-                assert text is None
-                assert "继续核对原始目标" in goal_feedback
-                # The second SDK turn supplies only the missing read; the first
-                # call keeps its original persisted receipt and identity.
-                missing = receipt(child_run_id="second-child", child_task_id="second-task")
-                missing["call_id"] = "missing-read"
-                missing["receipt"]["tool_calls"][0]["call_id"] = "second-child-call"
-                store.rows.append(missing)
-                store.review_missing = False
-            async for item in super().stream_turn(text, goal_feedback=goal_feedback):
-                yield item
-
-    transport = CorrectingTransport(store)
-    result = asyncio.run(invoke(store, transport))
-    assert result["business_completed"] is True and result["ok"] is True, result
-    assert len(transport.inputs) == 2 and len(transport.started) == 1
-    assert transport.resumed == []
-    assert store.run.metadata["runtime_goal_contract"] == original
-    assert store.run.metadata["xiaox_runtime"]["generation"] == 1
-    assert result["failure_kind"] == ""
-    assert "runtime_failure_kind" not in store.run.metadata
-    assert [row["call_id"] for row in store.rows] == ["model-call", "missing-read"]
-    assert [
-        item.data["status"]
-        for item in store.run.events
-        if item.event_type == "runtime.goal.verified"
-    ] == ["needs_work", "verified"]
 
 
 def test_format_retry_is_shared_across_three_turns_and_sql_restart(
@@ -771,19 +405,19 @@ def test_format_retry_is_shared_across_three_turns_and_sql_restart(
     saved = repository.get(parent.run_id)
     assert saved.metadata["xiaox_runtime"]["goal_format_retry_used"] is True
     assert saved.metadata["runtime_goal_contract"] == contract
-    # An explicit continuation reopens the same original task after a worker
-    # restart. A new repository, binding and generation cannot reset its budget.
+    # An unavailable review cannot reopen execution after a worker restart.
+    # Its consumed format budget and frozen candidate stay on the original task.
     saved.status = "waiting_user"
     repository.save(saved)
     reopened = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     resumed = CandidateTransport(trace)
     verifier.replies = [response({}, text="{"), positive]
     again = asyncio.run(invoke(XiaoxBindingStore(reopened), resumed))
-    assert again["ok"] is False and resumed.resumed == ["thread-one"]
-    assert len(resumed.inputs) == 1 and len(verifier.requests) == 5
-    assert len(verifier.replies) == 1 and reserved[-1] is True
+    assert again["ok"] is False and again["exit_status"] == "goal_verification_not_resumable"
+    assert resumed.resumed == [] and resumed.inputs == []
+    assert len(verifier.requests) == 4 and len(verifier.replies) == 2
     latest = reopened.get(parent.run_id)
-    assert latest.metadata["xiaox_runtime"]["generation"] == 2
+    assert latest.metadata["xiaox_runtime"]["generation"] == 1
     assert latest.metadata["runtime_goal_contract"] == contract
     assert latest.metadata["xiaox_runtime"]["goal_format_retry_used"] is True
 
@@ -817,3 +451,75 @@ def test_only_persisted_host_skills_become_developer_guidance(setup_runtime):
     assert "先查原始行，再逐项核对" in transport.started[0]
     assert "FORGED_PRIVILEGE_ESCALATION" not in transport.started[0]
     assert "不新增目标" in transport.started[0]
+
+
+@pytest.mark.asyncio
+async def test_new_plan_delivers_host_rendered_steps_from_first_sdk_turn(
+    setup_runtime, monkeypatch
+):
+    from app.infrastructure.xiaox.tools import XiaoxToolBridge
+
+    monkeypatch.setattr(XiaoxToolBridge, "visible_actions", lambda *_: iter(()))
+    invoke, _ = setup_runtime
+    store = Store()
+    store.run.message = "给出库区清单核对方案"
+    store.run.metadata.update(
+        runtime_requested_deliverable="action_plan",
+        runtime_execution_mode="plan",
+        plan_delivery_version=1,
+    )
+    frozen = build_goal_contract(
+        store.run,
+        context_evidence=[
+            {
+                "source": "desktop_navigation",
+                "entries": [
+                    {"id": "inventory", "label": "清单", "breadcrumb": ["库区"], "kind": "page"}
+                ],
+            }
+        ],
+    )
+    store.run.metadata.update(runtime_goal_contract=frozen, runtime_goal_digest=frozen["digest"])
+    raw = '{"plan":{"kind":"steps","steps":[{"kind":"navigation","navigation_id":"inventory","inputs":{}}]}}'
+    transport = Transport(store, completed(raw))
+    result = await invoke(store, transport, completion_mode="reply")
+    assert result["ok"] and result["reply_completed"] and not result["business_completed"]
+    assert not result["tool_calls"] and "库区 → 清单" in result["output"]
+    assert raw not in result["output"] and len(transport.schemas) == 1
+    assert transport.schemas[0]["properties"]["plan"]
+    assert '"requested_deliverable": "action_plan"' in transport.inputs[0]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_plan_delivers_safe_observation_without_model_review(
+    setup_runtime,
+    monkeypatch,
+):
+    from app.application.agent_runtime.goal_verifier import verify_runtime_goal
+    from app.infrastructure.xiaox.tools import XiaoxToolBridge
+
+    # Restore the real early verdict, which must never call a second model on this branch.
+    from tests.test_application.test_xiaox_goal_verifier import verify_runtime_goal as actual_review
+
+    assert verify_runtime_goal is not actual_review
+    monkeypatch.setattr(
+        "app.application.agent_runtime.goal_verifier.verify_runtime_goal", actual_review
+    )
+    monkeypatch.setattr(XiaoxToolBridge, "visible_actions", lambda *_: iter(()))
+    invoke, _ = setup_runtime
+    store = Store()
+    store.run.message = "给出核对方案"
+    store.run.metadata.update(
+        runtime_requested_deliverable="action_plan",
+        runtime_execution_mode="plan",
+        plan_delivery_version=1,
+    )
+    frozen = build_goal_contract(store.run)
+    store.run.metadata.update(runtime_goal_contract=frozen, runtime_goal_digest=frozen["digest"])
+    transport = Transport(
+        store, completed('{"plan":{"kind":"unavailable","reason":"missing_input"}}')
+    )
+    result = await invoke(store, transport)
+    assert result["execution_state"] == "blocked" and not result["ok"]
+    assert "现有资料不足" in result["output"] and not result["tool_calls"]
+    assert len(transport.schemas) == 1

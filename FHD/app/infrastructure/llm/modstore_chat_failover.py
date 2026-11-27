@@ -43,14 +43,14 @@ def is_market_chat_failoverable(status_code: Optional[int], error_text: str) -> 
 def _provider_row_usable(row: dict[str, Any], *, fernet_ok: bool) -> bool:
     if not isinstance(row, dict):
         return False
-    if row.get("has_platform_key") or row.get("has_env_key"):
-        return True
-    if row.get("has_user_override") and fernet_ok:
-        return True
-    # 兼容旧 status 字段
-    if row.get("configured") or row.get("available"):
-        return True
-    return False
+    if row.get("has_user_override"):
+        # Match the credential resolver: an unreadable BYOK must not silently
+        # fall through to another funding source.
+        return row["has_user_override"] is True and fernet_ok
+    return any(
+        row.get(key) is True
+        for key in ("has_platform_key", "has_env_key", "configured", "available")
+    )
 
 
 def first_model_from_catalog_block(block: dict[str, Any] | None) -> str:
@@ -81,8 +81,10 @@ def build_chat_failover_candidates(
     resolved_default: dict[str, Any] | None = None,
     max_attempts: int | None = None,
 ) -> list[tuple[str, str]]:
-    """组装桌面聊天换模候选：主模型 → resolve-default → status 中有 Key 的厂商首模。"""
-    limit = max_attempts if max_attempts is not None else chat_failover_max_attempts()
+    """Select account-visible routes; a public catalog is not an authorization grant."""
+    limit = max(
+        1, min(max_attempts if max_attempts is not None else chat_failover_max_attempts(), 8)
+    )
     out: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
 
@@ -99,9 +101,6 @@ def build_chat_failover_candidates(
 
     add(primary_provider, primary_model)
 
-    if isinstance(resolved_default, dict) and resolved_default.get("ok") is not False:
-        add(str(resolved_default.get("provider") or ""), str(resolved_default.get("model") or ""))
-
     catalog = catalog_payload or {}
     providers_catalog = (
         catalog.get("providers") if isinstance(catalog.get("providers"), list) else []
@@ -114,8 +113,20 @@ def build_chat_failover_candidates(
                 by_provider[pid] = block
 
     status = status_payload or {}
-    fernet_ok = bool(status.get("fernet_configured"))
+    fernet_ok = status.get("fernet_configured") is True
     rows = status.get("providers") if isinstance(status.get("providers"), list) else []
+    available = {
+        str(row.get("provider") or "").strip().lower(): _provider_row_usable(
+            row, fernet_ok=fernet_ok
+        )
+        for row in rows or []
+        if isinstance(row, dict)
+    }
+    if isinstance(resolved_default, dict) and resolved_default.get("ok") is not False:
+        provider = str(resolved_default.get("provider") or "").strip().lower()
+        if available.get(provider) is not False:
+            add(provider, str(resolved_default.get("model") or ""))
+
     for row in rows or []:
         if not isinstance(row, dict):
             continue
@@ -130,19 +141,12 @@ def build_chat_failover_candidates(
         if len(out) >= limit:
             break
 
-    # catalog 里有模型但 status 行缺失时的兜底
-    if len(out) < limit:
-        for pid, block in by_provider.items():
-            mid = first_model_from_catalog_block(block)
-            if mid:
-                add(pid, mid)
-            if len(out) >= limit:
-                break
-
     # A gateway can expose several deployment aliases under one provider.
-    # Prefer provider diversity above, then fill the remaining bounded slots.
+    # Only the account's usable credential rows authorize these alternatives.
     if len(out) < limit:
         for pid, block in by_provider.items():
+            if available.get(pid) is not True:
+                continue
             mids = block.get("runtime_models", block.get("models", []))
             for mid in mids if isinstance(mids, list) else []:
                 if isinstance(mid, str):

@@ -63,19 +63,67 @@ def _load_payload(raw: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _task_identity(payload: dict[str, Any], run_id: str) -> tuple[str, str]:
-    metadata = payload.get("metadata")
-    metadata = metadata if isinstance(metadata, dict) else {}
-    context = metadata.get("task_context")
-    context = context if isinstance(context, dict) else {}
-    runtime = metadata.get("runtime_context")
-    runtime = runtime if isinstance(runtime, dict) else {}
-    return str(context.get("task_id") or run_id), str(runtime.get("tenant_id") or "")
-
-
 def _desktop_single_process() -> bool:
     raw = os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _remember_queue_recovery(db: Any, execution: Any, target: str, now: str) -> None:
+    from app.domain.task_lifecycle.control import SessionBook, remember
+
+    book = SessionBook(db)
+    tenant = str(execution.tenant_id or "")
+    body = book.get("agent", tenant, execution.run_id)
+    remember(
+        body,
+        at=now,
+        source=str(execution.state),
+        target=target,
+        code=INTERRUPTED_ERROR_CODE,
+        actor="startup",
+    )
+    body["history"][-1]["execution_count"] = int(execution.execution_count or 0)
+    book.put("agent", tenant, execution.run_id, body)
+
+
+def _parked_xiaox_parent(payload: dict[str, Any], execution: Any) -> bool:
+    """Recognize an unleased original parent waiting on its durable child ledger."""
+    from app.application.agent_orchestrator.task_models import task_from_run
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+    from app.infrastructure.xiaox.receipt_projection import projection_allowed
+
+    if (
+        execution is None
+        or execution.state not in {"waiting_approval", "waiting_input", "waiting_auth"}
+        or execution.lease_owner
+        or execution.lease_expires_at
+        or execution.heartbeat_at
+        or execution.finished_at
+        or execution.last_error_code == "needs_verification"
+    ):
+        return False
+    run = agent_run_from_dict(payload)
+    task = task_from_run(run)
+    binding = run.metadata.get("xiaox_runtime") or {}
+    result = run.final_output.get("xiaox_result") or {}
+    if (
+        (execution.run_id, execution.user_id, execution.task_id, execution.tenant_id or "")
+        != (run.run_id, run.user_id, task.task_id, task.tenant_id)
+        or run.intent != "xiaox.runtime"
+        or not projection_allowed(run)
+        or binding.get("coordinator_active") is not False
+        or run.metadata.get("non_retryable")
+        or (run.metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+        or result.get("reconciliation_required")
+        or result.get("execution_state") not in {"running", "waiting_user"}
+        or result.get("exit_status") not in {"running", "waiting_user", "continuation_pending"}
+    ):
+        return False
+    try:
+        XiaoxBindingStore._validate_goal(run, binding)
+    except XiaoxBindingError:
+        return False
+    return True
 
 
 def _approved_unsubmitted_step(db: Any, run: AgentRun) -> str:
@@ -128,6 +176,122 @@ def _approved_unsubmitted_step(db: Any, run: AgentRun) -> str:
     )
 
 
+def _owns_current_task(db: Any, repository: Any, run: AgentRun) -> bool:
+    """Fence the active attempt or an originally registered same-task handoff."""
+    from app.application.agent_orchestrator.run_audit_scope import _result_scope
+    from app.application.agent_orchestrator.task_context import task_context_of
+    from app.application.agent_orchestrator.task_models import task_from_run
+    from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTaskRecord
+
+    task = task_from_run(run)
+    observed = (
+        db.query(AgentTaskRecord)
+        .filter_by(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.task_id)
+        .populate_existing()
+        .one_or_none()
+    )
+    target = observed.active_run_id if observed is not None else run.run_id
+    live_states = {"planning", "queued", "running", "retrying", "waiting_user"}
+    seen: set[str] = set()
+    child = run
+    for _ in range(16):
+        command = (
+            db.query(AgentTaskCommandRecord)
+            .filter_by(run_id=child.run_id)
+            .order_by(
+                AgentTaskCommandRecord.created_at.desc(), AgentTaskCommandRecord.command_id.desc()
+            )
+            .first()
+        )
+        if (
+            child.run_id in seen
+            or child.status not in live_states
+            or child.metadata.get("non_retryable")
+            or (child.metadata.get("control") or {}).get("state") in {"paused", "cancelled"}
+            or (child.metadata.get("xiaox_runtime") or {}).get("close_reason")
+            in {"paused", "cancelled"}
+            or (child.metadata.get("recovery") or {}).get("state")
+            == "manual_reconciliation_required"
+            or (
+                command is not None
+                and command.status in {"requested", "applied"}
+                and command.action in {"pause", "cancel"}
+            )
+        ):
+            return False
+        seen.add(child.run_id)
+        if child.run_id == target:
+            # Follow the ordinary repository's run -> Task lock order. A new
+            # attempt admitted while ancestors were read invalidates this chain.
+            current = repository._lock_task_record(db, task)
+            return (
+                current.active_run_id == child.run_id
+                and current.attempt == task_from_run(child).attempt
+                and current.status in live_states
+            )
+        context = child.metadata.get("runtime_context") or {}
+        child_task = task_context_of(child)
+        parent_id = str(context.get("parent_run_id") or "")
+        scope = _result_scope(child)
+        if (
+            not parent_id
+            or scope is None
+            or child_task.get("parent_run_id") != parent_id
+            or child_task.get("task_id") != task.task_id
+            or context.get("task_id") != task.task_id
+            or context.get("parent_task_id") != task.task_id
+        ):
+            return False
+        record = (
+            db.query(AgentRunRecord).filter_by(run_id=parent_id).populate_existing().one_or_none()
+        )
+        if record is None:
+            return False
+        raw = record.payload_json
+        if (
+            db.query(AgentRunRecord)
+            .filter_by(run_id=parent_id, payload_json=raw)
+            .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+            != 1
+        ):
+            return False
+        parent = agent_run_from_dict(_load_payload(raw))
+        original = parent.metadata.get("runtime_context") or {}
+        receipt = (parent.metadata.get("child_results") or {}).get(child.run_id)
+        if (
+            scope != _result_scope(parent)
+            or task_context_of(parent).get("task_id") != task.task_id
+            or not isinstance(receipt, dict)
+            or not context.get("employee_id")
+            or any(
+                receipt.get(key) != value
+                for key, value in {
+                    "parent_run_id": parent.run_id,
+                    "parent_task_id": task.task_id,
+                    "tenant_id": scope[1],
+                    "user_id": scope[0],
+                    "mod_id": scope[2],
+                    "employee_id": context.get("employee_id"),
+                }.items()
+            )
+            or any(
+                context.get(key) != original.get(key)
+                for key in (
+                    "_actor_authorization",
+                    "_mod_authorization",
+                    "_credential_authorization",
+                    "workspace_id",
+                    "workspace_path",
+                    "root_run_id",
+                    "user_id",
+                )
+            )
+        ):
+            return False
+        child = parent
+    return False
+
+
 def reconcile_stale_running_runs(
     *,
     stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
@@ -147,7 +311,10 @@ def reconcile_stale_running_runs(
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
     )
+    from app.application.agent_runtime.verification_budget import JOB_KEY
     from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+    from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+    from app.infrastructure.xiaox.queued_runtime import recover_abandoned_goal_verification
 
     repository = get_agent_run_repository()
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -158,11 +325,43 @@ def reconcile_stale_running_runs(
     current = str(now or utc_now_iso())
     desktop = _desktop_single_process()
     reconciled = 0
+    # A former synchronous entry has no queue lease to reclaim. Only an expired
+    # original grant can be parked for the existing independent-review scanner.
+    # Read/authority checks run outside the reconciliation write transaction.
+    with repository.transaction(read_only=True) as db:
+        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
+
+        direct_query = db.query(AgentRunRecord).filter(
+            AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES),
+            AgentRunRecord.intent == "xiaox.runtime",
+        )
+        if not desktop:
+            direct_query = direct_query.filter(
+                AgentRunRecord.updated_at <= _stale_cutoff(current, stale_after_seconds)
+            )
+        direct_ids = [
+            record.run_id
+            for record in direct_query.all()
+            if db.get(AgentTaskExecutionRecord, record.run_id) is None
+            and ((_load_payload(record.payload_json).get("metadata") or {}).get(JOB_KEY) or {}).get(
+                "state"
+            )
+            in {"running", "pending", "needs_work", "verified", "blocked"}
+        ]
+    for run_id in direct_ids:
+        try:
+            if recover_abandoned_goal_verification(
+                XiaoxBindingStore(repository),
+                run_id,
+                now=(_parse_timestamp(current) or datetime.now(UTC)).timestamp(),
+            ):
+                reconciled += 1
+        except XiaoxBindingError:
+            pass  # The original control, authorization and uncertain-effect guards remain closed.
     with repository.transaction() as db:
         from app.db.models.agent import (
             AgentRunRecord,
             AgentTaskExecutionRecord,
-            AgentTaskRecord,
         )
 
         filters: list[ColumnElement[bool]] = [AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES)]
@@ -171,6 +370,10 @@ def reconcile_stale_running_runs(
         records = db.query(AgentRunRecord).filter(*filters).all()
         for record in records:
             execution = db.get(AgentTaskExecutionRecord, record.run_id)
+            if _parked_xiaox_parent(_load_payload(record.payload_json), execution):
+                # The coordinator has exited intentionally; receipt reconciliation
+                # owns the next transition, independently of this process restart.
+                continue
             if (
                 not desktop
                 and execution is not None
@@ -178,6 +381,29 @@ def reconcile_stale_running_runs(
                 and str(execution.lease_expires_at or "") > current
             ):
                 # 服务端租约仍有效：交由既有重认领机制处理，启动对账不越权改写。
+                continue
+            payload = _load_payload(record.payload_json)
+            metadata = payload.get("metadata") or {}
+            verification = metadata.get(JOB_KEY) or {}
+            runtime = metadata.get("xiaox_runtime") or {}
+            if (
+                metadata.get("runtime_type") == "xiaox"
+                and verification.get("state")
+                in {"running", "pending", "needs_work", "verified", "blocked"}
+                and verification.get("generation") == runtime.get("generation")
+                and runtime.get("coordinator_active")
+                and (
+                    (execution is not None and execution.state in {"queued", "running", "claimed"})
+                    or (
+                        execution is None
+                        and float(runtime.get("expires_at") or 0)
+                        > (_parse_timestamp(current) or datetime.now(UTC)).timestamp()
+                    )
+                )
+            ):
+                # The original queue must fence/reclaim this owner before its
+                # settled review can resume. Generic plan recovery cannot judge
+                # an SDK request or erase its independent verification checkpoint.
                 continue
             if execution is not None and execution.state in {"queued", "running", "claimed"}:
                 # Fence the observed owner/count before touching either projection.
@@ -210,6 +436,7 @@ def reconcile_stale_running_runs(
                 continue
             payload = _load_payload(record.payload_json)
             interrupted = agent_run_from_dict(payload)
+            owns_current_task = _owns_current_task(db, repository, interrupted)
             unknown_effects = unresolved_effects(db, interrupted)
             checkpoint = checkpoint_step(interrupted) if execution is not None else None
             checkpoint_id = (
@@ -225,7 +452,8 @@ def reconcile_stale_running_runs(
                 else ""
             )
             if (
-                (not unknown_effects or checkpoint_id)
+                owns_current_task
+                and (not unknown_effects or checkpoint_id)
                 and not safe_continuation_error(
                     interrupted,
                     approved_unsubmitted_step_id=approved_step,
@@ -245,6 +473,7 @@ def reconcile_stale_running_runs(
                     elt_checkpoint_step_id=checkpoint_id,
                 )
                 if execution is not None:
+                    _remember_queue_recovery(db, execution, "queued", current)
                     execution.recovery_count = int(execution.recovery_count or 0) + 1
                     execution.state = "queued"
                     execution.lease_owner = execution.lease_expires_at = execution.heartbeat_at = (
@@ -263,6 +492,8 @@ def reconcile_stale_running_runs(
                 "reconciled_at": current,
                 "previous_status": str(record.status or ""),
             }
+            if not owns_current_task:
+                metadata["interrupted"]["reason"] = "task_ownership_or_control_changed"
             interrupted = agent_run_from_dict(payload)
             uncertain_steps = []
             for step in interrupted.steps:
@@ -296,29 +527,23 @@ def reconcile_stale_running_runs(
                 if status == "unknown"
                 else INTERRUPTED_MESSAGE
             )
-            record.status = status
-            record.payload_json = json.dumps(payload, ensure_ascii=False, default=str)
-            record.updated_at = current
-            task_id, tenant_id = _task_identity(payload, record.run_id)
-            task_record = (
-                db.query(AgentTaskRecord)
-                .filter(
-                    AgentTaskRecord.tenant_id == tenant_id,
-                    AgentTaskRecord.user_id == record.user_id,
-                    AgentTaskRecord.task_id == task_id,
-                )
-                .one_or_none()
+            interrupted = agent_run_from_dict(payload)
+            interrupted.add_event(
+                "run.interrupted",
+                interrupted.error,
+                {**metadata["interrupted"], "status": status},
             )
-            if task_record is not None and str(task_record.status or "") in IN_FLIGHT_RUN_STATUSES:
-                task_record.status = status
-                task_record.attention_state = status
-                task_record.updated_at = current
+            # The ordinary repository locks the shared Task and retains its
+            # newest attempt. A stale run must not rewrite a newer Task view.
+            repository.save_in_session(db, interrupted)
             if (
-                desktop
+                (desktop or not owns_current_task)
                 and execution is not None
                 and str(execution.state or "") in {"queued", "claimed", "running"}
             ):
-                # 桌面没有第二个 worker。先关掉执行行，dispatcher 不能把这条租约再认领。
+                # Park dead desktop claims, obsolete attempts and stopped
+                # descendants before the dispatcher can reclaim them.
+                _remember_queue_recovery(db, execution, status, current)
                 execution.state = status
                 execution.last_error_code = (
                     "needs_verification" if status == "unknown" else INTERRUPTED_ERROR_CODE

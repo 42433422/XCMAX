@@ -8,6 +8,7 @@ describe('buildChatExcelWorkflowSteps', () => {
     const ids = steps.map((s) => s.id)
     expect(ids[0]).toBe('chat-dialogue-basics')
     expect(ids).toContain('tutorial-excel-upload')
+    expect(steps[ids.indexOf('tutorial-excel-upload')].targetSelector).toContain('toolbar-excel-analyze')
     expect(ids).toContain('tutorial-excel-import-customers')
     expect(ids).toContain('tutorial-cleanup-departments')
     expect(ids[ids.length - 1]).toBe('tutorial-excel-flow-complete')

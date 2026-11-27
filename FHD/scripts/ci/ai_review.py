@@ -452,11 +452,11 @@ def _has_inline_loop_query(content: str) -> bool:
 
 
 def _finding_context(hunk: DiffHunk, line: int) -> str:
-    """Keep nearby new-file evidence so SQL, bindings and bounds reach the reviewer."""
+    """Keep bounded new-file context, including loop exits after the matched header."""
     return "\n".join(
         f"{number}: {content}"
         for number, prefix, content in hunk.lines
-        if prefix != "-" and number > 0 and line - 16 <= number <= line + 4
+        if prefix != "-" and number > 0 and line - 16 <= number <= line + 16
     )
 
 

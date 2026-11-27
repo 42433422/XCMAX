@@ -27,6 +27,7 @@ from app.application.employee_runtime.loader import (
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
 from app.application.employee_runtime.office_workers import (
     is_deterministic_office_worker,
+    is_trusted_workbook_pack,
 )
 from app.application.employee_runtime.result_builders import (
     build_blocked_result,
@@ -239,6 +240,7 @@ class EmployeeAgent:
         session_id: str | None = None,
         runtime_context: dict[str, Any] | None = None,
         on_event: Callable[[dict[str, Any]], Any] | None = None,
+        scoped_workbook: bool = False,
     ) -> dict[str, Any]:
         employee_id = self.employee_id
         t0 = time.perf_counter()
@@ -278,20 +280,27 @@ class EmployeeAgent:
             payload["workspace_root"] = workspace_root
         from app.application.employee_runtime.task_continuity import maybe_continue_employee_task
 
-        routed = maybe_continue_employee_task(
-            employee_id,
-            task,
-            payload,
-            user_id=user_id,
-            session_id=session_id,
-            workspace_root=workspace_root,
-            runtime_context=trusted_context,
-        )
-        if routed is not None:
-            return routed
+        if not scoped_workbook:
+            routed = maybe_continue_employee_task(
+                employee_id,
+                task,
+                payload,
+                user_id=user_id,
+                session_id=session_id,
+                workspace_root=workspace_root,
+                runtime_context=trusted_context,
+            )
+            if routed is not None:
+                return routed
         logger.info("employee_agent_run task_len=%s", len(task or ""))
         try:
             pack = load_employee_pack_from_disk(employee_id)
+            if scoped_workbook and not is_trusted_workbook_pack(employee_id, pack):
+                return {
+                    "success": False,
+                    "error_code": "workbook_worker_untrusted",
+                    "error": "受控工作簿操作需要可信的直接执行员工",
+                }
             manifest = pack.get("manifest") or {}
             from app.mod_sdk.product_plane import employee_execution_block_reason
 
@@ -328,8 +337,10 @@ class EmployeeAgent:
                 )
                 return self._blocked_result(pack, task, handler_list, gate, t0)
 
-            if not is_interactive_chat_payload(payload) and not is_collaboration_context_payload(
-                payload
+            if (
+                not scoped_workbook
+                and not is_interactive_chat_payload(payload)
+                and not is_collaboration_context_payload(payload)
             ):
                 upstream = self._run_upstream_collaboration(
                     task,

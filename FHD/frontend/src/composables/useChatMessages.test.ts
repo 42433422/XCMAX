@@ -1248,6 +1248,15 @@ it('restores only safe route receipts after server history, refresh and conversa
   expect(chatMessageExtrasFromServerRow({ role: 'user', metadata: { route_metadata: route } }).routeMetadata).toBeUndefined()
 })
 
+it.each([
+  { committed: false, effect: 'none', outcome: 'not_executed' },
+  { effect: 'unknown', outcome: 'unknown' },
+])('restores the durable execution outcome $outcome', execution => {
+  const metadata = JSON.stringify({ ui: { execution } })
+  const message = chatMessageExtrasFromServerRow({ id: 74, role: 'assistant', metadata })
+  expect(message.execution).toMatchObject(execution)
+})
+
 it('removes legacy local stop rows before history sync and keeps genuine chat messages', async () => {
   localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
   const chatApi = (await import('@/api/chat')).default
@@ -1276,6 +1285,46 @@ it('removes legacy local stop rows before history sync and keeps genuine chat me
   expect(useChatMessages(ref('stop-history')).messages.value.map(row => row.content)).toEqual([
     notice, notice, '只改第二天', '第二天改为颐和园',
   ])
+})
+
+it('does not publish stale server cache entries while opening owned history', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  chatStorageScope.value = 'tenant:8:owner:2'
+  const chatApi = (await import('@/api/chat')).default
+  const scope = effectScope(), sid = ref('other')
+  const key = 'chat_owned-history_'
+  const queued = { runId: 'run-a', status: 'queued', sessionId: 'owned-history' }
+  localStorage.setItem(key, JSON.stringify([
+    { role: 'user', content: 'old server question', time: '12:00', serverMessageId: 10 },
+    { role: 'ai', content: 'old server reply', time: '12:00', persistence: { id: 'server:11', status: 'saved' } },
+    { role: 'ai', content: 'stale saved result', time: '12:01', persistence: { id: 'legacy', status: 'saved' } },
+    { role: 'user', content: 'local request', time: '12:02', turnId: 'queued-turn', persistence: { id: 'pending', status: 'local' } },
+    { role: 'ai', content: 'local queue', time: '12:02', turnId: 'queued-turn', workflowAction: 'queued', runtimeContinuation: queued },
+  ]))
+  try {
+    const chat = scope.run(() => useChatMessages(sid))!
+    sid.value = 'owned-history'
+    let finish!: (value: never) => void
+    vi.mocked(chatApi.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const sync = chat.syncFromServer({ required: true })
+    expect(chat.messages.value.map(row => row.content)).toEqual(['local request', 'local queue'])
+    const file = { run_id: 'run-1', artifact_id: 'file-1', artifact_type: 'file', name: '答卷.xlsx', uri: '/api/agent/runs/run-1/artifacts/file-1' }
+    const input = { name: '原件.docx', reference: `conversation-upload:${'a'.repeat(40)}` }
+    finish({ success: true, durable: true, revision: 0, id: sid.value, message_count: 2, messages: [
+      { id: 10, role: 'user', content: 'verified question', metadata: {
+        ui: { inputAttachments: [input, { name: 'other', reference: '/tmp/other' }] },
+      } },
+      { id: 11, role: 'assistant', content: 'verified reply', metadata: { ui: { outputArtifacts: [file] } } },
+    ] } as never)
+    await expect(sync).resolves.toBe(true)
+    expect(chat.messages.value.map(row => row.content)).toEqual(['verified question', 'verified reply', 'local request', 'local queue'])
+    expect(chat.messages.value[0]?.inputAttachments).toEqual([input])
+    expect(chat.messages.value[1]?.outputArtifacts).toEqual([file])
+    expect(JSON.parse(localStorage.getItem(key) || '[]').map((row: { content: string }) => row.content)).toEqual(['local request', 'local queue'])
+  } finally {
+    scope.stop()
+    chatStorageScope.value = 'local'
+  }
 })
 
 it('does not replace current selected or failed local metadata with an older completed history receipt', async () => {

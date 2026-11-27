@@ -8,6 +8,7 @@ import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import { readPlannerSseResponse, resolveChatStreamPath, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { createTraceId } from '@/utils/networkStability'
 import { asRecord, asString } from '@/utils/typeGuards'
+import { getActiveExtensionModHeaders } from '@/utils/apiBase'
 import {
   resolvePlannerChatBatchPath,
   resolvePlannerChatPath,
@@ -105,6 +106,7 @@ export const chatApi = {
       'Content-Type': 'application/json',
       'X-Request-ID': createTraceId(),
       ...readMarketBearerHeader(),
+      ...getActiveExtensionModHeaders(url),
       ...(hdr as Record<string, string>),
     })
     return fetch(url, {
@@ -122,7 +124,7 @@ export const chatApi = {
     return fetch(`${buildFullApiUrl('/api/ai/chat/stream/resume')}?${query}`, {
       method: 'GET',
       credentials: 'include',
-      headers: { 'X-Request-ID': createTraceId(), ...readMarketBearerHeader() },
+      headers: { 'X-Request-ID': createTraceId(), ...readMarketBearerHeader(), ...getActiveExtensionModHeaders() },
       cache: 'no-store',
       signal,
     })

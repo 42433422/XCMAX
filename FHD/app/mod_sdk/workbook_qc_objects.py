@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.mod_sdk.workbook_reference_relocation import fill_formula_rows
+
 
 def check_native_table(ws, phase: Dict[str, Any], f: Any, targets: set) -> None:
     from openpyxl.utils.cell import get_column_letter, range_boundaries
@@ -42,10 +44,17 @@ def check_native_table(ws, phase: Dict[str, Any], f: Any, targets: set) -> None:
     ):
         f.fail("原生表格计算列或合计行元数据与计划不符", sheet=ws.title)
     targets.add((ws.title, bottom + 1, left + label))
+    formulas = fill_formula_rows(
+        formula, origin=f"{get_column_letter(left + idx)}{top + 1}", count=bottom - top
+    )
     for row in range(top + 1, bottom + 2):
         targets.add((ws.title, row, left + idx))
         cell = ws.cell(row, left + idx)
-        expected = formula if row <= bottom else f"=SUBTOTAL(109,{table.displayName}[{heading}])"
+        expected = (
+            formulas[row - top - 1]
+            if row <= bottom
+            else f"=SUBTOTAL(109,{table.displayName}[{heading}])"
+        )
         if cell.data_type != "f" or cell.value != expected:
             f.fail("表格计算列或合计公式与计划不符", sheet=ws.title, ref=cell.coordinate)
 

@@ -298,5 +298,5 @@ def test_existing_write_dispatch_is_not_caught_or_newly_authorized(monkeypatch):
             tool="purchase",
             action="create_supplier",
             params={"name": "synthetic"},
-            context={"tenant_id": "7"},
+            context={"tenant_id": "7", "idempotency_key": "existing-write-boundary"},
         )

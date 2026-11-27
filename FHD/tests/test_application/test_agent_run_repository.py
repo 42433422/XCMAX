@@ -412,7 +412,12 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
     assert restored.metadata["citation_count"] == 1
     assert restored.metadata["memory_hit_count"] == 1
     assert restored.metadata["artifact_count"] == 1
-    assert [event.event_type for event in restored.events] == ["run.created", "run.completed"]
+    assert [event.event_type for event in restored.events] == [
+        "run.created",
+        "run.completed",
+        "run.state_changed",
+    ]
+    assert restored.events[-1].data["reason_event_id"] == restored.events[1].event_id
 
     recent = restored_repo.list_recent(user_id="u1", limit=10)
     assert [item.run_id for item in recent] == [run.run_id]
@@ -422,7 +427,10 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
     assert restored_repo.list_task_runs(user_id="u2", task_id="task-xg-5003") == []
 
     events_after_first = restored_repo.list_events(run.run_id, after_event_id=first_event.event_id)
-    assert [event.event_type for event in events_after_first] == ["run.completed"]
+    assert [event.event_type for event in events_after_first] == [
+        "run.completed",
+        "run.state_changed",
+    ]
 
     task = restored_repo.get_task(
         user_id="u1",

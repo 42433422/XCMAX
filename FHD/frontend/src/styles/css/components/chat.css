@@ -10,10 +10,10 @@
   min-width: 0;
   padding: 16px;
   gap: 16px;
-  --chat-right-pane-width: 300px;
 }
 
 .chat-view {
+  --chat-right-pane-width: 300px;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -415,15 +415,11 @@
 
 .input-area {
   padding: 14px 20px 18px;
-  background: rgba(255, 255, 255, 0.76);
-  border-top: 1px solid rgba(213, 222, 235, 0.72);
-  backdrop-filter: blur(18px);
+  flex-shrink: 0;
 }
 
-.input-toolbar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+.chat-view .input-area {
+  padding-block: 7px 14px;
 }
 
 .toolbar-btn {
@@ -464,44 +460,11 @@
   font-weight: 600;
 }
 
-.input-wrapper {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-.input-wrapper textarea {
-  flex: 1;
-  min-width: 0;
-  max-width: 100%;
-  border: 1px solid rgba(190, 203, 221, 0.95);
-  border-radius: 16px;
-  padding: 13px 14px;
-  resize: none;
-  field-sizing: content;
-  font-family: inherit;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-.input-wrapper textarea:focus {
-  outline: none;
-  border-color: var(--primary-color);
-}
-
 .quick-actions {
-  padding: 14px 18px 0;
-  background: transparent;
-  border-bottom: 0;
+  padding: 12px 20px 0;
   display: flex;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
-}
-
-/* 价值展示条：快捷按钮行最右（考勤等按钮右边），与按钮同高顶置 */
-.quick-actions .value-stats-bar {
-  margin-left: auto;
-  align-self: center;
 }
 
 /* 聊天历史分页：紧跟快捷按钮，空时不留占位 */
@@ -520,29 +483,19 @@
 }
 
 .quick-btn {
-  padding: 8px 13px;
-  border: 1px solid rgba(190, 203, 221, 0.82);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.76);
+  padding: 7px 11px;
+  border: 1px solid var(--xc-color-border);
+  border-radius: 8px;
+  background: var(--xc-color-surface);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 700;
-  color: #334155;
-  box-shadow: var(--app-shadow-xs, 0 1px 2px rgba(15, 23, 42, 0.06));
-  transition:
-    transform 160ms ease,
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
+  font-weight: 600;
+  color: var(--xc-color-text-secondary);
 }
 
 .quick-btn:hover {
-  border-color: rgba(11, 114, 217, 0.55);
-  color: var(--primary-color);
-  background: rgba(239, 246, 255, 0.96);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(11, 114, 217, 0.1);
+  color: var(--xc-color-primary);
+  background: var(--xc-color-primary-soft);
 }
 
 .right-panel {
@@ -551,13 +504,11 @@
   width: var(--chat-right-pane-width);
   min-width: 240px;
   max-width: 420px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(213, 222, 235, 0.72);
-  border-radius: var(--app-radius-xl, 24px);
+  border: 1px solid var(--xc-color-border);
+  border-radius: 14px;
+  background: var(--xc-color-surface);
   display: flex;
   flex-direction: column;
-  box-shadow: var(--app-shadow-sm, 0 8px 24px rgba(15, 23, 42, 0.08));
-  backdrop-filter: blur(14px);
   overflow: hidden;
 }
 
@@ -567,12 +518,17 @@
   width: 0;
 }
 
+.chat-speech-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: 5px;
+}
+
 .panel-header {
   padding: 16px 18px;
   border-bottom: 1px solid rgba(213, 222, 235, 0.72);
   font-weight: 800;
   color: #0f172a;
-  background: rgba(248, 250, 252, 0.74);
 }
 
 .panel-content {
@@ -697,31 +653,6 @@
 
 .user-save-btn {
   margin-top: 8px;
-}
-
-/* ChatView.vue layout (Phase 7 extract) */
-.input-area {
-  flex-shrink: 0;
-}
-
-.input-toolbar {
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-#messageInput {
-  min-height: 54px;
-  max-height: 150px;
-}
-
-.voice-input-btn,
-.send-message-btn {
-  min-height: 48px;
-  border-radius: 16px;
-}
-
-.send-message-btn {
-  min-width: 84px;
 }
 
 .sheet-link-bar {
@@ -1257,64 +1188,93 @@
   gap: 10px;
 }
 
-/* 按住说话按钮：沿用 .btn 的圆角/内边距，通过状态色替换 background 即可 */
-.voice-input-btn {
+.chat-composer {
+  --composer-control-size: 36px;
+}
+
+.chat-composer .composer-control,
+.chat-composer [data-cds='ModelSwitcher'] button[popovertarget] {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 108px;
   justify-content: center;
+  gap: 6px;
+  min-block-size: var(--composer-control-size);
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--xc-color-text-secondary);
+  font-size: 13px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.chat-composer [data-cds='ModelSwitcher'] button[popovertarget] {
+  background: var(--xc-color-surface-3);
+}
+
+.chat-composer .composer-control:focus-visible {
+  outline: 2px solid var(--xc-token-colors-neutral-light-n00, #ffffff);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--xc-token-colors-neutral-light-n900, #141619);
+}
+
+.chat-composer .composer-control:enabled:hover,
+.chat-composer .composer-control[aria-expanded='true'],
+.chat-composer [data-cds='ModelSwitcher'] button[popovertarget]:hover {
+  background: var(--xc-color-primary-soft);
+  color: var(--xc-color-primary);
+}
+
+.chat-composer .composer-icon-button {
+  position: relative;
+  inline-size: var(--composer-control-size);
+  padding: 0;
+}
+
+.chat-composer .composer-control > :is(svg, .el-icon) {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.chat-composer .send-message-btn,
+.chat-composer .send-message-btn:enabled:hover {
+  border-radius: 50%;
+  background: var(--xc-color-primary);
+  color: var(--el-color-white);
+}
+
+.chat-composer .send-message-btn:enabled:hover { background: var(--xc-color-primary-hover); }
+
+.chat-composer .send-message-btn:disabled {
+  background: var(--xc-color-surface-3);
+  color: var(--xc-color-text-secondary);
+  opacity: 0.75;
+}
+
+.voice-input-btn {
   user-select: none;
   touch-action: none;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
 }
 
-.voice-input-btn .voice-input-btn-label {
+.voice-input-btn-label {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--xc-color-surface);
+  color: var(--xc-color-text);
+  box-shadow: var(--app-shadow-xs);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
-/* 语音输入竖排：语音通话入口在「按住说话」按钮上方 */
-.composer-voice-stack {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-/* 语音通话入口：位于按住说话上方的圆形拨号按钮 */
-.voice-call-entry-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  min-width: 38px;
-  height: 38px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.voice-call-entry-btn:hover:not(:disabled) {
-  background: #dbeafe;
-}
-
-.voice-input-btn-idle {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.voice-input-btn-idle:hover:not(:disabled) {
-  background: #e5e7eb;
-}
-
-.voice-input-btn-recording {
+.chat-composer .voice-input-btn-recording:is(.composer-control, :enabled:hover) {
   background: #dc2626;
   color: #fff;
   border: 1px solid #b91c1c;
@@ -1322,14 +1282,14 @@
   animation: voice-input-pulse 1s ease-in-out infinite;
 }
 
-.voice-input-btn-transcribing {
+.chat-composer .voice-input-btn-transcribing:is(.composer-control, :enabled:hover) {
   background: #eff6ff;
   color: #1d4ed8;
   border: 1px solid #bfdbfe;
   cursor: wait;
 }
 
-.voice-input-btn-error {
+.chat-composer .voice-input-btn-error:is(.composer-control, :enabled:hover) {
   background: #fef2f2;
   color: #b91c1c;
   border: 1px solid #fecaca;
@@ -1379,13 +1339,7 @@
   .chat-header-actions { padding: 6px 10px 0; }
   .chat-messages { padding: 8px 4px; gap: 12px; }
   .chat-view .input-area { padding: 8px 10px max(8px, env(safe-area-inset-bottom, 0px)); }
-  .chat-view .input-wrapper { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .chat-view #messageInput { flex: 1 0 100%; width: 100%; min-height: 60px; max-height: 120px; font-size: 16px; padding: 10px; }
-  .chat-view .composer-voice-stack { flex-direction: row; gap: 4px; }
-  .chat-view .input-wrapper .btn { min-width: 44px; min-height: 44px; padding: 6px 10px; }
-  .chat-view .input-wrapper .voice-call-entry-btn { width: 44px; padding: 0; }
-  .chat-view .input-wrapper .voice-input-btn { gap: 4px; font-size: 12px; }
-  .chat-view .send-message-btn { margin-left: auto; }
+  .chat-composer { --composer-control-size: 44px; }
   .chat-view .message-copy-btn, .chat-view .message-recall-btn, .chat-view .message-tts-btn { width: 36px; height: 36px; }
   .chat-view .message :is(pre, .md-code, .md-table-wrap) { max-width: 100%; }
 }

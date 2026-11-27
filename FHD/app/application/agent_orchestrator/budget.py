@@ -11,50 +11,61 @@ AI_COST_BUDGET_KEYS = (
 
 
 def _coerce_budget_value(value: Any) -> int | None:
-    if value is None:
+    if type(value) not in (int, float, str):
         return None
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
-    return max(parsed, 0)
+    if parsed < 0 or (isinstance(value, float) and value != parsed):
+        return None
+    return parsed
 
 
-def extract_ai_cost_budget_units(*sources: dict[str, Any] | None) -> int | None:
-    budget: int | None = None
+def _budget_constraints(*sources: dict[str, Any] | None) -> tuple[int | None, list[str]]:
+    budgets: list[int] = []
+    invalid: set[str] = set()
     for source in sources:
         if not isinstance(source, dict):
             continue
         for key in AI_COST_BUDGET_KEYS:
-            if key not in source:
+            value = source.get(key)
+            if value is None:
                 continue
-            parsed = _coerce_budget_value(source.get(key))
-            if parsed is not None:
-                budget = parsed
-    return budget
+            parsed = _coerce_budget_value(value)
+            if parsed is None:
+                invalid.add(key)
+            budgets.append(parsed if parsed is not None else 0)
+    return min(budgets, default=None), sorted(invalid)
+
+
+def extract_ai_cost_budget_units(*sources: dict[str, Any] | None) -> int | None:
+    """Aliases and source scopes are simultaneous ceilings, never overrides."""
+    return _budget_constraints(*sources)[0]
 
 
 def refresh_ai_budget_metadata(run: Any) -> None:
-    metadata = getattr(run, "metadata", None)
-    if not isinstance(metadata, dict) or "ai_cost_budget_units" not in metadata:
-        return
-    budget = _coerce_budget_value(metadata.get("ai_cost_budget_units"))
-    if budget is None:
-        return
-    total = _coerce_budget_value(metadata.get("ai_cost_units_total")) or 0
-    metadata["ai_cost_budget_units"] = budget
-    metadata["ai_cost_budget_remaining_units"] = max(budget - total, 0)
-    metadata["ai_cost_budget_exceeded"] = total > budget
+    apply_ai_budget_metadata(run)
 
 
 def apply_ai_budget_metadata(run: Any, *sources: dict[str, Any] | None) -> None:
+    """Ordinary resume can tighten a persisted budget, but cannot grant more credit."""
     metadata = getattr(run, "metadata", None)
     if not isinstance(metadata, dict):
         return
-    budget = extract_ai_cost_budget_units(*sources)
-    if budget is not None:
-        metadata["ai_cost_budget_units"] = budget
-    refresh_ai_budget_metadata(run)
+    budget, invalid = _budget_constraints(metadata, *sources)
+    if budget is None:
+        return
+    if invalid:
+        metadata["ai_cost_budget_invalid_fields"] = sorted(
+            set(invalid) | set(metadata.get("ai_cost_budget_invalid_fields") or [])
+        )
+    total = _coerce_budget_value(metadata.get("ai_cost_units_total")) or 0
+    metadata["ai_cost_budget_units"] = budget
+    metadata["ai_cost_budget_remaining_units"] = max(budget - total, 0)
+    metadata["ai_cost_budget_exceeded"] = (
+        bool(metadata.get("ai_cost_budget_invalid_fields")) or total > budget
+    )
 
 
 def budget_exceeded_payload(
@@ -66,21 +77,23 @@ def budget_exceeded_payload(
     metadata = getattr(run, "metadata", None)
     if not isinstance(metadata, dict):
         return None
-    budget = _coerce_budget_value(metadata.get("ai_cost_budget_units"))
+    budget, invalid = _budget_constraints(metadata)
     if budget is None:
         return None
+    invalid = invalid or metadata.get("ai_cost_budget_invalid_fields") or []
     current = _coerce_budget_value(metadata.get("ai_cost_units_total")) or 0
     additional = max(_coerce_budget_value(additional_cost_units) or 0, 0)
     projected = current + additional
-    if projected <= budget:
+    if projected <= budget and not invalid:
         return None
     return {
-        "error_code": "ai_cost_budget_exceeded",
-        "message": "AI cost budget exceeded",
+        "error_code": "ai_cost_budget_invalid" if invalid else "ai_cost_budget_exceeded",
+        "message": "AI cost budget is invalid" if invalid else "AI cost budget exceeded",
         "scope": str(scope or ""),
         "budget_units": budget,
         "current_units": current,
         "additional_cost_units": additional,
         "projected_units": projected,
         "remaining_units": max(budget - current, 0),
+        **({"invalid_fields": invalid} if invalid else {}),
     }

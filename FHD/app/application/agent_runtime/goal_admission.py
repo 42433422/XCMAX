@@ -176,6 +176,11 @@ def _context_evidence(run: Any, context: dict[str, Any]) -> list[dict[str, Any]]
             )
     if validate_actor_context(context) is not None:
         raise AgentRuntimeContractError("runtime_revoked", "召回期间原登录权限已失效")
+    if run.metadata.get("runtime_requested_deliverable") == "action_plan":
+        from app.infrastructure.xiaox.tools import desktop_navigation_items
+
+        if entries := desktop_navigation_items(context.get("desktop_navigation")):
+            evidence.append({"source": "desktop_navigation", "entries": entries})
     from app.application.skills.skill_registry import skill_rules
 
     rules = skill_rules(run.message)
@@ -212,12 +217,26 @@ def prepare_runtime_goal(
         _context, artifacts = resolve_attachment_context(context)
     except AttachmentInputError as exc:
         return RuntimeGoal(contract=build_goal_contract(run, history=history), question=str(exc))
+    evidence = _context_evidence(run, context)
+    if not artifacts:
+        from app.application.agent_runtime.conversation_attachments import (
+            EVIDENCE_SOURCE,
+            conversation_upload_context,
+            conversation_upload_directory,
+        )
+
+        if previous := conversation_upload_directory(run, context):
+            directory: dict[str, Any] = {"source": EVIDENCE_SOURCE, "entries": previous}
+            if verified_read := conversation_upload_context(run, context, previous):
+                key = "verified_reads" if isinstance(verified_read, list) else "verified_read"
+                directory[key] = verified_read
+            evidence.append(directory)
     return RuntimeGoal(
         contract=build_goal_contract(
             run,
             history=history,
             attachments=artifacts,
-            context_evidence=_context_evidence(run, context),
+            context_evidence=evidence,
         ),
         artifacts=artifacts,
     )

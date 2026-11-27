@@ -28,6 +28,10 @@ describe('buildQuickStartDeleteTutorialSteps', () => {
     expect(ids).toContain('quickstart-delete-customers')
     expect(ids).toContain('quickstart-delete-products-nav')
     expect(ids).toContain('quickstart-delete-products')
-    expect(ids[ids.length - 1]).toBe('quickstart-import-cleanup')
+    expect(steps.slice(-3).map((step) => step.targetSelector)).toEqual([
+      '#view-chat [data-tutorial-id="chat-side-panel-toggle"][aria-expanded="false"]',
+      '#chat-side-panel [data-tutorial-id="chat-conversation-tab"][aria-selected="false"]',
+      '#chat-side-panel #newConversationBtn',
+    ])
   })
 })
