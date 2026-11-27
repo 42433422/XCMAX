@@ -1,4 +1,5 @@
 # CI / 开发工具链（与 pyproject.toml [project.optional-dependencies].dev 对齐）
+hypothesis==6.170.17
 pytest>=7.4
 pytest-cov>=4.1
 coverage==7.15.1  # Match the canonical uv.lock report toolchain

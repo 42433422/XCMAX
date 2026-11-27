@@ -194,7 +194,10 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         engine.dispose()
 
 
-def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("runtime_type", ["", "xiaox"])
+def test_desktop_restart_interrupts_fresh_lease_without_reclaim(
+    tmp_path, monkeypatch, runtime_type
+) -> None:
     """桌面进程重启不得把仍标着有效租约的在途任务自动重放。"""
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     engine, factory, repo = _make_repo(tmp_path, "desktop-restart.db")
@@ -203,6 +206,7 @@ def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkey
         from app.application.agent_orchestrator.run_models import AgentStep
 
         run = AgentRun(user_id="u1", message="生成送货单", status="running")
+        run.metadata["runtime_type"] = runtime_type
         run.steps = [AgentStep("write", "sales", "shipment", status="running", idempotent=True)]
         run.metadata["task_context"] = {"task_id": "task-live"}
         repo.save(run)
@@ -224,6 +228,38 @@ def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkey
         assert parked.state == "unknown"
         assert parked.last_error_code == "needs_verification"
         assert parked.recovery_count == 0
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+def test_desktop_restart_preserves_xiaox_parent_parked_on_child_receipt(
+    tmp_path, monkeypatch
+) -> None:
+    from app.db.models.agent import AgentTaskExecutionRecord
+
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    engine, factory, repo = _make_repo(tmp_path, "xiaox-parked.db")
+    try:
+        set_agent_run_repository_for_tests(repo)
+        parent = AgentRun(user_id="u1", message="读取已批准的工作簿副本", status="running")
+        parent.metadata.update(
+            runtime_type="xiaox",
+            task_context={"task_id": "task-xiaox-parked"},
+        )
+        repo.save(parent)
+        queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+        queue.enqueue(parent)
+        with factory.begin() as db:
+            db.get(AgentTaskExecutionRecord, parent.run_id).state = "waiting_approval"
+        _backdate_run(factory, parent.run_id, status="running", updated_at=_iso(-300))
+        before, journal = repo.get(parent.run_id).to_dict(), queue.lifecycle(parent.run_id)
+
+        assert reconciler.reconcile_stale_running_runs(now=_iso()) == 0
+        assert repo.get(parent.run_id).to_dict() == before
+        assert queue.get(parent.run_id).state == "waiting_approval"
+        assert queue.lifecycle(parent.run_id) == journal
+        assert queue.claim("must-not-replay", lease_seconds=30) is None
     finally:
         set_agent_run_repository_for_tests(None)
         engine.dispose()

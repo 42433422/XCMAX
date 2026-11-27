@@ -313,6 +313,10 @@ def preserve_run_evidence(
         children[child_id] = receipt
     if children:
         run.metadata["child_results"] = children
+    if not allow_safe_retry and previous.status in terminal and "control" in old:
+        # A delayed whole-run save may contribute receipts, but it cannot erase
+        # or replace the command that permanently stopped the original run.
+        run.metadata["control"] = copy.deepcopy(old["control"])
     from app.application.agent_orchestrator.result_verification import (
         latest_step_call,
         preview_continuation_params,

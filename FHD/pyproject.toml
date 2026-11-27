@@ -133,6 +133,7 @@ ml = [
     "statsmodels>=0.14.6",
 ]
 dev = [
+    "hypothesis==6.170.17",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "pytest-mock>=3.12",
