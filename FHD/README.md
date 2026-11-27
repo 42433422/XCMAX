@@ -18,7 +18,7 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## Agent 执行、修复与核验
 
-智能对话（`agent_runtime.chat`）、Agent API 与员工（`employee_runtime.agent_runner`）统一进入原 `gateway.run_runtime_task` / Xiaox；已批准的工作流继续由原 LangGraph 执行和检查点恢复，工具仍走 SQL 子任务、权限、审批和幂等账本。复用 [Codex SDK 0.171.0](https://github.com/openai/codex)（Apache-2.0）、[LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT）、[Pydantic 2.13.4](https://github.com/pydantic/pydantic)（MIT）和原 SQLAlchemy 账本，不引入第二个 Runtime。产品适配定义原目标/证据的修复契约，通用 SDK 不掌握产品租户与业务回执，不能替代这些授权事实。
+智能对话（`agent_runtime.chat`）、Agent API 与员工（`employee_runtime.agent_runner`）统一进入原 `gateway.run_runtime_task` / Xiaox；已批准的工作流继续由原 LangGraph 执行和检查点恢复，工具仍走 SQL 子任务、权限、审批和幂等账本。复用 [Codex SDK 0.171.0](https://github.com/openai/codex)（Apache-2.0）、[LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT）、[Pydantic 2.13.4](https://github.com/pydantic/pydantic)（MIT）和原 SQLAlchemy 账本，不引入第二个 Runtime。新任务在原物理调用总额内预留修复与核验额度；执行阶段达到分配上限后中断原 SDK 轮次、保存已完成回执并交接，未知计量或在途副作用仍先对账。旧任务保留冻结额度。产品适配定义原目标/证据的修复契约，通用 SDK 不掌握产品租户与业务回执，不能替代这些授权事实。
 
 `AgentRun.metadata.xiaox_runtime.react_progress` 保存结构化缺口、修复步骤、证据指纹、分项执行/修复/无进展/策略预算与恢复记录。原账本仍逐次结算所有真实模型请求和成本；核验按证据修订记账，格式纠错复用同一核验任务且继续受原模型/费用总额限制。业务修复只有新的已核验宿主证据或原目标/补答变化才能重新核验；换一句回复、重复读同一事实、记忆候选、计划和无效调用不增加业务进展。文本任务按实际成稿核验，普通 JSON 回复不要求工具。记忆/动作/核验协议的错误正文隔离在原任务的未采信候选中，不自动写记忆或执行业务。
 

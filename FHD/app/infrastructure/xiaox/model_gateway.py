@@ -440,14 +440,27 @@ def _claim(
                     for row in calls.values()
                 )
                 if used >= limit:
-                    raise _ModelCallLimitReached(limit, used, f"react_{phase}_budget_exhausted")
+                    handoff = phase == "execution" and control["limits"]["repair"] > 0
+                    raise _ModelCallLimitReached(
+                        limit,
+                        used,
+                        "react_execution_phase_exhausted"
+                        if handoff
+                        else f"react_{phase}_budget_exhausted",
+                    )
             reserved_calls, reserved_cost = verification_reserve(metadata)
             if verification_job:
                 if metadata.get("verification_budget") and reserved_calls <= 0:
                     raise HTTPException(429, "Independent verification call budget is exhausted")
             elif len(calls) + reserved_calls >= maximum_calls:
-                raise HTTPException(
-                    429, "Remaining model calls are reserved for independent verification"
+                if not control:
+                    raise HTTPException(
+                        429, "Remaining model calls are reserved for independent verification"
+                    )
+                raise _ModelCallLimitReached(
+                    maximum_calls - reserved_calls,
+                    len(calls),
+                    f"react_{phase}_budget_exhausted",
                 )
             held = int(run.metadata.get("reserved_cost_units") or 0)
             if budget_exceeded_payload(

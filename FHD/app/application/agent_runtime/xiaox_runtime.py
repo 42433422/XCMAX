@@ -74,6 +74,7 @@ from app.domain.task_lifecycle.react_progress import (
     ensure_control,
     note_no_progress,
     output_channel,
+    receipt_facts,
     requires_actions,
     review_signature,
 )
@@ -214,6 +215,7 @@ def _budget_stop_reason(binding: Any) -> str:
             "tool_loop_detected",
             "react_repair_budget_exhausted",
             "react_execution_budget_exhausted",
+            "react_execution_phase_exhausted",
         }:
             return str(reason)
     return ""
@@ -655,6 +657,7 @@ async def run_xiaox_agent(
                     "tool_loop_detected": "工具调用重复且结果无进展，任务已停止。",
                     "react_repair_budget_exhausted": "原任务修复模型预算已耗尽。",
                     "react_execution_budget_exhausted": "原任务执行模型预算已耗尽。",
+                    "react_execution_phase_exhausted": "原任务执行阶段额度已用完，待核对剩余目标。",
                 }[budget_stop]
                 status = "failed"
                 result.update(
@@ -922,7 +925,6 @@ async def run_xiaox_agent(
             mutate(answer)
 
         def begin_active(_run: AgentRun, metadata: dict[str, Any]) -> None:
-            ensure_control(metadata, int(pinned.get("max_model_calls", 24)))
             now = time.time()
             reserve = initialize_verification_budget(
                 _run,
@@ -931,6 +933,7 @@ async def run_xiaox_agent(
                 max_model_calls=int(pinned.get("max_model_calls", 24)),
                 total_seconds=limit,
             )
+            ensure_control(metadata, int(pinned.get("max_model_calls", 24)))
             metadata.update(active_seconds=spent, active_started_at=now, deadline_at=now + timeout)
             metadata["execution_deadline_at"] = now + max(0, timeout - reserve["seconds"])
             metadata["active_phase"] = "execution"
@@ -1129,6 +1132,7 @@ async def run_xiaox_agent(
                         pending = asyncio.ensure_future(anext(iterator))
                         turn_id = ""
                         stalled_turn = False
+                        phase_handoff = False
                         try:
                             # The outer asyncio.timeout(remaining) keeps the original task deadline.
                             # Each 0.5s poll rechecks revocation without renewing that deadline.
@@ -1144,7 +1148,13 @@ async def run_xiaox_agent(
                                     raise XiaoxBindingError("token_invalid", "原运行授权已被更新")
                                 store._validate_current(observed.run, observed.metadata, generation)
                                 phase_stop = _budget_stop_reason(observed)
-                                if phase_stop.startswith("react_"):
+                                if (
+                                    phase_stop == "react_execution_phase_exhausted"
+                                    and not phase_handoff
+                                ):
+                                    await active.interrupt()
+                                    phase_handoff = True
+                                elif phase_stop.startswith("react_") and not phase_handoff:
                                     raise XiaoxBindingError(
                                         phase_stop, "原任务的执行或修复模型预算已耗尽，未确认完成"
                                     )
@@ -1173,8 +1183,10 @@ async def run_xiaox_agent(
                                     await active.interrupt()
                                     stalled_turn = True
                                 store.authenticate(
-                                    grant.mcp_token if stalled_turn else grant.model_token,
-                                    "mcp" if stalled_turn else "model",
+                                    grant.mcp_token
+                                    if stalled_turn or phase_handoff
+                                    else grant.model_token,
+                                    "mcp" if stalled_turn or phase_handoff else "model",
                                 )
                                 if not done:
                                     continue
@@ -1291,6 +1303,29 @@ async def run_xiaox_agent(
                                 await asyncio.gather(pending, return_exceptions=True)
                             if close_iterator := getattr(iterator, "aclose", None):
                                 await close_iterator()
+                        if phase_handoff:
+                            handoff_rows = store.receipt_snapshot(run_id)
+                            if _model_unsettled(store.get(run_id).metadata) or any(
+                                _receipt_state(row) in (_WAITING | _ACTIVE | {"unknown"})
+                                for row in handoff_rows
+                            ):
+                                break
+
+                            def enter_repair(run, metadata):
+                                metadata[CONTROL_KEY]["repairing"] = True
+                                metadata.pop("model_call_limit", None)
+                                run.add_event(
+                                    "runtime.recovery.phase_handoff",
+                                    "执行阶段已交接，修复与核验额度保留",
+                                )
+
+                            mutate(enter_repair)
+                            runtime_status = "completed"
+                            if not receipt_facts(handoff_rows):
+                                goal_feedback = await recover_without_review(
+                                    "", handoff_rows, "no_business_evidence"
+                                )
+                                continue
                         if stalled_turn:
                             stalled_rows = store.receipt_snapshot(run_id)
                             if any(

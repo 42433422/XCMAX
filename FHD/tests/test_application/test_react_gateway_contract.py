@@ -74,6 +74,19 @@ def test_physical_repair_requests_have_their_own_persisted_cap(gateway):
     assert store.binding.metadata["model_call_limit"]["reason"] == "react_repair_budget_exhausted"
 
 
+def test_execution_cannot_spend_the_reserved_repair_requests(gateway):
+    client, store, calls, _, _ = gateway
+    state = ensure_control(store.binding.metadata, 24)
+    assert state["limits"]["execution"] + state["limits"]["repair"] + 3 == 24
+    store.binding.metadata["model_requests"] = {
+        f"initial-{i}": {"state": "completed", "execution_phase": "execution"}
+        for i in range(state["limits"]["execution"])
+    }
+    result = post(client)
+    assert result.status_code == 429 and calls == []
+    assert store.binding.metadata["model_call_limit"]["reason"] == "react_execution_phase_exhausted"
+
+
 def test_recovery_uses_only_pre_authorized_compatible_route(gateway):
     client, store, calls, response, app = gateway
     state = repair(store, phase="reply")

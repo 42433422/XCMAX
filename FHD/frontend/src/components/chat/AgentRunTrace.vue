@@ -47,8 +47,8 @@
           <div v-if="hasPhaseDetails(phase)" class="art-step-detail">
             <template v-if="isTool(phase)">
               <div class="art-tool-meta">
-                <code>{{ phase.tool_id || 'tool' }}<template v-if="phase.action">.{{ phase.action }}</template></code>
-                <span v-if="phase.node_id">节点 {{ phase.node_id }}</span>
+                <code v-if="showDiagnosticMetadata">{{ phase.tool_id || 'tool' }}<template v-if="phase.action">.{{ phase.action }}</template></code>
+                <span v-if="showDiagnosticMetadata && phase.node_id">节点 {{ phase.node_id }}</span>
                 <span v-if="getPermissionBadge(phase.tool_id)" :class="['art-permission', `is-${getPermissionBadge(phase.tool_id)}`]">
                   {{ getPermissionBadge(phase.tool_id) === 'session' ? '本次会话已授权' : '已记住授权' }}
                 </span>
@@ -110,6 +110,7 @@ import type {
   TraceToolPhase,
 } from '@/utils/agentRunTraceModel'
 import { executionObservationDetails } from '@/utils/agentRunTraceModel'
+import { actionDisplayName, toolActivityLabel, toolDisplayName, toolIconClass } from '@/utils/toolLabels'
 import { getToolPermission, setToolPermission, type ToolPermissionScope } from '@/utils/toolPermissionCache'
 
 const props = defineProps<{
@@ -132,35 +133,6 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: '已取消',
 }
 
-const TOOL_LABELS: Array<[RegExp, string]> = [
-  [/business[_-]?db|database|sql/i, '业务数据库'],
-  [/browser|web/i, '浏览器'],
-  [/search/i, '搜索'],
-  [/shell|terminal|command|exec/i, '终端'],
-  [/file|document|word|pdf/i, '文档'],
-  [/excel|sheet/i, '表格'],
-  [/mail|message|wechat|wecom/i, '消息'],
-  [/approval|approve/i, '审批中心'],
-  [/customer/i, '客户资料'],
-  [/product|material|inventory/i, '业务资料'],
-]
-
-const ACTION_LABELS: Record<string, string> = {
-  write: '写入',
-  create: '创建',
-  update: '更新',
-  delete: '删除',
-  query: '查询',
-  list: '读取列表',
-  search: '搜索',
-  read: '读取',
-  import: '导入',
-  export: '导出',
-  execute: '执行',
-  send: '发送',
-  approve: '审批',
-}
-
 const INTENT_LABELS: Record<string, string> = {
   business_db_write: '业务数据写入',
   business_db_read: '业务数据查询',
@@ -181,7 +153,8 @@ const taskTitle = computed(() => {
   if (INTENT_LABELS[intent]) return INTENT_LABELS[intent]
   const primary = toolPhases.value[0]
   if (primary && toolPhases.value.length === 1) {
-    return `${toolDisplayName(primary.tool_id)} · ${actionDisplayName(primary.action)}`
+    return toolActivityLabel(primary.tool_id, primary.action, primary.waiting_approval ? 'approval' : primary.status)
+      || `${toolDisplayName(primary.tool_id)} · ${actionDisplayName(primary.action)}`
   }
   if (intent) {
     const readable = intent.replace(/[_-]+/g, ' ').trim()
@@ -213,31 +186,6 @@ function formatDuration(ms: number): string {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`
 }
 
-function toolDisplayName(toolId: string): string {
-  const raw = String(toolId || '').trim()
-  const match = TOOL_LABELS.find(([pattern]) => pattern.test(raw))
-  return match?.[1] || raw.replace(/[_-]+/g, ' ') || '工具'
-}
-
-function actionDisplayName(action: string): string {
-  const raw = String(action || '').trim().toLowerCase()
-  return ACTION_LABELS[raw] || raw.replace(/[_-]+/g, ' ') || '执行'
-}
-
-function toolIconClass(toolId: string, action = ''): string {
-  const raw = `${toolId} ${action}`
-  if (/business[_-]?db|database|sql|customer|product|material|inventory/i.test(raw)) return 'fa-database'
-  if (/browser|web/i.test(raw)) return 'fa-globe'
-  if (/search|query|find/i.test(raw)) return 'fa-search'
-  if (/shell|terminal|command|exec|code/i.test(raw)) return 'fa-terminal'
-  if (/excel|sheet|table/i.test(raw)) return 'fa-table'
-  if (/file|document|word|pdf/i.test(raw)) return 'fa-file-text-o'
-  if (/mail|message|wechat|wecom|send/i.test(raw)) return 'fa-envelope-o'
-  if (/approval|approve/i.test(raw)) return 'fa-check-square-o'
-  if (/upload|import/i.test(raw)) return 'fa-upload'
-  return 'fa-wrench'
-}
-
 function phaseIconClass(phase: TracePhase): string {
   if (isTool(phase)) return toolIconClass(phase.tool_id, phase.action)
   if (isPlanner(phase)) return 'fa-list-ul'
@@ -255,13 +203,13 @@ function statusIconClass(status: string): string {
 }
 
 function phaseDisplayTitle(phase: TracePhase): string {
-  if (isTool(phase)) return toolDisplayName(phase.tool_id)
+  if (isTool(phase)) return toolActivityLabel(phase.tool_id, phase.action, phase.waiting_approval ? 'approval' : phase.status) || toolDisplayName(phase.tool_id)
   if (isPlanner(phase)) return phase.status === 'success' ? '执行计划已生成' : phase.title || '正在生成执行计划'
   return phase.status === 'success' ? '任务执行完成' : phase.title || '任务结束'
 }
 
 function phaseDisplaySubtitle(phase: TracePhase): string {
-  if (isTool(phase)) return actionDisplayName(phase.action)
+  if (isTool(phase)) return toolActivityLabel(phase.tool_id, phase.action, phase.waiting_approval ? 'approval' : phase.status) ? '' : actionDisplayName(phase.action)
   if (isPlanner(phase) && phase.step_count) return `${phase.step_count} 个计划步骤`
   return phase.subtitle || ''
 }

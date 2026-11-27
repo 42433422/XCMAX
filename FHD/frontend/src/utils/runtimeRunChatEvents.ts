@@ -1,6 +1,7 @@
 import type { AgentRunEvent } from '@/api/agentRuns'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import { asRecord, asString } from '@/utils/typeGuards'
+import { toolActivityLabel } from '@/utils/toolLabels'
 
 /** Project durable SDK observations into the existing chat event vocabulary. */
 export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
@@ -20,6 +21,8 @@ export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
     const labels: Record<string, string> = { tool_constraint: '正在按原目标约束工具选择…', context_repair: '正在修复原任务上下文…', compatible_route: '正在核对原授权备用模型…' }
     return [{ type: 'thinking', delta: labels[asString(data.strategy)] || '正在恢复原任务执行…' }]
   }
+  if (type === 'runtime.recovery.phase_handoff')
+    return [{ type: 'thinking', delta: '小C正在交接执行进度，准备补齐剩余任务…' }]
   if (type === 'runtime.goal.verification.started')
     return [{ type: 'thinking', delta: '正在独立核对任务目标与操作回执…' }]
   if (type === 'runtime.goal.verified')
@@ -32,6 +35,7 @@ export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
   return [{
     type: 'tool_call', phase: started ? 'started' : 'progress',
     node_id: asString(data.item_id), tool_id: asString(data.tool_id), action: asString(data.action),
-    label: started ? '正在调用授权工具…' : '工具调用结束，正在核对回执…',
+    label: toolActivityLabel(asString(data.tool_id), asString(data.action), started ? 'running' : 'waiting')
+      || (started ? '正在调用授权工具…' : '工具调用结束，正在核对回执…'),
   }]
 }

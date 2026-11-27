@@ -9,7 +9,7 @@ import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import type { ExecutionObservation } from '@/api/agentRuns'
 import { asRecord, asNonNegativeNumber } from '@/utils/typeGuards'
 import { readExecutionObservation } from '@/utils/agentRunTraceModel'
-import { actionDisplayName, toolDisplayName } from '@/utils/toolLabels'
+import { actionDisplayName, toolActivityLabel, toolDisplayName } from '@/utils/toolLabels'
 
 export type AgentStepState = 'pending' | 'running' | 'success' | 'failed' | 'waiting' | 'blocked' | 'unknown' | 'deferred' | 'partial'
 
@@ -92,8 +92,8 @@ export function stepsFromNodeResults(rows: ChatNodeResultLike[] | undefined): Ag
       id: String(row.node_id || '').trim() || `node-${index}`,
       toolId,
       action,
-      title: toolDisplayName(toolId),
-      subtitle: actionDisplayName(action),
+      title: toolActivityLabel(toolId, action, state) || toolDisplayName(toolId),
+      subtitle: toolActivityLabel(toolId, action, state) ? '' : actionDisplayName(action),
       state,
       durationMs: asNonNegativeNumber(row.duration_ms),
       output: String(row.output_preview || '').trim() || undefined,
@@ -136,7 +136,8 @@ export function stepsFromAiParts(parts: UIMessage['parts']): AgentStepView[] {
     return {
       ...readExecutionObservation(detail),
       id: part.toolCallId, toolId, action,
-      title: toolDisplayName(toolId), subtitle: actionDisplayName(action), state,
+      title: toolActivityLabel(toolId, action, state) || toolDisplayName(toolId),
+      subtitle: toolActivityLabel(toolId, action, state) ? '' : actionDisplayName(action), state,
       durationMs: asNonNegativeNumber(detail.duration_ms),
       output: typeof part.output === 'string' ? part.output : preview !== error ? preview : undefined,
       error,

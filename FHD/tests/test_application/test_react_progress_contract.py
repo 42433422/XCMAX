@@ -136,6 +136,76 @@ def test_native_tool_loop_interrupt_changes_strategy_without_resetting_invocatio
     assert events.count("runtime.recovery.strategy_changed") == 1
 
 
+@pytest.mark.parametrize("original_state", ["completed", "none", "unknown", "waiting_approval"])
+def test_execution_handoff_preserves_repair_allowance_and_reviews_only_actual_evidence(
+    setup_runtime, original_state
+):
+    invoke, _ = setup_runtime
+
+    class HandoffStore(Store):
+        def authenticate(self, token, audience="mcp"):
+            return (
+                self.get(self.run.run_id)
+                if audience == "mcp"
+                else super().authenticate(token, audience)
+            )
+
+    store = HandoffStore()
+    store.review_missing = True
+
+    class Handoff(Transport):
+        async def interrupt(self):
+            assert not store.run.metadata["xiaox_runtime"]["revoked"]
+            store.log.append("phase-interrupt")
+
+        async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
+            if not self.inputs:
+                store.run.metadata["xiaox_runtime"]["model_call_limit"] = {
+                    "reason": "react_execution_phase_exhausted"
+                }
+                store.rows = (
+                    []
+                    if original_state == "none"
+                    else [
+                        receipt(
+                            status=original_state,
+                            verified=original_state == "completed",
+                            success=original_state == "completed",
+                        )
+                    ]
+                )
+            else:
+                fresh = receipt(child_run_id="fresh-child", child_task_id="fresh-task")
+                fresh["call_id"] = "fresh-call"
+                fresh["receipt"]["tool_calls"][0]["output"]["row_count"] = 4
+                store.rows.append(fresh)
+                store.review_missing = False
+            async for value in super().stream_turn(
+                text, goal_feedback=goal_feedback, output_schema=output_schema
+            ):
+                yield value
+
+    result = asyncio.run(invoke(store, Handoff(store), tool_bridge=Bridge()))
+    assert store.log.count("phase-interrupt") == 1
+    if original_state in {"unknown", "waiting_approval"}:
+        assert not result["ok"] and len(store.rows) == 1
+        assert store.rows[0]["receipt"]["status"] == original_state
+        assert result["execution_state"] == (
+            "unknown" if original_state == "unknown" else "waiting_user"
+        )
+        assert not any(
+            e.event_type == "runtime.goal.verification.started" for e in store.run.events
+        )
+        return
+    assert result["ok"]
+    state = store.run.metadata["xiaox_runtime"][CONTROL_KEY]
+    assert state["repair_turns"] == 1 and state["limits"]["repair"] == 6
+    assert "model_call_limit" not in store.run.metadata["xiaox_runtime"]
+    assert sum(e.event_type == "runtime.goal.verification.started" for e in store.run.events) == (
+        2 if original_state == "completed" else 1
+    )
+
+
 @pytest.mark.parametrize("internal", [False, True])
 def test_sql_verification_admission_rejects_unchanged_business_or_internal_output(
     review_task, internal

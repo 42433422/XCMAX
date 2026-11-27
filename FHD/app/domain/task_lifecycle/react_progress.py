@@ -22,7 +22,7 @@ STRATEGIES = ("native_repair", "tool_constraint", "context_repair", "compatible_
 class ProgressLimits(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     execution: int = Field(ge=1, le=1000)
-    repair: int = Field(ge=1, le=6)
+    repair: int = Field(ge=0, le=6)
     no_progress: int = Field(ge=1, le=4)
     strategy_switches: int = Field(ge=0, le=3)
 
@@ -30,7 +30,7 @@ class ProgressLimits(BaseModel):
 class ProgressCheckpoint(BaseModel):
     # Recovery records are extensible; authority and counters are not permissive.
     model_config = ConfigDict(extra="allow", strict=True)
-    version: Literal[1]
+    version: Literal[1, 2]
     strategy: int = Field(ge=0, lt=len(STRATEGIES))
     execution_turns: int = Field(ge=0)
     repair_turns: int = Field(ge=0)
@@ -171,8 +171,14 @@ def review_signature(run: Any, rows: list[dict[str, Any]], output: str) -> str:
 def ensure_control(metadata: dict[str, Any], max_calls: int) -> dict[str, Any]:
     """Never replenish counters during coordinator recovery or task resume."""
     if CONTROL_KEY not in metadata:
+        review_slots = int(
+            (metadata.get("verification_budget") or {}).get(
+                "model_calls", min(3, max(1, max_calls // 4))
+            )
+        )
+        repair_slots = min(6, max(0, (max_calls - review_slots) // 3))
         metadata[CONTROL_KEY] = {
-            "version": 1,
+            "version": 2,
             "strategy": 0,
             "execution_turns": 0,
             "repair_turns": 0,
@@ -180,8 +186,8 @@ def ensure_control(metadata: dict[str, Any], max_calls: int) -> dict[str, Any]:
             "strategy_switches": 0,
             "facts": [],
             "limits": {
-                "execution": max(1, max_calls),
-                "repair": min(6, max_calls),
+                "execution": max(1, max_calls - review_slots - repair_slots),
+                "repair": repair_slots,
                 "no_progress": 4,
                 "strategy_switches": len(STRATEGIES) - 1,
             },
