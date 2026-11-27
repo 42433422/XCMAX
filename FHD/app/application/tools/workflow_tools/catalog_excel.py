@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.application.tools.workflow_tools.contracts import Payload
+from app.domain.excel import EXCEL_HEADER_ROW
 
 
 def tool_spec(name: str, description: str, properties: Payload, required: list[str]) -> Payload:
@@ -20,7 +21,7 @@ def excel_tool_specs() -> list[Payload]:
     return [
         tool_spec(
             "excel_analysis",
-            "分析 Excel 文件内容，支持读取、结构识别、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。不确定表头或列名时先用 action=structure 获取列名/类型/样例/日期列，再用 action=query 提自然语言问题。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。",
+            "分析 Excel 文件内容，支持读取、结构识别、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。不确定表头或列名时先用 action=structure 获取列名/类型/样例/日期列，再用 action=query 提自然语言问题。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。需要原生坐标、公式或隐藏表时，用 read 的 view=sheets 列举，再用 view=cells 和 sheet_name 读取稀疏原始单元格；分页必须绑定上页 source_sha256。",
             {
                 "file_path": {
                     "type": "string",
@@ -30,12 +31,21 @@ def excel_tool_specs() -> list[Payload]:
                     "type": "string",
                     "description": "工作表名称（Sheet名），用于读取特定工作表。如果用户选中了某个工作表，请使用此参数指定。",
                 },
-                "header_row": {
-                    "type": "integer",
-                    "description": "表头所在行号（Excel 从 1 开始计数）。报价单等多行标题表格必须与上传预览 extract-grid "
-                    "检测到的 header_row_index / tables[].header_row 一致，否则会出现 "
-                    "Unnamed 列、大量 nan、价格错位。",
+                "view": {
+                    "type": "string",
+                    "enum": ["table", "sheets", "cells"],
+                    "description": "read默认table保持原数据表；sheets分页列举所有工作表（含隐藏）；cells按原坐标分页读取统一原生事实，必须指定sheet_name。原生视图的max_rows为项目数。",
                 },
+                "cell_range": {
+                    "type": "string",
+                    "description": "view=cells可选原生A1范围（如B2:Z100）；稀疏空隙不物化，显式空值/样式空白仍保留。",
+                },
+                "expected_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "原生事实分页延续时必须传前页source_sha256；源文件变化则拒绝拼接旧页。它不是授权凭据，每次仍校验原账号文件权限。",
+                },
+                "header_row": EXCEL_HEADER_ROW,
                 "offset": {
                     "type": "integer",
                     "description": "分页起始数据行（从 0 开始，默认 0）。上一次结果 has_more=true 时，传 next_offset 继续读取。",
@@ -69,6 +79,11 @@ def excel_tool_specs() -> list[Payload]:
                         "type": "object",
                         "properties": {
                             "column": {"type": "string"},
+                            "cell_range": {
+                                "type": "string",
+                                "maxLength": 23,
+                                "description": "无表头的单列 SUM 区域，如 C2:C100。该方式只接受单个指标，且不分组。",
+                            },
                             "op": {
                                 "type": "string",
                                 "enum": ["sum", "mean", "count", "min", "max"],

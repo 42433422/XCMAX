@@ -121,6 +121,20 @@ def test_export_contract_rejects_excess_rows_or_invalid_items_without_truncation
     assert len(rows) == original_count
 
 
+def test_extensionless_export_is_rejected_before_staging_or_approval(export_context, monkeypatch):
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    payload = {"file_path": "run-generated-name", "rows": [{"result": 1}]}
+    assert validate_tool_call("excel_analysis", "export", payload).ok is False
+    context, data = export_context
+    exporter = Mock(side_effect=AssertionError("invalid path reached exporter"))
+    monkeypatch.setattr(workflow, "handle_excel_analysis", exporter)
+    result = scope.export_workflow_spreadsheet(payload, context, exporter)
+    assert result["error_code"] == "invalid_excel_path"
+    exporter.assert_not_called()
+    assert not list(data.iterdir())
+
+
 @pytest.mark.parametrize("kind", ["csv", "xlsx"])
 @pytest.mark.parametrize("existing", [False, True])
 def test_oversized_artifact_is_removed_without_replacing_destination(

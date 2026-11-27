@@ -397,6 +397,11 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                 "type": "object",
                 "required": ["row_count", "column_count", "columns", "dtypes", "sample_rows"],
                 "properties": {
+                    "sheet_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "工作簿中的工作表名。列、类型和样例仅对应返回的 sheet_name。",
+                    },
                     "row_count": {"type": "integer"},
                     "column_count": {"type": "integer"},
                     "columns": {"type": "array", "items": {"type": "string"}},

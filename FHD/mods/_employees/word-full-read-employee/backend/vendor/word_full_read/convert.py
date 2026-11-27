@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -7,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from xml.etree import ElementTree as ET
 
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
+from app.mod_sdk.host_services import read_native_document
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -243,13 +245,14 @@ def _build_blocks(
     body: ET.Element, paragraphs: List[Dict[str, Any]], tables: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     blocks: List[Dict[str, Any]] = []
+    paragraphs_by_index = {p["index"]: p for p in paragraphs}
     p_idx = 0
     t_idx = 0
     for child in list(body):
         tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
         if tag == "p":
-            if p_idx < len(paragraphs):
-                p = paragraphs[p_idx]
+            if p_idx in paragraphs_by_index:
+                p = paragraphs_by_index[p_idx]
                 blocks.append(
                     {
                         "type": "paragraph",
@@ -386,6 +389,7 @@ def _extract_with_docx(src_path: Path) -> Optional[Dict[str, Any]]:
 
 
 def _extract_docx_ooxml(src_path: Path, output_dir: Path) -> Dict[str, Any]:
+    document_facts = read_native_document(src_path)
     with zipfile.ZipFile(src_path) as zf:
         doc_xml = zf.read("word/document.xml")
         root = ET.fromstring(doc_xml)
@@ -413,6 +417,7 @@ def _extract_docx_ooxml(src_path: Path, output_dir: Path) -> Dict[str, Any]:
             plain_parts.append(hf["text"])
     return {
         "metadata": {"source": src_path.name, "format": "docx", "extractor": "ooxml"},
+        "document_facts": document_facts,
         "paragraphs": paragraphs,
         "tables": tables,
         "sections": sections,
@@ -449,6 +454,10 @@ def convert_file(
     from word_full_read.legacy_doc import ensure_docx_for_extract
 
     output_dir = output_path.parent
+    original_source = {
+        "source_sha256": hashlib.sha256(src_path.read_bytes()).hexdigest(),
+        "source_format": src_path.suffix.lower().lstrip("."),
+    }
     legacy_work = output_dir / ".legacy_doc_work"
     extract_src, legacy_meta = ensure_docx_for_extract(Path(src_path), legacy_work)
     src_path = extract_src
@@ -461,9 +470,13 @@ def convert_file(
     if str(rule_spec.get("default_text_output_relpath") or "").endswith(".txt"):
         txt_path = output_dir / Path(str(rule_spec.get("default_text_output_relpath"))).name
 
-    docx_enhanced = _extract_with_docx(src_path)
     payload_data = _extract_docx_ooxml(src_path, output_dir)
+    docx_enhanced = _extract_with_docx(src_path)
     if isinstance(legacy_meta, dict) and legacy_meta:
+        payload_data["document_facts"].setdefault("native_extensions", {})["source_conversion"] = {
+            "original_source": original_source,
+            "receipt": legacy_meta,
+        }
         payload_data.setdefault("metadata", {})
         if isinstance(payload_data["metadata"], dict):
             payload_data["metadata"]["legacy_doc"] = legacy_meta
