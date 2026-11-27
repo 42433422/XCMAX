@@ -12,6 +12,88 @@ from app.fastapi_routes.workspace_prefs_routes import (
     patch_workspace_prefs_endpoint,
     router,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+def test_intelligence_level_stays_with_authenticated_company(trusted_actor, monkeypatch):
+    from app.application.agent_runtime import configuration
+    from app.application.tenant_workspace_prefs import enterprise_model_for_actor
+    from app.db.models.tenant import Tenant
+    from app.fastapi_routes.xcagi_compat_chat_helpers import (
+        _runtime_context_with_authenticated_actor,
+    )
+
+    alice = trusted_actor(tenant_id=41)
+    member = trusted_actor(tenant_id=41, tier="personal")
+    bob = trusted_actor(tenant_id=42)
+    with alice.factory.begin() as db:
+        db.add_all(
+            [
+                Tenant(id=41, code="test-enterprise-a", owner_user_id=alice.user_id),
+                Tenant(id=42, code="test-enterprise-b", owner_user_id=bob.user_id),
+            ]
+        )
+    app = FastAPI()
+    app.include_router(router)
+    endpoint = "/api/workspace/intelligence"
+    with TestClient(app) as client:
+        a = client.get(endpoint, headers=alice.headers).json()
+        b = client.get(endpoint, headers=bob.headers).json()
+        update = {
+            "level": 2,
+            "expected_owner_id": a["owner_id"],
+            "expected_revision": a["revision"],
+        }
+        assert client.put(endpoint, headers=member.headers, json=update).status_code == 403
+        assert client.put(endpoint, headers=bob.headers, json=update).status_code == 409
+        assert client.put(endpoint, headers=alice.headers, json=update).json()["level"] == 2
+        assert client.put(endpoint, headers=alice.headers, json=update).status_code == 409
+        assert client.get(endpoint, headers=bob.headers).json() == b
+        assert client.get(endpoint, headers=member.headers).json()["level"] == 2
+        assert client.get(endpoint, headers=member.headers).json()["editable"] is False
+        update_b = {
+            "level": 5,
+            "expected_owner_id": b["owner_id"],
+            "expected_revision": b["revision"],
+        }
+        assert client.put(endpoint, headers=bob.headers, json=update_b).json()["level"] == 5
+        assert client.get(endpoint, headers=alice.headers).json()["level"] == 2
+
+        monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
+        model_url = "/api/workspace/model"
+        choice = {key: update[key] for key in ("expected_owner_id", "expected_revision")}
+        choice.update(expected_revision=1, provider="litellm", model="team-model")
+        preflight = MagicMock(
+            side_effect=configuration.RuntimeSetupError("unsupported", "模型不可用")
+        )
+        monkeypatch.setattr(configuration, "validate_account_model_choice", preflight)
+        assert client.put(model_url, headers=member.headers, json=choice).status_code == 403
+        assert client.put(model_url, headers=bob.headers, json=choice).status_code == 409
+        assert client.put(model_url, headers=alice.headers, json=choice).status_code == 422
+        assert client.get(model_url, headers=alice.headers).json()["model"] is None
+        preflight.side_effect = None
+        preflight.return_value = "platform"
+        saved = client.put(model_url, headers=alice.headers, json=choice).json()
+        preflight.assert_called_with(str(alice.user_id), ("litellm", "team-model"))
+        assert client.get(model_url, headers=member.headers).json() == {**saved, "editable": False}
+        assert enterprise_model_for_actor(str(member.user_id)) == (
+            "litellm",
+            "team-model",
+            "platform",
+        )
+        assert enterprise_model_for_actor(str(bob.user_id)) is None
+        choice.update(expected_revision=saved["revision"], provider=None, model=None)
+        assert client.put(model_url, headers=alice.headers, json=choice).status_code == 200
+        assert enterprise_model_for_actor(str(member.user_id)) is None
+
+    forged = {"tenant_id": 42, "execution_autonomy_level": 6}
+    assert (
+        _runtime_context_with_authenticated_actor(alice.request, forged)["execution_autonomy_level"]
+        == 2
+    )
+    assert (
+        _runtime_context_with_authenticated_actor(bob.request, {})["execution_autonomy_level"] == 5
+    )
 
 
 @pytest.mark.parametrize("industry_id", ["业" * 33, "x" * 128])

@@ -54,6 +54,13 @@ def safe_filter_dataframe(df: pd.DataFrame, expression: str) -> pd.DataFrame:
     return df.loc[mask.fillna(False)]
 
 
+def _apply_operator(operation: Callable[[Any, Any], Any], left: Any, right: Any) -> Any:
+    try:
+        return operation(left, right)
+    except TypeError as exc:
+        raise ValueError("query operands have incompatible types; use an explicit conversion") from exc
+
+
 def _evaluate(node: ast.AST, df: pd.DataFrame) -> Any:
     if isinstance(node, ast.Name):
         if node.id not in df.columns:
@@ -90,26 +97,23 @@ def _evaluate(node: ast.AST, df: pd.DataFrame) -> Any:
         arithmetic_operation = _ARITHMETIC_OPERATORS.get(type(node.op))
         if arithmetic_operation is None:
             raise ValueError("unsupported arithmetic operator")
-        return arithmetic_operation(_evaluate(node.left, df), _evaluate(node.right, df))
+        return _apply_operator(arithmetic_operation, _evaluate(node.left, df), _evaluate(node.right, df))
     if isinstance(node, ast.Compare):
         left = _evaluate(node.left, df)
         compare_result: Any = True
         for operation_node, comparator_node in zip(node.ops, node.comparators):
             right = _evaluate(comparator_node, df)
             if isinstance(operation_node, (ast.In, ast.NotIn)):
-                if isinstance(left, pd.Series):
-                    if not isinstance(right, list):
-                        raise ValueError("'in' requires a literal list")
-                    current = left.isin(right)
-                else:
-                    current = left in right
+                if not isinstance(right, list):
+                    raise ValueError("'in' requires a literal list")
+                current = left.isin(right) if isinstance(left, pd.Series) else left in right
                 if isinstance(operation_node, ast.NotIn):
-                    current = operator.invert(current)
+                    current = ~current if isinstance(current, pd.Series) else not current
             else:
                 comparison_operation = _COMPARE_OPERATORS.get(type(operation_node))
                 if comparison_operation is None:
                     raise ValueError("unsupported comparison operator")
-                current = comparison_operation(left, right)
+                current = _apply_operator(comparison_operation, left, right)
             compare_result = operator.and_(compare_result, current)
             left = right
         return compare_result

@@ -53,9 +53,31 @@ export function isRuntimeQueued(payload: ChatPlannerPayload): boolean {
     && runtimeExecutionState(payload) === 'queued'
 }
 
+export function withoutSettledQueueReplies(messages: UiChatMessage[], hiddenIds?: Set<number>): UiChatMessage[] {
+  const queued = (message: UiChatMessage) =>
+    message.workflowAction === 'queued' || message.runtimeContinuation?.status === 'queued'
+  const settledTurns = new Set(messages.filter(message => message.role === 'ai' && message.turnId
+    && !message.streamingShell && !queued(message)).map(message => message.turnId))
+  const legacyQueue = messages.filter(message => message.role === 'ai' && queued(message) && !settledTurns.has(message.turnId))
+  return messages.filter((message, index) => {
+    if (message.role !== 'ai' || !queued(message)) return true
+    const before = messages[index - 1], after = messages[index + 1]
+    // Older clients saved final replies without turn IDs. Only use an unambiguous, adjacent receipt.
+    const legacyReply = legacyQueue.length === 1 && !!message.turnId && !!message.serverMessageId
+      && before?.role === 'user' && before.turnId === message.turnId
+      && after?.role === 'ai' && !after.turnId && !!after.serverMessageId && after.workflowAction === 'reply_completed'
+    if (!settledTurns.has(message.turnId) && !legacyReply) return true
+    if (message.serverMessageId) hiddenIds?.add(message.serverMessageId)
+    return false
+  })
+}
+
 /** Only the latest actual assistant reply can ask to continue its parent. */
 export function pendingRuntimeRunId(messages: UiChatMessage[], sessionId: string): string | undefined {
   const latest = [...messages].reverse().find(message => message.role === 'ai' && !message.streamingShell)
+  // Earlier receipts saved unknown outcomes with a waiting_user pointer.
+  if (latest?.workflowAction === 'unknown' || latest?.execution?.outcome === 'unknown'
+    || latest?.execution?.effect === 'unknown') return undefined
   const continuation = restoreRuntimeContinuation(latest?.runtimeContinuation)
   if (!continuation || continuation.sessionId !== sessionId || !WAITING.has(continuation.status)) return undefined
   return continuation.runId || undefined

@@ -323,15 +323,11 @@ defineExpose({
 
 <style scoped>
 .data-table-wrapper {
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow: auto;
   max-height: v-bind(height);
-  border: 1px solid rgba(203, 213, 225, 0.82);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow:
-    0 12px 28px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  border-radius: var(--xc-radius-lg);
+  background: var(--xc-color-surface);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 
 .data-table {
@@ -356,14 +352,14 @@ defineExpose({
 .data-table td {
   padding: 12px 14px;
   text-align: left;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  border-bottom: 1px solid var(--xc-color-border);
 }
 
 /* 不使用 sticky 表头：粘性 th 叠在数据行上会拦截操作列点击（pointer-events 在部分环境下仍不可靠） */
 .data-table th {
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.94));
-  font-weight: 800;
-  color: #334155;
+  background: var(--xc-color-surface-2);
+  font-weight: 650;
+  color: var(--xc-color-text);
   white-space: nowrap;
 }
 
@@ -397,10 +393,9 @@ defineExpose({
 
 .empty-state {
   text-align: center;
-  color: #64748b;
-  padding: 48px !important;
-  font-weight: 650;
-  background: radial-gradient(circle at 50% 0%, rgba(14, 116, 217, 0.08), transparent 35%), rgba(248, 250, 252, 0.72);
+  color: var(--xc-color-text-secondary);
+  padding: 36px 14px;
+  font-weight: 500;
 }
 
 .loading-state,

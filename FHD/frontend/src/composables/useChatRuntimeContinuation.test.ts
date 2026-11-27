@@ -39,7 +39,7 @@ function setupChat() {
       lastRequestContextSummary: ref(''),
       injectExcelContextPayload: () => false,
       consumeMultimodalIntoPlannerContext: () => {},
-      captureArtifacts: () => ({ ids: [], complete: () => {} }),
+      captureArtifacts: () => ({ ids: [], uploadIds: [], complete: () => {} }),
     })
     return { chat, request, sessionId }
   })!
@@ -155,6 +155,24 @@ describe('runtime continuation through message history and chat requests', () =>
     expect(pendingRuntimeRunId(rows, 'room-1')).toBe('parent-1')
     expect(pendingRuntimeRunId(rows, 'room-2')).toBeUndefined()
     expect(chatMessageExtrasFromServerRow({ role: 'user', metadata: { ui: { runtimeContinuation: pointer } } }).runtimeContinuation).toBeUndefined()
+  })
+
+  it('sends an independent turn after restoring a legacy unknown receipt', async () => {
+    const { chat, request } = setupChat()
+    const extras = chatMessageExtrasFromServerRow({
+      role: 'assistant', id: 7, metadata: {
+        summary: { status: 'unknown', success: false, run_id: 'parent-1' },
+        ui: { runtimeContinuation: pointer, execution: { effect: 'unknown', outcome: 'unknown' } },
+      },
+    })
+    chat.loadMessages([{ role: 'ai', content: '请核对原计量回执', time: '', ...extras }])
+    expect(pendingRuntimeRunId(chat.messages.value, 'room-1')).toBeUndefined()
+    await request.requestChatByMode('解释另一个概念')
+    const context = vi.mocked(chatApi.sendUnifiedChat).mock.calls[0][0].context
+    expect(context).toMatchObject({ conversation_id: 'room-1', turn_id: expect.any(String) })
+    expect(context).not.toHaveProperty('agent_runtime_run_id')
+    expect(context).not.toHaveProperty('retry_of')
+    expect(chat.messages.value[0]).toMatchObject({ serverMessageId: 7, workflowAction: 'unknown' })
   })
 
   it('persists an inactive conversation wait and its child approval without a failure prefix', async () => {

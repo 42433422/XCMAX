@@ -1,10 +1,10 @@
 <template>
-  <details class="settings-card settings-card--about">
+  <details class="settings-card">
     <summary class="settings-row">
       <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
         <img class="settings-row__icon-art" :src="aboutArtSrc" alt="" />
       </span>
-      <span class="settings-row__label">{{ $t('settings.about') }}</span>
+      <span class="settings-row__label">{{ $t(SETTINGS_ENTRIES.about.labelKey) }}</span>
       <span class="settings-row__meta">{{ appVersionLabel }}</span>
       <span class="settings-row__arrow" aria-hidden="true"></span>
     </summary>
@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { SETTINGS_ENTRIES } from './settingsNavigation'
 import aboutArtSrc from '@/assets/icons/settings/r5c1.png'
 
 defineProps<{

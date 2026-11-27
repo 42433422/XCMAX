@@ -162,3 +162,38 @@ def test_registered_office_download_requires_owner_and_original_file(scoped_app,
     denied = client.get(uri, headers=headers)
     assert denied.status_code == (404 if invalid == "type" else 410), denied.text
     assert "Synthetic owner-bound office artifact" not in denied.text
+
+
+def test_credentialed_cross_origin_download_exposes_artifact_integrity(scoped_app, monkeypatch):
+    import hashlib
+
+    from fastapi.testclient import TestClient
+
+    from app.config import TestingConfig
+    from app.fastapi_app import factory
+
+    _client, repo = scoped_app
+    run, content = _run_with_file(repo, 7, 11)
+    monkeypatch.setattr(factory, "_app_singleton", None)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://localhost:5173")
+    client = TestClient(factory.create_fastapi_app(TestingConfig, enable_cors=True))
+    try:
+        response = client.get(
+            run.artifacts[0].uri,
+            headers={
+                "X-Session-ID": "label-session-7",
+                "Origin": "http://localhost:5173",
+            },
+        )
+        assert response.status_code == 200
+        assert response.content == content
+        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert response.headers["access-control-allow-credentials"] == "true"
+        exposed = {
+            item.strip().lower()
+            for item in response.headers["access-control-expose-headers"].split(",")
+        }
+        assert {"x-artifact-sha256", "x-artifact-size"} <= exposed
+        assert response.headers["x-artifact-sha256"] == hashlib.sha256(content).hexdigest()
+    finally:
+        client.close()

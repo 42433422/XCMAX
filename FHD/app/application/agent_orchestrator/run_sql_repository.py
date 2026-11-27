@@ -230,6 +230,7 @@ def preserve_run_evidence(
     *,
     allow_safe_retry: bool = False,
     allow_planning_replacement: bool = False,
+    allow_verified_xiaox_recovery: bool = False,
 ) -> None:
     """Keep receipts across mutable context updates; only a verified CAS replaces a plan."""
     if previous is None:
@@ -259,13 +260,29 @@ def preserve_run_evidence(
             return
     old = previous.metadata
     settled_pending = allow_planning_replacement and verified_pending_settlement(run, previous)
-    if old.get("non_retryable") and not settled_pending:
+    settled_xiaox = bool(
+        allow_verified_xiaox_recovery
+        and previous.metadata.get("runtime_type") == "xiaox"
+        and previous.status in {"running", "waiting_user", "unknown"}
+        and (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+        and not old.get("stream_interruption")
+        and not run.metadata.get("recovery")
+        and not run.metadata.get("non_retryable")
+        and (run.final_output.get("xiaox_result") or {}).get("exit_status")
+        == "continuation_pending"
+        and any(event.event_type == "runtime.reconciliation.verified" for event in run.events)
+    )
+    if allow_verified_xiaox_recovery and not settled_xiaox:
+        raise ValueError("Xiaox recovery requires the verified original child transition")
+    if old.get("non_retryable") and not (settled_pending or settled_xiaox):
         run.metadata["non_retryable"] = True
     recovery = {
-        **({} if settled_pending else copy.deepcopy(old.get("recovery") or {})),
+        **({} if settled_pending or settled_xiaox else copy.deepcopy(old.get("recovery") or {})),
         **(run.metadata.get("recovery") or {}),
     }
-    if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required":
+    if (old.get("recovery") or {}).get(
+        "state"
+    ) == "manual_reconciliation_required" and not settled_xiaox:
         recovery["state"] = "manual_reconciliation_required"
     if recovery:
         run.metadata["recovery"] = recovery
@@ -378,7 +395,7 @@ def preserve_run_evidence(
     for event in run.events:
         events.setdefault(event.event_id, event)
     run.events = list(events.values())
-    if not allow_safe_retry and (
+    if not (allow_safe_retry or settled_xiaox) and (
         (previous.status in terminal and run.status != previous.status)
         or (
             previous.status == "unknown"
@@ -597,30 +614,31 @@ class SQLAlchemyAgentRunRepository:
         return copy.deepcopy(run), True
 
     def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        """CAS the complete snapshot, retaining the row lock through task persistence."""
-
-        if not valid_stream_interruption_update(run, previous):
-            return False
-        return self._save_if_unchanged(run, previous)
-
-    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        """Compare-and-save one durable lifecycle transition against its prior snapshot."""
-        return self._save_if_unchanged(run, previous)
-
-    def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        return valid_control_update(run, previous) and self._save_if_unchanged(run, previous)
-
-    def save_stream_tool_audit_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        return valid_stream_tool_audit_update(run, previous) and self._save_if_unchanged(
+        return valid_stream_interruption_update(run, previous) and self.save_if_unchanged(
             run, previous
         )
 
-    def _save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        self._ensure_schema()
-        with self._session_scope() as db:
+    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        """CAS the complete snapshot, retaining the row lock through task persistence."""
+        with self.transaction() as db:
             return self.save_if_unchanged_in_session(db, run, previous)
 
-    def save_if_unchanged_in_session(self, db: Session, run: AgentRun, previous: AgentRun) -> bool:
+    def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        return valid_control_update(run, previous) and self.save_if_unchanged(run, previous)
+
+    def save_stream_tool_audit_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        return valid_stream_tool_audit_update(run, previous) and self.save_if_unchanged(
+            run, previous
+        )
+
+    def save_if_unchanged_in_session(
+        self,
+        db: Session,
+        run: AgentRun,
+        previous: AgentRun,
+        *,
+        allow_verified_xiaox_recovery: bool = False,
+    ) -> bool:
         from app.db.models.agent import AgentRunRecord
 
         record = db.get(AgentRunRecord, previous.run_id)
@@ -639,33 +657,13 @@ class SQLAlchemyAgentRunRepository:
         )
         if matched != 1:
             return False
-        self.save_in_session(db, run, allow_planning_replacement=True)
+        self.save_in_session(
+            db,
+            run,
+            allow_planning_replacement=True,
+            allow_verified_xiaox_recovery=allow_verified_xiaox_recovery,
+        )
         return True
-
-    def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
-        from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
-        from app.db.models.agent import AgentTaskExecutionRecord
-
-        self._ensure_schema()
-        with self._session_scope() as db:
-            # A conditional write holds the queue-row lock through run persistence.
-            # Checking the lease in a separate SELECT would allow takeover between
-            # the check and save. Execution count also fences reused owner IDs.
-            owned = (
-                db.query(AgentTaskExecutionRecord)
-                .filter(
-                    AgentTaskExecutionRecord.run_id == run.run_id,
-                    AgentTaskExecutionRecord.state.in_(("running", "claimed")),
-                    AgentTaskExecutionRecord.lease_owner == owner_id,
-                    AgentTaskExecutionRecord.execution_count == execution_count,
-                    AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),
-                )
-                .update({AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False)
-            )
-            if owned != 1:
-                raise WorkerLeaseLost("worker lease expired or replaced")
-            self.save_in_session(db, run)
-        return copy.deepcopy(run)
 
     def save_in_session(
         self,
@@ -674,6 +672,7 @@ class SQLAlchemyAgentRunRepository:
         *,
         allow_safe_retry: bool = False,
         allow_planning_replacement: bool = False,
+        allow_verified_xiaox_recovery: bool = False,
     ) -> None:
         """Lock then persist in the caller's transaction, preserving concurrent receipts."""
         from app.application.agent_orchestrator.business_harness import (
@@ -702,6 +701,7 @@ class SQLAlchemyAgentRunRepository:
             previous,
             allow_safe_retry=allow_safe_retry,
             allow_planning_replacement=allow_planning_replacement,
+            allow_verified_xiaox_recovery=allow_verified_xiaox_recovery,
         )
         if catalog_fenced:
             # A signed permanent dispatch fence supersedes a previous failure;

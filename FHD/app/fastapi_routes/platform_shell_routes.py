@@ -411,6 +411,7 @@ async def platform_shell_workspace_root():
 async def platform_shell_chat_office_file_upload(
     request: Request,
     file: UploadFile = File(...),
+    attachment_only: bool = False,
 ):
     """对话「解析办公文件」：保存到 workspace/uploads/chat，返回相对 workspace_root 的路径。"""
     from app.infrastructure.auth.dependencies import resolve_session_user
@@ -418,6 +419,28 @@ async def platform_shell_chat_office_file_upload(
     user = resolve_session_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="请先登录")
+    if attachment_only:
+        from io import BytesIO
+        from pathlib import Path
+
+        from app.application.agent_orchestrator.attachment_inputs import MAX_ATTACHMENT_BYTES
+        from app.application.elt.errors import EltError
+        from app.application.elt.service_uploads import register_chat_upload
+
+        name = (file.filename or "").strip()
+        if Path(name).suffix.lower() != ".docx":
+            raise HTTPException(status_code=400, detail="此入口仅接收 .docx 对话附件")
+        raw = await file.read(MAX_ATTACHMENT_BYTES + 1)
+        if len(raw) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(status_code=413, detail="附件过大，请上传较小的 Word 文件")
+        try:
+            receipt = register_chat_upload(user, name, file.content_type, BytesIO(raw))
+        except EltError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        return {
+            "success": True,
+            "data": {"upload_id": receipt["upload_id"], "filename": receipt["file_name"]},
+        }
     data = await _save_workspace_upload(file, subdir="chat", user=user)
     return {"success": True, "data": data}
 

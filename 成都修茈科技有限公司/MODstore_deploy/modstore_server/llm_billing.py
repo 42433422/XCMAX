@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 import uuid
@@ -277,7 +278,10 @@ def _limit_key(name: str, ident: str, window_seconds: int, limit: int) -> None:
     key = f"{name}:{ident}"
     rows = [t for t in _WINDOWS.get(key, []) if now - t < window_seconds]
     if len(rows) >= limit:
-        raise HTTPException(429, "请求过于频繁，请稍后再试")
+        retry_after = math.ceil(window_seconds - (now - rows[-limit]))
+        raise HTTPException(
+            429, "请求过于频繁，请稍后再试", headers={"Retry-After": str(retry_after)}
+        )
     rows.append(now)
     _WINDOWS[key] = rows
 

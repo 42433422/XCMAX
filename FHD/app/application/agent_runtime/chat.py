@@ -12,6 +12,11 @@ from filelock import FileLock, Timeout
 from app.application.agent_runtime.configuration import RuntimePolicyError
 from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
 from app.application.agent_task_context import authenticated_task_owner
+from app.domain.task_lifecycle.agent_runtime_results import released_runtime_artifacts
+from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
+    execution_result_states,
+)
 
 # RuntimePolicyError is supplied by the configured fixed runtime package.
 # After #3606 migration the same surface advertises Xiaox, not a retired Codex label.
@@ -42,8 +47,20 @@ def stream_runtime_event(event: dict[str, Any]) -> None:
         publish_stream_note("正在通过授权工具处理任务…")
 
 
+def runtime_chat_files(result: dict[str, Any]) -> list[dict[str, Any]]:
+    if result.get("ok") is not True or result.get("execution_state") != "completed":
+        return []
+    files = result.get("output_artifacts")
+    return files if isinstance(files, list) else released_runtime_artifacts(result)
+
+
 def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -> dict[str, Any]:
     state = str(result.get("execution_state") or result.get("exit_status") or "failed")
+    reconciling = (
+        "reconciliation_required" in execution_result_states(result)
+        or result.get("error_code") == "reconciliation_required"
+        or execution_result_outcome_unknown(result, include_execution=True)
+    )
     waiting = state in {"waiting_user", "waiting_approval"}
     queued = state == "queued"
     retained = (
@@ -51,13 +68,31 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         or queued
         or bool(result.get("run_id"))
         and (
-            result.get("reconciliation_required") is True
-            or state in {"running", "unknown", "paused"}
+            state in {"running", "paused"}
             or state == "blocked"
             and result.get("retryable") is True
         )
     )
     text = str(result.get("output") or result.get("error") or "本轮执行未完成")
+    qualification_blocked = (
+        result.get("ok") is False
+        and state == "blocked"
+        and result.get("failure_stage") == "runtime_setup"
+        and result.get("error_code") == "runtime_qualification_evidence_missing"
+        and not any(
+            result.get(key) is True
+            for key in (
+                "reconciliation_required",
+                "business_completed",
+                "verified_operations",
+                "execution_started",
+            )
+        )
+        and not result.get("business_receipts")
+        and not result.get("tool_calls")
+    )
+    if qualification_blocked:
+        text = "当前模型未通过运行验收，请在模型服务中查看。"
     if result.get("pending_approval"):
         text = "任务已进入审批，请通过审批入口处理；原任务及参数已保留。"
     if result.get("reconciliation_required"):
@@ -72,6 +107,11 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         and row["receipt"].get("pending_approval") is True
     ]
     card = next((item for item in cards if isinstance(item, dict) and item.get("run_id")), None)
+    output_files = runtime_chat_files(result)
+    sources = result.get("file_sources") if (
+        state == "completed" and result.get("ok") is True and not reconciling
+        and text == result.get("output")
+    ) else None
     return {
         "success": bool(result.get("ok")),
         "response": text,
@@ -80,18 +120,23 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "run_id": result.get("run_id"),
         "agent_run_id": result.get("run_id"),
         "execution_state": state,
+        **({"execution_started": False} if qualification_blocked else {}),
         "business_completed": result.get("business_completed") is True,
         "verified_operations": result.get("verified_operations") is True,
         "retryable": result.get("retryable") is True,
-        "requires_reconciliation": result.get("reconciliation_required") is True,
+        "requires_reconciliation": reconciling,
         "requires_confirmation": result.get("pending_approval") is True,
         "needs_user_input": result.get("needs_user_input") is True,
         "runtime_context_update": {
-            "agent_runtime_run_id": result.get("run_id") if waiting or retained else None,
+            "agent_runtime_run_id": result.get("run_id")
+            if not reconciling and (waiting or retained)
+            else None,
             "conversation_id": conversation_id,
-            # queued is a follow state, not a user-input wait: the client must
-            # keep the run id to read terminal events but must not resubmit.
-            "status": "queued" if queued else ("waiting_user" if retained else state),
+            # Reconciliation keeps the receipt identity above without admitting
+            # a continuation. Queued work keeps its id for observation only.
+            "status": "reconciliation_required"
+            if reconciling
+            else ("waiting_user" if retained and not (queued or waiting) else state),
         },
         "data": {
             "action": "approval_pending" if card else "runtime_reply",
@@ -103,6 +148,8 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
             "business_receipts": result.get("business_receipts", []),
             "tool_calls": result.get("tool_calls", []),
             "artifacts": result.get("artifacts", []),
+            **({"output_artifacts": output_files} if output_files else {}),
+            **({"file_sources": sources} if sources else {}),
             "needs_user_input": result.get("needs_user_input") is True,
             **(
                 {"clarification": result["clarification"]}

@@ -8,32 +8,91 @@ import importlib.abc
 import importlib.machinery
 import importlib.util
 import sys
+import json
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 from uuid import uuid4
+from zipfile import BadZipFile
 
+from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
 from app.domain.workbook_write_contract import (
     WORKBOOK_NATIVE_PHASES,
     WORKBOOK_QC,
+    WORKBOOK_READER,
     WORKBOOK_STRUCTURAL_PHASES,
     WORKBOOK_WRITER,
 )
 
 
-def is_workbook_write(params: dict) -> bool:
-    return (
+def scoped_workbook_employee(params: dict) -> str:
+    employee_id = str(
         next(
-            (
-                params[key]
-                for key in ("employee_id", "pack_id", "tool_name", "id")
-                if params.get(key)
-            ),
-            "",
+            (params[k] for k in ("employee_id", "pack_id", "tool_name", "id") if params.get(k)), ""
         )
-        == WORKBOOK_WRITER
-    )
+    ).strip()
+    return employee_id if employee_id in (WORKBOOK_READER, WORKBOOK_WRITER) else ""
+
+
+def is_workbook_write(params: dict) -> bool:
+    return scoped_workbook_employee(params) == WORKBOOK_WRITER
+
+
+def trusted_workbook_reader(params: dict) -> bool:
+    """Only the signed bundled reader may run as an isolated read task."""
+    if scoped_workbook_employee(params) != WORKBOOK_READER:
+        return False
+    from app.application.employee_runtime.loader import load_employee_pack_from_disk
+    from app.application.employee_runtime.office_workers import is_trusted_workbook_pack
+
+    try:
+        return is_trusted_workbook_pack(
+            WORKBOOK_READER, load_employee_pack_from_disk(WORKBOOK_READER)
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+class WorkbookFormulaSyntaxError(ValueError):
+    def __init__(self, field_path: str) -> None:
+        super().__init__("工作簿公式语法无效")
+        self.field_path = field_path
+
+
+class WorkbookPlanError(ValueError):
+    """The pinned writer rejected a plan before any file was saved."""
+
+
+def _validate_formula_tokens(plan: dict) -> None:
+    from openpyxl.formula import Tokenizer
+    from openpyxl.formula.tokenizer import TokenizerError
+
+    if not isinstance(plan, dict):
+        return
+    for phase_index, phase in enumerate(plan.get("phases") or []):
+        if not isinstance(phase, dict) or phase.get("phase") != "formula_writes":
+            continue
+        writes = phase.get("writes")
+        if not isinstance(writes, list):
+            continue
+        for write_index, write in enumerate(writes):
+            formula = write.get("formula") if isinstance(write, dict) else None
+            if not isinstance(formula, str) or not formula.startswith("="):
+                continue  # The pinned writer owns the remaining plan-schema checks.
+            field_path = f"input.plan.phases[{phase_index}].writes[{write_index}].formula"
+            try:
+                tokens = Tokenizer(formula).items
+            except TokenizerError as exc:
+                raise WorkbookFormulaSyntaxError(field_path) from exc
+            array_depth = 0
+            for token in tokens:
+                if token.type == "ARRAY":
+                    array_depth += 1 if token.subtype == "OPEN" else -1
+                elif token.type == "SEP" and token.subtype == "ROW" and array_depth == 0:
+                    # OOXML uses semicolons for array rows only; outside an
+                    # array they cannot separate function arguments.
+                    raise WorkbookFormulaSyntaxError(field_path)
 
 
 @contextmanager
@@ -120,6 +179,39 @@ def _qc_package(pack: Path):
             if loaded == name or loaded.startswith(name + "."):
                 sys.modules.pop(loaded, None)
         sys.meta_path.remove(finder)
+def review_workbook_write(params: dict, context: dict) -> tuple[dict, list[dict]]:
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    from app.application.employee_runtime.executor import _import_module_from_path
+    from app.application.employee_runtime.loader import load_employee_pack_from_disk
+    from app.application.employee_runtime.office_workers import is_trusted_workbook_pack
+
+    _validate_formula_tokens((params.get("input") or {}).get("plan") or {})
+    pack = load_employee_pack_from_disk(WORKBOOK_WRITER)
+    if not is_trusted_workbook_pack(WORKBOOK_WRITER, pack):
+        raise PermissionError("没有可信的工作簿写入员")
+    writer = _import_module_from_path(
+        Path(pack["pack_dir"]) / "backend/vendor/excel_template_write/convert.py",
+        "_xcagi_workbook_write_review",
+    )
+    if writer is None or not callable(getattr(writer, "review_literal_changes", None)):
+        raise PermissionError("工作簿写入员没有数据变化预检能力")
+    payload = params["input"]
+    with _owned_template(payload["template_path"], context) as template:
+        try:
+            changes = writer.review_literal_changes(template, payload["plan"])
+        except writer.PlanError as exc:
+            raise WorkbookPlanError(str(exc)[:500]) from exc
+        except (BadZipFile, InvalidFileException) as exc:
+            raise ValueError("写入计划与原工作簿不兼容") from exc
+        return {
+            "template_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),
+            "plan_sha256": canonical_digest(payload["plan"]),
+            "changes_sha256": hashlib.sha256(
+                json.dumps(changes, ensure_ascii=False, default=str, sort_keys=True).encode()
+            ).hexdigest(),
+            "requires_manual_approval": bool(changes),
+        }, changes
 
 
 def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict) -> dict:
@@ -146,6 +238,8 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
     suffix = Path(str(artifacts[0].get("name") or "")).suffix.lower()
     if suffix not in {".xlsx", ".xlsm"}:
         return _report("failed", "result_workbook_format_invalid", "workbook_qc")
+    if (name := payload.get("output_name")) and artifacts[0].get("name") != name:
+        return _report("failed", "result_workbook_name_mismatch", "workbook_qc")
     files = _files(run, step, call, output, context, suffix)
     if files["status"] != "verified":
         return files
@@ -208,6 +302,7 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
         template_sha256=original["sha256"],
         artifact_sha256=artifacts[0]["metadata"]["sha256"],
         sections=checked,
+        cell_changes=report.get("cell_changes"),
         formula_recalculation_verified=False,
     )
     quality["checks"] = files["checks"] + quality["checks"]

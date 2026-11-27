@@ -229,6 +229,34 @@ def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkey
         engine.dispose()
 
 
+def test_desktop_restart_preserves_xiaox_parent_parked_on_child_receipt(
+    tmp_path, monkeypatch
+) -> None:
+    from app.db.models.agent import AgentTaskExecutionRecord
+
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    engine, factory, repo = _make_repo(tmp_path, "xiaox-parked.db")
+    try:
+        set_agent_run_repository_for_tests(repo)
+        parent = AgentRun(user_id="u1", message="读取已批准的工作簿副本", status="running")
+        parent.metadata.update(
+            runtime_type="xiaox", task_context={"task_id": "task-xiaox-parked"},
+        )
+        repo.save(parent)
+        queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+        queue.enqueue(parent)
+        with factory.begin() as db:
+            db.get(AgentTaskExecutionRecord, parent.run_id).state = "waiting_approval"
+        _backdate_run(factory, parent.run_id, status="running", updated_at=_iso(-300))
+
+        assert reconciler.reconcile_stale_running_runs(now=_iso()) == 0
+        assert repo.get(parent.run_id).status == "running"
+        assert queue.get(parent.run_id).state == "waiting_approval"
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
 def test_dispatcher_reconciles_before_it_starts_dispatching(monkeypatch) -> None:
     """对账必须发生在 dispatcher 开始认领执行之前，否则中断任务会被并发改写。"""
     calls: list[str] = []

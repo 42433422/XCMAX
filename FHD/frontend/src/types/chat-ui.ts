@@ -4,6 +4,8 @@ import type { AgentStepView, ChatNodeResultLike } from '@/utils/agentStepChain'
 import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import type { ChatStatus } from 'ai'
+import type { AgentArtifactDownload } from '@/utils/agentArtifactDownloads'
+import type { ChatFileSource } from '@/utils/chatFileSources'
 
 export interface ChatExecutionProgressItem {
   phase: string
@@ -91,6 +93,9 @@ export interface UiChatMessage {
   trace?: ChatTraceItem[]
   /** 附件（Excel 分析等 Mod 回传的结构化数据） */
   attachments?: Record<string, unknown>[]
+  inputAttachments?: { name: string; reference: string }[]
+  outputArtifacts?: AgentArtifactDownload[]
+  fileSources?: ChatFileSource[]
   /** XCAGI Business Harness 终态业务结果。 */
   businessResult?: Record<string, unknown>
   /** 后端命中语义缓存；对用户明确标注，避免把重复回答误解为新执行结果。 */

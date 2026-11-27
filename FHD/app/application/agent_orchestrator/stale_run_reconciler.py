@@ -171,6 +171,13 @@ def reconcile_stale_running_runs(
         records = db.query(AgentRunRecord).filter(*filters).all()
         for record in records:
             execution = db.get(AgentTaskExecutionRecord, record.run_id)
+            if execution is not None and execution.state == "waiting_approval":
+                payload = _load_payload(record.payload_json)
+                if (payload.get("metadata") or {}).get("runtime_type") == "xiaox":
+                    # An approved child can finish after the model turn. The
+                    # original parent is parked on its durable queue receipt,
+                    # not owned by the exited process.
+                    continue
             if (
                 not desktop
                 and execution is not None

@@ -319,6 +319,37 @@ def test_timeout_unknown_releases_worker_slot_and_prevents_repair_replay(monkeyp
         dispatcher.stop()
 
 
+@pytest.mark.parametrize("open_effect", [False, True])
+def test_worker_assertion_persists_matching_run_task_and_queue(monkeypatch, actor, open_effect):
+    repository = InMemoryAgentRunRepository()
+    queue = InMemoryTaskExecutionRepository()
+    run = _queued_run(actor, "worker-assertion")
+    repository.save(run)
+    queue.enqueue(run)
+    claim = queue.claim("worker", lease_seconds=30)
+
+    def fail_before_tool(*_args, **_kwargs):
+        if open_effect:
+            assert queue.mark_open_effect(run.run_id, "external", owner_id="worker")
+        raise AssertionError("workflow initialization failed")
+
+    monkeypatch.setattr(AgentOrchestrator, "_execute_ready_steps", fail_before_tool)
+    AgentTaskDispatcher(execution_repository=queue, run_repository=repository)._execute_claim(
+        claim, "worker"
+    )
+    saved = repository.get(run.run_id)
+    task = repository.get_task(user_id=run.user_id, task_id="worker-assertion")
+    execution = queue.get(run.run_id)
+    assert saved.status == task.status == ("blocked" if open_effect else "failed")
+    assert execution.state == ("unknown" if open_effect else "failed")
+    assert execution.last_error_code == (
+        "needs_verification" if open_effect else "worker_execution_failed"
+    )
+    assert bool(saved.metadata.get("non_retryable")) is open_effect
+    assert not saved.tool_calls
+    assert queue.claim("another-worker", lease_seconds=30) is None
+
+
 @pytest.mark.parametrize(
     "status, tool, output, expected",
     [

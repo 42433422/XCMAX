@@ -22,7 +22,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
     TaskExecutionRepository,
     get_task_execution_repository,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
@@ -110,6 +110,7 @@ class AgentTaskDispatcher:
         self._outcome_worker: threading.Thread | None = None
         self._last_outcome_recovery = float("-inf")
         self._xiaox_resume_cursor: dict[str, str] = {}
+        self._chat_delivery_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -218,6 +219,7 @@ class AgentTaskDispatcher:
             from app.application.agent_orchestrator.verification_recovery import (
                 reconcile_pending_verifications,
             )
+            from app.application.ai_chat.queued_chat_delivery import reconcile_pending_chat_replies
             from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
             from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
 
@@ -239,6 +241,14 @@ class AgentTaskDispatcher:
                 )
             except RECOVERABLE_ERRORS:
                 logger.warning("original Xiaox continuation remains pending", exc_info=True)
+            try:
+                reconcile_pending_chat_replies(
+                    repository=self._run_repo,
+                    stopped=self._stop.is_set,
+                    cursor=self._chat_delivery_cursor,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original chat delivery remains pending", exc_info=True)
             self._wake.set()
 
         self._outcome_worker = threading.Thread(
@@ -335,25 +345,16 @@ class AgentTaskDispatcher:
                     )
                 return
             if preview is not None and cross_module_ready(preview):
-                try:
-                    request_id = str(preview.metadata.get("approval_request_id") or "")
-                    receipt = execute_claimed_cross_module(
-                        orchestrator,
-                        preview,
-                        owner=owner_id,
-                        queue=self._execution_repo,
-                        request_id=request_id,
-                        finish=False,
-                    )
-                    state = "succeeded" if receipt.get("success") else "failed"
-                    if state == "failed":
-                        error_code = "cross_module_failed"
-                except InjectedTransactionFault:
-                    abandon = True
-                    logger.warning(
-                        "cross-module transaction fault abandoned lease for %s",
-                        execution.run_id,
-                    )
+                receipt = execute_claimed_cross_module(
+                    orchestrator,
+                    preview,
+                    owner=owner_id,
+                    queue=self._execution_repo,
+                    request_id=str(preview.metadata.get("approval_request_id") or ""),
+                    finish=False,
+                )
+                state = "succeeded" if receipt.get("success") else "failed"
+                error_code = "cross_module_failed" if state == "failed" else ""
                 return
             scope = (
                 worker_claim_scope(self._run_repo, execution, owner_id)
@@ -388,22 +389,24 @@ class AgentTaskDispatcher:
         except TimeoutError:
             error_code = "timeout"
             logger.exception("agent task worker timed out for run %s", execution.run_id)
-        except (
-            RECOVERABLE_ERRORS
-        ):  # thread boundary: preserve the worker pool and persist safe evidence
+        except BOUNDARY_ERRORS:  # The worker has no request boundary to settle unexpected faults.
             logger.exception("agent task worker failed for run %s", execution.run_id)
-            error_code = "worker_execution_failed"
-            try:
-                if xiaox_run:
-                    error_code = "needs_verification"
-                else:
+            error_code = "needs_verification" if xiaox_run else "worker_execution_failed"
+            if not xiaox_run:
+                try:
+                    lifecycle = self._execution_repo.lifecycle(execution.run_id)
                     failed_run = self._orchestrator_factory(repository).fail_dispatched_run(
-                        execution.run_id
+                        execution.run_id, open_effects=bool(lifecycle.get("effects"))
                     )
                     if failed_run is not None:
-                        state, error_code = dispatched_run_state(failed_run)
-            except RECOVERABLE_ERRORS:
-                logger.exception("agent task failure receipt could not be persisted")
+                        state, code = dispatched_run_state(failed_run)
+                        error_code = code or (error_code if state == "failed" else "")
+                except WorkerLeaseLost:
+                    abandon = True
+                except BOUNDARY_ERRORS:
+                    # Keep the lease recoverable when the durable projection failed.
+                    abandon = True
+                    logger.exception("agent task failure receipt could not be persisted")
         finally:
             _open_effect.reset(effect_token)
             if not abandon:

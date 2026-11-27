@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from datetime import UTC, datetime, timedelta
 
@@ -38,6 +39,171 @@ def expire(state, run_id):
     with state.actor.factory.begin() as db:
         row = db.get(AgentTaskExecutionRecord, run_id)
         row.lease_expires_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+
+
+@pytest.mark.parametrize("uncertain", [False, True])
+def test_qualification_receipt_only_claims_not_started_when_certain(uncertain):
+    from app.application.agent_runtime.chat import runtime_chat_payload
+
+    payload = runtime_chat_payload(
+        {
+            "ok": False,
+            "execution_state": "blocked",
+            "failure_stage": "runtime_setup",
+            "error_code": "runtime_qualification_evidence_missing",
+            "reconciliation_required": uncertain,
+        }
+    )
+    assert payload.get("execution_started") is (None if uncertain else False)
+    assert ("未通过运行验收" in payload["response"]) is not uncertain
+    assert payload["requires_reconciliation"] is uncertain
+
+
+@pytest.mark.parametrize("publication", ["completed", "interrupted", "old_history", "old_dedup"])
+def test_claimed_queue_worker_settles_chat_without_a_view(runtime_entry, monkeypatch, publication):
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.application.ai_chat.conversation_history import (
+        persist_chat_turn,
+        reconcile_queued_chat_reply,
+    )
+    from app.application.task_conversation_store import task_conversation_store
+    from app.db.models import AIConversation
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.infrastructure.xiaox.queued_runtime import _ClaimedRuntimeRepository
+
+    state = runtime_entry
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation_service.notify_user", lambda **_: None
+    )
+    context = {
+        **state.actor.context,
+        "local_user_id": state.actor.user_id,
+        "conversation_id": "queued-chat",
+        "turn_id": "scoped-queued-chat",
+        "_conversation_revision": 0,
+    }
+    task_conversation_store.prepare_revision(session_id="queued-chat", user_id=state.actor.user_id)
+    message = "解释库存含义"
+    request = {
+        "task": message,
+        "system_prompt": "回答问题",
+        "runtime_context": context,
+        "completion_mode": "reply",
+        "start_queued": True,
+    }
+    queued = gateway.run_runtime_task(**request)
+    assert queued.get("execution_state") == "queued", queued.get("error_code")
+    ack = persist_chat_turn(
+        str(state.actor.user_id), message, context, runtime_chat_payload(queued)
+    )
+
+    run_id = queued["run_id"]
+    if publication != "completed":
+
+        async def interrupted(**kwargs):
+            state.calls.append(kwargs)
+            store = kwargs["binding_store"]
+            grant = store.create(run_id, runtime_config=kwargs["runtime_config"])
+
+            def commit_unknown(parent, binding):
+                parent.status = "blocked"
+                parent.metadata.update(
+                    non_retryable=True, recovery={"state": "manual_reconciliation_required"}
+                )
+                binding.update(
+                    runtime_status="interrupted", model_requests={"unsettled": {"state": "unknown"}}
+                )
+                parent.final_output["xiaox_result"] = {
+                    "run_id": run_id,
+                    "ok": False,
+                    "exit_status": "unknown",
+                    "execution_state": "unknown",
+                    "reconciliation_required": True,
+                    "failure_kind": "model_usage_unknown",
+                }
+
+            store.update(run_id, commit_unknown)
+            store.close(run_id, "interrupted", generation=grant.binding.metadata["generation"])
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(gateway, "run_xiaox_agent", interrupted)
+
+    if publication.startswith("old_"):
+        execution = state.queue.claim("legacy-worker", lease_seconds=120)
+        run = state.repository.get(run_id)
+        pending = run.metadata["_xiaox_queued_request"]
+        with pytest.raises(asyncio.CancelledError):
+            gateway.run_runtime_task(
+                **{
+                    **request,
+                    "start_queued": False,
+                    "runtime_context": {**context, "turn_id": pending["worker_turn_id"]},
+                    "run_id": run_id,
+                    "_repository": _ClaimedRuntimeRepository(
+                        state.repository, execution, "legacy-worker"
+                    ),
+                }
+            )
+        assert state.queue.get(run_id).lease_owner == "legacy-worker"
+        assert not reconcile_queued_chat_reply(context, context["turn_id"], run_id)
+        duplicate = gateway.run_runtime_task(**request)
+        assert duplicate["deduplicated"] is True and duplicate["execution_state"] == "queued"
+        assert (
+            state.repository.get(run_id).metadata["runtime_requests"][pending["request_key"]][
+                "state"
+            ]
+            == "queued"
+        )
+        state.queue.finish(run_id, "legacy-worker", "failed")
+        assert not reconcile_queued_chat_reply(
+            {**context, "tenant_id": 999}, context["turn_id"], run_id
+        )
+        if publication == "old_dedup":
+            assert gateway.run_runtime_task(**request)["reconciliation_required"] is True
+        timestamp = None
+        for _ in range(2):
+            with tenant_scope(state.actor.tenant_id):
+                history = task_conversation_store.get_history(
+                    session_id="queued-chat",
+                    user_id=state.actor.user_id,
+                    turn_id=context["turn_id"],
+                )
+            assert history["turn_receipt"]["requires_reconciliation"] is True
+            assert history["turn_receipt"]["message_id"] == ack["message_ids"][1]
+            run = state.repository.get(run_id)
+            returned = run.metadata["runtime_requests"][pending["request_key"]]
+            assert returned["state"] == "returned" and returned["returned_at"]
+            snapshot = (run.updated_at, returned["returned_at"])
+            if timestamp is None:
+                timestamp = snapshot
+            else:
+                assert timestamp == snapshot
+    else:
+        run = state.drain(run_id)
+
+    pending = run.metadata["_xiaox_queued_request"]
+    receipt = run.metadata["runtime_requests"][pending["request_key"]]
+    if publication == "completed":
+        assert run.status == "completed"
+        assert receipt["state"] == "returned"
+        reply = "库存表示可用产品的数量。"
+    else:
+        assert run.status == "blocked"
+        if publication == "interrupted":
+            assert receipt["state"] == "returned" and receipt["returned_at"]
+            assert state.queue.get(run_id).last_error_code == "needs_verification"
+        duplicate = gateway.run_runtime_task(**request)
+        assert duplicate["deduplicated"] is True and duplicate["execution_state"] == "unknown"
+        assert duplicate["reconciliation_required"] is True
+        assert len(state.calls) == 1
+        reply = runtime_chat_payload(duplicate)["response"]
+    with state.actor.factory() as db:
+        rows = db.query(AIConversation).order_by(AIConversation.id).all()
+        assert [row.id for row in rows] == ack["message_ids"]
+        assert [(row.role, row.content) for row in rows] == [
+            ("user", message),
+            ("assistant", reply),
+        ]
 
 
 @pytest.mark.parametrize("legacy_unstarted", [False, True])

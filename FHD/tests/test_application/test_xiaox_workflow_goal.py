@@ -128,6 +128,39 @@ def test_mcp_thread_reads_current_sql_parent_budget_before_running_action(
     assert remaining_invocation_seconds(60) == 60
 
 
+def test_renderer_navigation_is_searchable_only_on_its_own_run_and_never_executable(
+    dynamic_runtime,
+):
+    from app.application.agent_runtime.gateway import _trusted_context
+
+    state = dynamic_runtime
+    entry = {
+        "id": "sample-entry",
+        "kind": "user_action",
+        "label": "项目归档",
+        "breadcrumb": ["资料"],
+    }
+    rows = [entry, entry, {**entry, "id": "invalid", "url": "https://example.invalid"}]
+    context, _ = _trusted_context(
+        {**state.actor.context, "turn_id": "nav-test", "desktop_navigation": rows}
+    )
+    assert context["desktop_navigation"] == [entry]
+    other = AgentRun(user_id=state.parent.user_id, message="另一个任务", status="running")
+    other.metadata.update(runtime_type="xiaox", runtime_context=state.actor.context)
+    state.repository.save(other)
+    other_token = state.store.create(other.run_id).mcp_token
+    state.store.update(
+        state.parent.run_id, lambda run, _: run.metadata.update(runtime_context=context)
+    )
+    search = {"query": "资料 归档"}
+    found = state.bridge.invoke(state.grant.mcp_token, "capability_search", search)
+    assert found["desktop_navigation"] == [entry] and found["capabilities"] == []
+    assert not state.bridge.invoke(other_token, "capability_search", search)["desktop_navigation"]
+    with pytest.raises(XiaoxBindingError, match="未获授权"):
+        state.describe("sample-entry", "execute")
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
 @pytest.mark.parametrize("digest", [None, "", "0" * 64])
 def test_missing_or_stale_schema_never_publishes_an_action(dynamic_runtime, digest):
     state = dynamic_runtime
@@ -162,6 +195,12 @@ def test_known_invalid_parameters_can_be_corrected_after_schema_feedback(
     assert (
         invalid["status"] == "not_started" and invalid["error_code"] == "schema_validation_failed"
     )
+    assert invalid["schema_violation"] == {
+        "path": "$.file_path",
+        "validator": "type",
+        "expected": "string",
+        "received": "integer",
+    }
     assert state.store.get(state.parent.run_id).metadata["calls"] == {}
     fixed = state.execute("read", {"file_path": "owned.xlsx"}, "excel_analyzer", "analyze")
     child = state.repository.get(fixed["run_id"])
@@ -170,6 +209,60 @@ def test_known_invalid_parameters_can_be_corrected_after_schema_feedback(
         child.error,
         [(step.status, step.error, step.output) for step in child.steps],
     )
+
+
+def test_unexpected_keys_return_published_names_only():
+    from jsonschema import Draft202012Validator
+
+    from app.infrastructure.xiaox.tools import schema_violation
+
+    schema = {"type": "object", "properties": {"title": {}}, "additionalProperties": False}
+    error = next(Draft202012Validator(schema).iter_errors({"private-field": "private-value"}))
+    assert schema_violation(error) == {
+        "path": "$",
+        "validator": "additionalProperties",
+        "allowed": ["title"],
+    }
+
+
+@pytest.mark.parametrize(("keyword", "published", "value"), [
+    ("pattern", "^[A-Z]+$", "private-input"), ("maximum", 30, 500),
+])
+def test_invalid_parameter_reports_only_its_published_constraint(keyword, published, value):
+    from jsonschema import Draft202012Validator
+
+    from app.infrastructure.xiaox.tools import schema_violation
+
+    error = next(Draft202012Validator({keyword: published}).iter_errors(value))
+    assert schema_violation(error) == {"path": "$", "validator": keyword, "expected": published}
+
+
+def test_workbook_schema_violation_reports_discriminated_cell_location():
+    from jsonschema import Draft202012Validator
+
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT
+    from app.infrastructure.xiaox.tools import schema_violation
+
+    invalid = {
+        "template_path": "scoped-upload",
+        "plan": {
+            "plan_version": 1,
+            "phases": [
+                {
+                    "phase": "cell_writes",
+                    "writes": [{"sheet": "private-sheet", "value": "private-cell"}],
+                }
+            ],
+        },
+    }
+    error = next(Draft202012Validator(WORKBOOK_WRITE_INPUT).iter_errors(invalid))
+    assert schema_violation(error) == {"path": "$.plan.phases[0].writes[0]", "validator": "anyOf"}
+    missing = next(Draft202012Validator(WORKBOOK_WRITE_INPUT).iter_errors({}))
+    assert schema_violation(missing) == {
+        "path": "$",
+        "validator": "required",
+        "missing": ["template_path", "plan"],
+    }
 
 
 def test_next_action_uses_observed_result_without_a_precompiled_graph(dynamic_runtime, monkeypatch):

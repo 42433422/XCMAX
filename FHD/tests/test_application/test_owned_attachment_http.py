@@ -15,7 +15,7 @@ from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.xiaox_http_runtime import finish_queued_chat, fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
 from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
@@ -37,7 +37,17 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
         assert prompt["evidence"] == []
         _assert_owned_artifact(prompt["original_request"]["attachments"], state)
         state.model_requests.append(prompt)
-        content = json.dumps(fixture_goal_review(prompt, kind="reply", source=state.source))
+        assessment = fixture_goal_review(prompt, kind="reply", source=state.source)
+        (goal,) = assessment["goals"]
+        document = prompt["file_evidence"][state.upload["upload_id"]]
+        source_id = next(key for key, value in document["blocks"].items() if "paint,120" in value)
+        response_id = next(key for key, value in prompt["response_blocks"].items() if value == state.reply)
+        goal.update(
+            file_basis="passages",
+            file_citations=[{"source_block_id": source_id, "response_block_id": response_id}],
+        )
+        assessment["feedback_disposition"] = "none"
+        content = json.dumps(assessment)
         return httpx.Response(
             200,
             json={
@@ -252,34 +262,32 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     app = FastAPI()
     app.include_router(router, prefix="/api")
-
-    def chat_result(response):
-        if endpoint.endswith("/stream"):
-            for line in response.text.splitlines():
-                if line.startswith("data: "):
-                    event = json.loads(line[6:])
-                    if event.get("type") == "done":
-                        return event["result"]
-            pytest.fail("missing done event")
-        return response.json()
-
     with TestClient(app, headers=state.actor.headers) as client:
         payload = {"message": state.source, "context": state.context}
-        response = client.post(endpoint, json=payload)
-        assert response.status_code == 200, response.text
-        ack = chat_result(response)
-        assert ack["execution_state"] == "queued", ack
-        completed = finish_queued_chat(state, ack)
+
+        def dispatch():
+            response = client.post(endpoint, json=payload)
+            assert response.status_code == 200, response.text
+            if endpoint.endswith("/stream"):
+                events = (
+                    json.loads(line[6:])
+                    for line in response.text.splitlines()
+                    if line.startswith("data: ")
+                )
+                result = next(event["result"] for event in events if event.get("type") == "done")
+            else:
+                result = response.json()
+            assert result["execution_state"] == "queued"
+            return state.drain(result["run_id"])
+
+        parent = dispatch()
         assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
-        assert state.reply in completed["response"]
-        assert "skip_dataset_ingest" in json.dumps(completed)
-        parent = state.repository.get(ack["run_id"])
+        assert parent.final_output["xiaox_result"]["output"] == state.reply
         _assert_owned_artifact([artifact.to_dict() for artifact in parent.artifacts], state)
         assert parent.metadata["runtime_goal_verification"]["accepted"] is True
         assert not parent.tool_calls
         _transfer_upload(state)
-        denied = client.post(endpoint, json=payload)
-        assert denied.status_code == 200, denied.text
-        denial = finish_queued_chat(state, chat_result(denied))
-        assert "重新上传" in denial["response"]
+        denied = dispatch()
+        assert denied.status == "waiting_user"
+        assert "重新上传" in denied.final_output["xiaox_result"]["output"]
         assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1

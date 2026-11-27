@@ -79,6 +79,13 @@ class ToolActionSpecV2:
         """Resolve host-declared effects from the validated call, before dispatch."""
         if self.read_only:
             return True
+        if (self.tool_id, self.action) == ("employee", "execute") and _validate_schema_payload(
+            self.input_schema, params, subject="工具参数"
+        )[0]:
+            from app.application.agent_orchestrator.verification_workbook import trusted_workbook_reader
+
+            if trusted_workbook_reader(params):
+                return True
         return (
             bool(self.read_only_if_unset)
             and _validate_schema_payload(self.input_schema, params, subject="工具参数")[0]
@@ -86,6 +93,10 @@ class ToolActionSpecV2:
                 params.get(key) is None or params.get(key) == "" for key in self.read_only_if_unset
             )
         )
+
+    @property
+    def approval_required(self) -> bool:
+        return not (self.read_only and self.risk == "low")
 
     @property
     def receipt_permission(self) -> str:
@@ -424,6 +435,8 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                     " file_path 可直接使用当前账号的上传 ID/文件名或同原任务已核验产物 URI；"
                     "宿主按账号、租户和原文件哈希读取。read 返回 has_more 时用 next_offset 继续读取。"
                 )
+            if (str(tool_id), normalized_action) == ("excel_analysis", "structure"):
+                description += " 返回 sheet_names 工作表名列表及当前表的结构。按各表名传 sheet_name 获取完整工作簿结构。"
             if (str(tool_id), normalized_action) == ("employee", "execute"):
                 from app.domain.workbook_write_contract import WORKBOOK_WRITER
 
@@ -896,6 +909,7 @@ def validate_tool_call(
     *,
     allow_references_from: set[str] | frozenset[str] | None = None,
     allow_missing_fields: set[str] | frozenset[str] | None = None,
+    resolved_spec: ToolActionSpecV2 | None = None,
 ) -> ToolValidationResult:
     normalized_tool_id = str(tool_id or "").strip()
     normalized_action = (
@@ -903,8 +917,8 @@ def validate_tool_call(
         if normalized_tool_id.startswith("mcp__")
         else _normalize_tool_action(str(action or "view"), dict(params or {}))
     )
-    spec = get_tool_action_spec(normalized_tool_id, normalized_action)
-    if spec is None:
+    spec = resolved_spec or get_tool_action_spec(normalized_tool_id, normalized_action)
+    if spec is None or (spec.tool_id, spec.action) != (normalized_tool_id, normalized_action):
         return ToolValidationResult(
             ok=False,
             tool_id=normalized_tool_id,

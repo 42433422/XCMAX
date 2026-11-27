@@ -1,8 +1,25 @@
-.lbl-inline {
-  display: inline-flex;
+.page-header { flex-wrap: wrap; }
+
+.product-actions,
+.page-content .product-filters {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #334155;
-  white-space: nowrap;
+  gap: 8px;
+}
+
+.page-content .product-filters,
+.page-content > .product-table {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.product-filters label { white-space: nowrap; }
+.product-filters select { min-inline-size: min(170px, 100%); max-inline-size: 100%; }
+.product-filters input { min-inline-size: min(200px, 100%); }
+
+@media (max-width: 768px) {
+  .product-actions { justify-content: flex-start; }
 }

@@ -7,6 +7,8 @@
 import json
 import logging
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
@@ -16,6 +18,14 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
+from app.domain.conversation.message_visibility import (
+    EMPLOYEE_MEMORY_PREFIX,
+    employee_memory_rows,
+    employee_memory_session,
+    is_employee_memory,
+    ordered_public_sessions,
+    public_messages,
+)
 from app.domain.shared_services.mobile_push import notify_user
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -40,7 +50,10 @@ def lock_conversation_session(
     user_id: int | None,
     expected_revision: int | None = None,
     create: bool = False,
+    employee_memory: bool = False,
 ) -> AIConversationSession:
+    if session_id.startswith(EMPLOYEE_MEMORY_PREFIX) != employee_memory:
+        raise PermissionError("conversation session is reserved for employee memory")
     query = db.query(AIConversationSession).filter(AIConversationSession.session_id == session_id)
     session = query.with_for_update().first()
     if session is None:
@@ -87,6 +100,65 @@ def _message_title(content: str) -> str:
     parser.close()
     plain = " ".join("".join(parser.parts).split())
     return f"{plain[:48]}…" if len(plain) > 48 else plain
+
+
+def public_session_metadata(db, session: AIConversationSession):
+    """Project legacy mixed sessions without rewriting old data or manual titles."""
+    rows = db.query(AIConversation).filter(
+        AIConversation.session_id == session.session_id,
+        AIConversation.user_id == (str(session.user_id) if session.user_id is not None else None),
+    )
+    title, summary, count, updated = (
+        session.title,
+        session.summary,
+        session.message_count,
+        session.last_message_at,
+    )
+    if rows.filter(employee_memory_rows(db)).with_entities(AIConversation.id).first():
+        users = rows.filter(AIConversation.role == "user").order_by(AIConversation.id)
+        first_user = users.first()
+        first_private_user = users.filter(employee_memory_rows(db)).first()
+        if (
+            first_user is not None
+            and first_user is first_private_user
+            and title == _message_title(first_user.content)
+        ):
+            title = None
+        rows = rows.filter(public_messages(db))
+        last = rows.order_by(AIConversation.id.desc()).first()
+        summary, count, updated = (
+            _message_title(last.content)[:120] if last else "",
+            rows.count(),
+            last.created_at if last else None,
+        )
+    if not (title or "").strip():
+        first = rows.filter(AIConversation.role == "user").order_by(AIConversation.id).first()
+        title = _message_title(first.content) if first else title
+    return title, summary, count, updated
+
+
+def queued_chat_binding(
+    metadata: dict, *, include_legacy: bool = False
+) -> tuple[str, str, str] | None:
+    harness = metadata.get("business_harness") or {}
+    summary = metadata.get("summary") or {}
+    if not isinstance(harness, dict) or not isinstance(summary, dict):
+        return None
+    turn, run, scope = (harness.get(key) for key in ("turn_id", "run_id", "conversation_key"))
+    if (
+        harness.get("recall_bound") is True
+        and (
+            harness.get("queued_reply") is True
+            or include_legacy
+            and "queued_reply" not in harness
+            and summary.get("status") == "queued"
+        )
+        and all(isinstance(value, str) and value for value in (turn, run, scope))
+        and summary.get("turn_id") == turn
+        and summary.get("run_id") == run
+    ):
+        return turn, run, scope
+    return None
 
 
 class ConversationService(NeuroEventPublisherMixin):
@@ -146,6 +218,7 @@ class ConversationService(NeuroEventPublisherMixin):
         user_id: str,
         messages: list[dict[str, Any]],
         expected_revision: int | None = None,
+        _employee_memory: bool = False,
     ) -> list[int]:
         """Commit a complete receipt atomically, fenced by the conversation revision."""
         owner = self._normalize_user_id(user_id)
@@ -160,6 +233,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 user_id=owner,
                 expected_revision=expected_revision,
                 create=True,
+                employee_memory=_employee_memory,
             )
             for item in messages:
                 role, content = str(item["role"]), str(item["content"])
@@ -168,6 +242,8 @@ class ConversationService(NeuroEventPublisherMixin):
                 payload = json.loads(metadata)
                 if not isinstance(payload, dict):
                     raise ValueError("conversation metadata must be a JSON object")
+                if is_employee_memory(payload) != _employee_memory:
+                    raise ValueError("employee memory must use its private session")
                 key = str(item.get("idempotency_key") or "").strip()
                 if len(key) > 256:
                     raise ValueError("conversation idempotency key is too long")
@@ -200,7 +276,19 @@ class ConversationService(NeuroEventPublisherMixin):
                             content,
                             intent,
                         ):
-                            raise ValueError("message retry does not match the original content")
+                            saved_metadata = json.loads(prior.conversation_metadata)
+                            binding = queued_chat_binding(payload)
+                            if not (
+                                role == prior.role == "assistant"
+                                and binding is not None
+                                and binding == queued_chat_binding(saved_metadata)
+                                and payload["summary"].get("status") == "queued"
+                                and saved_metadata.get("queued_ack_intent") == intent
+                                and key.endswith(":" + uuid.uuid5(uuid.NAMESPACE_URL, content).hex)
+                            ):
+                                raise ValueError(
+                                    "message retry does not match the original content"
+                                )
                         ids.append(int(prior.id))
                         continue
                 row = AIConversation(
@@ -215,6 +303,8 @@ class ConversationService(NeuroEventPublisherMixin):
                 db.add(row)
                 db.flush()
                 ids.append(int(row.id))
+                if _employee_memory:
+                    continue
                 session.message_count = int(session.message_count or 0) + 1
                 session.last_message_at = row.created_at
                 session.summary = _message_title(content)[:120]
@@ -241,6 +331,156 @@ class ConversationService(NeuroEventPublisherMixin):
                 logger.warning("conversation push notify failed: %s", exc)
         return ids
 
+    def settle_queued_reply(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        expected_revision: int,
+        assistant: dict[str, Any],
+        allow_retry_repair: bool = False,
+        source_guard: Callable[[Session], AbstractContextManager[bool]] | None = None,
+    ) -> int | None:
+        """Replace the trusted queue acknowledgement under the original session fence."""
+        replacement = json.loads(assistant["metadata"])
+        binding = queued_chat_binding(replacement)
+        if binding is None or replacement["summary"].get("status") == "queued":
+            return None
+        marker = json.dumps({"turn_id": binding[0]}, ensure_ascii=False)[1:-1]
+        with get_db() as db:
+            if source_guard is None:
+                begin_conversation_write(db)
+            with source_guard(db) if source_guard is not None else nullcontext(True) as current:
+                if not current:
+                    return None
+                session = lock_conversation_session(
+                    db,
+                    session_id=session_id,
+                    user_id=self._normalize_user_id(user_id),
+                    expected_revision=expected_revision,
+                )
+                messages = db.query(AIConversation).filter(
+                    AIConversation.session_id == session_id,
+                    AIConversation.user_id == user_id,
+                    public_messages(db),
+                )
+                for row in messages.filter(
+                    AIConversation.role == "assistant",
+                    AIConversation.conversation_metadata.contains(marker, autoescape=True),
+                ):
+                    try:
+                        prior = json.loads(row.conversation_metadata or "{}")
+                    except (TypeError, ValueError):
+                        continue
+                    if not isinstance(prior, dict) or queued_chat_binding(prior) != binding:
+                        continue
+                    prior_status = prior["summary"].get("status")
+                    if prior_status == "queued" or (
+                        allow_retry_repair
+                        and (
+                            prior_status in {"blocked", "failed", "unknown"}
+                            or source_guard is not None
+                            and prior_status
+                            in {
+                                "waiting_user",
+                                "waiting_approval",
+                                "waiting_auth",
+                                "paused",
+                                "running",
+                            }
+                        )
+                        and replacement["summary"].get("status") == "completed"
+                    ):
+                        replacement["idempotency_key"] = prior["idempotency_key"]
+                        replacement["queued_ack_intent"] = row.intent or ""
+                        row.content = assistant["content"]
+                        row.intent = assistant["intent"]
+                        row.conversation_metadata = json.dumps(replacement, ensure_ascii=False)
+                        if (
+                            row.id
+                            == messages.with_entities(AIConversation.id)
+                            .order_by(AIConversation.id.desc())
+                            .first()[0]
+                        ):
+                            session.summary = _message_title(row.content)[:120]
+                        db.commit()
+                        return int(row.id)
+                    return None
+        return None
+
+    def save_employee_memory(
+        self,
+        session_id: str,
+        *,
+        user_id: str,
+        tenant_id: str,
+        employee_id: str,
+        task: str,
+        summary: str,
+        metadata: str,
+    ) -> None:
+        self.save_turn(
+            session_id=employee_memory_session(session_id, user_id, tenant_id, employee_id),
+            user_id=user_id,
+            messages=[
+                {"role": role, "content": text, "intent": employee_id, "metadata": metadata}
+                for role, text in (("user", task), ("assistant", summary))
+                if text
+            ],
+            _employee_memory=True,
+        )
+
+    def get_employee_memory(
+        self,
+        session_id: str,
+        *,
+        user_id: str,
+        tenant_id: str,
+        employee_id: str,
+        limit: int,
+    ) -> list[tuple]:
+        with get_db() as db:
+            return self._recent_messages(
+                db.query(AIConversation)
+                .join(AIConversationSession)
+                .filter(
+                    AIConversation.session_id.in_(
+                        (
+                            session_id,
+                            employee_memory_session(session_id, user_id, tenant_id, employee_id),
+                        )
+                    ),
+                    AIConversationSession.user_id == int(user_id),
+                    AIConversationSession.deleted_at.is_(None),
+                    AIConversation.user_id == user_id,
+                    employee_memory_rows(
+                        db, employee_id=employee_id, tenant_id=tenant_id, user_id=user_id
+                    ),
+                ),
+                limit,
+            )
+
+    @staticmethod
+    def _recent_messages(query, limit: int) -> list[tuple]:
+        messages = (
+            query.order_by(AIConversation.created_at.desc(), AIConversation.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            (
+                msg.id,
+                msg.session_id,
+                msg.user_id,
+                msg.role,
+                msg.content,
+                msg.intent or "",
+                msg.conversation_metadata or "",
+                msg.created_at,
+            )
+            for msg in reversed(messages)
+        ]
+
     def get_session_messages(
         self, session_id: str, limit: int = 50, *, user_id: Any = None
     ) -> list[tuple]:
@@ -257,7 +497,9 @@ class ConversationService(NeuroEventPublisherMixin):
         """
         with get_db() as db:
             try:
-                query = db.query(AIConversation).filter(AIConversation.session_id == session_id)
+                query = db.query(AIConversation).filter(
+                    AIConversation.session_id == session_id, public_messages(db)
+                )
                 if user_id is not None:
                     owner = self._normalize_user_id(user_id)
                     if isinstance(user_id, bool) or owner is None or owner <= 0:
@@ -269,27 +511,7 @@ class ConversationService(NeuroEventPublisherMixin):
                         AIConversationSession.user_id == owner,
                         AIConversation.user_id == str(owner),
                     )
-                messages = (
-                    query.order_by(AIConversation.created_at.desc(), AIConversation.id.desc())
-                    .limit(limit)
-                    .all()
-                )
-
-                result = []
-                for msg in reversed(messages):
-                    result.append(
-                        (
-                            msg.id,
-                            msg.session_id,
-                            msg.user_id,
-                            msg.role,
-                            msg.content,
-                            msg.intent or "",
-                            msg.conversation_metadata or "",
-                            msg.created_at,
-                        )
-                    )
-                return result
+                return self._recent_messages(query, limit)
             except RECOVERABLE_ERRORS as e:
                 logger.error("获取会话消息失败: %s", e)
                 raise
@@ -307,9 +529,7 @@ class ConversationService(NeuroEventPublisherMixin):
         """
         with get_db() as db:
             try:
-                query = db.query(AIConversationSession).filter(
-                    AIConversationSession.deleted_at.is_(None)
-                )
+                query = ordered_public_sessions(db)
 
                 if user_id:
                     query = query.filter(
@@ -317,21 +537,20 @@ class ConversationService(NeuroEventPublisherMixin):
                         | (AIConversationSession.user_id.is_(None))
                     )
 
-                sessions = (
-                    query.order_by(AIConversationSession.last_message_at.desc()).limit(limit).all()
-                )
+                sessions = query.limit(limit).all()
 
                 result = []
                 for session in sessions:
+                    title, summary, count, updated = public_session_metadata(db, session)
                     result.append(
                         (
                             session.id,
                             session.session_id,
                             session.user_id,
-                            session.title,
-                            session.summary,
-                            session.message_count,
-                            session.last_message_at,
+                            title,
+                            summary,
+                            count,
+                            updated,
                             session.created_at,
                         )
                     )
@@ -358,6 +577,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 query = db.query(AIConversationSession).filter(
                     AIConversationSession.session_id == session_id,
                     AIConversationSession.deleted_at.is_(None),
+                    ~AIConversationSession.session_id.startswith(EMPLOYEE_MEMORY_PREFIX),
                 )
                 if user_id is not None:
                     query = query.filter(AIConversationSession.user_id == user_id)

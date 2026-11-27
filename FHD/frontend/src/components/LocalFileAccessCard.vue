@@ -139,19 +139,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="card local-file-card">
-    <div class="card-header local-file-header">
-      <span>本机文件（只读）</span>
+  <section>
+    <header class="local-file-header">
+      <h2>本机文件（只读）</h2>
       <span class="local-file-badge" :data-on="activeGrants.length > 0">
         {{ activeGrants.length > 0 ? `已授权 ${activeGrants.length} 处` : '未授权' }}
       </span>
-    </div>
+    </header>
     <p class="muted local-file-note">
       授权后 AI 只读取你选定的文件夹（或整机模式下的主目录/外接卷）中的文档，并持续写入知识库；
       不会修改、移动或删除原文件。敏感目录与凭证文件（.ssh、Keychains、浏览器 Cookie 等）始终跳过。
     </p>
 
-    <p v-if="!desktopAvailable" class="local-file-alert">本机文件读取仅桌面端可用。</p>
+    <p v-if="!desktopAvailable" class="muted">本机文件读取仅桌面端可用。</p>
     <p v-else-if="error" class="local-file-alert" role="alert">{{ error }}</p>
 
     <template v-if="desktopAvailable">
@@ -203,16 +203,16 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.local-file-card { border: 1px solid var(--xc-color-border, #e6e9ef); }
-.local-file-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.local-file-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.local-file-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
 .local-file-badge { padding: 2px 10px; border-radius: 999px; background: #eef1f6; color: #5b6472; font-size: 12px; font-weight: 600; }
 .local-file-badge[data-on='true'] { background: #e7f6ec; color: #157f3b; }
 .local-file-note { margin: 0 0 12px; font-size: 13px; line-height: 1.6; }
 .local-file-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
 .local-file-fda { color: #667085; font-size: 12px; }
 .local-file-alert { margin: 8px 0; padding: 8px 12px; border-radius: 8px; background: #fdeceb; color: #b42318; font-size: 13px; }
-.local-file-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.local-file-item { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid #e6ebf3; border-radius: 10px; background: #fbfcfe; }
+.local-file-list { margin: 0; padding: 0; list-style: none; }
+.local-file-item { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-block-start: 1px solid var(--xc-color-border); }
 .local-file-item-main { min-width: 0; flex: 1 1 320px; }
 .local-file-item-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .local-file-mode { padding: 1px 8px; border-radius: 999px; background: #e8f1fd; color: #1a63bd; font-size: 12px; }

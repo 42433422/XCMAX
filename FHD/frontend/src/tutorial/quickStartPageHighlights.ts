@@ -24,15 +24,9 @@ export const QUICK_START_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]
   ],
   'workflow-employee-space': [
     {
-      idSuffix: 'head',
-      title: '员工空间 · 总览',
-      description: '这儿看各个自动小助手在哪儿、状态怎样，跟右侧副窗、对话页看到的是同一套。办公员工包在 L1 工具层，不会出现在 L2 执行层。',
-      targetSelector: '#view-workflow-employee-space .ews-page-head',
-    },
-    {
       idSuffix: 'desks',
-      title: '员工空间 · 工位卡片',
-      description: '一格就是一个小助手：忙不忙、开不开，都可以在这里点；跟副窗里「一键托管」联动。',
+      title: '员工空间 · 办公室',
+      description: '按部门筛选办公室，查看员工的工位与当前状态。',
       targetSelector: '[data-tour="employee-workspace-desks"]',
       highlightSelector: '[data-tour="employee-workspace-desks"]',
     },

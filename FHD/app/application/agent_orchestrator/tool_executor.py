@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import os
 import time
@@ -554,11 +553,10 @@ class AgentToolExecutor:
                     "retryable": False,
                     "message": "此工具需通过已授权的 AIOPEN 入口执行",
                 }
-        from app.application.chat_turn_guard import _is_mutation
-
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
         guard_action = validation.action or step.action
-        if _is_mutation(f"{validation.tool_id} {guard_action}", json.dumps(params, default=str)):
+        call_read_only = bool(validation.spec and validation.spec.is_read_only_call(params))
+        if not call_read_only:
             if guard_policy in {"block", "model_only"} or (
                 guard_policy == "allow_once"
                 and (validation.tool_id, guard_action)
@@ -685,7 +683,7 @@ class AgentToolExecutor:
                 if (
                     not (context_key or client_key)
                     and validation.spec is not None
-                    and not validation.spec.is_read_only_call(params)
+                    and not call_read_only
                 ):
                     return _pre_dispatch_refusal(
                         {
@@ -779,9 +777,7 @@ class AgentToolExecutor:
                                 tool_id=validation.tool_id, action=action, params=params
                             )
                         else:
-                            if validation.spec is None or not validation.spec.is_read_only_call(
-                                params
-                            ):
+                            if not call_read_only:
                                 from app.application.agent_orchestrator.task_dispatcher import (
                                     note_open_effect,
                                 )
@@ -800,8 +796,7 @@ class AgentToolExecutor:
                     from app.infrastructure.llm.retry_policy import is_transport_error
 
                     safe_read_retry = (
-                        validation.spec is not None
-                        and validation.spec.read_only
+                        call_read_only
                         and is_transport_error(exc)
                         and not isinstance(
                             exc, (FileNotFoundError, IsADirectoryError, NotADirectoryError)
@@ -864,7 +859,7 @@ class AgentToolExecutor:
             result = {**result, **classify_http_status(status_value)}
         empty = reject_empty_business_result(
             result,
-            action="read" if validation.spec is not None and validation.spec.read_only else action,
+            action="read" if call_read_only else action,
         )
         if empty is not None:
             result = {**empty, "outcome": "unknown", "reconciliation_required": True}
@@ -874,8 +869,7 @@ class AgentToolExecutor:
             # A completed read with an invalid response is a contract failure.
             # Mutations and any pre-existing uncertainty must retain their claim.
             requires_reconciliation = (
-                validation.spec is None
-                or not validation.spec.read_only
+                not call_read_only
                 or invocation_requires_reconciliation()
                 or execution_result_outcome_unknown(result, include_execution=True)
                 or execution_result_requires_reconciliation(result)
@@ -921,10 +915,7 @@ class AgentToolExecutor:
                 and not acknowledged_pending
                 and (
                     execution_result_requires_reconciliation(result)
-                    or (
-                        result.get("success") is not True
-                        and (validation.spec is None or not validation.spec.read_only)
-                    )
+                    or (result.get("success") is not True and not call_read_only)
                 )
             )
         ):

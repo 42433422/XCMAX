@@ -52,6 +52,7 @@ export const BATCH_MAX_BYTES = 50 * 1024 * 1024
 export const CONTEXT_MAX_FILES = 50
 export const CONTEXT_MAX_FILE_BYTES = 12 * 1024 * 1024
 export const CONTEXT_MAX_BATCH_BYTES = 48 * 1024 * 1024
+export const CHAT_WORD_ATTACHMENT_SUFFIX = '.docx'
 
 const RULES: Record<DocumentIntakeIntent, IntakeRule> = {
   context: {
@@ -101,6 +102,9 @@ export function fileExtension(name: string): string {
   const index = name.lastIndexOf('.')
   return index >= 0 ? name.slice(index).toLowerCase() : ''
 }
+
+export const isChatWordAttachment = (name: string): boolean =>
+  fileExtension(name) === CHAT_WORD_ATTACHMENT_SUFFIX
 
 /** Office/macOS 生成的锁文件与资源分支，内容无意义。 */
 export function isTemporaryDocument(name: string): boolean {

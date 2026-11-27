@@ -142,7 +142,7 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
     {
       idSuffix: 'stats',
       title: '客户管理 · 统计',
-      description: '数字卡片展示客户总数等汇总指标（以当前页统计为准）',
+      description: '标题旁显示客户总数',
       targetSelector: '#view-customers .stat-cards',
     },
     {
@@ -261,9 +261,9 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
   'workflow-employee-space': [
     {
       idSuffix: 'main',
-      title: '员工空间 · 概览',
-      description: '查看与管理工作流员工相关入口',
-      targetSelector: '#view-workflow-employee-space .page-content',
+      title: '员工空间 · 办公室',
+      description: '按部门查看工作流员工的工位与状态',
+      targetSelector: '[data-tour="employee-workspace-desks"]',
     },
   ],
   'ai-ecosystem': [

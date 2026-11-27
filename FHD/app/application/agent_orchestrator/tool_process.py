@@ -448,6 +448,7 @@ def _worker(
     route_metadata: dict[str, str | int] = {}
     worker_client: tuple[Any, str] | None = None
     finish_stream = None
+    failure_stage = "worker_setup"
 
     def restore_llm_scope():
         nonlocal worker_client
@@ -525,10 +526,12 @@ def _worker(
                     return renewed_deadline
 
                 context["_renew_elt_file_deadline"] = renew_file_deadline
+            failure_stage = "tool_execution"
             try:
                 output = executor_type().execute(step, runtime_context=context)
             finally:
                 route_metadata = scoped_route_metadata(worker_client[0] if worker_client else None)
+        failure_stage = "result_encoding"
         encoded = json.dumps(
             {"output": output, "uncertain": budget.uncertain, "llm_route_metadata": route_metadata},
             allow_nan=False,
@@ -536,6 +539,7 @@ def _worker(
         )
         if len(encoded.encode()) > 8 * 1024 * 1024:
             raise ValueError("tool result exceeds transport limit")
+        failure_stage = "result_delivery"
         Path(folder, "result").write_text(encoded, encoding="utf-8")
         control.send_bytes(b"d")
     except BOUNDARY_ERRORS as exc:
@@ -548,6 +552,7 @@ def _worker(
                         "success": False,
                         "outcome": "unknown",
                         "error_code": "tool_result_transport_failed",
+                        "failure_stage": failure_stage,
                         "exception_type": type(exc).__name__,
                         "retryable": False,
                         "reconciliation_required": True,

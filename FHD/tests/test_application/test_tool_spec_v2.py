@@ -610,6 +610,29 @@ def test_validate_tool_spec_fixtures_pass_for_all_registry_actions() -> None:
     assert validate_tool_spec_fixtures() == {}
 
 
+@pytest.mark.parametrize(
+    "file_path, valid",
+    [
+        ("sample.csv", True),
+        ("sample.xlsx", True),
+        ("reports/sample.CsV", True),
+        ("reports/sample.XlSx", True),
+        ("sample.xls", False),
+        ("sample.csv.exe", False),
+        (".xlsx", False),
+        ("reports/.xlsx", False),
+        ("reports/", False),
+    ],
+)
+def test_excel_export_contract_accepts_supported_file_names(file_path, valid):
+    from app.application.excel_export_limits import export_input_error
+
+    payload = {"file_path": file_path, "rows": [{"a": 1}]}
+    result = validate_tool_call("excel_analysis", "export", payload)
+    assert result.ok is valid, result.message
+    assert (export_input_error(payload) is None) is valid
+
+
 def test_get_tool_action_spec_normalizes_action_alias() -> None:
     spec = get_tool_action_spec("employee", "run")
     assert spec is not None
@@ -759,6 +782,15 @@ def test_agent_tool_executor_rejects_non_object_tool_result(trusted_actor, monke
         (False, {"error_code": "upstream_outcome_unknown"}, False),
         (False, {"result": {"status": "accepted"}}, False),
         (False, {"execution": {"outcome": "unknown", "committed": False}}, False),
+        (
+            False,
+            {
+                "outcome": "known",
+                "reconciliation_required": False,
+                "execution": {"outcome": "unknown", "committed": False},
+            },
+            False,
+        ),
         (False, {}, True),
         (True, {}, False),
     ],
@@ -830,6 +862,93 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         else:
             assert result["message"] == "工具输出 缺少字段：data"
             assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"
+        dispatch.assert_called_once()
+
+
+@pytest.mark.parametrize("writes", [False, True])
+def test_conditional_read_identity_matches_the_validated_params(trusted_actor, writes):
+    actor = trusted_actor(permissions=["tool.excel_analyzer.analyze"])
+    step = AgentStep(
+        node_id="analyze",
+        tool_id="excel_analyzer",
+        action="analyze",
+        params={"file_path": "source.xlsx", **({"output_json": "analysis.json"} if writes else {})},
+    )
+    with (
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True, "file_path": "source.xlsx"},
+        ) as dispatch,
+        patch("app.application.agent_orchestrator.task_dispatcher.note_open_effect") as marker,
+    ):
+        result = AgentToolExecutor().execute(step, runtime_context=actor.context)
+    marker.assert_not_called()
+    if writes:
+        dispatch.assert_not_called()
+        assert result["error_code"] == "task_identity_required"
+        assert result["execution"] == {"outcome": "not_executed", "committed": False}
+    else:
+        dispatch.assert_called_once()
+        assert result["success"] is True
+
+
+@pytest.mark.parametrize(
+    "writes, failure, uncertain",
+    [
+        (False, "transport", False),
+        (False, "schema", False),
+        (False, "schema_unknown", True),
+        (False, "unknown", True),
+        (True, "transport", True),
+        (True, "schema", True),
+    ],
+)
+def test_conditional_read_preserves_transport_and_schema_receipt_contracts(
+    monkeypatch, tmp_path, trusted_actor, writes, failure, uncertain
+):
+    import httpx
+
+    from app.application.agent_orchestrator import tool_permission
+
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
+    actor = trusted_actor(permissions=["tool.excel_analyzer.analyze"])
+    step = AgentStep(
+        node_id="analyze",
+        tool_id="excel_analyzer",
+        action="analyze",
+        params={"file_path": "source.xlsx", **({"output_json": "analysis.json"} if writes else {})},
+    )
+    context = {**actor.context, "run_id": "original-run", "idempotency_key": "original-analysis"}
+    raw = {"success": True, "outcome": "known", "reconciliation_required": False}
+    if failure.endswith("unknown"):
+        raw["execution"] = {"outcome": "unknown", "committed": False}
+    if failure == "unknown":
+        raw["file_path"] = "source.xlsx"
+    with (
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            side_effect=httpx.ConnectError("connection unavailable")
+            if failure == "transport"
+            else None,
+            return_value=raw,
+        ) as dispatch,
+        patch("app.application.agent_orchestrator.task_dispatcher.note_open_effect") as marker,
+    ):
+        result = AgentToolExecutor().execute(step, runtime_context=context)
+        assert marker.call_count == int(writes)
+        assert result["success"] is False
+        if uncertain:
+            assert result["outcome"] == "unknown" and result["retryable"] is False
+            assert result["reconciliation_required"] is True
+            tool_permission.drop_process_idempotency_memory()
+            replay = AgentToolExecutor().execute(step, runtime_context=context)
+            assert replay == result
+        else:
+            assert result.get("outcome") != "unknown" and not result.get("reconciliation_required")
+            if failure == "transport":
+                assert result["error_code"] == "tool_unavailable" and result["retryable"] is True
+        if failure.startswith("schema"):
+            assert result["error_code"] == "output_schema_validation_failed"
         dispatch.assert_called_once()
 
 

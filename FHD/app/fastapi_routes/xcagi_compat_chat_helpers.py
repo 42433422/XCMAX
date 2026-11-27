@@ -140,6 +140,24 @@ def _runtime_context_with_authenticated_actor(
     context["actor_id"] = int(context["user_id"])
     if context.get("tenant_id"):
         context["tenant_id"] = int(context["tenant_id"])
+        if context.get("_actor_authorization") and not getattr(
+            request.state, "tutorial_active", False
+        ):
+            from app.application.tenant_workspace_prefs import (
+                get_workspace_prefs,
+                workspace_intelligence_level,
+            )
+
+            owner = f"tenant:{context['tenant_id']}"
+            saved = getattr(request.state, "enterprise_intelligence", None)
+            if saved is None or saved[0] != owner:
+                saved = (
+                    owner,
+                    workspace_intelligence_level(get_workspace_prefs(owner, strict=True)),
+                )
+                request.state.enterprise_intelligence = saved
+            if saved[1] is not None:
+                context["execution_autonomy_level"] = saved[1]
     return context
 
 

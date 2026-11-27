@@ -4,6 +4,8 @@ import { approvalApi, type ApprovalRequest } from '@/api/approval'
 import { authApi } from '@/api/auth'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
 
+type ApprovalQueue = 'pending' | 'initiated' | 'approved' | 'rejected'
+
 export function useApprovalData(deps: { viewDetails: (requestId: number) => Promise<void>; closeDetails: () => void }) {
   const route = useRoute()
   const accountScope = () => productReadScopeKey('xcagi-approval-bridge')
@@ -28,26 +30,15 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
   const fullListItems = ref<ApprovalRequest[]>([])
   const fullListLoading = ref(false)
   const fullListError = ref('')
+  const activeQueue = ref<ApprovalQueue>('pending')
+  const initiatedStatus = computed(() => activeQueue.value === 'approved' || activeQueue.value === 'rejected' ? activeQueue.value : undefined)
   const visiblePendingRequests = computed(() => fullListType.value === 'pending' ? fullListItems.value : pendingRequests.value)
-  const visibleInitiatedRequests = computed(() => fullListType.value === 'initiated' ? fullListItems.value : initiatedRequests.value)
+  const visibleInitiatedRequests = computed(() => {
+    if (fullListType.value === 'initiated') return fullListItems.value
+    const status = initiatedStatus.value
+    return status ? initiatedRequests.value.filter((item) => item.status === status) : initiatedRequests.value
+  })
   let fullListRequest = 0
-
-  // 工作台分组与筛选（统计卡点击 + 搜索）
-  const activeTab = ref<'pending' | 'initiated'>('pending')
-  const initiatedFilter = ref<'all' | 'approved' | 'rejected'>('all')
-  const listQuery = ref('')
-  const matchesQuery = (item: ApprovalRequest) => {
-    const query = listQuery.value.trim().toLowerCase()
-    return !query || item.title.toLowerCase().includes(query) || item.request_no.toLowerCase().includes(query)
-  }
-  const filteredPendingRequests = computed(() => visiblePendingRequests.value.filter(matchesQuery))
-  const filteredInitiatedRequests = computed(() => visibleInitiatedRequests.value
-    .filter(matchesQuery)
-    .filter((item) => initiatedFilter.value === 'all' || item.status === initiatedFilter.value))
-  const applyStatsFilter = (kind: 'pending' | 'initiated' | 'approved' | 'rejected') => {
-    activeTab.value = kind === 'pending' ? 'pending' : 'initiated'
-    initiatedFilter.value = kind === 'approved' || kind === 'rejected' ? kind : 'all'
-  }
 
   const loadFullListPage = async (page = fullListPage.value) => {
     const type = fullListType.value, scope = accountScope(), userId = getCurrentUserId()
@@ -57,7 +48,9 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     fullListLoading.value = true
     fullListError.value = ''
     try {
-      const result = await (type === 'pending' ? approvalApi.getPendingApprovals : approvalApi.getMyRequests)(userId, page, 50)
+      const result = await (type === 'pending'
+        ? approvalApi.getPendingApprovals(userId, page, 50)
+        : approvalApi.getMyRequests(userId, page, 50, initiatedStatus.value))
       if (!isCurrent()) return
       if (!result.success) throw new Error(result.message || '审批列表加载失败')
       const pagination = 'pagination' in result ? result.pagination : undefined
@@ -75,8 +68,8 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     }
   }
 
-  const viewAll = async (type: 'pending' | 'initiated') => {
-    fullListType.value = type
+  const viewAll = async () => {
+    fullListType.value = activeQueue.value === 'pending' ? 'pending' : 'initiated'
     fullListPage.value = fullListPageCount.value = 1
     fullListItems.value = []
     await loadFullListPage(1)
@@ -88,6 +81,11 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     fullListItems.value = []
     fullListLoading.value = false
     fullListError.value = ''
+  }
+
+  const selectQueue = (queue: ApprovalQueue) => {
+    if (fullListType.value) closeFullList()
+    activeQueue.value = queue
   }
 
   const currentUserId = ref(0)
@@ -162,6 +160,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     const scope = accountScope(), request = ++sessionRequest
     const isCurrent = () => request === sessionRequest && isCurrentAccount(scope)
     if (fullListType.value) fullListLoading.value = true
+    else loading.value = true
     fullListError.value = ''
     try {
       await resolveCurrentUserId()
@@ -175,6 +174,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
 
   watch(accountScope, () => {
     closeFullList()
+    activeQueue.value = 'pending'
     dashboardRequest++
     currentUserId.value = 0
     resolvedAccountScope = ''
@@ -191,7 +191,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     stats, pendingRequests, initiatedRequests, loading,
     fullListType, fullListPage, fullListPageCount, fullListLoading, fullListError,
     visiblePendingRequests, visibleInitiatedRequests, viewAll, loadFullListPage, closeFullList,
-    activeTab, initiatedFilter, listQuery, filteredPendingRequests, filteredInitiatedRequests, applyStatsFilter,
+    activeQueue, selectQueue,
     currentUserId, deepLinkOpened, getCurrentUserId, reloadAccount, loadData,
   }
 }

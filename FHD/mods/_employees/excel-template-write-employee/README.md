@@ -36,6 +36,7 @@
   - `clear_ranges`：清值不动样式/合并（回填前清旧数据）。
   - `cell_writes`：`ref`（如 `M4`）或 `row`+`col` 二选一；`value_type` 可选 `number/date/datetime/string`，解析失败降级为原样字符串并 warning；`number_format` 可选（如 `0.0`，用于修正模板 `[DBNum1]` 等显示怪癖）。
   - `formula_writes`：公式串（必须以 `=` 开头）原样写入，不求值。
+  - `create_sheet`：用 openpyxl 新建工作表；后续阶段可向该页写入，独立质检会核对该页确实是新增的。
   - `retain_sheets` / `remove_sheets`：裁剪输出 sheet（如只留「明细」「月度统计」）。
 - 顶层直接给 `writes` 数组时，视为单一 `cell_writes` 阶段。
 - `expected`：写入员不消费，原样透传（返回值与 `write_report.json`），供下游质检员对账。

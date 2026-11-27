@@ -50,6 +50,45 @@ def test_grants_survive_repository_reopen_and_separate_audiences(trusted_actor):
         reopened.authenticate(grant.model_token, "mcp")
 
 
+@pytest.mark.parametrize("level", [1, 2])
+def test_enterprise_intelligence_limits_new_business_calls(trusted_actor, level):
+    store, run, grant = make_binding(trusted_actor(), execution_autonomy_level=level)
+    kwargs = {
+        "action": "execute",
+        "params": {},
+        "read_only": False,
+        "generation": grant.binding.metadata["generation"],
+    }
+    with pytest.raises(XiaoxBindingError) as error:
+        store.claim_call(run.run_id, "workflow", tool_id="xcmax_workflow", **kwargs)
+    assert error.value.code == "autonomy_level_denied"
+    with pytest.raises(XiaoxBindingError) as error:
+        store.claim_call(run.run_id, "arbitrary-employee", tool_id="employee", **kwargs)
+    assert error.value.code == "autonomy_level_denied"
+    artifact, created = store.claim_call(
+        run.run_id, "isolated-file", tool_id="employee", isolated_artifact=True, **kwargs
+    )
+    assert created and not artifact["read_only"] and artifact["isolated_artifact"]
+    store.record_call(
+        run.run_id,
+        "isolated-file",
+        child_run_id="isolated-child",
+        receipt={
+            "task_id": artifact["child_task_id"],
+            "run_id": "isolated-child",
+            "status": "completed",
+        },
+    )
+    if level == 2:
+        call, created = store.claim_call(run.run_id, "first", tool_id="customer", **kwargs)
+        assert created
+        replay, created = store.claim_call(run.run_id, "retry", tool_id="customer", **kwargs)
+        assert not created and replay == call
+        with pytest.raises(XiaoxBindingError) as error:
+            store.claim_call(run.run_id, "second", tool_id="orders", **kwargs)
+        assert error.value.code == "autonomy_level_denied"
+
+
 def test_concurrent_coordinators_and_stale_cleanup_are_fenced(trusted_actor):
     store, run, grant = make_binding(trusted_actor())
     with pytest.raises(XiaoxBindingError) as error:

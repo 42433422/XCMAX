@@ -1,11 +1,36 @@
 <template>
-  <div class="input-toolbar">
-    <button class="toolbar-btn" id="newConversationBtn" :title="$t('chat.newConversationTitle')" @click="$emit('new-conversation')">
-      <i class="fa fa-plus" aria-hidden="true"></i> {{ $t('shell.newChat') }}
+  <div class="input-toolbar" @mousedown.stop>
+    <button
+      class="toolbar-btn composer-control composer-icon-button"
+      type="button"
+      data-tutorial-id="toolbar-excel-analyze"
+      :aria-label="`${$t(attachmentUploading ? 'shell.uploadingAttachment' : 'chat.uploadAttachment')}${multimodalPendingCount ? ` (${multimodalPendingCount})` : ''}`"
+      :title="$t('chat.uploadTitle')"
+      :disabled="attachmentUploading"
+      @click="triggerUpload"
+    >
+      <ElIcon :class="{ 'is-loading': attachmentUploading }" aria-hidden="true">
+        <Loading v-if="attachmentUploading" />
+        <Paperclip v-else />
+      </ElIcon>
+    </button>
+    <button
+      class="toolbar-btn composer-control composer-icon-button"
+      type="button"
+      data-tutorial-id="toolbar-office-docking"
+      :aria-label="$t(officeDockingProcessing ? 'chat.officeDockingBusy' : 'chat.officeDocking')"
+      :title="$t('chat.officeDockingTitle')"
+      :disabled="officeDockingProcessing"
+      @click="emit('trigger-office-docking')"
+    >
+      <ElIcon :class="{ 'is-loading': officeDockingProcessing }" aria-hidden="true">
+        <Loading v-if="officeDockingProcessing" />
+        <Document v-else />
+      </ElIcon>
     </button>
     <div class="approval-mode" data-testid="approval-mode-toggle">
       <button
-        class="toolbar-btn approval-mode__toggle"
+        class="toolbar-btn composer-control approval-mode__toggle"
         id="approvalModeBtn"
         type="button"
         :title="$t('chat.approvalModeTitle')"
@@ -13,7 +38,7 @@
         :class="{ 'is-active': approvalMode.state.enabled }"
         @click="toggleApproval"
       >
-        <i class="fa fa-shield" aria-hidden="true"></i> {{ $t('chat.approvalMode') }}
+        <CircleCheck aria-hidden="true" /> {{ $t('chat.approvalMode') }}
       </button>
       <div
         v-if="approvalMode.state.enabled"
@@ -41,80 +66,24 @@
         </button>
       </div>
     </div>
-    <button
-      class="toolbar-btn"
-      type="button"
-      data-tutorial-id="toolbar-excel-analyze"
-      :title="$t('chat.uploadTitle')"
-      @click="triggerUpload"
-      :disabled="attachmentUploading"
-    >
-      <i class="fa fa-upload" aria-hidden="true"></i>
-      {{ attachmentUploading ? $t('shell.uploadingAttachment') : $t('chat.uploadAttachment') }}
-      {{ multimodalPendingCount ? `(${multimodalPendingCount})` : '' }}
-    </button>
-    <button
-      class="toolbar-btn"
-      type="button"
-      data-tutorial-id="toolbar-office-docking"
-      :title="$t('chat.officeDockingTitle')"
-      @click="$emit('trigger-office-docking')"
-      :disabled="officeDockingProcessing"
-    >
-      <i class="fa fa-file-text-o" aria-hidden="true"></i>
-      {{ officeDockingProcessing ? $t('chat.officeDockingBusy') : $t('chat.officeDocking') }}
-    </button>
     <input
       ref="fileInputRef"
       type="file"
-      :accept="intakeAcceptAttribute('context', 'analysis')"
+      :accept="`${intakeAcceptAttribute('context', 'analysis')},${CHAT_WORD_ATTACHMENT_SUFFIX}`"
       multiple
       style="display: none"
       @change="onFileChange"
     />
-    <label
-      data-tutorial-id="proactive-suggestions-toggle"
-      data-testid="proactive-suggestions-toggle"
-      :title="$t('chat.proactiveSuggestionsTitle')"
-      style="
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: var(--app-font-size-caption);
-        color: var(--app-text-muted);
-        cursor: pointer;
-        user-select: none;
-      "
-    >
-      <input type="checkbox" :checked="proactiveSuggestionsEnabled" @change="onProactiveChange" />
-      <span class="toolbar-toggle-text">{{ $t('chat.proactiveSuggestions') }}</span>
-    </label>
-    <label
-      :title="$t('chat.ttsTitle')"
-      style="
-        margin-left: 12px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: var(--app-font-size-caption);
-        color: var(--app-text-muted);
-        cursor: pointer;
-        user-select: none;
-      "
-    >
-      <input type="checkbox" :checked="ttsEnabled" @change="$emit('toggle-tts', !ttsEnabled)" />
-      <i class="fa fa-volume-up" aria-hidden="true"></i>
-      <span class="toolbar-toggle-text">{{ $t('chat.ttsToggle') }}</span>
-    </label>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { ElIcon } from 'element-plus'
+import { CircleCheck, Document, Loading, Paperclip } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useApprovalMode } from '@/composables/useApprovalMode'
-import { intakeAcceptAttribute } from '@/utils/documentIntake'
+import { CHAT_WORD_ATTACHMENT_SUFFIX, intakeAcceptAttribute } from '@/utils/documentIntake'
 
 useI18n()
 
@@ -125,17 +94,12 @@ defineProps<{
   multimodalPendingCount: number
   /** @deprecated kept optional for older callers; chat toolbar no longer binds WeChat star refresh */
   autoRefreshStarredWechat?: boolean
-  proactiveSuggestionsEnabled: boolean
-  ttsEnabled: boolean
   officeDockingProcessing?: boolean
 }>()
 
 const emit = defineEmits<{
-  'new-conversation': []
   'trigger-office-docking': []
   'attachment-file-change': [event: Event]
-  'proactive-suggestions-change': [enabled: boolean]
-  'toggle-tts': [enabled: boolean]
 }>()
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -151,17 +115,10 @@ function triggerUpload() {
 function onFileChange(event: Event) {
   emit('attachment-file-change', event)
 }
-
-function onProactiveChange(event: Event) {
-  emit('proactive-suggestions-change', (event.target as HTMLInputElement).checked)
-}
 </script>
 
 <style scoped>
-.input-toolbar {
-  align-items: center;
-  flex-wrap: wrap;
-}
+.input-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 
 .toolbar-toggle-text {
   /* Avoid fractional inherited leading in these centered flex text items. */
@@ -175,8 +132,8 @@ function onProactiveChange(event: Event) {
 }
 
 .approval-mode__toggle.is-active {
-  color: var(--xc-color-primary, #0d47a1);
-  border-color: var(--xc-color-primary, #0d47a1);
+  color: var(--xc-color-primary);
+  background: var(--xc-color-primary-soft);
 }
 
 .approval-mode__choices {
@@ -203,9 +160,6 @@ function onProactiveChange(event: Event) {
 }
 
 @media (max-width: 768px) {
-  .input-toolbar { flex-wrap: nowrap; overflow-x: auto; gap: 6px; }
-  .input-toolbar > * { flex-shrink: 0; white-space: nowrap; }
-  .input-toolbar .toolbar-btn, .input-toolbar label { min-height: 44px; }
   .approval-mode__choice { min-height: 44px; }
 }
 </style>

@@ -1,6 +1,7 @@
 """Bind worker run writes to the durable queue claim that authorized execution."""
 
 import copy
+from contextlib import contextmanager
 
 
 class WorkerLeaseLost(RuntimeError):
@@ -33,14 +34,29 @@ class ClaimedRunRepository:
         self._execution = copy.deepcopy(execution)
         self._owner_id = owner_id
 
-    def save(self, run):
-        if run.run_id != self._execution.run_id:
+    @contextmanager
+    def _claim_transaction(self, run_id):
+        if run_id != self._execution.run_id:
             raise WorkerLeaseLost("worker attempted to save another run")
-        return self._repository.save_claimed(
-            run,
-            owner_id=self._owner_id,
-            execution_count=self._execution.execution_count,
-        )
+        with self._repository.transaction() as db:
+            lock_execution_claim(
+                db,
+                run_id=run_id,
+                owner_id=self._owner_id,
+                execution_count=self._execution.execution_count,
+            )
+            yield db
+
+    def save(self, run):
+        with self._claim_transaction(run.run_id) as db:
+            self._repository.save_in_session(db, run)
+        return copy.deepcopy(run)
+
+    def save_if_unchanged(self, run, previous) -> bool:
+        if previous.run_id != run.run_id:
+            return False
+        with self._claim_transaction(run.run_id) as db:
+            return self._repository.save_if_unchanged_in_session(db, run, previous)
 
     def __getattr__(self, name):
         return getattr(self._repository, name)

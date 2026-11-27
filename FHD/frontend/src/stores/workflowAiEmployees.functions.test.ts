@@ -389,6 +389,16 @@ describe('useWorkflowAiEmployeesStore', () => {
   })
 
   describe('pruneOrphanWorkflowEmployeeToggles', () => {
+    it('does not persist automatic registry cleanup as a user preference edit', async () => {
+      mockFilterWorkflowRegistrySourceMods.mockReturnValue([])
+      const store = useWorkflowAiEmployeesStore()
+      store.acceptConfirmedPreferences({ orphan: true })
+      store.pruneOrphanWorkflowEmployeeToggles([])
+      await Promise.resolve()
+      expect(store.enabled).not.toHaveProperty('orphan')
+      expect(mockQueueWorkspacePrefsSync).not.toHaveBeenCalled()
+    })
+
     it('removes keys not in registry or manifest', () => {
       mockFilterWorkflowRegistrySourceMods.mockReturnValue([])
       const store = useWorkflowAiEmployeesStore()

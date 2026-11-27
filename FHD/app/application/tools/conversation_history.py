@@ -7,6 +7,7 @@ from sqlalchemy import func
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.db.models import AIConversation
 from app.db.session import get_host_db
+from app.domain.conversation.message_visibility import public_messages
 from app.domain.shared_services.conversation_service import (
     ConversationRevisionError,
     begin_conversation_write,
@@ -68,6 +69,7 @@ def read_conversation_history(action: str, params: dict, context: dict) -> dict:
             ).filter(
                 AIConversation.session_id == conversation_id,
                 AIConversation.user_id == str(actor.id),
+                public_messages(db),
             )
             if before is not None:
                 query = query.filter(AIConversation.id < before)

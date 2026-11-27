@@ -4,6 +4,12 @@
   margin: 0 auto;
 }
 
+.page-content {
+  border-radius: var(--xc-radius-lg);
+  background: var(--xc-color-surface);
+  box-shadow: var(--xc-shadow-sm);
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -29,35 +35,32 @@
 }
 
 .card {
-  background-color: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.card + .card {
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--xc-color-border);
 }
 
 .card h3 {
-  color: #34495e;
-  margin: 0 0 15px;
-  font-size: 18px;
-  border-bottom: 1px solid #e0e0e0;
-  padding-bottom: 8px;
+  margin: 0 0 12px;
+  color: var(--xc-color-text);
+  font-size: 16px;
 }
 
-.header-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+.order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.header-section h3 {
-  color: white;
-  border-bottom-color: rgba(255, 255, 255, 0.3);
-}
-
-.header-section label {
-  color: white;
-}
+.order-file-name { margin-block-end: 8px; }
 
 .status {
   margin: 20px 0;
@@ -88,11 +91,8 @@
   display: grid;
   grid-template-columns: 2fr 2fr 1fr 1fr 1fr 1fr 1fr auto;
   gap: 10px;
-  padding: 15px;
-  border: 1px solid #e0e0e0;
-  border-radius: 5px;
-  margin-bottom: 10px;
-  background-color: #f9f9f9;
+  padding-block: 12px;
+  border-block-end: 1px solid var(--xc-color-border);
   align-items: end;
 }
 
@@ -115,11 +115,8 @@
 
 .empty-products {
   text-align: center;
-  padding: 40px;
-  color: #6c757d;
-  background-color: #f8f9fa;
-  border-radius: 5px;
-  border: 2px dashed #dee2e6;
+  padding-block: 28px;
+  color: var(--xc-color-text-secondary);
 }
 
 .modal-overlay {
