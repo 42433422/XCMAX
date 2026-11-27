@@ -31,6 +31,7 @@ _REQUIRES_ENGINE = pytest.mark.skipif(
 _REQUIRES_LIMITER = pytest.mark.skipif(
     sys.platform != "linux" or not shutil.which("prlimit"), reason="Linux prlimit required"
 )
+_REQUIRES_DARWIN = pytest.mark.skipif(sys.platform != "darwin", reason="macOS boundary required")
 
 
 @pytest.fixture(autouse=True)
@@ -235,7 +236,7 @@ def test_unavailable_resource_limits_never_launch_engine(tmp_path, monkeypatch):
     from app.application.employee_runtime import continuity_tool_wait as process_runtime
 
     monkeypatch.setattr(recalc, "_engine_path", lambda: sys.executable)
-    monkeypatch.setattr(process_runtime.shutil, "which", lambda _: None)
+    monkeypatch.setattr(process_runtime.sys, "platform", "unsupported")
     monkeypatch.setattr(
         process_runtime.subprocess,
         "Popen",
@@ -244,6 +245,125 @@ def test_unavailable_resource_limits_never_launch_engine(tmp_path, monkeypatch):
     report = _verify(_workbook(tmp_path))
     assert report["code"] == "formula_recalculation_resource_limits_unavailable", report
     assert report["source_unchanged"] and not report["formula_recalculation_verified"]
+
+
+@_REQUIRES_DARWIN
+def test_darwin_limits_enforce_cpu_files_and_preserve_stdin(tmp_path):
+    import resource
+
+    from app.application.employee_runtime.continuity_tool_wait import ProcessLimits, run_process
+
+    kinds = (resource.RLIMIT_CPU, resource.RLIMIT_FSIZE, resource.RLIMIT_NOFILE)
+    before = [resource.getrlimit(kind) for kind in kinds]
+    output = tmp_path / "bounded output"
+    script = """
+import errno,json,os,resource,sys,time
+time.sleep(0.2)
+report = {'input': sys.stdin.read(), 'limits': [resource.getrlimit(k) for k in
+    (resource.RLIMIT_CPU,resource.RLIMIT_FSIZE,resource.RLIMIT_NOFILE)]}
+with open(sys.argv[1], 'wb', buffering=0) as f:
+    try:
+        f.write(b'x'*1024)
+        f.write(b'x')
+    except OSError as e:
+        report['file_limited'] = e.errno == errno.EFBIG
+print(json.dumps(report))
+"""
+    result = run_process(
+        [sys.executable, "-c", script, str(output)],
+        input="original input",
+        cwd=tmp_path,
+        timeout=5,
+        limits=ProcessLimits(3, 128 * 1024**2, 1024, 64),
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["input"] == "original input" and report["file_limited"]
+    assert output.stat().st_size == 1024
+    assert report["limits"] == [[3, 3], [1024, 1024], [64, 64]]
+    cpu = run_process(
+        [sys.executable, "-c", "while True: pass"],
+        input=None,
+        cwd=tmp_path,
+        timeout=5,
+        limits=ProcessLimits(1, 128 * 1024**2, 1024, 64),
+    )
+    assert cpu.returncode < 0
+    assert [resource.getrlimit(kind) for kind in kinds] == before
+
+
+@_REQUIRES_DARWIN
+def test_darwin_memory_monitor_stops_real_allocation(tmp_path):
+    from app.application.employee_runtime.continuity_tool_wait import (
+        ProcessLimits,
+        ProcessLimitsExceeded,
+        run_process,
+    )
+
+    pid = tmp_path / "engine.pid"
+    script = (
+        "import os,pathlib,sys,time;pathlib.Path(sys.argv[1]).write_text(str(os.getpid()));"
+        "allocation=bytearray(128*1024**2);time.sleep(5)"
+    )
+    with pytest.raises(ProcessLimitsExceeded, match="tool_memory_limit_exceeded"):
+        run_process(
+            [sys.executable, "-c", script, str(pid)],
+            input=None,
+            cwd=tmp_path,
+            timeout=4,
+            limits=ProcessLimits(3, 64 * 1024**2, 1024, 64),
+        )
+    assert pid.exists() and not psutil.pid_exists(int(pid.read_text()))
+
+
+@_REQUIRES_DARWIN
+def test_darwin_monitor_unavailable_never_executes_command(tmp_path, monkeypatch):
+    from app.application.employee_runtime import continuity_tool_wait as boundary
+
+    pids = []
+    marker = tmp_path / "must-not-execute"
+
+    def unavailable(pid, cap):
+        pids.append(pid)
+        raise boundary.ProcessLimitsUnavailable("monitor denied")
+
+    monkeypatch.setattr(boundary, "_memory_check", unavailable)
+    with pytest.raises(boundary.ProcessLimitsUnavailable, match="monitor denied"):
+        boundary.run_process(
+            [
+                sys.executable,
+                "-c",
+                "import pathlib,sys;pathlib.Path(sys.argv[1]).touch()",
+                str(marker),
+            ],
+            input=None,
+            cwd=tmp_path,
+            timeout=2,
+            limits=boundary.ProcessLimits(1, 128 * 1024**2, 1024, 64),
+        )
+    assert not marker.exists() and pids and not psutil.pid_exists(pids[0])
+
+
+@_REQUIRES_DARWIN
+def test_darwin_deadline_reaps_real_engine_group(tmp_path):
+    from app.application.employee_runtime.continuity_tool_wait import ProcessLimits, run_process
+
+    pid = tmp_path / "child.pid"
+    script = (
+        "import pathlib,subprocess,sys,time;"
+        "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(10)']);"
+        "pathlib.Path(sys.argv[1]).write_text(str(p.pid));time.sleep(10)"
+    )
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_process(
+            [sys.executable, "-c", script, str(pid)],
+            input=None,
+            cwd=tmp_path,
+            timeout=0.5,
+            limits=ProcessLimits(3, 128 * 1024**2, 1024, 64),
+        )
+    child = int(pid.read_text())
+    assert not psutil.pid_exists(child) or psutil.Process(child).status() == psutil.STATUS_ZOMBIE
 
 
 @_REQUIRES_LIMITER

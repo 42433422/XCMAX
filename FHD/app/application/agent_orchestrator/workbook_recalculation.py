@@ -34,6 +34,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from app.application.employee_runtime.continuity_tool_wait import (
     ProcessLimits,
+    ProcessLimitsExceeded,
     ProcessLimitsUnavailable,
 )
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
@@ -680,6 +681,8 @@ def recalculate_workbook(
             )
     except _Unavailable as exc:
         result.update(status="inconclusive", code=exc.code)
+    except ProcessLimitsExceeded:
+        result.update(status="inconclusive", code="formula_recalculation_resource_limit_exceeded")
     except ProcessLimitsUnavailable:
         result.update(
             status="inconclusive", code="formula_recalculation_resource_limits_unavailable"
