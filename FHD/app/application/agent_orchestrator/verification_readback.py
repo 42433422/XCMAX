@@ -371,6 +371,7 @@ def verify_independent_result(
         "correct_price",
     }
     from app.application.agent_orchestrator.verification_transactions import (
+        FINANCE_ACTIONS,
         PURCHASE_ACTIONS,
         SALES_ACTIONS,
     )
@@ -378,7 +379,7 @@ def verify_independent_result(
     sales_action = step.tool_id == "sales" and step.action in SALES_ACTIONS
     sales_closed_loop = action == ("sales", "execute_closed_loop")
     purchase_action = step.tool_id == "purchase" and step.action in PURCHASE_ACTIONS
-    finance_creation = action == ("finance", "create_transaction")
+    finance_action = step.tool_id == "finance" and step.action in FINANCE_ACTIONS
     cognition_action = step.tool_id == "enterprise_cognition" and step.action in {
         "bind_goal",
         "plan",
@@ -444,7 +445,7 @@ def verify_independent_result(
         or sales_action
         or sales_closed_loop
         or purchase_action
-        or finance_creation
+        or finance_action
         or cognition_action
         or kellai_action
         or surface_action
@@ -578,12 +579,12 @@ def verify_independent_result(
             )
 
             return verify_purchase_result(step, call, output, context)
-        if finance_creation:
+        if finance_action:
             from app.application.agent_orchestrator.verification_transactions import (
-                verify_finance_creation,
+                verify_finance_result,
             )
 
-            return verify_finance_creation(step, call, output, context)
+            return verify_finance_result(step, call, output, context)
         if cognition_action:
             from app.application.agent_orchestrator.verification_cognition import (
                 verify_cognition_result,

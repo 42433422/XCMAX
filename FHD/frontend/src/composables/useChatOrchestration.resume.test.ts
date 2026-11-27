@@ -494,15 +494,84 @@ describe('persisted chat turn observation through the real SDK and task workspac
     expect(receiptReads()).toHaveLength(1)
   })
 
+  it('keeps one observer and receipt backoff while a blocked turn has no saved reply yet', async () => {
+    const reply = originalReply()
+    let resolveReceipt!: (value: unknown) => void
+    readReceipt = () => new Promise(resolve => { resolveReceipt = resolve })
+    taskStatus = 'blocked'
+    await api.refreshTasks()
+    await flushPromises()
+    await api.refreshTasks()
+    await flushPromises()
+    expect(receiptReads()).toHaveLength(1)
+    const blocked = { success: true, id: 'original', durable: true, revision: 1, messages: [],
+      active_turn: { turn_id: 'original-turn', run_id: 'original-run', task_id: 'original-task', status: 'blocked' },
+    }
+    resolveReceipt(blocked)
+    await flushPromises()
+    expect(runStreams).toHaveLength(1)
+    expect(resumed).toHaveLength(1)
+    expect(originalReply()).toBe(reply)
+    readReceipt = async () => blocked
+    await api.refreshTasks()
+    await vi.advanceTimersByTimeAsync(1999)
+    await api.refreshTasks()
+    await flushPromises()
+    expect(receiptReads()).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await api.refreshTasks()
+    await flushPromises()
+    expect(receiptReads()).toHaveLength(2)
+    readReceipt = async () => terminalHistory('blocked')
+    await vi.advanceTimersByTimeAsync(3999)
+    await api.refreshTasks()
+    await flushPromises()
+    expect(receiptReads()).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(1)
+    await api.refreshTasks()
+    await flushPromises()
+    expect(receiptReads()).toHaveLength(3)
+    expect(reply.workflowAction).toBe('blocked')
+    expect(reply.content).toContain('原文件交付已恢复')
+    expect(runStreams).toHaveLength(1)
+    expect(resumed).toHaveLength(1)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+  })
+
+  it.each(['blocked', 'completed'])('clears active model and tool indicators after a saved %s receipt', async status => {
+    const reply = originalReply()
+    runStreams[0].emit({ event_id: 'tool-start', run_id: 'original-run', event_type: 'runtime.xiaox.item.started',
+      data: { item_type: 'mcpToolCall', item_id: 'tool-1', tool_id: 'elt_import', action: 'preview' } }, 'runtime.xiaox.item.started', 'tool-start')
+    runStreams[0].emit({ event_id: 'model-start', run_id: 'original-run', event_type: 'runtime.model.started',
+      data: { request_id: 'model-1' } }, 'runtime.model.started', 'model-start')
+    resumed[0].emit({ type: 'tool_call', node_id: 'import', tool_id: 'elt_import', action: 'preview', phase: 'started', label: '核对附件' })
+    await flushPromises()
+    expect(reply.waitingHint).toContain('模型正在分析')
+    expect(reply.liveSteps?.some(step => step.state === 'running')).toBe(true)
+    taskStatus = status
+    readReceipt = async () => terminalHistory(status)
+    await api.refreshTasks()
+    await flushPromises()
+    expect(reply.workflowAction).toBe(status)
+    expect(reply.content).toContain('原文件交付已恢复')
+    expect(reply.waitingHint).toBeUndefined()
+    expect(reply.toolProgressLabel).toBeUndefined()
+    expect(reply.liveSteps?.some(step => step.state === 'running')).toBe(false)
+    expect(reply.agentRunTrace?.status).toBe(status === 'completed' ? 'success' : 'blocked')
+    expect(reply.agentRunTrace?.phases.some(phase => phase.status === 'running')).toBe(false)
+    expect(reply.agentRunTrace?.phases.find(phase => phase.kind === 'tool')?.status).toBe('waiting')
+    expect(resumed[0].signal?.aborted).toBe(true)
+  })
+
   it('projects durable model and tool events onto the original chat message', async () => {
     const reply = originalReply()
     expect(runStreams).toHaveLength(1)
     const emit = (type: string, data: Record<string, unknown>, id: string) =>
       runStreams[0].emit({ event_id: id, run_id: 'original-run', event_type: type, data }, type, id)
-    emit('runtime.model.started', {}, 'e1')
+    emit('runtime.model.started', { request_id: 'model-1' }, 'e1')
     await flushPromises()
     expect(reply.waitingHint).toContain('模型正在分析')
-    emit('runtime.model.completed', {}, 'e1b')
+    emit('runtime.model.completed', { request_id: 'model-1' }, 'e1b')
     await flushPromises()
     expect(reply.waitingHint).toBeUndefined()
     expect(reply.toolProgressLabel).toContain('模型响应已完成')

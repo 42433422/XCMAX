@@ -1,5 +1,7 @@
 ## Unreleased
 
+- 后台对话实时显示模型和授权工具进度，调用结束仍等待业务回执核验；重新打开已阻断的原任务只读取持久化回执，不恢复原执行流，切换会话或撤权后停止观察。
+- 财务删除核验同时检查操作前记录与原账号归属；记录原本不存在或缺少可信前态时保持待核对，避免误报删除成功。
 - 修复多轮文字修订的目标来源绑定：沿冻结用户历史核对未变更条件，核验报告的标识或引用错误只在原预算内修复报告；保留全部未完成项和原业务回执，历史助手/工具文字不授予操作权限。
 - 汇合工作组01–11的稳定性修复，统一原任务的状态投影、恢复、模型预算、业务回执与独立核验；已完成和结果未知的写入保持原操作身份，不自动重放。
 - 工作簿数值核验同时核对定义名称、原生表范围、隐藏行、数值格式、日期系统与计算精度；转换结果改变计算上下文时拒绝宣告验证通过。真实引擎不可用时仍明确阻断。
@@ -40,6 +42,7 @@
 - 持续运行验收按基础任务、复杂任务、故障恢复、父子交接、业务重复和误报、8小时/72小时、30天及四端真机分别核对原始证据；缺失或旧版本证据明确阻断。修正30天生产指标仍按90天查询判定的问题，保留既有90天正式发布门槛；验收规则通过不代表真实生产运行已经通过。
 
 - 修复集成后员工工具边界与质量校验不一致的问题，文件来源名称安全校验保持原有规则。
+- 补齐财务凭证 `update_transaction` 与 `delete_transaction` 的独立数据库读回核验（按租户校验提交后字段、时间戳与硬删除结果，消除 `outcome: "unknown"` 缺口），并补充正负向及路由编排回归；统一移除剩余 3 个移动端 Flutter CI workflow 中与 `.flutter-version` 锁版本并存的冗余 `channel: stable` 配置。
 - 性能探针 `scripts/loadtest/probe.py` 新增 `--suite regular-pages`、`--max-p95-ms`（支持 500ms 常规页面 P95 门禁）、`--max-error-rate` 与 `--json-out`（绑定 `source_sha` 的结构化报告），并补充基于真实本地 HTTP 服务的正负向门禁单测。
 - Java 支付服务补齐原路渠道退款闭环：`AlipayService` 新增基于 `AlipayTradeRefundRequest` 与 `out_request_no` 幂等键的 `refundOrder`，`Refund` 与 Flyway `V21` 新增渠道退款元数据字段，`RefundService` 支持按 `refund_target=original|alipay|wallet` 执行原路退款并在渠道失败时回滚不误退钱包，补充 3 项原路退款正负向单测（36 项退款单测与契约测试全绿）。
 - 新用户引导 `onboardingTutorial` store 新增 10 分钟（600s）核心任务清单追踪（`startCoreChecklist` / `completeCoreTask` / `getCoreChecklistSummary` / `resetCoreChecklist`），支持 `localStorage` 持久化、完成度百分比与 10 分钟 SLA 达标判定，并补充 Vitest 单元测试（13/13 通过）。

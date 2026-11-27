@@ -46,7 +46,7 @@ import agentRunsApi from '@/api/agentRuns'
 import type { AgentRunEvent } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
-import { buildAgentRunTraceFromEvents } from '@/utils/agentRunTraceModel'
+import { buildAgentRunTraceFromEvents, withAgentRunReceipt } from '@/utils/agentRunTraceModel'
 import { runtimeRunChatEvents } from '@/utils/runtimeRunChatEvents'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
@@ -414,7 +414,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     // The task feed supplies terminal status; this read-only run event stream
     // supplies SDK progress without resubmitting the original request.
     void agentTaskRuntime.refreshTasks().catch(() => undefined)
-    if (options.resume === false) return
+    if (options.resume === false || turn.status === 'blocked') return
     let receipt: unknown
     let awaitingAuthorization = false
     const stream = useAiSdkChatRound({
@@ -470,6 +470,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       ...(runtimeContinuation ? { runtimeContinuation } : {}), ...(files.length ? { outputArtifacts: files } : {}) })
     if (!runtimeContinuation && !chatMessageExtrasFromServerRow(savedMessage).runtimeContinuation) delete message.runtimeContinuation
     delete message.toolProgressLabel
+    delete message.waitingHint
+    if (message.liveSteps?.length) message.liveSteps = message.liveSteps.filter(step => step.state !== 'running')
+    if (message.agentRunTrace?.run_id === observation.turn.runId)
+      message.agentRunTrace = withAgentRunReceipt(message.agentRunTrace, action)
     chatSessionActivity.forSession(observation.sessionId).setStatus(action === 'completed' ? 'ready'
       : ['failed', 'rejected'].includes(action) ? 'error'
         : ['cancelled', 'interrupted'].includes(action) ? 'stopped'
@@ -519,7 +523,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         && message.id === binding.message_id && message.role === 'assistant')
       const receipt = droppedRoundFromHistory(row ? { ...data, turn_receipt: { ...binding, message: row.content } } : data, observation.turn.turnId)
       if (receipt.activeTurn) {
-        if (receipt.activeTurn.status === 'blocked') observeActiveTurn(receipt.activeTurn)
+        if (receipt.activeTurn.status === 'blocked') observeActiveTurn(receipt.activeTurn, { revision: observation.revision, resume: false })
       } else if (data.success === true && data.durable === true && receipt.savedMessage
         && ['completed', 'failed', 'blocked', 'cancelled', 'rejected', 'interrupted', 'unknown'].includes(asString(binding.status))
         && asString(receipt.savedMessage.content).trim()

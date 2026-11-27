@@ -95,6 +95,21 @@ export interface AgentRunTraceData extends ExecutionObservation {
   terminal: boolean
 }
 
+/** Apply a bound business receipt without inventing successful tool receipts. */
+export function withAgentRunReceipt(trace: AgentRunTraceData, action: string): AgentRunTraceData {
+  const status: TracePhaseStatus = action === 'completed' ? 'success'
+    : action === 'failed' ? 'failed'
+      : ['cancelled', 'interrupted'].includes(action) ? 'cancelled'
+        : ['blocked', 'rejected'].includes(action) ? 'blocked' : action === 'paused' ? 'paused' : 'waiting'
+  return { ...trace, status, terminal: ['completed', 'failed', 'cancelled', 'interrupted', 'rejected'].includes(action),
+    phases: trace.phases.map(phase => phase.status !== 'running' ? phase : {
+      ...phase, status: phase.kind === 'tool' ? 'waiting' : status,
+      title: phase.kind === 'tool' ? '工具执行已停止，待回执核对'
+        : phase.kind === 'planner' ? '模型阶段已结束' : phase.title,
+    }),
+  }
+}
+
 const TOOL_TERMINAL_FAILED = new Set<string>(['tool.failed'])
 
 /** Keep only the shared observation contract, never arbitrary tool inputs. */
@@ -235,6 +250,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
   let runObservation: ExecutionObservation = {}
   let durationScope: string | undefined
   const seenEvents = new Set<string>()
+  const runtimePlanners = new Map<string, TracePlannerPhase>()
 
   /** 找最近一个未终态的 ToolPhase（用于合并同 step 事件） */
   function findToolPhase(nodeId: string, openOnly = true, identity?: ExecutionObservation): TraceToolPhase | undefined {
@@ -294,17 +310,27 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     }
 
     if (type === 'runtime.model.started' || type === 'runtime.xiaox.turn.started') {
-      phases.push({ ...observation, kind: 'planner', status: 'running',
+      const identity = asString(type === 'runtime.model.started' ? data.request_id : data.turn_id)
+      const key = `${type}:${identity}`
+      if (!identity || runtimePlanners.has(key)) continue
+      const phase: TracePlannerPhase = { ...observation, kind: 'planner', status: 'running',
         started_event_id: asString(ev.event_id), started_at: asString(ev.created_at),
-        title: '模型正在分析任务' })
+        title: '模型正在分析任务' }
+      phases.push(phase)
+      runtimePlanners.set(key, phase)
       continue
     }
     if (type === 'runtime.model.completed' || type === 'runtime.model.failed'
       || type === 'runtime.model.failure' || type === 'runtime.xiaox.turn.completed') {
-      const phase = [...phases].reverse().find(p => p.kind === 'planner' && p.status === 'running')
-      if (phase) {
-        phase.status = type.includes('failed') || type.includes('failure') ? 'failed' : 'success'
-        phase.title = phase.status === 'failed' ? '模型请求未完成' : '模型响应已完成'
+      const model = type.startsWith('runtime.model.')
+      const identity = asString(model ? data.request_id : data.turn_id)
+      const phase = runtimePlanners.get(`${model ? 'runtime.model.started' : 'runtime.xiaox.turn.started'}:${identity}`)
+      if (identity && phase?.status === 'running') {
+        phase.status = model ? type === 'runtime.model.completed' ? 'success' : 'failed'
+          : data.status === 'completed' ? 'success' : data.status === 'failed' ? 'failed'
+            : ['interrupted', 'cancelled'].includes(asString(data.status)) ? 'cancelled' : 'waiting'
+        phase.title = phase.status === 'success' ? '模型响应已完成' : phase.status === 'failed' ? '模型请求未完成'
+          : phase.status === 'cancelled' ? '执行轮次已取消' : '执行轮次状态待核对'
       }
       continue
     }

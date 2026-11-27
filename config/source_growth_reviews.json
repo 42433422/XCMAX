@@ -688,12 +688,12 @@
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
       "base_file": "FHD/frontend/src/composables/useChatOrchestration.ts",
       "base_blob": "e44459ca3922acc3fe19285905b39a2f532572a6",
-      "head_blob": "6100729c7206f5169dc605f1b58772e9ca9cc647",
+      "head_blob": "48f7f758035bf4608da53b345512518b934d9431",
       "before_lines": 1021,
-      "after_lines": 1151,
-      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；复用原任务观察器补收最终结果，保持会话版本、撤权和卸载屏障。 本登记不是人工架构批准。 本轮修复只接受同会话、同revision和同turn/run的持久核对回执，以unknown结束原观察，保留服务端文本且不重发业务。 本次复用既有鉴权SSE和Trace，把后台模型与工具事件接回原会话，并在阻断后读取原turn/run的持久终态回执。 本登记仍为架构评审请求。",
-      "boundary": "删除远程轮次内的独立一次性回传流程，现有观察器只读原session/turn/run回执，single-flight加有界退避；切号、停止、卸载、撤权、删除和revision变化使旧观察失效，不重发业务请求或新增调度器。 集成冲突以当前main与来源提交共同祖先三方核对，用户已追加授权纳入01/06，合并共享状态投影和原预算内独立核验。",
-      "validation": "本轮 Vitest run：sanitizeHtml、chatBubbleDisplay、lightMarkdown及deep四个原测试模块58项通过，Kellai两模块11项通过；前者覆盖共享富文本边界，不替代ChatView/消息编排的完整frontend-test与构建，最终集成CI仍按新HEAD核对。 真实HTTP边界的SSE/JSON及排队恢复、归属和取消组合6模块283项通过；迁移的3个queued场景前后总数138不变。最终HEAD正式前端CI继续核验。 本次在最新集成基线复验后台相关211项和前端相关242项通过；真实桌面端仍待安装版本验收。",
+      "after_lines": 1155,
+      "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；复用原任务观察器补收最终结果，保持会话版本、撤权和卸载屏障。 本登记不是人工架构批准。 本轮修复只接受同会话、同revision和同turn/run的持久核对回执，以unknown结束原观察，保留服务端文本且不重发业务。 本次复用既有鉴权SSE和Trace，把后台模型与工具事件接回原会话，并在阻断后读取原turn/run的持久终态回执。 本登记仍为架构评审请求。 正式CI复现blocked原对话误恢复，现只读回执并保留单一观察器；模型/SDK事件按各自原身份配对，终态回执收束临时进度。",
+      "boundary": "删除远程轮次内的独立一次性回传流程，现有观察器只读原session/turn/run回执，single-flight加有界退避；切号、停止、卸载、撤权、删除和revision变化使旧观察失效，不重发业务请求；原鉴权SSE的只读连接按已有游标恢复，执行调度保持原路径。 集成冲突以当前main与来源提交共同祖先三方核对，用户已追加授权纳入01/06，合并共享状态投影和原预算内独立核验。",
+      "validation": "本轮 Vitest run：sanitizeHtml、chatBubbleDisplay、lightMarkdown及deep四个原测试模块58项通过，Kellai两模块11项通过；前者覆盖共享富文本边界，不替代ChatView/消息编排的完整frontend-test与构建，最终集成CI仍按新HEAD核对。 真实HTTP边界的SSE/JSON及排队恢复、归属和取消组合6模块283项通过；迁移的3个queued场景前后总数138不变。最终HEAD正式前端CI继续核验。 本次在最新集成基线复验后台相关211项和前端相关242项通过；真实桌面端仍待安装版本验收。 集成补修先复现原blocked断言、重复观察器与事件错配；8个原模块348项通过，最终恢复/Trace两模块84项通过（分组重叠不累计），严格定向TypeScript通过，完整前端类型与正式CI仍按最终HEAD验证。",
       "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
       "review_owner": "@42433422"
     },

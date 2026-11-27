@@ -106,6 +106,12 @@ def freeze_verification_contract(
 
         if step.action in SALES_ACTIONS:
             contract["authority_baseline"] = capture_sales_baseline(step, context)
+    if (step.tool_id, step.action) == ("finance", "delete_transaction"):
+        from app.application.agent_orchestrator.verification_finance import (
+            capture_finance_deletion_baseline,
+        )
+
+        contract["authority_baseline"] = capture_finance_deletion_baseline(step, context)
     if (step.tool_id, step.action) == ("kellai", "send"):
         from app.application.kellai_binding_app_service import connection_identity_sha256
 
