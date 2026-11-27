@@ -23,7 +23,7 @@ probe = _load_probe()
 
 
 class _FixtureHandler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):  # noqa: A002
+    def log_message(self, _fmt, *args):
         return
 
     def do_GET(self):
