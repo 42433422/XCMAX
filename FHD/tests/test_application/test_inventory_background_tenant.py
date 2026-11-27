@@ -49,6 +49,10 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(
     )
 
     def dispatch(step, runtime_context):
+        runtime_context = {
+            **runtime_context,
+            "idempotency_key": f"inventory-tenant:{step.step_id}",
+        }
         executor = AgentToolExecutor()
         if isolated:
             return execute_with_tool_deadline(

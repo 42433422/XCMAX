@@ -73,6 +73,7 @@ def _context(task_id: str, **extra) -> dict:
         "user_id": "11",
         "employee_id": "employee-a",
         "task_id": task_id,
+        "idempotency_key": f"approval-gate:{task_id}:customers:create",
     }
     body.update(extra)
     return body

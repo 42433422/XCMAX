@@ -176,6 +176,7 @@ def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
             runtime_context={
                 "run_id": run.run_id,
                 "tenant_id": "1",
+                "idempotency_key": f"agent:{run.run_id}:1:{step.step_id}",
                 "_mod_authorization": binding,
             },
             timeout_seconds=10,

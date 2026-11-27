@@ -25,7 +25,12 @@ def test_registered_issue_uses_signed_actor_and_original_message(trusted_actor, 
     )
     step = AgentStep(node_id="report", tool_id="client_product_issue", action="submit", params={})
     result = AgentToolExecutor().execute(
-        step, runtime_context={**actor.context, "message": message}
+        step,
+        runtime_context={
+            **actor.context,
+            "message": message,
+            "idempotency_key": f"client-issue:{state}:{step.step_id}",
+        },
     )
     assert calls == [(actor.session_id, str(actor.tenant_id), message)]
     assert result["success"] is (state != "OWNER_ROUTE_UNAVAILABLE")
@@ -56,9 +61,17 @@ def test_registered_issue_rejects_unbound_or_non_issue_context(trusted_actor, mo
             "tenant_id": actor.tenant_id,
             "user_id": actor.user_id,
             "message": "提交产品故障工单",
+            "idempotency_key": f"client-issue:forged:{step.step_id}",
         },
     )
-    unrelated = executor.execute(step, runtime_context={**actor.context, "message": "查一下客户"})
+    unrelated = executor.execute(
+        step,
+        runtime_context={
+            **actor.context,
+            "message": "查一下客户",
+            "idempotency_key": f"client-issue:unrelated:{step.step_id}",
+        },
+    )
     assert forged["success"] is False and unrelated["success"] is False
     assert calls == []
 

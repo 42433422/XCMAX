@@ -194,6 +194,7 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
     tmp_path, monkeypatch, worker_kind
 ):
     engines, factories, context = _inventory_scope(tmp_path, monkeypatch)
+    context["idempotency_key"] = "inventory-background:stock-in"
 
     def execute():
         if worker_kind == "thread":
