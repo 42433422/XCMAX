@@ -181,6 +181,9 @@ def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "start_paused",
         "start_queued",
         "runtime_config",
+        "runtime_authorized_model_routes",
+        "runtime_effective_model_route",
+        "authorized_model_routes",
         "runtime_type",
     ):
         context.pop(key, None)
@@ -261,6 +264,25 @@ def _same_owner(
             raise XiaoxBindingError("owner_changed", "原调用凭据已撤销、过期或授权范围已变化")
     if error := continuation_conversation_error(run, original):
         raise XiaoxBindingError("conversation_changed", error)
+
+
+def _validate_model_routes(run: AgentRun, identities: list[str]) -> None:
+    primary = identities[0]
+    configured = (run.metadata.get("xiaox_runtime") or {}).get("runtime_config")
+    if (
+        run.metadata.get("runtime_route_identity") != primary
+        or run.metadata.get("runtime_authorized_model_routes", [primary]) != identities
+        or run.metadata.get("runtime_effective_model_route", primary) not in identities
+        or (
+            configured is not None
+            and (
+                not isinstance(configured, dict)
+                or configured.get("route_identity") != primary
+                or configured.get("authorized_model_routes", [primary]) != identities
+            )
+        )
+    ):
+        raise XiaoxBindingError("runtime_changed", "原任务的模型路由及备用授权不能改变")
 
 
 def _insert_parent(
@@ -584,14 +606,13 @@ async def run_runtime_task_async(
         surface = "employee" if context.get("employee_id") else "chat"
         if surface not in settings.surfaces:
             raise RuntimePolicyError("当前入口未启用固定 Xiaox 执行器")
-        route = settings.route if deferred else settings.require_qualified()
+        routes = () if deferred else settings.qualified_routes()
+        route = settings.route if deferred else routes[0]
         if route is None or settings.runtime_root is None:
             raise RuntimePolicyError("Xiaox model route and private runtime_root are required")
-        if not deferred:
-            route.token()  # Credentials and real qualification precede business execution.
+        authorized_routes = settings.authorized_route_identities()
         if is_resume and parent is not None:
-            if parent.metadata.get("runtime_route_identity") != route.identity:
-                raise XiaoxBindingError("runtime_changed", "原任务的模型路由不能改变")
+            _validate_model_routes(parent, authorized_routes)
         queue = None
         if start_queued:
             from app.infrastructure.xiaox.queued_runtime import (
@@ -609,6 +630,7 @@ async def run_runtime_task_async(
                 runtime_task_id=_task_id,
                 runtime_context=context,
                 runtime_route_identity=route.identity,
+                runtime_authorized_model_routes=authorized_routes,
                 runtime_route=route.runtime_identity(),
                 runtime_gate_required=gate is not None,
                 runtime_instruction_digest=instruction_digest,
@@ -697,6 +719,7 @@ async def run_runtime_task_async(
             def claim(run: AgentRun, _metadata: dict[str, Any]) -> None:
                 nonlocal admitted
                 admitted = False
+                _validate_model_routes(run, authorized_routes)
                 requests = run.metadata.setdefault("runtime_requests", {})
                 if request_key in requests:
                     if requests[request_key].get("digest") != digest:
@@ -706,6 +729,13 @@ async def run_runtime_task_async(
                     return
                 if len(requests) >= 256:
                     raise XiaoxBindingError("request_limit", "运行任务已达到续跑请求上限")
+                # Old bindings authorize only their original model. Normalize
+                # that exact authorization under the existing SQL claim lock.
+                run.metadata.setdefault("runtime_authorized_model_routes", authorized_routes)
+                if isinstance(_metadata.get("runtime_config"), dict):
+                    _metadata["runtime_config"].setdefault(
+                        "authorized_model_routes", authorized_routes
+                    )
                 requests[request_key] = {
                     "digest": digest,
                     "state": "admitted",
@@ -748,6 +778,7 @@ async def run_runtime_task_async(
         bridge = XiaoxToolBridge(store, gate=gate, run_id=resolved_id)
         app.state.xiaox_tool_bridge = bridge
         app.state.xiaox_model_route = route
+        app.state.xiaox_model_routes = routes
         app.include_router(model_router)
         app.include_router(mcp_router)
         with LocalRuntimeServer(app) as server:
@@ -774,7 +805,11 @@ async def run_runtime_task_async(
                 input_data=input_data,
                 completion_mode=completion_mode,
                 allowed_actions=actions,
-                runtime_config={**route.runtime_identity(), "gate_required": gate is not None},
+                runtime_config={
+                    **route.runtime_identity(),
+                    "gate_required": gate is not None,
+                    "authorized_model_routes": authorized_routes,
+                },
                 answer_to_waiting_input=answer_to_waiting_input,
                 tool_bridge=bridge,
                 on_event=(lambda event: on_event(public_runtime_result(event)))

@@ -1,3 +1,5 @@
+import pytest
+
 from app.infrastructure.llm.modstore_chat_failover import (
     build_chat_failover_candidates,
     is_market_chat_failoverable,
@@ -68,3 +70,49 @@ def test_same_gateway_aliases_are_deduplicated_and_bounded():
         max_attempts=2,
     )
     assert candidates == [("litellm", "kimi"), ("litellm", "mimo")]
+
+
+@pytest.mark.parametrize("status", [None, {}, {"providers": []}])
+def test_public_catalog_is_not_an_account_failover_grant(status):
+    assert build_chat_failover_candidates(
+        primary_provider="litellm",
+        primary_model="chosen",
+        status_payload=status,
+        catalog_payload={
+            "providers": [
+                {"provider": "litellm", "runtime_models": ["chosen", "ungranted"]},
+                {"provider": "other", "models": ["public-only"]},
+            ]
+        },
+    ) == [("litellm", "chosen")]
+
+
+@pytest.mark.parametrize(
+    "blocked",
+    [
+        {"has_platform_key": False},
+        {"has_user_override": True, "has_platform_key": True},
+        {"has_platform_key": "false"},
+    ],
+)
+def test_unavailable_account_route_is_not_restored_by_catalog_or_cached_default(blocked):
+    assert build_chat_failover_candidates(
+        primary_provider="primary",
+        primary_model="chosen",
+        status_payload={
+            "fernet_configured": False,
+            "providers": [{"provider": "backup", **blocked}],
+        },
+        catalog_payload={"providers": [{"provider": "backup", "models": ["second", "third"]}]},
+        resolved_default={"provider": "backup", "model": "second"},
+    ) == [("primary", "chosen")]
+
+
+def test_account_resolved_default_remains_usable_when_status_is_unavailable():
+    assert build_chat_failover_candidates(
+        primary_provider="primary",
+        primary_model="chosen",
+        status_payload=None,
+        catalog_payload=None,
+        resolved_default={"ok": True, "provider": "backup", "model": "second"},
+    ) == [("primary", "chosen"), ("backup", "second")]

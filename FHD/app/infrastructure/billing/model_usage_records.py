@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from typing import Any, cast
 
 from app.infrastructure.billing import model_usage as _model_usage
@@ -28,6 +29,7 @@ def record_model_usage(
     source: str = "",
     usage_key: str = "",
     metadata: dict[str, Any] | None = None,
+    validate_existing: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Persist one model usage record for audit and future wallet debit reconciliation."""
     total = _facade()._coerce_int(total_tokens)
@@ -62,7 +64,13 @@ def record_model_usage(
         "wallet_backend": _facade().model_usage_wallet_backend(),
         "created_at": now,
     }
-    return cast(dict[str, Any], _facade()._record_usage_entry(entry))
+    return cast(
+        dict[str, Any],
+        _facade()._record_usage_entry(
+            entry,
+            **({"validate_existing": validate_existing} if validate_existing is not None else {}),
+        ),
+    )
 
 
 def record_tool_usage(

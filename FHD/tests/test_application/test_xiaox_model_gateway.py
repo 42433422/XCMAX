@@ -70,6 +70,13 @@ class Store:
 
 @pytest.fixture
 def gateway(tmp_path, monkeypatch):
+    from app.infrastructure.llm import model_admission
+
+    # Every fixture is a fresh host/account. Faults in one independent request
+    # scenario must not leave the next scenario's process-local circuit open.
+    monkeypatch.setattr(model_admission, "_MODEL_BREAKERS", {})
+    monkeypatch.setattr(model_admission, "_MODEL_INFLIGHT", 0)
+    monkeypatch.setattr(model_admission, "_MODEL_ROUTE_INFLIGHT", {})
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
     monkeypatch.setenv("MODEL_USAGE_WALLET_REQUIRED", "1")

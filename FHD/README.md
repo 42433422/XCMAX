@@ -273,6 +273,22 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 部署方仍可显式设置 `XCAGI_AGENT_RUNTIME_CONFIG` 使用原独立网关合同；无效显式配置不会改走账号默认路由。该 JSON 包含 `engine=codex`、两种 `surfaces`、绝对私有 `runtime_root`、根目录内的 `qualification_file` 及 `route`；路由明确独立 `base_url`、`model`、`response_model`、`provider_id`、`upstream_vendor`、`api_key_env`、容量和调用上限。请求不能选择凭据或引擎。Codex 使用短期模型/工具令牌及本地 MCP/Responses 代理，不继承个人 Codex 配置、ChatGPT 登录或额外插件；仅开启受控业务工具，禁止 shell、文件修改及托管搜索。既有开发超级员工的 CLI 调度保持原路径。
 
+模型稳定性继续使用上述网关、原任务 SQL 账本和计费记录。退避复用 [Tenacity 9.1.4](https://github.com/jd/tenacity/tree/9.1.4)（Apache-2.0），传输分阶段限时复用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.28.1)（BSD-3-Clause）和现有 AnyIO；结构校验复用已锁定的 jsonschema 4.26.0 / referencing 0.37.0（MIT），不取回远程 Schema。保留现有异步模型准入层的原子半开探测、代际及流式资源所有权；同步 `CircuitBreaker.call()` 无法直接承接这些生命周期，未新建第二套执行器。请求、物理尝试、实际模型、供应商响应 ID、原任务 Trace 和已知用量在同一链路对齐；模型耗时为宿主观测，不能当作供应商内部推理计时。
+
+| 模型等待与隔离配置 | 默认及范围 |
+| --- | --- |
+| `XCAGI_MODEL_REQUEST_TIMEOUT_SEC` | 单请求绝对预算 180 秒，范围 30–600 秒，受原任务截止时间限制；重试不重置。 |
+| `XCAGI_MODEL_CONNECT_TIMEOUT_SEC` / `POOL_TIMEOUT_SEC` / `WRITE_TIMEOUT_SEC`（均以 `XCAGI_MODEL_` 开头） | 各 15 秒；每项不超过请求剩余预算。 |
+| `XCAGI_MODEL_RESPONSE_TIMEOUT_SEC` | 等待响应头的上限，默认沿用单请求预算。 |
+| `XCAGI_MODEL_INFERENCE_TIMEOUT_SEC` / `READ_TIMEOUT_SEC`（均以 `XCAGI_MODEL_` 开头） | 返回体/推理阶段总时限及读取空闲时限，默认沿用单请求预算；持续吐字节不能延长总时限。 |
+| `XCAGI_MODEL_CLEANUP_TIMEOUT_SEC` | 传输清理共享 2 秒宽限；关闭卡死不能永久占用模型槽位。 |
+| `XCAGI_MODEL_MAX_INFLIGHT_PER_MODEL` | 每个端点/模型默认 8 个并发，受现有全局上限（默认 32）约束；进程内控制，不冒充多 Worker 共享熔断。 |
+| `XCAGI_STRUCTURED_OUTPUT_MAX_REPAIRS` | 最多 2 次格式修复；安全传输重试全程最多 2 次，共享结构化调用总截止时间。 |
+
+显式部署配置可增设 `authorized_fallbacks` 数组（最多两个 `{ "route": { ... }, "qualification_file": "/原runtime_root内/独立资格.json" }`）。每个候选沿用完整 `ModelRoute` 字段及单路真实资格，容量不得低于主路由；缺资格不启动、不会自动购买探测。候选列表及顺序绑定原任务，恢复不能增删或换序。账号市场路由当前没有已签发的备用授权快照，仍保持单路；公开模型目录不会产生换模授权。上游 `failover_policy` 继续为 `disabled`，SDK 不自行重试/换模。只有明确未发出或 HTTP 429 拒绝、原尝试已零用量结算且没有输出时，宿主才在原三次物理尝试及截止时间内考虑下一候选；原文字、完整函数调用及结果不改变，原线程和任务不重建。包含加密推理、压缩、远程模板/文件引用或未验收模态的现场禁止跨路由传递；已选中的实际路由持久化，后续请求及恢复不把其历史发送回旧模型。组合切换的真实模型、压缩与重启验收尚需实际部署取证，单路资格不能替代这项生产证据。
+
+读写超时、5xx、响应丢失、取消及结算不明不授权重发。带 `client_request_id` 的同步/流式聊天共用原请求账本，自带 Key 与不启用钱包的请求也保存原回执；未知状态有平台资金预留时保留原 hold，先核对原请求，再决定释放或结算。BYOK 只恢复已持久化的终态回执；未收到终态仍返回待核对，不能重新调用供应商。幂等键在任何待恢复扣款前核对账号、任务、模型和额度，SQLite 认领及迟到处理使用原写锁和尝试代际。旧客户端没有请求幂等键时不能声称跨请求恰好一次，供应商实际费用仍必须用原账单核对。
+
 显式部署的首次资格或旧资格升级由部署方在运行主机执行 `xcagi-brain --json runtime-check --deployment`，使用该主机原有的 `XCAGI_AGENT_RUNTIME_CONFIG` 和其指定的密钥环境变量。该入口在本机复用同一资格探针、配置锁及尝试记录，可能产生模型费用；已有完整资格时只读复用，失败或中断后须修复配置并加 `--retry` 才再次取证。旧证据缺少宿主绑定或可核验摘要时不自动认定升级资格，部署方核对后使用 `--retry` 重新取证。`--deployment` 采用运行配置中的 `turn_timeout_seconds` 与原调用预算，`--timeout` 只影响 HTTP 命令。验收通过后重新读取原配置和新资格，配置漂移继续阻断；原任务按原编号恢复。账号模型设置与不带 `--deployment` 的 HTTP 命令仍只读检查共享部署资格，不能代替部署方写入，也不能沿用旧 PASS 补齐新检查。
 
 Responses 多轮工具协议由固定 SDK 处理：LiteLLM 代理保留真实原生 Responses 流，直连兼容模型使用 LiteLLM 的成熟适配，并在原始 HTTP 响应边界核对实际模型、实际用量和单次请求。适配器自行补出的用量不能作为结算或资格证据；平台聊天接口健康也不代表工具、压缩和恢复验收已通过。已发布的厂商总窗口声明沿用既有模型目录并标明来源（例如 [MiMo V2.6 Flash](https://mimo.mi.com/models/en-US/mimo-v2.6-flash)）；输入上限、输出上限和总窗口保持独立，不能从别名或 max_tokens 猜测总容量。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和实际出站拒绝证据。宿主出站传输仅允许已绑定的 Responses 地址，在建立连接前拒绝 OpenAI 地址、其他端点和非 POST 请求，并禁用环境代理与重定向；资格证据明确记录范围为 `host_model_egress`，不声称完成操作系统级防火墙隔离。`response_model` 是已验收的单个实际响应 ID，省略时等于请求 `model`；别名解析到快照时须由宿主显式绑定，不能由响应自行扩充允许列表。`gateway_kind=responses` 只发送标准 Responses 字段；明确验收为 `litellm` 时才由宿主下发 `num_retries=0`、`disable_fallbacks=true`，并检查原始 HTTP 两项 attempted-retries/fallbacks 头唯一且均为零。缺头、重复或非零保留未知用量，不结算为一次成功。通用 Responses 没有标准关闭换模参数，上游固定路由仍须实际资格证据；网关计数头是其协议声明，不能替代实际路由验收。

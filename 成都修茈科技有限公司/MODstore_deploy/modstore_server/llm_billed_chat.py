@@ -565,10 +565,12 @@ async def stream_billed_llm_chat(
             upstream_usage: Dict[str, Any] = {}
             finish_reason = ""
             emitted_delta = False
+            upstream_started = False
             settlement_started = False
             pricing = None
             try:
                 remaining_percent = await personal_provider_quota(route)
+                upstream_started = True
                 async for ev in chat_dispatch_stream(
                     prov,
                     api_key=api_key,
@@ -591,7 +593,7 @@ async def stream_billed_llm_chat(
                             status_code = int(status) if status is not None else None
                         except (TypeError, ValueError):
                             status_code = None
-                        if journaled_attempt and status_code not in {400, 401, 403, 404, 422, 429}:
+                        if emitted_delta or status_code not in {400, 401, 403, 404, 422, 429}:
                             yield _route_error(
                                 route,
                                 {
@@ -751,7 +753,7 @@ async def stream_billed_llm_chat(
                 yield _stream_limit_pending(route, request_id, hold)
                 return
             except _CHAT_ERRORS as exc:
-                if settlement_started or journaled_attempt:
+                if settlement_started or journaled_attempt or upstream_started:
                     if settlement_started and ledger_row is not None and client_request_id:
                         db.rollback()
                         recovered = await recover_receipt(

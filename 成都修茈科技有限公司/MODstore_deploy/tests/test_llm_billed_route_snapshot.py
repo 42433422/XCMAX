@@ -301,9 +301,10 @@ async def test_billed_chat_never_publishes_reasoning_as_final_content(
     else:
         with pytest.raises(HTTPException) as error:
             await llm_billed_chat.run_billed_llm_chat(**args)
-        assert error.value.status_code == 502
+        assert error.value.status_code == 409
         assert error.value.detail["route_state"] == "failed"
-        assert "未输出正文" in error.value.detail["message"]
+        assert "未输出正文" in error.value.detail["error"]
+        assert error.value.detail["request_id"]
         wallet.settle.assert_not_awaited()
         saved.assert_not_called()
 
@@ -404,7 +405,10 @@ def test_failed_receipt_preserves_reconciliation_fields_and_excludes_credentials
 
 
 @pytest.mark.asyncio
-async def test_stream_does_not_failover_after_emitting_tool_call(monkeypatch, failed_billed_case):
+@pytest.mark.parametrize("status", [429, 503])
+async def test_stream_does_not_failover_after_emitting_tool_call(
+    monkeypatch, failed_billed_case, status
+):
     route, args, wallet = failed_billed_case
     args.pop("route_snapshot")
     monkeypatch.setattr(
@@ -432,7 +436,7 @@ async def test_stream_does_not_failover_after_emitting_tool_call(monkeypatch, fa
                 }
             ],
         }
-        yield {"type": "error", "status": 503, "error": "temporarily unavailable"}
+        yield {"type": "error", "status": status, "error": "temporarily unavailable"}
 
     monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch)
     response = await llm_billed_chat.stream_billed_llm_chat(**args)
@@ -441,12 +445,15 @@ async def test_stream_does_not_failover_after_emitting_tool_call(monkeypatch, fa
     assert [event for event, _ in events] == ["meta", "toolcall", "error"]
     assert candidates.await_args.kwargs["include_platform_fallbacks"] is True
     wallet.settle.assert_not_awaited()
+    wallet.release.assert_not_awaited()
+    assert events[-1][1]["status"] == 409
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("first_status", [429, 503])
 async def test_fallback_preauthorizes_and_settles_actual_route(
-    monkeypatch, failed_billed_case, stream
+    monkeypatch, failed_billed_case, stream, first_status
 ):
     route, args, wallet = failed_billed_case
     args.pop("route_snapshot")
@@ -470,17 +477,32 @@ async def test_fallback_preauthorizes_and_settles_actual_route(
 
     async def dispatch(provider, **kw):
         if provider == route.provider:
-            return {"ok": False, "status": 503, "error": "temporarily unavailable"}
+            return {"ok": False, "status": first_status, "error": "temporarily unavailable"}
         return {"ok": True, "content": "backup answer", "usage": {}}
 
     async def dispatch_stream(provider, **kw):
         if provider == route.provider:
-            yield {"type": "error", "status": 503, "error": "temporarily unavailable"}
+            yield {"type": "error", "status": first_status, "error": "temporarily unavailable"}
         else:
             yield {"type": "delta", "delta": "backup answer"}
 
     monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
     monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch_stream)
+    if first_status == 503:
+        if stream:
+            response = await llm_billed_chat.stream_billed_llm_chat(**args)
+            events = dict([_frame(frame) async for frame in response.body_iterator])
+            assert "done" not in events and events["error"]["status"] == 409
+        else:
+            with pytest.raises(HTTPException) as pending:
+                await llm_billed_chat.run_billed_llm_chat(**args)
+            assert pending.value.status_code == 409
+        wallet.preauthorize.assert_awaited_once()
+        wallet.release.assert_not_awaited()
+        wallet.settle.assert_not_awaited()
+        charge.assert_not_called()
+        saved.assert_not_called()
+        return
     if stream:
         response = await llm_billed_chat.stream_billed_llm_chat(**args)
         events = dict([_frame(frame) async for frame in response.body_iterator])

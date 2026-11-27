@@ -3,14 +3,46 @@
 from __future__ import annotations
 
 import asyncio
+import math
+import time
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
 from openai import APIConnectionError
+from tenacity import RetryCallState, Retrying, wait_exponential_jitter
 
 from app.infrastructure.chat_stream_lifetime import StreamStopped
 
 _SAFE_TRANSPORT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+_BACKOFF = wait_exponential_jitter(initial=0.25, max=5.0, jitter=0.25)
+
+
+def retry_after_seconds(value: str | None, *, now: float | None = None) -> float | None:
+    """Parse a provider's minimum delay without shortening it to our backoff cap."""
+    if not value:
+        return None
+    try:
+        delay = float(value)
+    except ValueError:
+        try:
+            delay = parsedate_to_datetime(value).timestamp() - (time.time() if now is None else now)
+        except (TypeError, ValueError, OverflowError, OSError):
+            return None
+        delay = max(0.0, delay)
+    return delay if math.isfinite(delay) and delay >= 0 else None
+
+
+def retry_delay(attempt: int, retry_after: str | None = None, *, now: float | None = None) -> float:
+    """Tenacity supplies bounded exponential jitter; the owner enforces its deadline.
+
+    Only the caller that proved a request was not started may use this delay.
+    Retry-After is a lower bound, never permission to extend a task's budget.
+    """
+    state = RetryCallState(Retrying(), None, (), {})
+    state.attempt_number = max(1, min(int(attempt), 32))
+    backoff = _BACKOFF(state)
+    return max(backoff, retry_after_seconds(retry_after, now=now) or 0.0)
 
 
 def is_safe_transport_retry(error: BaseException) -> bool:

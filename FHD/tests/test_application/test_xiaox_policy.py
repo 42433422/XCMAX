@@ -1,6 +1,6 @@
 import hashlib
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
@@ -354,3 +354,150 @@ def test_legacy_deployment_label_selects_same_executor_without_rewriting(
     assert config.read_bytes() == original
     with pytest.raises(RuntimePolicyError):
         settings.require_qualified()
+
+
+def _qualified_settings(root, model):
+    route = replace(_route(), model=model, response_model=model)
+    certificate = root / f"{model}.json"
+    receipt = synthetic_qualification(route, root)
+    certificate.write_text(json.dumps(receipt))
+    return RuntimeSettings(route=route, runtime_root=root, qualification_file=certificate)
+
+
+def test_explicit_fallback_config_binds_order_and_checks_every_route(tmp_path, monkeypatch):
+    primary, first, second = (
+        _qualified_settings(tmp_path, model) for model in ("primary", "first", "second")
+    )
+    config = tmp_path / "runtime.json"
+    config.write_text(
+        json.dumps(
+            {
+                "runtime_root": str(tmp_path),
+                "route": asdict(primary.route),
+                "qualification_file": str(primary.qualification_file),
+                "authorized_fallbacks": [
+                    {
+                        "route": asdict(item.route),
+                        "qualification_file": str(item.qualification_file),
+                    }
+                    for item in (first, second)
+                ],
+            }
+        )
+    )
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config))
+    settings = runtime_settings()
+    assert settings.qualified_routes() == (primary.route, first.route, second.route)
+    assert settings.authorized_route_identities() == [
+        item.route.identity for item in (primary, first, second)
+    ]
+    assert all(item.runtime_root == tmp_path for item in settings.authorized_fallbacks)
+    assert all(item.failover_policy == "disabled" for item in settings.qualified_routes())
+    second.qualification_file.unlink()
+    with pytest.raises(RuntimePolicyError, match="qualification"):
+        settings.qualified_routes()
+
+
+@pytest.mark.parametrize("index", [0, 1, 2])
+def test_every_authorized_route_needs_current_credentials(tmp_path, monkeypatch, index):
+    candidates = [_qualified_settings(tmp_path, name) for name in ("main", "first", "second")]
+    candidates[index] = replace(
+        candidates[index], route=replace(candidates[index].route, api_key_env="TEST_FALLBACK_TOKEN")
+    )
+    monkeypatch.delenv("TEST_FALLBACK_TOKEN", raising=False)
+    settings = replace(candidates[0], authorized_fallbacks=tuple(candidates[1:]))
+    with pytest.raises(RuntimePolicyError, match="credential is unavailable"):
+        settings.qualified_routes()
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "duplicate",
+        "nested",
+        "root",
+        "binary",
+        "primary_market",
+        "fallback_market",
+        "context_window",
+        "max_output_tokens",
+        "max_request_bytes",
+    ],
+)
+def test_fallback_cannot_expand_authority_or_shrink_context(tmp_path, defect):
+    primary = RuntimeSettings(route=_route(), runtime_root=tmp_path)
+    fallback = replace(
+        primary, route=replace(_route(), model="fallback", response_model="fallback")
+    )
+    if defect == "duplicate":
+        fallback = primary
+    elif defect == "nested":
+        fallback = replace(
+            fallback,
+            authorized_fallbacks=(replace(primary, route=replace(_route(), model="nested")),),
+        )
+    elif defect == "root":
+        fallback = replace(fallback, runtime_root=tmp_path / "other")
+    elif defect == "binary":
+        fallback = replace(fallback, codex_bin="other-codex")
+    elif defect.endswith("market"):
+        original = primary if defect == "primary_market" else fallback
+        changed = replace(
+            original,
+            route=replace(
+                original.route,
+                gateway_kind="market",
+                credential="fixture",
+                route_token="fixture-route",
+                config_revision="1",
+                key_source="platform",
+            ),
+        )
+        if defect == "primary_market":
+            primary = changed
+        else:
+            fallback = changed
+    else:
+        fallback = replace(
+            fallback, route=replace(fallback.route, **{defect: getattr(primary.route, defect) - 1})
+        )
+    with pytest.raises(RuntimePolicyError):
+        replace(primary, authorized_fallbacks=(fallback,))
+
+
+@pytest.mark.parametrize(
+    "defect", ["null", "object", "limit", "nested", "root", "missing", "outside"]
+)
+def test_deployment_fallbacks_must_be_explicit_bounded_certificates(tmp_path, monkeypatch, defect):
+    candidate = {
+        "route": asdict(replace(_route(), model="fallback")),
+        "qualification_file": str(tmp_path / "fallback.json"),
+    }
+    fallbacks = [candidate]
+    if defect == "null":
+        fallbacks = None
+    elif defect == "object":
+        fallbacks = candidate
+    elif defect == "limit":
+        fallbacks = [candidate] * 3
+    elif defect == "nested":
+        candidate["authorized_fallbacks"] = []
+    elif defect == "root":
+        candidate["runtime_root"] = str(tmp_path)
+    elif defect == "missing":
+        candidate.pop("qualification_file")
+    else:
+        candidate["qualification_file"] = str(tmp_path.parent / "outside.json")
+    config = tmp_path / "runtime.json"
+    config.write_text(
+        json.dumps(
+            {
+                "route": asdict(_route()),
+                "runtime_root": str(tmp_path),
+                "authorized_fallbacks": fallbacks,
+            }
+        )
+    )
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config))
+    with pytest.raises(RuntimePolicyError):
+        runtime_settings()
