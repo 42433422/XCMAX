@@ -724,10 +724,10 @@
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
       "base_blob": "e680f0387fd7412d351074d38c86206da020b8f7",
-      "head_blob": "ad7f0b95cc552d1828ee02321bc44dc71b9f2470",
+      "head_blob": "fbb6c6cf84f23fd97127109c2ad8f5e68288e883",
       "before_lines": 1206,
       "after_lines": 1208,
-      "reason": "Review request only: remove the mature Sender focus border requested by the user, retaining its white surface and shadow with the original component.",
+      "reason": "Review request only: remove the mature Sender focus border requested by the user, retaining the original surface and shadow, with an inset keyboard focus indicator.",
       "boundary": "Only composer focus styles and its border pseudo-element; preserve controls, model selection, tool dispatch and keyboard submission. No ecosystem changes.",
       "validation": "Production frontend build and scoped Vue eslint passed. Native desktop focus appearance remains a separate visible check.",
       "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
