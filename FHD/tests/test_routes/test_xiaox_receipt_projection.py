@@ -206,7 +206,16 @@ def receipt_task(runtime_entry, local_tools, monkeypatch, request):
             if goal_feedback is None:
                 assert "创建客户" in text
             else:
-                assert text is None and "原目标仍有一项条件待核对" in goal_feedback
+                assert text is None
+                feedback = json.loads(goal_feedback)
+                if repair := feedback.get("repair_task"):
+                    assert [
+                        item["goal_id"] for item in repair["tasks"] if not item["completed"]
+                    ] == ["verification_explanation"]
+                else:
+                    assert [item["goal_id"] for item in feedback["remaining_goals"]] == [
+                        "verification_explanation"
+                    ]
             for event in completed(getattr(state, "corrected_answer", "原客户已创建并核验")):
                 yield {**event, "thread_id": "original-thread"}
 
@@ -382,7 +391,7 @@ def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent
     indirect=True,
     ids=["missing_original_explanation"],
 )
-def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answer(
+def test_exhausted_candidate_keeps_diagnostics_without_reverifying_same_evidence(
     receipt_task, monkeypatch
 ):
     from app.application.agent_runtime import goal_verifier
@@ -391,6 +400,7 @@ def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answ
     state = receipt_task
     state.complete_child()
     review = goal_verifier.verify_runtime_goal
+    reviews = []
 
     def missing_goal(
         binding,
@@ -402,6 +412,7 @@ def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answ
         on_progress=None,
         replay_response=None,
     ):
+        reviews.append(output)
         report = review(
             binding, config, rows=rows, output=output, consume_format_retry=consume_format_retry
         )
@@ -417,11 +428,11 @@ def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answ
     assert resume_ready_xiaox_runs(repository=state.repository) == 1
     blocked = state.drain(state.parent_id)
     before = blocked.final_output["xiaox_result"]
-    assert blocked.status == "blocked" and before["retryable"] is True
-    assert before["rounds"] == 3 and before["failure_stage"] == "goal_verification"
+    assert blocked.status == "blocked" and before["retryable"] is False
+    assert before["terminal_code"] == "react_no_progress_exhausted"
+    assert before["failure_stage"] == "recovery"
+    assert len(reviews) == 1
     assert not blocked.metadata["xiaox_runtime"].get("goal_format_retry_used")
-    assert "条件待核对" in before["failure_reason"]
-    assert before["goal_response"] == "原客户已创建并核验"
     detail = state.client.get(f"/api/agent/runs/{state.parent_id}")
     assert detail.status_code == 200
     public = json.dumps(detail.json(), ensure_ascii=False)
@@ -445,30 +456,7 @@ def test_exhausted_candidate_keeps_diagnostics_and_compensation_reviews_new_answ
         assert refreshed.final_output["xiaox_result"][field] == before[field]
     assert resume_ready_xiaox_runs(repository=state.repository) == 0
     assert state.resume_count == 1 and state.effect_count() == 1
-    goal_digest = refreshed.metadata["runtime_goal_digest"]
-    generation = refreshed.metadata["xiaox_runtime"]["generation"]
-    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", review)
-    # Compensation changes the candidate, not the completed business action.
-    # An unchanged candidate cannot gain a fourth review of the same evidence.
-    state.corrected_answer = "原客户已创建并核验；依据是原审批客户的 SQL 独立回读与回执一致。"
-    options = {
-        "run_id": state.parent_id,
-        "task": "继续原任务",
-        "system_prompt": "original instructions",
-        "runtime_context": {**state.store.get(state.parent_id).context, "turn_id": "user-retry"},
-        "settings": state.settings,
-        "completion_mode": "business",
-    }
-    queued = gateway.run_runtime_task(**options)
-    assert queued["execution_state"] == "queued", queued
-    assert gateway.run_runtime_task(**options)["deduplicated"] is True
-    completed = state.drain(state.parent_id)
-    assert completed.status == "completed", completed.final_output
-    assert completed.metadata["runtime_goal_digest"] == goal_digest
-    assert completed.metadata["xiaox_runtime"]["generation"] == generation + 1
-    assert completed.metadata["xiaox_runtime"]["active_seconds"] >= before["active_seconds"]
-    assert state.resume_count == 2 and state.effect_count() == 1
-    assert completed.final_output["xiaox_result"]["failure_kind"] == ""
+    assert len(reviews) == 1
 
 
 def test_repository_rejection_keeps_candidate_out_of_durable_public_result(receipt_task):

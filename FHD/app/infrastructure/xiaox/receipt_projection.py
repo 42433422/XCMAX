@@ -160,11 +160,17 @@ def reconcile_model_receipts(store: XiaoxBindingStore, run: AgentRun) -> AgentRu
 
 
 def projection_allowed(run: AgentRun) -> bool:
+    from app.application.agent_runtime.verification_budget import JOB_KEY
+
     metadata = run.metadata.get("xiaox_runtime") or {}
     queued = run.metadata.get("_xiaox_queued_request") or {}
+    verification = run.metadata.get(JOB_KEY) or {}
     return bool(
         run.metadata.get("runtime_type") == "xiaox"
         and run.status in {"waiting_user", "running", "blocked", "unknown"}
+        # A receipt refresh cannot reopen a terminal verification budget or
+        # change the final reason recorded by the coordinator.
+        and not (run.status == "blocked" and verification.get("state") == "blocked")
         and run.metadata.get("runtime_goal_contract")
         and metadata.get("calls")
         and not metadata.get("coordinator_active")
