@@ -9,13 +9,13 @@ from __future__ import annotations
 import copy
 import json
 import math
-import re
 import time
 from collections.abc import Callable
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any, cast
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
 from pydantic import ValidationError
 
 from app.application.agent_runtime.goal_verification_task import (
@@ -26,6 +26,7 @@ from app.application.agent_runtime.goal_verification_task import (
     review_repair_checkpoint,
 )
 from app.application.agent_runtime.instructions import GOAL_REVIEW_RULES as _RULES
+from app.domain.task_lifecycle import goal_review_models as review_protocol
 from app.domain.task_lifecycle.agent_runtime_contract import (
     GOAL_PROTOCOL,
     REPAIRABLE_GOAL_REVIEW_ERRORS,
@@ -42,66 +43,14 @@ from app.domain.task_lifecycle.agent_runtime_contract import (
     validate_goal_review,
     validate_runtime_goal,
 )
-from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
-from app.domain.task_lifecycle.goal_review_models import (
-    normalize_review_provenance as _normalize_review_provenance,
-)
-from app.domain.task_lifecycle.goal_review_models import (
-    preserves_source_bindings as _preserves_source_bindings,
-)
-from app.domain.task_lifecycle.goal_review_models import (
-    review_judgments as _review_judgments,
+from app.domain.task_lifecycle.agent_runtime_results import (
+    model_unsettled,
+    receipt_state,
+    receipt_verified,
 )
 
 if TYPE_CHECKING:
     from app.application.agent_runtime.plan_delivery import PlanVerdict
-
-
-_REFERENCE_PREFIX = re.compile(r"^\[原文消息 #[^\]]*\]\n?")
-_LANGUAGE_MENTION = re.compile(
-    r"英文|英语|中文|汉语|简体|繁体|日文|日语|韩文|韩语|德文|德语|法文|法语|"
-    r"西班牙文|西班牙语|俄文|俄语|葡萄牙语|English|Chinese|Japanese|Korean|German|"
-    r"French|Spanish|Russian|Portuguese",
-    re.IGNORECASE,
-)
-_REVISION_CUE = re.compile(
-    r"(?:再|更)(?:正式|简洁|详细|礼貌|专业|口语|生动)"
-    r"|(?:润色|重写|改写|缩写|扩写|调整|修改|补充|完善)"
-    r"(?:一下|一遍)?(?:这封|该|上述|上一版|这个)?(?:邮件|正文|文案|回复|回答|内容|方案|措辞|语气|格式)",
-)
-
-
-def _dominant_script(text: str) -> str:
-    cjk = len(re.findall(r"[\u3400-\u9fff]", text))
-    latin = len(re.findall(r"[A-Za-z]", text))
-    if cjk >= 8 and cjk * 4 >= latin:
-        return "zh"
-    if latin >= 40 and latin * 4 >= cjk:
-        return "en"
-    return ""
-
-
-def _established_language(request: dict[str, Any]) -> str:
-    if _LANGUAGE_MENTION.search(str(request.get("text") or "")):
-        return ""
-    for row in reversed(request.get("history") or []):
-        if isinstance(row, dict) and row.get("role") == "assistant":
-            content = _REFERENCE_PREFIX.sub("", str(row.get("content") or ""))
-            if script := _dominant_script(content):
-                return script
-    return ""
-
-
-def language_continuity_feedback(request: dict[str, Any], response: str) -> str:
-    """Reject a revised deliverable that silently switches its established language."""
-    if not _REVISION_CUE.search(str(request.get("text") or "")):
-        return ""
-    expected = _established_language(request)
-    actual = _dominant_script(response)
-    if not expected or not actual or expected == actual:
-        return ""
-    name = "英文" if expected == "en" else "中文"
-    return f"上一版成稿使用{name}，本轮未要求更换成稿语言；请沿用{name}重写完整成稿。"
 
 
 def _finish_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -170,69 +119,6 @@ def _review_evidence_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return view
-
-
-def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result = dict(pairs)
-    if len(result) != len(pairs):
-        raise ValueError("Duplicate key in goal review JSON")
-    return result
-
-
-def _review_json_text(value: str) -> str:
-    """Unwrap one presentation fence; all JSON and host checks still apply."""
-    text = value.strip()
-    lines = text.splitlines()
-    if len(lines) >= 3 and lines[0].lower() in {"```", "```json"} and lines[-1] == "```":
-        return "\n".join(lines[1:-1]).strip()
-    return text
-
-
-def _verbatim_blocks(text: str) -> list[str]:
-    lines = text.splitlines(keepends=True)
-    stride = max(1, math.ceil(len(lines) / 128))
-    blocks = []
-    for start in range(0, len(lines), stride):
-        block = "".join(lines[start : start + stride]).strip()
-        for offset in range(0, len(block), 4000):
-            if bounded := block[offset : offset + 4000].strip():
-                blocks.append(bounded)
-    return blocks
-
-
-def _file_citation_catalogue(
-    file_evidence: dict[str, dict[str, Any]],
-) -> tuple[
-    dict[str, dict[str, Any]],
-    dict[str, tuple[str, str]],
-]:
-    documents = {}
-    sources: dict[str, tuple[str, str]] = {}
-    for identity, source in file_evidence.items():
-        blocks = {}
-        for block in _verbatim_blocks(source["text"]):
-            block_id = f"s{len(sources) + 1}"
-            sources[block_id] = (identity, block)
-            blocks[block_id] = block
-        documents[identity] = {key: value for key, value in source.items() if key != "text"}
-        documents[identity]["blocks"] = blocks
-    return documents, sources
-
-
-def _resolve_file_citations(
-    review: dict[str, Any],
-    sources: dict[str, tuple[str, str]],
-    responses: dict[str, str],
-) -> None:
-    for goal in review["goals"]:
-        if "file_citations" in goal:
-            for cite in goal["file_citations"]:
-                identity, source = sources[cite.pop("source_block_id")]
-                cite.update(
-                    evidence_id=identity,
-                    source_excerpt=source,
-                    response_excerpt=responses[cite.pop("response_block_id")],
-                )
 
 
 def _verify_plan_capabilities(
@@ -499,9 +385,8 @@ def verify_runtime_goal(
                 return _finish_report(invalid)
             return copy.deepcopy(previous)
     route = binding.metadata.get("runtime_config") or {}
-    mimo_reasoning = str(
-        route.get("upstream_vendor") or ""
-    ).strip().casefold() == "xiaomi" and config.model.casefold().startswith("mimo-")
+    from app.application.agent_runtime.verification_budget import review_output_floor
+
     started = time.monotonic()
     verification_job = active_verification_job_id(binding.run, binding.metadata)
     if binding.metadata.get("verification_budget") and not verification_job:
@@ -511,16 +396,14 @@ def verify_runtime_goal(
         )
         return _finish_report(report)
     persisted_deadline = phase_deadline(binding.run, binding.metadata)
-    seconds = min(float(config.turn_timeout_seconds), persisted_deadline - time.time(), 90.0)
-    # Verification can outlast a normal tool RPC; the original task still bounds it.
-    request_limit = seconds
+    # The loopback gateway applies the signed route ceiling and settles the receipt.
+    # Let it return that outcome within the original task deadline.
+    seconds = min(float(config.turn_timeout_seconds), persisted_deadline - time.time())
     capacity = int(config.context_window) - int(config.auto_compact_token_limit or 0)
     if (
         not math.isfinite(persisted_deadline)
         or not math.isfinite(seconds)
         or seconds <= 0
-        or not math.isfinite(request_limit)
-        or request_limit <= 0
         or capacity <= 0
     ):
         report.update(
@@ -539,9 +422,12 @@ def verify_runtime_goal(
         action_catalog = {}
         for spec in XiaoxToolBridge.visible_actions(binding, []):
             action_catalog.setdefault(spec.tool_id, []).append(spec.action)
-    documents, source_blocks = _file_citation_catalogue(file_evidence or {})
+    documents, source_blocks = review_protocol.file_citation_catalogue(file_evidence or {})
     response_blocks = (
-        {f"r{index}": block for index, block in enumerate(_verbatim_blocks(output), start=1)}
+        {
+            f"r{index}": block
+            for index, block in enumerate(review_protocol.verbatim_blocks(output), start=1)
+        }
         if source_blocks
         else {}
     )
@@ -551,9 +437,18 @@ def verify_runtime_goal(
         action_catalog=action_catalog,
         file_evidence=file_evidence,
         receipt_ids=tuple(row["evidence_id"] for row in snapshot["evidence"]),
+        verified_receipt_ids=tuple(row["child_run_id"] for row in rows if receipt_verified(row)),
         source_block_ids=tuple(source_blocks),
         response_block_ids=tuple(response_blocks),
     )
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError:
+        report.update(
+            error_code="goal_verification_schema_rejected",
+            feedback="核验格式无效，任务已停止在独立核验阶段。",
+        )
+        return _finish_report(report)
     # Source policy belongs to deterministic host validation, not format retry.
     # Keep the full policy in the advertised schema; validate wire citations here.
     wire_schema = copy.deepcopy(schema)
@@ -599,8 +494,7 @@ def verify_runtime_goal(
     # Reserve output within the qualified route limit; bill every attempt.
     payload_size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
     output_estimate = max(
-        # MiMo bills internal reasoning against the same output allowance.
-        8192 if mimo_reasoning else 2048,
+        review_output_floor(str(route.get("upstream_vendor") or ""), config.model),
         1024 + len(contract["request"]["text"]) + 384 * len(snapshot["evidence"]),
         min(32768, math.ceil(payload_size / 8)),
     )
@@ -674,7 +568,7 @@ def verify_runtime_goal(
                                 api_key=config.provider_token,
                                 base_url=config.provider_url,
                                 max_retries=0,
-                                timeout=min(request_limit, seconds),
+                                timeout=seconds,
                                 http_client=DefaultHttpxClient(
                                     trust_env=False, follow_redirects=False
                                 ),
@@ -683,14 +577,41 @@ def verify_runtime_goal(
                     response = client.responses.create(
                         model=config.model,
                         input=cast(ResponseInputParam, messages),
+                        text={
+                            "format": {
+                                "type": "json_schema",
+                                "name": "runtime_goal_review",
+                                "schema": schema,
+                                "strict": False,
+                            }
+                        },
                         tools=[],
                         store=False,
                         max_output_tokens=output_budget,
-                        timeout=min(request_limit, remaining),
+                        timeout=remaining,
                         extra_headers={JOB_HEADER: verification_job} if verification_job else None,
                     )
                     raw = response.model_dump()
             except APIError as exc:
+                from app.infrastructure.llm.retry_policy import (
+                    MODEL_SCHEMA_REJECTED,
+                    MODEL_UPSTREAM_RATE_LIMITED,
+                )
+
+                if getattr(exc, "code", None) == MODEL_SCHEMA_REJECTED:
+                    diagnostic["state"] = "schema_rejected"
+                    report.update(
+                        error_code="goal_verification_schema_rejected",
+                        feedback="所选模型拒绝了附件核验格式，原操作回执已保留。",
+                    )
+                    return _finish_report(report)
+                if getattr(exc, "code", None) == MODEL_UPSTREAM_RATE_LIMITED:
+                    diagnostic["state"] = "upstream_rate_limited"
+                    report.update(
+                        error_code="goal_verification_transport_error",
+                        feedback="独立核验遭到上游模型限流（HTTP 429），原请求计量待核对。",
+                    )
+                    return _finish_report(report)
                 # The gateway owns unknown billing/transport outcomes. Never
                 # turn a lost response into another speculative request.
                 diagnostic["state"] = (
@@ -730,6 +651,18 @@ def verify_runtime_goal(
                     feedback="目标核验已达时限，原任务未确认完成。",
                 )
                 break
+            if raw.get("status") == "incomplete":
+                diagnostic["state"] = "incomplete"
+                format_failure = False
+                report.update(
+                    error_code=(
+                        "goal_verification_budget_exhausted"
+                        if output_budget == capacity
+                        else "goal_verification_output_incomplete"
+                    ),
+                    feedback="核验输出未完整结束，原任务及全部待核对目标已保留。",
+                )
+                break
             items = raw.get("output")
             if not isinstance(items, list) or any(
                 not isinstance(item, dict)
@@ -757,14 +690,10 @@ def verify_runtime_goal(
                 )
                 break
             if raw.get("status") != "completed":
-                diagnostic["state"] = "incomplete"
+                diagnostic["state"] = "invalid_output"
                 format_failure = False
                 report.update(
-                    error_code=(
-                        "goal_verification_budget_exhausted"
-                        if raw.get("status") == "incomplete" and output_budget == capacity
-                        else "goal_verification_format_invalid"
-                    ),
+                    error_code="goal_verification_format_invalid",
                     feedback="核验输出未完整结束，原任务及全部待核对目标已保留。",
                 )
                 break
@@ -776,7 +705,8 @@ def verify_runtime_goal(
                     for part in item["content"]
                 )
                 decoded = json.loads(
-                    _review_json_text(output_text), object_pairs_hook=_unique_json_object
+                    review_protocol.review_json_text(output_text),
+                    object_pairs_hook=review_protocol.unique_json_object,
                 )
                 json.dumps(decoded, allow_nan=False)
                 if isinstance(decoded, dict) and isinstance(decoded.get("goals"), list):
@@ -787,24 +717,36 @@ def verify_runtime_goal(
                             feedback="原任务超过单次64项目标核验范围；全部原文及回执已保留，不能将部分核验当作全部完成。",
                         )
                         return _finish_report(report)
-                decoded = _normalize_review_provenance(decoded, contract)
+                decoded = review_protocol.normalize_review_provenance(decoded, contract)
                 wire_review = copy.deepcopy(decoded)
                 if wire_validator is not None:
-                    if not wire_validator.is_valid(decoded):
-                        raise ValueError("Invalid goal review references")
-                    _resolve_file_citations(decoded, source_blocks, response_blocks)
+                    wire_defects = review_protocol.review_schema_defects(
+                        wire_validator.iter_errors(decoded)
+                    )
+                    if wire_defects:
+                        diagnostic["validation_errors"] = [
+                            *wire_defects,
+                            *review_protocol.review_provenance_defects(
+                                decoded, payload["source_catalogue"]
+                            ),
+                        ]
+                        raise ValueError("Invalid goal review schema")
+                    review_protocol.resolve_file_citations(decoded, source_blocks, response_blocks)
                 review, errors = validate_goal_review(
                     decoded, contract, snapshot, output, file_evidence=file_evidence
                 )
             except (ValueError, TypeError, ValidationError):
                 diagnostic["state"] = "invalid_format"
                 error = "JSON或字段格式无效，请严格按output_schema完整输出"
+                if format_defects := diagnostic.get("validation_errors"):
+                    error += "：" + json.dumps(format_defects, ensure_ascii=False)
                 format_failure = True
                 continue
             diagnostic["state"] = "reviewed"
             if repair_review is not None and (
-                _review_judgments(review) != _review_judgments(repair_review)
-                or not _preserves_source_bindings(
+                review_protocol.review_judgments(review)
+                != review_protocol.review_judgments(repair_review)
+                or not review_protocol.preserves_source_bindings(
                     repair_review, review, payload["source_catalogue"]
                 )
             ):
@@ -862,7 +804,7 @@ def verify_runtime_goal(
                 if any(goal["kind"] in {"read", "write"} for goal in review["goals"])
                 else "reply"
             )
-            continuity = language_continuity_feedback(contract["request"], output)
+            continuity = review_protocol.language_continuity_feedback(contract["request"], output)
             if continuity:
                 # The host rule is authoritative for a hard language constraint;
                 # drop the reviewer's contrary language claims from the retry input.

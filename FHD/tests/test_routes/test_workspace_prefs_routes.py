@@ -69,7 +69,9 @@ def test_intelligence_level_stays_with_authenticated_company(trusted_actor, monk
         monkeypatch.setattr(configuration, "validate_account_model_choice", preflight)
         assert client.put(model_url, headers=member.headers, json=choice).status_code == 403
         assert client.put(model_url, headers=bob.headers, json=choice).status_code == 409
-        assert client.put(model_url, headers=alice.headers, json=choice).status_code == 422
+        rejected = client.put(model_url, headers=alice.headers, json=choice)
+        assert rejected.status_code == 422
+        assert rejected.json()["detail"] == {"code": "unsupported", "message": "模型不可用"}
         assert client.get(model_url, headers=alice.headers).json()["model"] is None
         preflight.side_effect = None
         preflight.return_value = "platform"

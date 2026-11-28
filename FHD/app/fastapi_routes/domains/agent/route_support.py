@@ -287,7 +287,10 @@ def run_response(
 ) -> dict[str, Any]:
     if run_owned_by(run, principal):
         from app.application.agent_orchestrator.run_repository import get_agent_run_repository
-        from app.infrastructure.xiaox.receipt_projection import refresh_xiaox_receipts
+        from app.infrastructure.xiaox.receipt_projection import (
+            projection_allowed,
+            refresh_xiaox_receipts,
+        )
 
         parent = run if run.metadata.get("runtime_type") == "xiaox" else None
         context = run.metadata.get("runtime_context") or {}
@@ -304,6 +307,26 @@ def run_response(
     execution = get_task_execution_repository().get(run.run_id)
     run = project_execution_failure(run, execution)
     approval = issue_approval_grant(run, principal_id=principal.user_id)
+    if (
+        approval is None
+        and run_owned_by(run, principal)
+        and run.status == "waiting_user"
+        and run.metadata.get("runtime_type") == "xiaox"
+        and projection_allowed(run)
+    ):
+        # The parent has no business steps. Reuse the verified child's existing
+        # frozen-action grant; never mint a parent grant or recreate its action.
+        store = XiaoxBindingStore()
+        rows = store.receipt_snapshot(run.run_id)
+        if not any(row.get("state") == "unknown" for row in rows):
+            for row in rows:
+                if not (row.get("receipt") or {}).get("pending_approval"):
+                    continue
+                child = store.repository.get(row["child_run_id"])
+                if child is not None and run_owned_by(child, principal):
+                    approval = issue_approval_grant(child, principal_id=principal.user_id)
+                    if approval:
+                        break
     extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
     if approval:
         extra["approval"] = approval

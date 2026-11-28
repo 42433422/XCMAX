@@ -119,13 +119,22 @@ def task_capabilities(run: AgentRun) -> dict[str, bool]:
         safe = not requires_retry_reconciliation(run) and not (
             run.metadata.get("xiaox_runtime") or {}
         ).get("model_reconciliation_required")
+        approval = (
+            safe
+            and status == "waiting_user"
+            and any(
+                call.get("state") == "waiting_user"
+                and (call.get("receipt") or {}).get("pending_approval") is True
+                for call in (run.metadata.get("xiaox_runtime") or {}).get("calls", {}).values()
+            )
+        )
         return {
             "pause": status in {"queued", "planning", "running", "retrying", "waiting_user"},
             "cancel": status
             in {"queued", "planning", "running", "retrying", "waiting_user", "paused", "blocked"},
             "retry": safe and status in {"failed", "blocked"},
-            "approve": False,
-            "resume": safe and status in {"paused", "waiting_user"},
+            "approve": approval,
+            "resume": safe and not approval and status in {"paused", "waiting_user"},
             "evidence": True,
         }
     context = run.metadata.get("runtime_context") or {}

@@ -69,7 +69,7 @@ function stageOf(raw: string): string {
     waiting_auth: '等待授权',
     accepted: '已受理，等待执行',
     unknown: '结果待核对，请查看原任务回执',
-    blocked: '等待依赖解除',
+    blocked: '已阻断，请核对任务回执',
     paused: '已暂停，可继续',
     completed: '任务完成',
     failed: '执行失败',

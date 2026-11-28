@@ -9,7 +9,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.infrastructure.xiaox.binding import XiaoxBindingError
-from app.infrastructure.xiaox.tools import XiaoxToolBridge, mcp_tool_definitions, schema_violation
+from app.infrastructure.xiaox.tool_schemas import schema_violations
+from app.infrastructure.xiaox.tools import XiaoxToolBridge, mcp_tool_definitions
 
 MCP_PATH = "/api/agent-runtime/xiaox/mcp"
 router = APIRouter(tags=["xiaox-runtime"])
@@ -52,18 +53,17 @@ class _McpResponse(Response):
             try:
                 arguments = params.arguments or {}
                 validator = input_validators.get(params.name)
-                if (
-                    validator
-                    and (error := next(validator.iter_errors(arguments), None)) is not None
-                ):
-                    result = {
-                        "success": False,
-                        "verified": False,
-                        "status": "not_started",
-                        "error_code": "invalid_arguments",
-                        "message": "工具参数不满足已发布的能力契约",
-                        "schema_violation": schema_violation(error),
-                    }
+                violations = (
+                    schema_violations(validator.iter_errors(arguments)) if validator else []
+                )
+                if violations:
+                    result = await anyio.to_thread.run_sync(
+                        self.bridge.reject_invalid_arguments,
+                        self.token,
+                        params.name,
+                        arguments,
+                        violations,
+                    )
                 else:
                     result = await anyio.to_thread.run_sync(
                         self.bridge.invoke, self.token, params.name, arguments

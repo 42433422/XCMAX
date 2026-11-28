@@ -92,7 +92,7 @@ def test_transport_fault_preserves_checkpoint_and_blocks_unsettled_replay(
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
     monkeypatch.setenv("MODEL_USAGE_WALLET_REQUIRED", "1")
     # Shorten only this test's real wait; the host deadline/retry code is unchanged.
-    monkeypatch.setattr(model_gateway, "model_request_timeout_seconds", lambda: 0.75)
+    monkeypatch.setattr(model_gateway, "model_request_timeout_seconds", lambda _route=None: 0.75)
     actor = trusted_actor(user_id=71)
     ledger.set_model_wallet_balance("71", 100)
     route = ModelRoute(

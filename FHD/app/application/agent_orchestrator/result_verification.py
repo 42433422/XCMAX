@@ -144,7 +144,9 @@ def freeze_verification_contract(
         )
 
         if is_workbook_write(step.params):
-            contract["workbook_template"] = capture_template(step.params, context)
+            contract["workbook_template"] = capture_template(
+                step.params, {**context, "run_id": run.run_id}
+            )
     if step.tool_id == "dataset_rag" and step.action in {
         "ingest_document",
         "rollback_version",
@@ -555,7 +557,19 @@ def verified_step_output(run: AgentRun, step: AgentStep) -> dict[str, Any]:
             retryable=False,
             verification=copy.deepcopy(call.metadata.get("verification") or {}) if call else {},
         )
-        if call is not None and pending_execution_receipt(call.output):
+        from app.application.agent_orchestrator.verification_workbook import (
+            known_workbook_expectation_failure,
+        )
+
+        if known_workbook_expectation_failure(run, step, call):
+            output.update(
+                execution_state="completed",
+                outcome="failed",
+                reconciliation_required=False,
+                error_code="artifact_expectation_mismatch",
+                execution={"outcome": "succeeded", "committed": True, "effect": "artifact_created"},
+            )
+        elif call is not None and pending_execution_receipt(call.output):
             output["execution_state"] = execution_result_pending_state(call.output)
         else:
             output.update(

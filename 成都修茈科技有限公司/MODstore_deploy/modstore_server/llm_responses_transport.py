@@ -18,7 +18,11 @@ from openai.types.chat import ChatCompletionChunk
 from modstore_server.llm_billing_values import exact_reported_usage
 from modstore_server.llm_chat_proxy import _normalize_openai_base
 from modstore_server.llm_gateway_contract import StreamReceiptBudget, gateway_single_attempt
-from modstore_server.llm_key_resolver import ChatRouteSnapshot, is_minimax_token_plan_key
+from modstore_server.llm_key_resolver import (
+    ChatRouteSnapshot,
+    is_minimax_token_plan_key,
+    normalize_minimax_api_key,
+)
 from modstore_server.llm_litellm_router import _deployment, _extra_headers, _load_litellm
 from modstore_server.platform_model_config import PlatformApiKey
 from modstore_server.platform_model_transport import bound_model_stream_client
@@ -45,11 +49,20 @@ def _independent_endpoint(url: str) -> None:
         raise ValueError("the selected runtime endpoint is not independent")
 
 
+def _responses_base(route: ChatRouteSnapshot) -> str:
+    base = _normalize_openai_base(route.provider, route.base_url, route.api_key)
+    _independent_endpoint(base)
+    if route.provider == "minimax" and is_minimax_token_plan_key(route.api_key):
+        # A subscription credential can use the vendor's OpenAI-compatible
+        # endpoint. Do not send it to an Anthropic endpoint or to another host.
+        if base not in {"https://api.minimax.io/v1", "https://api.minimaxi.com/v1"}:
+            raise ValueError("MiniMax subscription requires an official OpenAI-compatible endpoint")
+    return base
+
+
 def validate_responses_route(route: ChatRouteSnapshot) -> None:
     try:
-        _independent_endpoint(_normalize_openai_base(route.provider, route.base_url, route.api_key))
-        if route.provider == "minimax" and is_minimax_token_plan_key(route.api_key):
-            raise ValueError("this token plan uses a different native protocol")
+        _responses_base(route)
     except ValueError:
         raise HTTPException(
             409,
@@ -131,7 +144,10 @@ class ResponsesTransport:
     async def open(self, body: dict[str, Any]) -> ResponsesTransport:
         owner = self
         self.streaming = body.get("stream") is True
-        base = _normalize_openai_base(self.route.provider, self.route.base_url, self.route.api_key)
+        base = _responses_base(self.route)
+        api_key = self.route.api_key
+        if self.route.provider == "minimax":
+            api_key = normalize_minimax_api_key(api_key)
         expected_url = base.rstrip("/") + ("/chat/completions" if self.direct else "/responses")
 
         async def before_send(request: Any) -> None:
@@ -182,7 +198,7 @@ class ResponsesTransport:
 
         client_type = ObservedClient if self.direct else AsyncOpenAI
         self.client = client_type(
-            api_key=self.route.api_key,
+            api_key=api_key,
             base_url=base,
             default_headers=_extra_headers(self.route.provider, self.route.api_key),
             timeout=self.timeout,
@@ -199,8 +215,9 @@ class ResponsesTransport:
                 "account-responses",
                 self.route.provider,
                 self.route.model,
-                self.route.api_key,
+                api_key,
                 self.route.base_url,
+                responses_bridge=True,
             )
             if (
                 module is None

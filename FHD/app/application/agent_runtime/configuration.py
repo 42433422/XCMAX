@@ -58,8 +58,15 @@ _QUALIFICATION_ERRORS = {
     "runtime_model_identity_mismatch": "模型响应标识与已保存的上游配置不一致。",
     "runtime_model_response_failed": "模型响应失败，请检查已保存的模型配置。",
     "runtime_model_probe_failed": "模型验收请求未完成，请检查模型网关连接。",
+    "runtime_model_auth_failed": "模型网关拒绝认证，请检查当前模型服务的授权配置。",
+    "runtime_model_rate_limited": "模型服务限流或额度不足，请检查额度或稍后重试。",
+    "runtime_model_gateway_unavailable": "模型网关服务暂时不可用，请稍后重试。",
+    "runtime_model_request_rejected": "模型网关拒绝验收请求，请检查模型与接口协议配置。",
+    "runtime_model_timeout": "模型验收请求超时，请检查模型服务响应。",
+    "runtime_model_connection_failed": "无法连接模型网关，请检查模型服务地址与网络。",
     "runtime_probe_turn_failed": "固定执行器未完成工具调用或原任务恢复检查。",
     "runtime_probe_receipt_missing": "无法核验隔离测试的实际操作回执。",
+    "runtime_attachment_review_schema_failed": "当前模型未通过附件独立核验格式检查。",
 }
 
 
@@ -164,6 +171,14 @@ def _model_route(prepared: PreparedChatRoute) -> ModelRoute:
             "runtime_configuration_required",
             "当前模型缺少 Xiaox 运行信息，请在模型设置中核对上游模型、容量和 Responses 支持。",
         )
+    if "request_timeout_seconds" in runtime:
+        request_timeout_seconds = runtime["request_timeout_seconds"]
+    else:
+        # Legacy snapshots do not advertise a ceiling. Use the existing host
+        # request budget until the platform publishes its signed limit.
+        from app.infrastructure.xiaox.model_gateway import model_request_timeout_seconds
+
+        request_timeout_seconds = model_request_timeout_seconds()
     try:
         return ModelRoute(
             base_url=prepared.connection.platform_url.rstrip("/") + "/v1",
@@ -173,8 +188,10 @@ def _model_route(prepared: PreparedChatRoute) -> ModelRoute:
             response_model=runtime["response_model"],
             context_window=capacities["context_window"],
             max_output_tokens=capacities["max_output_tokens"],
+            max_input_tokens=capacities.get("max_input_tokens"),
             max_model_calls=runtime["max_model_calls"],
             max_request_bytes=runtime["max_request_bytes"],
+            request_timeout_seconds=request_timeout_seconds,
             gateway_kind="market",
             credential=prepared.connection.auth_token,
             route_token=snapshot["route_token"],

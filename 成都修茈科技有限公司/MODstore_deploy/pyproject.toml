@@ -13,6 +13,7 @@ web = [
     "litellm==1.109.3",
     # Account Responses and stream receipts share the reviewed SDK in every web install.
     "openai==3.57.0",
+    "jsonschema>=4.21,<5",
     "uvicorn[standard]>=0.27",
     "websockets>=15,<17",
     "python-multipart>=0.0.33",
@@ -100,6 +101,7 @@ dev = [
   "jsonschema>=4.21",
   # 工具精确固定；升级必须同时验证格式和类型检查。
   "mypy==2.4.1",
+  "types-jsonschema>=4.21,<5",
   "openpyxl>=3.1",
   "pypdf>=4.0",
   # Sparse-recall tests exercise the real pinned implementation without the full knowledge extra.

@@ -16,6 +16,8 @@ from app.infrastructure.chat_stream_lifetime import StreamStopped
 
 _SAFE_TRANSPORT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 _BACKOFF = wait_exponential(multiplier=0.25, max=5.0) + wait_random(0.0, 0.25)
+MODEL_SCHEMA_REJECTED = "CODEX_RESPONSE_SCHEMA_REJECTED"
+MODEL_UPSTREAM_RATE_LIMITED = "CODEX_UPSTREAM_RATE_LIMITED_UNSETTLED"
 
 
 def retry_after_seconds(value: str | None, *, now: float | None = None) -> float | None:
@@ -92,6 +94,22 @@ def _upstream_settlement_unresolved(error: BaseException) -> bool:
     except (AttributeError, TypeError, ValueError, RuntimeError):
         return False
     return "REQUEST_UNRESOLVED" in text or '"state":"settling"' in text.replace(" ", "")
+
+
+def market_rate_limited_unsettled(response: httpx.Response) -> bool:
+    if response.status_code != 409:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    return (
+        isinstance(detail, dict)
+        and detail.get("code") == "CODEX_REQUEST_UNRESOLVED"
+        and detail.get("state") == "settling"
+        and detail.get("upstream_status") == 429
+    )
 
 
 def model_failure_details(

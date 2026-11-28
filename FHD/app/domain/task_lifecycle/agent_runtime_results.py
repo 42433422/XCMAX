@@ -16,6 +16,7 @@ from app.domain.task_lifecycle.results import (
     execution_result_outcome_unknown,
     execution_result_proven_not_executed,
 )
+from app.domain.workbook_write_contract import WORKBOOK_WRITER
 
 ClassifiedRunStatus = Literal["blocked", "waiting_user", "running", "failed", "completed"]
 WAITING_STATES = frozenset({"waiting_user", "waiting_approval", "pending_approval", "waiting_auth"})
@@ -179,7 +180,39 @@ def receipt_settled_failure(row: dict[str, Any]) -> bool:
     return (
         receipt_state(row) in {"failed", "not_started", "not_executed"}
         and receipt.get("success") is False
-        and (row.get("read_only") is True or execution_result_proven_not_executed(receipt))
+        and (
+            row.get("read_only") is True
+            or execution_result_proven_not_executed(receipt)
+            or receipt_artifact_failure(row)
+        )
+    )
+
+
+def receipt_artifact_failure(row: dict[str, Any]) -> bool:
+    """Recognize the host's bound file-only failure, never an arbitrary failed write."""
+    receipt = row.get("receipt") or {}
+    try:
+        fingerprint = canonical_digest({k: row.get(k) for k in ("tool_id", "action", "params")})
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        receipt_state(row) == "failed"
+        and row.get("child_run_id")
+        and row.get("child_task_id")
+        and row.get("child_run_id") == receipt.get("run_id")
+        and row.get("child_task_id") == receipt.get("task_id")
+        and row.get("fingerprint") == fingerprint
+        and row.get("tool_id") == "employee"
+        and row.get("action") == "execute"
+        and isinstance(row.get("params"), dict)
+        and row["params"].get("employee_id") == WORKBOOK_WRITER
+        and receipt.get("success") is False
+        and receipt.get("verified") is False
+        and receipt.get("error_code") == "artifact_expectation_mismatch"
+        and receipt.get("execution")
+        == {"outcome": "succeeded", "committed": True, "effect": "artifact_created"}
+        and (receipt.get("verification") or {}).get("status") == "failed"
+        and (receipt.get("verification") or {}).get("accepted") is False
     )
 
 
@@ -356,8 +389,7 @@ def classify_runtime_result(
         and not (
             coverage["completed"]
             and all(
-                receipt_state(row) == "failed"
-                and execution_result_proven_not_executed(row.get("receipt") or {})
+                receipt_state(row) == "failed" and receipt_settled_failure(row)
                 for row in terminal_failures
             )
         )
@@ -390,6 +422,10 @@ def classify_runtime_result(
         return "failed"
     if not coverage["completed"]:
         feedback = str((report or {}).get("feedback") or "原始目标仍需逐项核对。")
+        failure_output = {
+            "goal_verification_schema_rejected": "所选模型未接受核验格式，核验已停止。原任务和操作回执已保留。",
+            "goal_verification_output_incomplete": "核验输出未完整结束。原任务和操作回执已保留。",
+        }.get(str(report.get("error_code")))
         result.update(
             exit_status="goal_verification_required",
             execution_state="blocked",
@@ -397,11 +433,13 @@ def classify_runtime_result(
             output=(
                 unavailable_plan
                 if unavailable_plan and report.get("error_code") == "plan_delivery_unavailable"
-                else "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
+                else failure_output
+                or "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
             ),
             goal_response=reviewed_output,
             verification_feedback=feedback,
-            retryable=isinstance(report, dict)
+            retryable=not failure_output
+            and isinstance(report, dict)
             and report.get("status") in {"needs_work", "unavailable"},
         )
         return "blocked"

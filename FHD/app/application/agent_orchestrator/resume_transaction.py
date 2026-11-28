@@ -118,6 +118,8 @@ def reconcile_xiaox_receipts(
     from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentTaskRecord
     from app.domain.task_lifecycle.agent_runtime_results import (
         model_unsettled,
+        receipt_artifact_failure,
+        receipt_settled_failure,
         receipt_verified,
     )
     from app.domain.task_lifecycle.control import SessionBook, remember
@@ -152,26 +154,44 @@ def reconcile_xiaox_receipts(
             children[child_id] = child
     previous_result = previous.final_output.get("xiaox_result") or {}
     prior = {str(row.get("call_id")): row for row in previous_result.get("business_receipts") or []}
+    quality_recovery = any(receipt_artifact_failure(row) for row in rows) and all(
+        receipt_verified(row) or receipt_settled_failure(row) for row in rows
+    )
     recovered_writes = [
         row
         for row in rows
         if row.get("read_only") is not True
         and (prior.get(str(row["call_id"])) or {}).get("state")
-        in {"waiting_user", "waiting_approval", "running"}
+        in (
+            {"waiting_user", "waiting_approval", "running", "unknown"}
+            if quality_recovery
+            else {"waiting_user", "waiting_approval", "running"}
+        )
     ]
     verified_child_recovery = bool(
         (previous.metadata.get("recovery") or {}) == {"state": "manual_reconciliation_required"}
         and previous.metadata.get("non_retryable") is True
-        and previous.status in {"running", "waiting_user", "unknown"}
+        and previous.status
+        in (
+            {"running", "waiting_user", "unknown", "blocked"}
+            if quality_recovery
+            else {"running", "waiting_user", "unknown"}
+        )
         and not previous.metadata.get("stream_interruption")
         and not model_unsettled(binding.metadata)
-        and previous_result.get("exit_status") in {"waiting_user", "running"}
-        and not any(
-            (request.get("result") or {}).get("execution_state") == "unknown"
-            for request in (previous.metadata.get("runtime_requests") or {}).values()
+        and (quality_recovery or previous_result.get("exit_status") in {"waiting_user", "running"})
+        and (
+            quality_recovery
+            or not any(
+                (request.get("result") or {}).get("execution_state") == "unknown"
+                for request in (previous.metadata.get("runtime_requests") or {}).values()
+            )
         )
         and recovered_writes
-        and all(receipt_verified(row) for row in rows)
+        and all(
+            receipt_verified(row) or (quality_recovery and receipt_settled_failure(row))
+            for row in rows
+        )
     )
     projected = project_receipt_state(
         previous, rows, verified_child_recovery=verified_child_recovery
@@ -194,7 +214,14 @@ def reconcile_xiaox_receipts(
         execution = db.get(AgentTaskExecutionRecord, previous.run_id)
         if execution is not None:
             if (
-                execution.state not in WAITING_STATES
+                (
+                    execution.state not in WAITING_STATES
+                    and not (
+                        verified_child_recovery
+                        and quality_recovery
+                        and execution.state == "unknown"
+                    )
+                )
                 or execution.lease_owner
                 or execution.lease_expires_at
             ):
@@ -217,8 +244,21 @@ def reconcile_xiaox_receipts(
                 return None
             book = SessionBook(db)
             body = book.get("agent", str(execution.tenant_id or ""), previous.run_id)
-            if body.get("effects") or execution.last_error_code == "needs_verification":
+            settled_files = (
+                {
+                    f"child:{row['child_run_id']}:{children[row['child_run_id']].steps[0].step_id}"
+                    for row in rows
+                    if receipt_artifact_failure(row)
+                }
+                if verified_child_recovery and quality_recovery
+                else set()
+            )
+            if set(body.get("effects") or []) - settled_files or (
+                execution.last_error_code == "needs_verification" and not settled_files
+            ):
                 return None
+            if settled_files:
+                body["effects"] = []
         for child_id, child in children.items():
             record = db.get(AgentRunRecord, child_id)
             current = run_repository._record_to_run(record) if record is not None else None
@@ -255,7 +295,7 @@ def reconcile_xiaox_receipts(
                     or tasks[0].root_run_id != previous.run_id
                     or tasks[0].attempt != 1
                     or tasks[0].run_count != 1
-                    or child.status != "completed"
+                    or (child.status != "completed" and not receipt_artifact_failure(row))
                     or child.metadata.get("non_retryable")
                     or child.metadata.get("recovery")
                 ):

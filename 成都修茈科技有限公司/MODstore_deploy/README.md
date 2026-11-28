@@ -51,7 +51,7 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 | [Anthropic Sandbox Runtime](https://github.com/anthropics/sandbox-runtime) | `0.0.83` / Apache-2.0 | 官方命名空间、seccomp、TLS 与请求过滤；原始 key 只在受信控制进程闭包中使用 |
 | [LangGraph](https://github.com/langchain-ai/langgraph) / [GEPA](https://github.com/gepa-ai/gepa) | `1.2.10` / `0.1.4`，MIT | 沿用仓库固定包、持久检查点、审批中断和辅助实验；产品只实现协议适配 |
 | [APScheduler](https://github.com/agronholm/apscheduler/tree/3.11.3) | `3.11.3` / MIT | 复用现有独立调度进程，推进批准组合、实验和恢复读回 |
-| [LiteLLM](https://github.com/BerriAI/litellm/tree/v1.109.3) | SDK `1.109.3` / MIT | 复用现有流式路由；预算调用关闭隐性重试/fallback，在 SDK 归一化前观测供应商原始 usage，避免把本地估算当结算回执 |
+| [LiteLLM](https://github.com/BerriAI/litellm/tree/v1.109.3) | SDK `1.109.3` / MIT | 复用模型管理 API 的 `/model/info`、流式路由和 Responses 桥。模型容量在原 LiteLLM 部署配置维护，企业选型沿现有设置。MiniMax 套餐走已配置的官方 OpenAI 兼容入口；保留原始用量和单次调用校验 |
 | [OpenAI Python SDK](https://github.com/openai/openai-python) | `3.57.0` / Apache-2.0 | 原生 Responses 承接远程 OpenCode 的完整工具协议与逐调用预算；请求专属 `AsyncStream` 同时保留 LiteLLM 规范化前真实 chunk，不另写 SSE 解析器 |
 | [SearXNG](https://github.com/searxng/searxng/tree/626105eec11d776e2dbccff6cc93fd2cd85f4d0c) | 参考提交 `626105eec11d776e2dbccff6cc93fd2cd85f4d0c` / AGPL-3.0-or-later | 复用已有服务的 JSON Search API；公开查询进入检索，原客户/订单/目标留在控制面。冻结来源快照，搜索片段作为待验证产品假设 |
 | [filelock](https://github.com/tox-dev/filelock/blob/4.2.4/LICENSE) | 服务器锁定 `4.2.4` / MIT；沿用 governance 兼容范围 | 与原维护 ledger 共用派发锁；先持久化意图，再发起 GitHub 工作流，响应丢失只恢复原运行 |

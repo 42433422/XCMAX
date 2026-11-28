@@ -32,6 +32,7 @@ from app.domain.task_lifecycle.goal_review_models import (
 from app.domain.task_lifecycle.goal_review_models import (
     goal_source_catalogue as goal_source_catalogue,
 )
+from app.domain.task_lifecycle.goal_review_models import review_provenance_defects
 from app.domain.task_lifecycle.results import (
     execution_result_error,
     execution_result_outcome_unknown,
@@ -193,6 +194,7 @@ def review_schema(
     action_catalog: dict[str, list[str]] | None = None,
     file_evidence: dict[str, dict[str, Any]] | None = None,
     receipt_ids: tuple[str, ...] = (),
+    verified_receipt_ids: tuple[str, ...] | None = None,
     source_block_ids: tuple[str, ...] = (),
     response_block_ids: tuple[str, ...] = (),
     answers: Sequence[dict[str, Any]] = (),
@@ -209,6 +211,27 @@ def review_schema(
             },
         }
     ]
+    if verified_receipt_ids is not None:
+        assessment["allOf"].append(
+            {
+                "if": {
+                    "properties": {
+                        "kind": {"enum": ["read", "write"]},
+                        "status": {"enum": ["satisfied", "not_applicable"]},
+                    }
+                },
+                "then": {
+                    "properties": {
+                        "evidence_ids": {
+                            "minItems": 1,
+                            "items": {"enum": list(verified_receipt_ids)},
+                        }
+                    }
+                }
+                if verified_receipt_ids
+                else {"properties": {"status": {"const": "unmet"}}},
+            }
+        )
     sources = goal_source_catalogue(contract, answers)
     properties["source_id"]["enum"] = list(sources)
     source_kinds: dict[tuple[str, ...], list[str]] = {}
@@ -229,8 +252,7 @@ def review_schema(
     plan_content = schema["properties"]["plan_content"]
     if contract["scope"].get("plan_delivery_version") == 1:
         plan_content.pop("default")
-        plan_content.pop("anyOf")
-        plan_content["enum"] = ["steps", "narrative"]
+        plan_content.update(plan_content.pop("anyOf")[0])
         schema["required"].append("plan_content")
     else:
         schema["properties"].pop("plan_content")
@@ -262,13 +284,28 @@ def review_schema(
     else:
         schema["properties"]["feedback_disposition"].pop("default")
         schema["required"].append("feedback_disposition")
-        properties["file_basis"].pop("anyOf")
-        properties["file_basis"].pop("default")
-        properties["file_basis"]["enum"] = ["independent", "passages", "complete"]
+        file_basis = properties["file_basis"]
+        file_basis.pop("default")
+        file_basis.update(file_basis.pop("anyOf")[0])
         assessment["allOf"].append(
             {
                 "if": {"properties": {"kind": {"enum": ["read", "reply"]}}},
                 "then": {"required": ["file_basis"]},
+            }
+        )
+        assessment["allOf"].append(
+            {
+                "if": {
+                    "required": ["file_basis"],
+                    "properties": {
+                        "file_basis": {"enum": ["passages", "complete"]},
+                        "status": {"const": "satisfied"},
+                    },
+                },
+                "then": {
+                    "required": ["file_citations"],
+                    "properties": {"file_citations": {"minItems": 1}},
+                },
             }
         )
         if source_block_ids and response_block_ids:
@@ -609,20 +646,16 @@ def validate_goal_review(
         and goal.source in sources[goal.source_id]["text"]
         for goal in review.goals
     )
-    prior_requests = [
-        source["text"] for key, source in sources.items() if key.startswith("history:")
-    ]
     evidence = {row["evidence_id"]: row for row in snapshot["evidence"]}
     verified = _verified_evidence(snapshot)
     if file_evidence is None:
         file_evidence = runtime_file_evidence(contract, snapshot)
-    errors = list(snapshot["conflicts"])
+    errors = [*snapshot["conflicts"], *review_provenance_defects(review.model_dump(), sources)]
     if file_evidence is not None:
         if review.feedback_disposition is None:
             errors.append("附件核验缺少反馈结论")
         elif require_completion and review.feedback_disposition == "blocking":
             errors.append(review.feedback or "附件事实未通过核验")
-    seen: set[str] = set()
     used_writes: set[str] = set()
     assigned: dict[str, list[str]] = {}
     deferred_preferences = 0
@@ -651,24 +684,6 @@ def validate_goal_review(
         for call in goal.planned_calls:
             if not _quotes_planned_action(call, output):
                 errors.append(f"方案动作 {call.tool_id}.{call.action} 未见于当前成稿")
-        source = sources.get(goal.source_id)
-        source_known = source is not None
-        source_matches = source is not None and goal.source in source["text"]
-        # Persisted v2 reports used a user-history alias. New reports receive
-        # granular IDs; compatibility must not promote assistant/tool text.
-        if goal.source_id == "history":
-            source_known = bool(prior_requests)
-            source_matches = any(goal.source in text for text in prior_requests)
-        if goal.goal_id in seen:
-            errors.append(f"goal_id_duplicate: 目标 {goal.goal_id} 的唯一标识重复")
-        if not source_known:
-            errors.append(
-                f"goal_source_unknown: 目标 {goal.goal_id} 的来源 {goal.source_id} 不存在，缺少原始请求证据"
-            )
-        elif not source_matches:
-            errors.append(
-                f"goal_source_mismatch: 目标 {goal.goal_id} 的引用不匹配来源 {goal.source_id}，缺少原始请求证据"
-            )
         if (goal.source_id == "history" or goal.source_id.startswith("history:")) and not (
             current_reply
             and goal.kind in {"reply", "constraint"}
@@ -681,7 +696,6 @@ def validate_goal_review(
             errors.append(
                 f"goal_history_scope_invalid: 目标 {goal.goal_id} 的历史来源仅能补充本轮回复条件，不能授权业务动作"
             )
-        seen.add(goal.goal_id)
         if file_evidence is not None and goal.kind in {"read", "reply"} and goal.file_basis is None:
             errors.append(f"目标 {goal.goal_id} 未区分附件事实与独立回复")
         if goal.file_basis in {"passages", "complete"}:
@@ -716,6 +730,12 @@ def validate_goal_review(
             if require_completion:
                 errors.append(f"目标 {goal.goal_id} 尚未完成")
             continue
+        if (
+            goal.source_id.startswith("attachment:")
+            and any(item.kind in {"read", "write"} for item in review.goals)
+            and (not selected or not selected <= verified.keys())
+        ):
+            errors.append(f"附件操作条件 {goal.goal_id} 缺少原任务的独立执行回执")
         # 只引用正文的约束只能约束回复本身，按正文目标核对，不要求业务回执。
         if goal.kind in {"reply", "planned_action"} or (
             goal.kind == "constraint" and selected == {"response"}

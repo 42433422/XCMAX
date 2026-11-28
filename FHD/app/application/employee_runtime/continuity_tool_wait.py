@@ -10,7 +10,8 @@ import signal
 import subprocess
 import sys
 import threading
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from types import ModuleType
@@ -39,6 +40,10 @@ class ProcessLimitsUnavailable(RuntimeError):
     """A requested child resource boundary could not be established."""
 
 
+class ProcessLimitsExceeded(RuntimeError):
+    """The existing process-tree monitor observed a resource budget violation."""
+
+
 @dataclass(frozen=True)
 class ProcessLimits:
     cpu_seconds: int
@@ -47,12 +52,15 @@ class ProcessLimits:
     open_files: int = 256
 
 
-def _limited_command(command, limits: ProcessLimits):
+def _limited_command(
+    command: Sequence[str], limits: ProcessLimits, *, start_fd: int | None = None
+) -> list[str]:
     # prlimit applies limits before exec without a preexec_fn in a threaded host.
     # These are per-process/per-file limits, not aggregate PID or cgroup limits.
+    darwin = sys.platform == "darwin"
     limiter = shutil.which("prlimit") if sys.platform == "linux" else None
-    if limiter is None:
-        raise ProcessLimitsUnavailable("Linux prlimit is required for bounded execution")
+    if (not darwin and limiter is None) or (darwin and start_fd is None):
+        raise ProcessLimitsUnavailable("no supported child resource boundary")
     import resource
 
     options = (
@@ -61,19 +69,62 @@ def _limited_command(command, limits: ProcessLimits):
         ("fsize", resource.RLIMIT_FSIZE, limits.file_size_bytes),
         ("nofile", resource.RLIMIT_NOFILE, limits.open_files),
     )
-    bounded = [limiter]
+    bounded: list[str] = []
+    caps: list[tuple[int, int]] = []
     try:
         for name, kind, cap in options:
             if type(cap) is not int or cap <= 0:
                 raise ValueError("invalid child resource limit")
+            if darwin and name == "as":
+                # Darwin cannot enforce RLIMIT_AS; the existing parent-owned
+                # process-tree RSS guard gates startup and monitors execution.
+                continue
             inherited = resource.getrlimit(kind)
             effective = min(
                 [cap, *(value for value in inherited if value != resource.RLIM_INFINITY)]
             )
             bounded.append(f"--{name}={effective}:{effective}")
+            caps.append((kind, effective))
     except (OSError, ValueError) as exc:
         raise ProcessLimitsUnavailable("cannot establish inherited child limits") from exc
-    return [*bounded, "--", *command]
+    if darwin:
+        # A fresh interpreter sets kernel limits before exec. preexec_fn can
+        # deadlock in the threaded server; the pipe prevents unmonitored startup.
+        script = (
+            "import os,resource,sys\n"
+            f"for kind,cap in {caps!r}: resource.setrlimit(kind,(cap,cap))\n"
+            f"if os.read({start_fd},1) != b'1': sys.exit(125)\n"
+            f"os.close({start_fd})\n"
+            "os.execvp(sys.argv[1],sys.argv[1:])\n"
+        )
+        return [sys.executable, "-c", script, *command]
+    assert limiter is not None
+    return [limiter, *bounded, "--", *command]
+
+
+def _memory_check(pid: int, cap: int) -> Callable[[], None]:
+    from app.application.agent_orchestrator.tool_process import (
+        _ProcessTreeMemoryGuard,
+        _WorkerResourceError,
+    )
+
+    try:
+        guard = _ProcessTreeMemoryGuard(pid, cap)
+    except _WorkerResourceError as exc:
+        raise ProcessLimitsUnavailable(str(exc)) from exc
+
+    def check() -> None:
+        try:
+            guard.check()
+        except _WorkerResourceError as exc:
+            error = (
+                ProcessLimitsExceeded
+                if exc.code == "tool_memory_limit_exceeded"
+                else ProcessLimitsUnavailable
+            )
+            raise error(str(exc)) from exc
+
+    return check
 
 
 @dataclass
@@ -142,33 +193,61 @@ def run_process(command, *, input, cwd, timeout, env=None, limits: ProcessLimits
     budget = remaining_invocation_seconds(timeout if timeout is not None else math.inf)
     if budget <= 0:
         raise ToolNotStarted("invocation budget expired before process start")
-    if limits is not None:
-        command = _limited_command(command, limits)
-    with subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=cwd,
-        env=env,
-        start_new_session=True,
-    ) as process:
-        completed = False
-        try:
-            stdout, stderr = process.communicate(
-                input=input,
-                timeout=budget if math.isfinite(budget) else None,
-            )
-            completed = True
-            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-        finally:
-            if not completed:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                process.communicate()
+    gate = os.pipe() if limits is not None and sys.platform == "darwin" else ()
+    deadline = time.monotonic() + budget
+    try:
+        if limits is not None:
+            command = _limited_command(command, limits, start_fd=gate[0] if gate else None)
+        with subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cwd,
+            env=env,
+            start_new_session=True,
+            pass_fds=gate[:1],
+        ) as process:
+            completed = False
+            try:
+                check_memory = None
+                if gate:
+                    assert limits is not None
+                    check_memory = _memory_check(process.pid, limits.address_space_bytes)
+                    check_memory()
+                    os.write(gate[1], b"1")
+                while True:
+                    if check_memory is not None:
+                        check_memory()
+                    remaining = max(0, deadline - time.monotonic())
+                    try:
+                        stdout, stderr = process.communicate(
+                            input=input,
+                            timeout=min(0.1, remaining)
+                            if check_memory
+                            else remaining
+                            if math.isfinite(remaining)
+                            else None,
+                        )
+                        completed = True
+                        return subprocess.CompletedProcess(
+                            command, process.returncode, stdout, stderr
+                        )
+                    except subprocess.TimeoutExpired:
+                        input = None
+                        if time.monotonic() >= deadline:
+                            raise
+            finally:
+                if not completed:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.communicate()
+    finally:
+        for fd in gate:
+            os.close(fd)
 
 
 def has_running_claim(state, task_ids, pid_alive):

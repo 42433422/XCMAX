@@ -9,13 +9,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncGenerator, AsyncIterator
 from decimal import Decimal
 from typing import Any
 
+import anyio
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from openai import APIError
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+from openai import APIError, APIStatusError
 from openai.types.responses.response_create_params import ResponseCreateParamsBase
 from sqlalchemy.orm import Session
 
@@ -35,6 +39,7 @@ from modstore_server.llm_gateway_contract import (
     StreamReceiptBudget,
     codex_route_contract,
     gateway_body,
+    gateway_single_attempt,
 )
 from modstore_server.llm_key_resolver import read_chat_route_token
 from modstore_server.llm_model_concurrency import (
@@ -56,6 +61,8 @@ _MAX_RECEIPT_BYTES = 16_777_216
 _CONCURRENCY_WAIT_S = 8.0
 _TERMINALS = {"response.completed", "response.incomplete", "response.failed"}
 _ERRORS: tuple[type[Exception], ...] = (HTTPException, APIError, *RECOVERABLE_ERRORS)
+_SCHEMA_REJECTED = "CODEX_RESPONSE_SCHEMA_REJECTED"
+_SCHEMA_REJECTED_MESSAGE = "所选模型拒绝了结构化输出格式，请检查核验配置。"
 
 
 def _error(code: str, message: str, *, status: int = 409, **detail: Any) -> HTTPException:
@@ -112,6 +119,16 @@ def _validate_payload(payload: Any) -> dict[str, Any]:
         )
     if not _function_tools(payload.get("tools", [])):
         raise _error("CODEX_REQUEST_INVALID", "当前运行时仅支持由本机执行的函数工具。", status=400)
+    text_format = payload.get("text")
+    response_format = text_format.get("format") if isinstance(text_format, dict) else None
+    if isinstance(response_format, dict) and response_format.get("type") == "json_schema":
+        schema = response_format.get("schema")
+        try:
+            if not isinstance(schema, dict):
+                raise SchemaError("Expected an object schema")
+            Draft202012Validator.check_schema(schema)
+        except (SchemaError, RecursionError):
+            raise _error(_SCHEMA_REJECTED, _SCHEMA_REJECTED_MESSAGE, status=422) from None
     source = payload["input"]
     if not isinstance(source, (str, list)) or (
         isinstance(source, list)
@@ -143,6 +160,8 @@ def _identity(response: Any, expected: str, response_id: str | None = None) -> s
 
 
 def _replay(receipt: dict[str, Any]) -> JSONResponse | StreamingResponse:
+    if receipt.get("rejection"):
+        return _schema_rejection_response({"X-XCMax-Request-Replayed": "true"})
     wire = receipt["wire"]
     headers = {**receipt["headers"], "X-XCMax-Request-Replayed": "true"}
     if wire.get("events") is not None:
@@ -154,10 +173,54 @@ def _replay(receipt: dict[str, Any]) -> JSONResponse | StreamingResponse:
     return JSONResponse(wire["response"], headers=headers)
 
 
+def _schema_rejection_response(headers: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(
+        {"detail": {"code": _SCHEMA_REJECTED, "message": _SCHEMA_REJECTED_MESSAGE}},
+        status_code=422,
+        headers=headers,
+    )
+
+
+def _rejected_schema(error: APIStatusError, body: dict[str, Any]) -> bool:
+    if error.status_code not in {400, 422}:
+        return False
+    text_format = body.get("text")
+    response_format = text_format.get("format") if isinstance(text_format, dict) else None
+    if not isinstance(response_format, dict) or response_format.get("type") != "json_schema":
+        return False
+    upstream = error.body if isinstance(error.body, dict) else {}
+    nested = upstream.get("error")
+    if isinstance(nested, dict):
+        upstream = nested
+    # LiteLLM forwards Moonshot's validation error without a structured code.
+    # Match the exact rejection here, before any streaming output is exposed.
+    message = upstream.get("message", "")
+    return upstream.get("code") == "invalid_json_schema" or (
+        isinstance(message, str)
+        and "response_format.json_schema is not a valid moonshot flavored json schema" in message
+    )
+
+
 async def run_billed_responses(
     request: Request, db: Session, user: User, payload: Any
 ) -> JSONResponse | StreamingResponse:
     body = _validate_payload(payload)
+    timeout = _chat_total_deadline_s()
+    deadline = asyncio.get_running_loop().time() + timeout
+    requested = request.headers.getlist("x-xcmax-request-deadline-ms")
+    if requested:
+        if (
+            len(requested) != 1
+            or len(requested[0]) > 16
+            or not requested[0].isascii()
+            or not requested[0].isdecimal()
+        ):
+            raise _error("CODEX_REQUEST_INVALID", "模型请求截止时间无效。", status=400)
+        remaining = int(requested[0]) / 1000 - time.time()
+        if remaining <= 0:
+            raise _error("CODEX_REQUEST_EXPIRED", "模型请求截止时间已过期，未执行。", status=408)
+        timeout = min(timeout, remaining)
+        deadline = asyncio.get_running_loop().time() + timeout
     key = request.headers.get("idempotency-key", "")
     if len(request.headers.getlist("idempotency-key")) != 1 or not ledger.KEY_PATTERN.fullmatch(
         key
@@ -212,7 +275,15 @@ async def run_billed_responses(
         raise HTTPException(
             412 if exc.status_code == 409 else exc.status_code, exc.detail
         ) from None
-    if contract.get("runtime") != runtime:
+    signed_runtime = contract.get("runtime")
+    if (
+        not isinstance(signed_runtime, dict)
+        or {
+            **signed_runtime,
+            "request_timeout_seconds": runtime["request_timeout_seconds"],
+        }
+        != runtime
+    ):
         raise _error(
             "CODEX_ROUTE_EXPIRED", "运行时模型配置快照已失效，请重新读取当前配置。", status=412
         )
@@ -233,7 +304,6 @@ async def run_billed_responses(
             status=503,
         )
     wallet.validate_pat(authorization_header(request))
-    timeout = _chat_total_deadline_s()
     model_key = concurrency_key(
         provider,
         model,
@@ -280,13 +350,14 @@ async def run_billed_responses(
         if transport is not None:
             await transport.close()
 
-    def unresolved() -> HTTPException:
+    def unresolved(*, upstream_rate_limited: bool = False) -> HTTPException:
         return _error(
             "CODEX_REQUEST_UNRESOLVED",
             "上游调用或结算状态待核对；原请求不会自动重跑。",
             state="settling",
             request_id=request_id,
             hold_no=hold.hold_no if hold.enabled or byok else "",
+            **({"upstream_status": 429} if upstream_rate_limited else {}),
         )
 
     async def settle(
@@ -356,8 +427,12 @@ async def run_billed_responses(
                     ledger.finish(db, row, None)
                     raise
                 raise unresolved() from None
-        transport = ResponsesTransport(route, timeout)
-        deadline = asyncio.get_running_loop().time() + timeout
+        # Leave the final part of this same budget for verified usage and wallet I/O.
+        inference_deadline = deadline - min(15.0, timeout / 10)
+        remaining = inference_deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError("Responses admission exhausted the request budget")
+        transport = ResponsesTransport(route, remaining)
         body.update(
             model=model,
             max_output_tokens=maximum,
@@ -367,13 +442,49 @@ async def run_billed_responses(
             truncation="disabled",
             extra_body=gateway_body(provider),
         )
-        async with asyncio.timeout(timeout):
-            await transport.open(body)
+        try:
+            async with asyncio.timeout(remaining):
+                await transport.open(body)
+        except APIStatusError as exc:
+            counters = {
+                name: exc.response.headers[name]
+                for name in ("x-litellm-attempted-retries", "x-litellm-attempted-fallbacks")
+                if name in exc.response.headers
+            }
+            if (
+                transport.attempts != 1
+                or transport.denied
+                or (counters and not gateway_single_attempt(counters))
+                or (not byok and not hold.enabled)
+                or not _rejected_schema(exc, body)
+            ):
+                raise
+            receipt = {
+                "operation": "responses",
+                **route.public_metadata(),
+                "client_request_id": key,
+                "request_id": request_id,
+                "hold_no": hold.hold_no,
+                "billed": False,
+                "charge_amount": "0.00",
+                "rejection": {
+                    "code": _SCHEMA_REJECTED,
+                    "response_model": runtime["response_model"],
+                    "billing_status": "byok" if byok else "released",
+                },
+            }
+            # Persist the explicit upstream refusal before releasing the hold.
+            ledger.prepare_settlement(db, row, receipt)
+            if not byok:
+                async with asyncio.timeout(max(0.0, deadline - asyncio.get_running_loop().time())):
+                    await wallet.release(auth, hold, _SCHEMA_REJECTED, request_id)
+            ledger.finish(db, row, receipt)
+            return _schema_rejection_response()
         source = transport.source
         headers = transport.headers
         if body.get("stream"):
 
-            async def generate() -> AsyncIterator[str]:
+            async def produce() -> AsyncGenerator[str, None]:
                 events: list[dict[str, Any]] = []
                 terminal = None
                 response_id = None
@@ -381,7 +492,7 @@ async def run_billed_responses(
                 stream_budget = StreamReceiptBudget()
                 try:
                     while True:
-                        remaining = deadline - asyncio.get_running_loop().time()
+                        remaining = inference_deadline - asyncio.get_running_loop().time()
                         if remaining <= 0:
                             raise TimeoutError("Responses deadline expired")
                         try:
@@ -421,7 +532,10 @@ async def run_billed_responses(
                     if terminal is None:
                         raise ValueError("Responses stream ended without terminal usage")
                     await close()
-                    await settle(terminal["response"], headers, events)
+                    async with asyncio.timeout(
+                        max(0.0, deadline - asyncio.get_running_loop().time())
+                    ):
+                        await settle(terminal["response"], headers, events)
                     yield _sse(terminal)
                 except _ERRORS as exc:
                     db.rollback()
@@ -439,6 +553,26 @@ async def run_billed_responses(
                     await close()
                     release_slot()
 
+            async def generate() -> AsyncIterator[str]:
+                producer = produce()
+                try:
+                    while True:
+                        # Starlette cancellation must not discard the paid request's
+                        # terminal receipt. Drain this same iterator, bounded above.
+                        with anyio.CancelScope(shield=True):
+                            frame = await anext(producer)
+                        yield frame
+                except StopAsyncIteration:
+                    pass
+                except (asyncio.CancelledError, GeneratorExit):
+                    with anyio.CancelScope(shield=True):
+                        async for _ in producer:
+                            pass
+                    raise
+                finally:
+                    with anyio.CancelScope(shield=True):
+                        await producer.aclose()
+
             handed_off = True
             return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
         result = redact_key(
@@ -446,9 +580,13 @@ async def run_billed_responses(
         )
         if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > _MAX_RECEIPT_BYTES:
             raise ValueError("Responses result exceeds the receipt limit")
-        await close()
-        receipt = await settle(result, headers)
-        return JSONResponse(receipt["wire"]["response"], headers=headers)
+        # A disconnected caller can still reconcile a response already received.
+        # Use the same cancellation shield as streaming, within the original deadline.
+        with anyio.CancelScope(shield=True):
+            async with asyncio.timeout(max(0.0, deadline - asyncio.get_running_loop().time())):
+                await close()
+                settled = await settle(result, headers)
+        return JSONResponse(settled["wire"]["response"], headers=headers)
     except HTTPException:
         if row.state == "failed":
             raise
@@ -458,7 +596,9 @@ async def run_billed_responses(
         db.rollback()
         if is_throttled(exc):
             concurrency.report_throttled(db, model_key, retry_after_seconds(exc))
-        raise unresolved() from None
+        raise unresolved(
+            upstream_rate_limited=isinstance(exc, APIStatusError) and exc.status_code == 429
+        ) from None
     finally:
         if not handed_off:
             await close()

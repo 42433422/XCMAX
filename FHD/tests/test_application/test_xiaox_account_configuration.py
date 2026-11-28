@@ -93,6 +93,20 @@ def account(monkeypatch, tmp_path):
     return state
 
 
+@pytest.mark.parametrize("signed, expected", [(None, 300), (120, 120)])
+def test_market_timeout_remains_bounded_by_the_advertised_route(
+    account, monkeypatch, signed, expected
+):
+    from app.infrastructure.xiaox.model_gateway import model_request_timeout_seconds
+
+    monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "300")
+    if signed is not None:
+        account.snapshot["runtime"]["request_timeout_seconds"] = signed
+    settings = configuration.get_account_runtime_settings("test-owner", qualify=False)
+    assert settings.route is not None
+    assert model_request_timeout_seconds(settings.route) == expected
+
+
 @pytest.mark.parametrize("key_source", ["platform", "user_override"])
 def test_account_route_needs_no_manual_config_and_reuses_exact_qualification(
     account, tmp_path, key_source
@@ -325,6 +339,26 @@ def test_incomplete_platform_contract_does_not_start_a_qualification(account, mi
         configuration.get_account_runtime_settings("41")
     assert exc.value.code == "runtime_configuration_required"
     assert account.attempts == []
+
+
+def test_capacity_refresh_applies_to_new_tasks_and_preserves_original_binding(account):
+    read = configuration.get_account_runtime_settings
+    original = read("41", qualify=False).route
+    limits = account.snapshot["model_capabilities"]
+    limits["max_input_tokens"] = 29000
+    same = read("41", previous=original.runtime_identity(), qualify=False).route
+    assert same.identity == original.identity
+    assert same.input_token_budget == 28000
+
+    limits["max_input_tokens"] = 12000
+    current = read("41", qualify=False).route
+    assert (current.input_token_budget, current.max_output_tokens) == (12000, 4000)
+    assert current.effective_context_window == 16000
+    assert current.identity != original.identity
+    with pytest.raises(configuration.RuntimeSetupError) as exc:
+        read("41", previous=original.runtime_identity(), qualify=False)
+    assert exc.value.code == "runtime_changed"
+    assert not account.attempts
 
 
 def test_resume_pins_original_model_and_rejects_config_change_before_probe(account, monkeypatch):

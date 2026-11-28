@@ -94,7 +94,7 @@ describe('AgentRunTrace', () => {
   })
 
   it('exposes nested tool input and output through a details row', () => {
-    const wrapper = mount(AgentRunTrace, { props: { trace: makeTrace('success') } })
+    const wrapper = mount(AgentRunTrace, { props: { trace: makeTrace('success'), showDiagnosticMetadata: true } })
     const toolStep = wrapper.findAll('.art-step').find((node) => node.classes().includes('is-tool'))
 
     expect(toolStep).toBeTruthy()
@@ -201,6 +201,21 @@ it.each([
   summary.element.dispatchEvent(event)
   expect(event.defaultPrevented).toBe(true)
   expect(summary.attributes('aria-disabled')).toBe('true')
+  wrapper.unmount()
+})
+
+it.each([
+  ['running', '小C正在阅读你的 Excel 文档'],
+  ['waiting', '小C正在核对Excel 文档读取结果'],
+  ['success', '小C已完成Excel 文档读取'],
+  ['failed', '小C未能完成Excel 文档读取'],
+] as const)('uses Chinese Excel activity for %s without exposing SDK identifiers', (status, label) => {
+  const trace = makeTrace(status)
+  Object.assign(trace.phases[1], { tool_id: 'xcmax', action: 'execute_excel_read', waiting_approval: false })
+  const wrapper = mount(AgentRunTrace, { props: { trace } })
+  expect(wrapper.get('.is-tool .art-step-heading').text()).toBe(label)
+  expect(wrapper.find('.is-tool .fa-table').exists()).toBe(true)
+  expect(wrapper.text()).not.toMatch(/xcmax|execute_excel_read/)
   wrapper.unmount()
 })
 

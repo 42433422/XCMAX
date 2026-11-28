@@ -34,6 +34,7 @@ from app.application.agent_runtime.verification_budget import (
     phase_deadline,
     verification_reserve,
 )
+from app.infrastructure.billing.model_reservation import PlatformModelReceiptScope
 from app.infrastructure.llm.retry_policy import retry_after_seconds, retry_delay
 from app.infrastructure.xiaox.policy import ModelRoute
 
@@ -43,22 +44,23 @@ MODEL_PATH = "/api/agent-runtime/xiaox/responses"
 _ZERO_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-def model_request_timeout_seconds() -> float:
+def model_request_timeout_seconds(route: ModelRoute | None = None) -> float:
     """Upstream wait budget for one model request; the turn deadline still clamps it."""
-    raw = os.environ.get("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180").strip()
+    ceiling = route.request_timeout_seconds if route else 180.0
+    raw = os.environ.get("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", str(ceiling)).strip()
     try:
         value = float(raw)
     except ValueError:
         value = 180.0
     if not math.isfinite(value):
         value = 180.0
-    return max(30.0, min(value, 600.0))
+    return max(15.0 if route else 30.0, min(value, ceiling if route else 600.0))
 
 
-def model_phase_timeout_seconds(phase: str) -> float:
+def model_phase_timeout_seconds(phase: str, budget: float | None = None) -> float:
     """Separate transport/header/inference guards under the same request clock."""
     default = {"connect": 15.0, "pool": 15.0, "write": 15.0, "cleanup": 2.0}.get(
-        phase, model_request_timeout_seconds()
+        phase, budget if budget is not None else model_request_timeout_seconds()
     )
     raw = os.environ.get(f"XCAGI_MODEL_{phase.upper()}_TIMEOUT_SEC", str(default))
     try:
@@ -72,14 +74,14 @@ class ModelRequestTimeout(TimeoutError):
     """One model request exhausted its single absolute wait budget."""
 
 
-def model_request_deadline(binding: Any) -> float:
+def model_request_deadline(binding: Any, route: ModelRoute | None = None) -> float:
     """Start the one monotonic clock shared by headers, JSON and SSE settlement.
 
     The upstream phase timeout remains a transport guard, but it must never
     extend the request's absolute budget. Retries, header waits and body reads
     all consume the same clock, so a slow attempt cannot buy a fresh window.
     """
-    return time.monotonic() + min(model_request_timeout_seconds(), _remaining(binding))
+    return time.monotonic() + min(model_request_timeout_seconds(route), _remaining(binding))
 
 
 def request_remaining(deadline: float) -> float:
@@ -354,10 +356,16 @@ def _portable_fallback_body(body: dict[str, Any]) -> bool:
 class _ModelCallLimitReached(Exception):
     """Raised inside a binding mutation so the refusal can be committed first."""
 
-    def __init__(self, max_model_calls: int, used_model_calls: int) -> None:
+    def __init__(
+        self,
+        max_model_calls: int,
+        used_model_calls: int,
+        reason: str = "model_call_budget_exhausted",
+    ) -> None:
         super().__init__("model call limit reached")
         self.max_model_calls = max_model_calls
         self.used_model_calls = used_model_calls
+        self.reason = reason
 
 
 def _remaining(binding: Any) -> float:
@@ -387,7 +395,7 @@ def _claim(
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
     from app.infrastructure.llm.model_admission import admit_model_call
 
-    reserve = estimate_llm_cost_units(total_tokens=route.context_window)
+    reserve = estimate_llm_cost_units(total_tokens=route.effective_context_window)
     with store.scope(token, audience="model") as binding:
         _remaining(binding)
         config = binding.metadata.get("runtime_config") or {}
@@ -425,13 +433,36 @@ def _claim(
                 raise HTTPException(409, "Task model-call limit is invalid")
             if len(calls) >= maximum_calls:
                 raise _ModelCallLimitReached(maximum_calls, len(calls))
+            control = metadata.get("react_progress") or {}
+            phase = "repair" if control.get("repairing") else "execution"
+            if not verification_job and control:
+                limit = control["limits"][phase]
+                used = sum(
+                    row.get("execution_phase", row.get("purpose")) == phase
+                    for row in calls.values()
+                )
+                if used >= limit:
+                    handoff = phase == "execution" and control["limits"]["repair"] > 0
+                    raise _ModelCallLimitReached(
+                        limit,
+                        used,
+                        "react_execution_phase_exhausted"
+                        if handoff
+                        else f"react_{phase}_budget_exhausted",
+                    )
             reserved_calls, reserved_cost = verification_reserve(metadata)
             if verification_job:
                 if metadata.get("verification_budget") and reserved_calls <= 0:
                     raise HTTPException(429, "Independent verification call budget is exhausted")
             elif len(calls) + reserved_calls >= maximum_calls:
-                raise HTTPException(
-                    429, "Remaining model calls are reserved for independent verification"
+                if not control:
+                    raise HTTPException(
+                        429, "Remaining model calls are reserved for independent verification"
+                    )
+                raise _ModelCallLimitReached(
+                    maximum_calls - reserved_calls,
+                    len(calls),
+                    f"react_{phase}_budget_exhausted",
                 )
             held = int(run.metadata.get("reserved_cost_units") or 0)
             if budget_exceeded_payload(
@@ -453,8 +484,23 @@ def _claim(
                 "started_at": time.time(),
                 "trace_id": ensure_run_trace(run, live=False)["trace_id"],
                 "route_identity": route.identity,
+                "receipt_scope": {
+                    name: getattr(route, name)
+                    for name in (
+                        "provider_id",
+                        "model",
+                        "response_model",
+                        "config_revision",
+                        "key_source",
+                    )
+                },
                 **({"observation": observation} if observation else {}),
                 "purpose": "verification" if verification_job else "execution",
+                "execution_phase": "verification"
+                if verification_job
+                else (
+                    "repair" if metadata.get("react_progress", {}).get("repairing") else "execution"
+                ),
                 **(
                     {
                         "verification_job_id": verification_job,
@@ -469,7 +515,7 @@ def _claim(
             }
             run.add_event(
                 "runtime.model.started",
-                data={"request_id": request_id, "purpose": calls[request_id]["purpose"]},
+                data={"model_request_id": request_id, "purpose": calls[request_id]["purpose"]},
             )
             # The SDK thread keeps its original logical model. Persist the
             # actual route so its later opaque history never goes back to the
@@ -486,11 +532,12 @@ def _claim(
 
             def record(run: Any, metadata: dict[str, Any]) -> None:
                 metadata["model_call_limit"] = {
-                    "reason": "model_call_budget_exhausted",
+                    "reason": exhausted_reason,
                     "max_model_calls": max_model_calls,
                     "used_model_calls": used_model_calls,
                 }
 
+            exhausted_reason = exhausted.reason
             store.update(binding.run_id, record, generation=binding.metadata.get("generation"))
             raise HTTPException(429, "Task model-call limit reached") from exhausted
         return binding, reserve
@@ -504,10 +551,12 @@ def _finish(
     usage: dict[str, int] | None,
     usage_key: str,
     state: str = "completed",
-    market_route: ModelRoute | None = None,
+    market_route: ModelRoute | PlatformModelReceiptScope | None = None,
     platform_receipt: Any = None,
     observation: dict[str, Any] | None = None,
     verification_response: dict[str, Any] | None = None,
+    reconciled_response: dict[str, Any] | None = None,
+    reconciled_rejection: dict[str, Any] | None = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
@@ -554,6 +603,28 @@ def _finish(
             item.get("state") in {"reserved", "unknown"}
             for item in metadata["model_requests"].values()
         )
+        if reconciled_response is not None:
+            call.setdefault("reconciled_response", reconciled_response)
+            call.update(
+                observed_model=reconciled_response["model"],
+                model_identity_verified=True,
+                gateway_attempts_verified=True,
+            )
+            if not terminal:
+                run.add_event(
+                    "runtime.model.reconciled",
+                    "已核对原模型终态与计量，未重放调用",
+                    {"model_request_id": request_id},
+                )
+        if reconciled_rejection is not None:
+            call.setdefault("reconciled_rejection", reconciled_rejection)
+            call["diagnostic"] = {
+                **(call.get("diagnostic") or {}),
+                "failure_kind": "model_schema_rejected",
+                "failure_reason": "所选模型拒绝了结构化输出格式。",
+                "outcome": "not_started",
+                "retryable": False,
+            }
         if (
             verification_response is not None
             and call.get("purpose") == "verification"
@@ -577,9 +648,14 @@ def _finish(
         if terminal:
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
+        diagnostic = call.get("diagnostic") or {}
         run.add_event(
             "runtime.model.completed" if state == "completed" else "runtime.model.failed",
-            data={"request_id": request_id, "purpose": call.get("purpose")},
+            data={
+                "model_request_id": request_id,
+                "purpose": call.get("purpose"),
+                **{k: diagnostic[k] for k in ("failure_kind", "outcome") if k in diagnostic},
+            },
         )
         if state == "completed":
             for key in ("runtime_failure_kind", "runtime_failure_reason", "runtime_failure_stage"):
@@ -713,6 +789,47 @@ async def forward_responses(request: Request):
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
     verification_job = request.headers.get(JOB_HEADER, "")
+    from app.domain.task_lifecycle.react_progress import (
+        CONTROL_KEY,
+        receipt_facts,
+        requires_actions,
+    )
+
+    control = binding.metadata.get(CONTROL_KEY) or {}
+    if not verification_job and control.get("repairing"):
+        target = control.get("route_switch_target")
+        if target and target != active:
+            if target not in authorized or authorized.index(target) != route_index + 1:
+                raise HTTPException(409, "Repair model target no longer matches authorized routes")
+            if not _portable_fallback_body(requested_body):
+                raise HTTPException(
+                    409, "Repair context is not portable to the authorized alternate model"
+                )
+            route_index = authorized.index(target)
+            route = routes[route_index]
+            body = _prepare_body({**requested_body, "model": route.model}, route)
+    if not verification_job:
+        from app.domain.task_lifecycle.agent_runtime_results import (
+            receipt_settled_failure,
+            receipt_verified,
+        )
+
+        rows = [
+            {"call_id": key, **value}
+            for key, value in (binding.metadata.get("calls") or {}).items()
+        ]
+        if (
+            requires_actions(control)
+            or binding.run.metadata.get("runtime_completion_mode") == "business"
+        ) and not (
+            binding.metadata.get("waiting_input")
+            or any(not (receipt_verified(row) or receipt_settled_failure(row)) for row in rows)
+            or (set(receipt_facts(rows)) - set(control.get("facts", [])))
+        ):
+            if not body.get("tools"):
+                raise HTTPException(409, "The current repair requires authorized host tools")
+            body["tool_choice"] = "required"
+
     if verification_job or binding.metadata.get("active_phase") == "verification":
         if not verification_job or verification_job != active_verification_job_id(
             binding.run, binding.metadata
@@ -903,9 +1020,12 @@ async def forward_responses(request: Request):
     try:
         # All attempts share one absolute clock. An expired task still closes
         # its observation, without admitting a model call or resetting budget.
-        inference_deadline = deadline = model_request_deadline(binding)
+        inference_deadline = deadline = model_request_deadline(binding, route)
         from app.infrastructure.llm.retry_policy import (
+            MODEL_SCHEMA_REJECTED,
+            MODEL_UPSTREAM_RATE_LIMITED,
             is_safe_transport_retry,
+            market_rate_limited_unsettled,
             model_failure_details,
         )
 
@@ -914,6 +1034,9 @@ async def forward_responses(request: Request):
             *,
             output_started: bool = False,
             upstream_error: str = "",
+            schema_rejected: bool = False,
+            upstream_rate_limited: bool = False,
+            settled: bool = False,
             stream_phase: str | None = None,
             stream_frame: int | None = None,
         ) -> None:
@@ -945,6 +1068,19 @@ async def forward_responses(request: Request):
                 details["upstream_error"] = upstream_error[:500]
             if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429:
                 details.update(outcome="not_started", retryable=True)
+            if schema_rejected:
+                details.update(
+                    failure_kind="model_schema_rejected",
+                    failure_reason="所选模型拒绝了结构化输出格式。",
+                    outcome="not_started",
+                )
+            if upstream_rate_limited:
+                details.update(
+                    failure_kind="upstream_rate_limited",
+                    failure_reason="上游模型限流（HTTP 429），原请求计量仍待核对。",
+                )
+            if settled:
+                details["outcome"] = "settled"
             if isinstance(error, ModelGatewayContractError):
                 details.update(failure_kind=error.code, failure_reason=str(error), retryable=False)
             if isinstance(error, _ModelSettlementStorageError):
@@ -970,7 +1106,15 @@ async def forward_responses(request: Request):
                 run.metadata["runtime_failure_kind"] = details["failure_kind"]
                 run.metadata["runtime_failure_reason"] = details["failure_reason"]
                 run.metadata["runtime_failure_stage"] = "model"
-                run.add_event("runtime.model.failure", details["failure_reason"], details)
+                run.add_event(
+                    "runtime.model.failure",
+                    details["failure_reason"],
+                    {
+                        **details,
+                        "model_request_id": request_id,
+                        "purpose": (call or {}).get("purpose"),
+                    },
+                )
 
             await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
 
@@ -1081,7 +1225,7 @@ async def forward_responses(request: Request):
                         user_id=binding.run.user_id,
                         provider_id=route.provider_id,
                         model=route.model,
-                        token_ceiling=route.context_window,
+                        token_ceiling=route.effective_context_window,
                     )
                 )
             # The platform reserves and settles its wallet. _claim still checks
@@ -1095,7 +1239,9 @@ async def forward_responses(request: Request):
                 # it is a transport guard, not a second budget.
                 "timeout": httpx.Timeout(
                     **{
-                        phase: min(model_phase_timeout_seconds(phase), attempt_budget)
+                        phase: min(
+                            model_phase_timeout_seconds(phase, attempt_budget), attempt_budget
+                        )
                         for phase in ("connect", "read", "write", "pool")
                     }
                 ),
@@ -1110,6 +1256,10 @@ async def forward_responses(request: Request):
             client = client_factory(**client_options)
             headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
             headers.update(route.headers(request_id))
+            if route.gateway_kind == "market":
+                headers["X-XCMax-Request-Deadline-Ms"] = str(
+                    int((time.time() + request_remaining(deadline)) * 1000)
+                )
             headers.update(observe("headers") or {})
             outbound = client.build_request(
                 "POST",
@@ -1122,7 +1272,10 @@ async def forward_responses(request: Request):
             request_phase = "response"
             try:
                 with anyio.fail_after(
-                    min(model_phase_timeout_seconds("response"), request_remaining(deadline))
+                    min(
+                        model_phase_timeout_seconds("response", attempt_budget),
+                        request_remaining(deadline),
+                    )
                 ):
                     upstream = await client.send(outbound, stream=True)
             except httpx.HTTPError as exc:
@@ -1158,7 +1311,9 @@ async def forward_responses(request: Request):
                 continue
             request_phase = "inference"
             inference_deadline = min(
-                deadline, time.monotonic() + model_phase_timeout_seconds("inference")
+                deadline,
+                time.monotonic()
+                + model_phase_timeout_seconds("inference", request_remaining(deadline)),
             )
             headers_ms = round((time.monotonic() - attempt_started) * 1000, 1)
             await anyio.to_thread.run_sync(
@@ -1210,7 +1365,25 @@ async def forward_responses(request: Request):
                 raise
             except (httpx.HTTPError, UnicodeDecodeError, OSError):
                 upstream_error = ""
-            await record_failure(slot_failure, upstream_error=upstream_error)
+            schema_rejected = False
+            if route.gateway_kind == "market" and upstream.status_code == 422:
+                try:
+                    envelope = upstream.json()
+                    detail = envelope.get("detail") if isinstance(envelope, dict) else None
+                    schema_rejected = (
+                        isinstance(detail, dict) and detail.get("code") == MODEL_SCHEMA_REJECTED
+                    )
+                except (ValueError, UnicodeDecodeError):
+                    pass
+            upstream_rate_limited = (
+                route.gateway_kind == "market" and market_rate_limited_unsettled(upstream)
+            )
+            await record_failure(
+                slot_failure,
+                upstream_error=upstream_error,
+                schema_rejected=schema_rejected,
+                upstream_rate_limited=upstream_rate_limited,
+            )
             # Explicit rejection has no generated completion. A 5xx/408 can
             # hide a started model request and remains unresolved, without replay.
             definite = (
@@ -1248,8 +1421,14 @@ async def forward_responses(request: Request):
             return JSONResponse(
                 {
                     "error": {
-                        "message": "Qualified model gateway request failed",
+                        "message": "所选模型拒绝了结构化输出格式。"
+                        if schema_rejected
+                        else "上游模型限流，原请求计量待核对。"
+                        if upstream_rate_limited
+                        else "Qualified model gateway request failed",
                         "type": "upstream_error",
+                        **({"code": MODEL_SCHEMA_REJECTED} if schema_rejected else {}),
+                        **({"code": MODEL_UPSTREAM_RATE_LIMITED} if upstream_rate_limited else {}),
                     }
                 },
                 status_code=upstream.status_code if definite else 502,
@@ -1292,7 +1471,7 @@ async def forward_responses(request: Request):
                 error = ModelGatewayContractError(
                     f"model_response_{status}", f"Gateway response ended as {status}"
                 )
-                await record_failure(error)
+                await record_failure(error, settled=True)
                 if any(item.get("type") == "function_call" for item in response.get("output", [])):
                     raise error
             return JSONResponse(response)
@@ -1369,7 +1548,9 @@ async def forward_responses(request: Request):
                                     f"model_response_{status}",
                                     f"Gateway response ended as {status}",
                                 )
-                                await record_failure(error, output_started=output_visible)
+                                await record_failure(
+                                    error, output_started=output_visible, settled=True
+                                )
                                 if any(
                                     item.get("type") == "function_call"
                                     for item in response.get("output", [])

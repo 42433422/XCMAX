@@ -50,6 +50,24 @@ def test_grants_survive_repository_reopen_and_separate_audiences(trusted_actor):
         reopened.authenticate(grant.model_token, "mcp")
 
 
+@pytest.mark.parametrize("level", range(1, 7))
+def test_each_enterprise_level_can_run_model_and_read_only_steps(trusted_actor, level):
+    store, run, grant = make_binding(
+        trusted_actor(), completion_mode="reply", execution_autonomy_level=level
+    )
+    assert store.authenticate(grant.model_token, "model").run_id == run.run_id
+    call, created = store.claim_call(
+        run.run_id,
+        "read-source",
+        tool_id="excel_analysis",
+        action="read",
+        params={},
+        read_only=True,
+        generation=grant.binding.metadata["generation"],
+    )
+    assert created and call["read_only"]
+
+
 @pytest.mark.parametrize("level", [1, 2])
 def test_enterprise_intelligence_limits_new_business_calls(trusted_actor, level):
     store, run, grant = make_binding(trusted_actor(), execution_autonomy_level=level)

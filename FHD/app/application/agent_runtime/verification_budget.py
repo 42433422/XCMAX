@@ -14,6 +14,16 @@ JOB_HEADER = "x-xcagi-verification-job"
 VERIFIER_VERSION = 2
 
 
+def review_output_floor(vendor: str, model: str) -> int:
+    """Reserve room for reasoning when the selected route meters it as output."""
+    return (
+        8192
+        if vendor.strip().casefold() in {"moonshot", "kimi"}
+        or (vendor.strip().casefold() == "xiaomi" and model.casefold().startswith("mimo-"))
+        else 2048
+    )
+
+
 def initialize_verification_budget(
     run: Any,
     metadata: dict[str, Any],
@@ -63,12 +73,13 @@ def initialize_verification_budget(
         calls = min(calls, max(1, remaining // (4 * per_call)))
         call_limit = min(call_limit, remaining // per_call - 1)
     budget = {
-        "version": 1,
+        "version": 2,
+        "accounting": "evidence_revision",
         "model_calls": calls,
         "max_model_calls": call_limit,
         "per_call_cost_units": per_call,
         "cost_units": calls * per_call,
-        "seconds": min(90.0, float(total_seconds) / 4),
+        "seconds": float(total_seconds) / 4,
     }
     metadata["verification_budget"] = budget
     return dict(budget)
@@ -79,10 +90,19 @@ def verification_reserve(metadata: dict[str, Any]) -> tuple[int, int]:
     budget = metadata.get("verification_budget") or {}
     if not budget:
         return 0, 0  # Existing in-flight runs have no retroactive budget promise.
-    used = sum(
-        row.get("purpose") == "verification"
-        for row in (metadata.get("model_requests") or {}).values()
-    )
+    requests = metadata.get("model_requests") or {}
+    if budget.get("accounting") == "evidence_revision":
+        # A format correction belongs to the original assessment. It still
+        # consumes the physical model/cost ledger and its one persisted repair slot.
+        used = len(
+            {
+                row.get("verification_job_id") or key
+                for key, row in requests.items()
+                if row.get("purpose") == "verification"
+            }
+        )
+    else:
+        used = sum(row.get("purpose") == "verification" for row in requests.values())
     # Old frozen envelopes retain their original ceiling. Introducing slots
     # never grants a pre-upgrade task additional verification calls.
     ceiling = int(budget.get("max_model_calls", budget["model_calls"]))

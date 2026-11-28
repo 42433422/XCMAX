@@ -23,6 +23,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from httpx_sse import EventSource
+from jsonschema import Draft202012Validator
 
 from app.build_identity import build_identity
 from app.infrastructure.xiaox.launcher import verify_installation
@@ -274,6 +275,8 @@ def _market_receipt(response: dict, route: ModelRoute, request_id: str) -> dict:
 
 
 async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> Response:
+    from app.application.agent_runtime.verification_budget import review_output_floor
+
     # Deferred import lets the production gateway reuse IndependentModelTransport.
     from app.infrastructure.xiaox.model_gateway import (
         _prepare_body,
@@ -286,12 +289,18 @@ async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> 
     if len(raw) > route.max_request_bytes or len(probe.models) >= min(route.max_model_calls, 12):
         raise _QualificationError("runtime_qualification_limit")
     payload = json.loads(raw)
+    review_probe = probe.phase == "attachment_review"
     if isinstance(payload, dict):
         # This disposable probe needs a small receipt/compaction summary, not
         # the deployment's maximum generation allowance or wallet hold.
-        payload["max_output_tokens"] = min(route.max_output_tokens, 2048)
+        maximum = (
+            review_output_floor(route.upstream_vendor, route.response_model)
+            if review_probe
+            else 2048
+        )
+        payload["max_output_tokens"] = min(route.max_output_tokens, maximum)
     body = _prepare_body(payload, route)
-    if body.get("stream") is not True:
+    if bool(body.get("stream")) == review_probe:
         raise _QualificationError("runtime_stream_evidence_missing")
     request_id = uuid.uuid4().hex
     observation: dict[str, Any] = {
@@ -300,6 +309,22 @@ async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> 
         "completed": False,
     }
     probe.models.append(observation)
+
+    def accept_terminal(response: Any) -> None:
+        if not isinstance(response, dict) or response.get("status") != "completed":
+            raise _QualificationError("runtime_model_response_failed")
+        if response.get("model") != route.response_model or any(
+            response.get(key) for key in ("fallback_used", "_fallback_used")
+        ):
+            raise _QualificationError("runtime_model_identity_mismatch")
+        _validate_model_output(response)
+        usage = response_usage(response)
+        if usage is None:
+            raise _QualificationError("runtime_usage_evidence_missing")
+        observation.update(model=response["model"], usage=usage)
+        if route.gateway_kind == "market":
+            observation["billing"] = _market_receipt(response, route, request_id)
+
     transport = IndependentModelTransport(route)
     async with httpx.AsyncClient(
         transport=transport,
@@ -321,7 +346,10 @@ async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> 
             "POST",
             route.base_url + "/responses",
             json=body,
-            headers={"Accept": "text/event-stream", **route.headers(request_id)},
+            headers={
+                "Accept": "application/json" if review_probe else "text/event-stream",
+                **route.headers(request_id),
+            },
         ) as upstream:
             upstream.raise_for_status()
             names = ("x-litellm-attempted-retries", "x-litellm-attempted-fallbacks")
@@ -335,6 +363,16 @@ async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> 
             ):
                 raise _QualificationError("runtime_upstream_attempts_unverified")
             observation["single_attempt"] = True
+            if review_probe:
+                raw_terminal = bytearray()
+                async for chunk in upstream.aiter_bytes():
+                    raw_terminal.extend(chunk)
+                    if len(raw_terminal) > 8_388_608:
+                        raise _QualificationError("runtime_qualification_limit")
+                terminal = json.loads(raw_terminal)
+                accept_terminal(terminal)
+                observation["completed"] = True
+                return JSONResponse(terminal)
             output, size, deltas, terminal = [], 0, 0, None
             async for event in EventSource(upstream).aiter_sse():
                 if event.data == "[DONE]":
@@ -359,16 +397,8 @@ async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> 
                 if kind in {"response.failed", "response.incomplete", "error"}:
                     raise _QualificationError("runtime_model_response_failed")
                 if kind == "response.completed":
-                    if not isinstance(response, dict) or response.get("status") != "completed":
-                        raise _QualificationError("runtime_stream_evidence_missing")
-                    _validate_model_output(response)
-                    usage = response_usage(response)
-                    if usage is None:
-                        raise _QualificationError("runtime_usage_evidence_missing")
+                    accept_terminal(response)
                     terminal = response
-                    observation["usage"] = usage
-                    if route.gateway_kind == "market":
-                        observation["billing"] = _market_receipt(response, route, request_id)
                 line = "data: " + json.dumps(value, ensure_ascii=False) + "\n\n"
                 size += len(line.encode())
                 if size > 8_388_608:
@@ -401,9 +431,27 @@ def _probe_app(route: ModelRoute, probe: _Probe, model_token: str, mcp_token: st
         try:
             return await _forward_model(request, route, probe)
         except BOUNDARY_ERRORS as exc:
-            probe.error_code = (
-                exc.code if isinstance(exc, _QualificationError) else "runtime_model_probe_failed"
-            )
+            if isinstance(exc, _QualificationError):
+                probe.error_code = exc.code
+            elif isinstance(exc, httpx.HTTPStatusError):
+                status = exc.response.status_code
+                if probe.models:
+                    probe.models[-1]["http_status"] = status
+                probe.error_code = (
+                    "runtime_model_auth_failed"
+                    if status in {401, 403}
+                    else "runtime_model_rate_limited"
+                    if status == 429
+                    else "runtime_model_gateway_unavailable"
+                    if status >= 500
+                    else "runtime_model_request_rejected"
+                )
+            elif isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+                probe.error_code = "runtime_model_timeout"
+            elif isinstance(exc, httpx.RequestError):
+                probe.error_code = "runtime_model_connection_failed"
+            else:
+                probe.error_code = "runtime_model_probe_failed"
             return JSONResponse(
                 {"error": {"message": "Qualification model request failed"}}, status_code=502
             )
@@ -420,6 +468,53 @@ async def _completed_turn(runtime: XiaoxTransport, text: str) -> None:
         raise _QualificationError("runtime_probe_turn_failed")
 
 
+async def _probe_attachment_review(config: XiaoxTransportConfig, probe: _Probe) -> None:
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract, review_schema
+
+    task = "Report the worksheet name in the fixture."
+    contract = build_goal_contract(AgentRun(user_id="qualification", message=task))
+    schema = review_schema(
+        contract, file_evidence={}, source_block_ids=("s1",), response_block_ids=("r1",)
+    )
+    probe.phase = "attachment_review"
+    async with httpx.AsyncClient(trust_env=False, timeout=65.0) as client:
+        reply = await client.post(
+            config.provider_url + "/responses",
+            headers={"Authorization": "Bearer " + config.provider_token},
+            json={
+                "model": config.model,
+                "input": f"Assess this reply using the attachment evidence. Request: {task} "
+                "s1: the worksheet is Inventory. r1: the worksheet is Inventory. "
+                "Return one satisfied reply goal from request with file_basis=passages, "
+                "evidence_ids=[response], and a citation from s1 to r1. Use feedback_disposition=none.",
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "runtime_goal_review",
+                        "schema": schema,
+                        "strict": False,
+                    }
+                },
+            },
+        )
+    reply.raise_for_status()
+    text = "".join(
+        part["text"]
+        for item in reply.json()["output"]
+        if item.get("type") == "message"
+        for part in item.get("content", [])
+        if part.get("type") == "output_text"
+    )
+    result = json.loads(text)
+    if not Draft202012Validator(schema).is_valid(result) or not any(
+        goal.get("file_basis") == "passages" and goal.get("file_citations")
+        for goal in result["goals"]
+    ):
+        raise _QualificationError("runtime_attachment_review_schema_failed")
+    probe.recovery["attachment_review_schema"] = True
+
+
 async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe) -> None:
     route = settings.route
     assert route is not None and settings.runtime_root is not None
@@ -433,7 +528,8 @@ async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe)
             provider_token=model_token,
             mcp_url=server.url + "/mcp",
             mcp_token=mcp_token,
-            context_window=route.context_window,
+            context_window=route.effective_context_window,
+            auto_compact_token_limit=route.input_token_budget,
             mcp_tools=("execute_action", "task_evidence"),
             codex_bin=settings.codex_bin,
             turn_timeout_seconds=settings.turn_timeout_seconds,
@@ -493,6 +589,7 @@ async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe)
             "first_process_id": first_pid,
             "second_process_id": second_pid,
         }
+        await _probe_attachment_review(config, probe)
 
 
 def _checks(probe: _Probe, route: ModelRoute) -> dict[str, str]:
@@ -510,7 +607,11 @@ def _checks(probe: _Probe, route: ModelRoute) -> dict[str, str]:
     models_complete = bool(probe.models) and all(item.get("completed") for item in probe.models)
     facts = {
         "responses_stream": models_complete
-        and all(item.get("stream_deltas", 0) > 0 for item in probe.models),
+        and any(item.get("stream_deltas", 0) > 0 for item in probe.models)
+        and all(
+            item.get("phase") == "attachment_review" or item.get("stream_deltas", 0) > 0
+            for item in probe.models
+        ),
         "multi_turn_tools": continued,
         "openai_network_denied": probe.network.get("denied_before_connect") is True,
         "business_receipt_verified": snapshot["calls_complete"]
@@ -520,6 +621,7 @@ def _checks(probe: _Probe, route: ModelRoute) -> dict[str, str]:
         and all(item.get("single_attempt") for item in probe.models),
         "response_model_identity": models_complete
         and all(item.get("model") == route.response_model for item in probe.models),
+        "attachment_review_schema": recovery.get("attachment_review_schema") is True,
         "forced_compaction_restart_same_task_no_replay": (
             continued
             and bool(recovery.get("thread_id"))

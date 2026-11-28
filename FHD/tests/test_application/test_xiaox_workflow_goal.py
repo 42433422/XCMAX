@@ -359,6 +359,53 @@ def test_unknown_receipt_fences_followup_without_replaying_original_action(
     assert len(calls) == 1
 
 
+def test_waiting_parent_exposes_original_child_grant_without_recreating_action(
+    dynamic_runtime, monkeypatch
+):
+    from app.application.agent_orchestrator.approval_grant import validate_approval_grant
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+
+    state = dynamic_runtime
+    first = state.execute("pending-child", {"ids": [11, 22]}, "customers", "batch_delete")
+    assert first["pending_approval"]
+    child = state.repository.get(first["run_id"])
+    from app.application.agent_orchestrator import run_repository
+    from app.fastapi_routes.domains.agent import route_support
+    from app.infrastructure.auth.agent_principal import AgentPrincipal
+    from app.infrastructure.xiaox import receipt_projection
+
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=state.actor.factory)
+    monkeypatch.setattr(run_repository, "get_agent_run_repository", lambda: state.repository)
+    monkeypatch.setattr(receipt_projection, "get_agent_run_repository", lambda: state.repository)
+    monkeypatch.setattr(receipt_projection, "get_task_execution_repository", lambda: queue)
+    monkeypatch.setattr(route_support, "get_task_execution_repository", lambda: queue)
+    state.store.update(
+        state.parent.run_id, lambda run, metadata: setattr(run, "status", "waiting_user")
+    )
+    state.store.close(state.parent.run_id, "waiting_user", release_coordinator=True)
+    principal = AgentPrincipal(
+        user_id=str(state.actor.user_id),
+        tenant_id=str(state.actor.tenant_id),
+        mod_authorization=state.actor.context.get("_mod_authorization"),
+    )
+    parent = state.repository.get(state.parent.run_id)
+    assert parent.steps == []
+    projected = route_support.run_response(parent, principal=principal)
+    grant = projected["approval"]
+    assert projected["capabilities"]["approve"] is True
+    assert projected["capabilities"]["resume"] is False
+    assert grant["run_id"] == child.run_id and grant["step_id"] == child.steps[0].step_id
+    validate_approval_grant(grant["grant"], run=child, principal_id=principal.user_id)
+    for unsafe in ("cancelled", "paused"):
+        state.store.update(
+            state.parent.run_id, lambda run, metadata: setattr(run, "status", unsafe)
+        )
+        blocked = state.repository.get(state.parent.run_id)
+        assert "approval" not in route_support.run_response(blocked, principal=principal)
+
+
 def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
     dynamic_runtime, monkeypatch
 ):

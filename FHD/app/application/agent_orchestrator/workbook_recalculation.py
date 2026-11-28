@@ -32,8 +32,16 @@ from openpyxl.formula.tokenizer import TokenizerError
 from openpyxl.styles.numbers import BUILTIN_FORMATS, BUILTIN_FORMATS_MAX_SIZE
 from openpyxl.utils.exceptions import InvalidFileException
 
+from app.application.agent_orchestrator.workbook_calculation_inputs import (
+    _evaluation_input,
+    _formula_semantics,
+    _materialized_table,
+    _name_semantics,
+    _table_semantics,
+)
 from app.application.employee_runtime.continuity_tool_wait import (
     ProcessLimits,
+    ProcessLimitsExceeded,
     ProcessLimitsUnavailable,
 )
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
@@ -270,44 +278,7 @@ def _cells(content: bytes) -> tuple[list[str], dict, dict]:
         book.close()
 
 
-def _table_semantics(node: Element) -> tuple:
-    """Keep ordered columns, formulas and metadata without ZIP identity or XML spelling."""
-    tag = node.tag.removeprefix(_NS)
-    defaults = {
-        "table": {
-            "headerRowCount": "1",
-            "totalsRowCount": "0",
-            "totalsRowShown": "1",
-            "tableType": "worksheet",
-        },
-        "tableColumn": {"totalsRowFunction": "none"},
-        "calculatedColumnFormula": {"array": "0"},
-        "totalsRowFormula": {"array": "0"},
-    }
-    attributes = {**defaults.get(tag, {}), **node.attrib}
-    if tag == "table":
-        attributes.pop("id", None)  # Package-local IDs can change during conversion.
-        attributes.setdefault("name", attributes.get("displayName", ""))
-        attributes["ref"] = attributes.get("ref", "").replace("$", "").upper()
-        for key in ("headerRowCount", "totalsRowCount"):
-            attributes[key] = str(int(attributes[key]))
-    elif tag == "tableColumns":
-        attributes.pop("count", None)  # The actual ordered children define the columns.
-    for key in ("totalsRowShown", "insertRow", "insertRowShift", "published", "array"):
-        if attributes.get(key) in {"true", "1"}:
-            attributes[key] = "1"
-        elif attributes.get(key) in {"false", "0"}:
-            attributes[key] = "0"
-    text = node.text or ""
-    return (
-        node.tag,
-        tuple(sorted(attributes.items())),
-        text if text.strip() else "",
-        tuple(_table_semantics(child) for child in node),
-    )
-
-
-def _table_context(archive: ZipFile) -> tuple:
+def _table_models(archive: ZipFile) -> list[tuple[str, str, Element]]:
     """Resolve table ownership through each worksheet's own relationships."""
     members = set(archive.namelist())
     tables = []
@@ -341,8 +312,15 @@ def _table_context(archive: ZipFile) -> tuple:
             table = fromstring(archive.read(path))
             if table.tag != f"{_NS}table":
                 raise _Unavailable("formula_recalculation_package_invalid")
-            tables.append((sheet_name, _table_semantics(table)))
-    return tuple(sorted(tables))
+            tables.append((sheet_name, path, table))
+    return tables
+
+
+def _table_context(archive: ZipFile, formulas: dict) -> tuple:
+    tables = _table_models(archive)
+    for sheet, _, table in tables:
+        _materialized_table(table, sheet, formulas)
+    return tuple(sorted((sheet, _table_semantics(table)) for sheet, _, table in tables))
 
 
 def _display_context(content: bytes, *, full_precision: bool) -> tuple:
@@ -417,9 +395,9 @@ def _calculation_context(content: bytes) -> tuple:
     """
     with ZipFile(io.BytesIO(content)) as archive:
         book = fromstring(archive.read("xl/workbook.xml"))
-        tables = _table_context(archive)
+        tables = _table_context(archive, _cells(content)[1])
     names = sorted(
-        (node.get("name", ""), node.get("localSheetId", ""), node.text or "")
+        (node.get("name", ""), node.get("localSheetId", ""), _name_semantics(node.text or ""))
         for node in book.findall(f"{_NS}definedNames/{_NS}definedName")
     )
     properties = book.find(f"{_NS}workbookPr")
@@ -596,7 +574,19 @@ def recalculate_workbook(
             if engine_version != pinned:
                 raise _Unavailable("formula_recalculation_engine_version_mismatch")
             source, output = root / "source.xlsx", root / "calculated"
-            source.write_bytes(content)
+            with ZipFile(io.BytesIO(content)) as package:
+                evaluation, rewrites = _evaluation_input(
+                    content, _sheet_parts(package), _table_models(package)
+                )
+            evaluation_formulas = {**formulas, **rewrites}
+            if (
+                _cells(evaluation) != (sheets, evaluation_formulas, literals)
+                or _calculation_context(evaluation) != calculation_context
+            ):
+                raise _Unavailable("formula_recalculation_input_compilation_changed")
+            evaluation_sha = hashlib.sha256(evaluation).hexdigest()
+            result.update(evaluation_input_sha256=evaluation_sha, reference_rewrites=len(rewrites))
+            source.write_bytes(evaluation)
             output.mkdir()
             process = run_process(
                 [
@@ -627,11 +617,18 @@ def recalculate_workbook(
                 raise _Unavailable("formula_recalculation_package_limit")
             calculated = calculated_path.read_bytes()
             result["output_sha256"] = hashlib.sha256(calculated).hexdigest()
-            if result["output_sha256"] == artifact_sha256:
+            if result["output_sha256"] == evaluation_sha:
                 raise _Unavailable("formula_recalculation_output_not_fresh")
             _inspect_package(calculated, ".xlsx")
             actual_sheets, actual_formulas, actual_literals = _cells(calculated)
-            if (sheets, formulas, literals) != (actual_sheets, actual_formulas, actual_literals):
+            if (
+                (sheets, literals) != (actual_sheets, actual_literals)
+                or evaluation_formulas.keys() != actual_formulas.keys()
+                or any(
+                    _formula_semantics(value) != _formula_semantics(actual_formulas[key])
+                    for key, value in evaluation_formulas.items()
+                )
+            ):
                 raise _Unavailable("formula_recalculation_input_cells_changed")
             if _calculation_context(calculated) != calculation_context:
                 raise _Unavailable("formula_recalculation_input_context_changed")
@@ -650,13 +647,14 @@ def recalculate_workbook(
             ]
             errors = [row for row in rows if row["cached_type"] == "e"]
             mismatches = [
-                item
+                {**item, "actual_value": values[item["sheet"], item["ref"]][1]}
                 for item in expected
                 if not _matches(values[item["sheet"], item["ref"]][1], item)
             ]
             verified = not errors and not mismatches
             result.update(
                 status="verified" if verified else "failed",
+                evaluation_completed=True,
                 code=(
                     "formula_recalculation_verified"
                     if verified
@@ -680,6 +678,8 @@ def recalculate_workbook(
             )
     except _Unavailable as exc:
         result.update(status="inconclusive", code=exc.code)
+    except ProcessLimitsExceeded:
+        result.update(status="inconclusive", code="formula_recalculation_resource_limit_exceeded")
     except ProcessLimitsUnavailable:
         result.update(
             status="inconclusive", code="formula_recalculation_resource_limits_unavailable"

@@ -18,7 +18,7 @@ _STATUS_LABELS = {
     "retrying": "正在重试",
     "waiting_user": "等待审批或用户确认",
     "paused": "已暂停，可继续",
-    "blocked": "等待依赖解除",
+    "blocked": "已阻断，需核对原任务回执",
     "completed": "任务完成",
     "failed": "执行失败",
     "cancelled": "已取消",

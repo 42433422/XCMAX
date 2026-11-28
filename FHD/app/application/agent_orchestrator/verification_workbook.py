@@ -16,7 +16,9 @@ from typing import Any
 from uuid import uuid4
 from zipfile import BadZipFile
 
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.domain.workbook_write_contract import (
     WORKBOOK_NATIVE_PHASES,
     WORKBOOK_QC,
@@ -37,6 +39,92 @@ def scoped_workbook_employee(params: dict) -> str:
 
 def is_workbook_write(params: dict) -> bool:
     return scoped_workbook_employee(params) == WORKBOOK_WRITER
+
+
+def known_workbook_expectation_failure(
+    run: AgentRun, step: AgentStep, call: ToolCall | None
+) -> bool:
+    """A read-back copy with a bad prediction is not an unknown business effect.
+
+    Only the original single file-producing call is eligible. This does not
+    accept its quality, clear any unsettled effect, or authorize replay.
+    """
+    from app.application.agent_orchestrator.result_verification import (
+        _binding_valid,
+        _declared_files,
+        _files_have_evidence,
+        canonical_hash,
+    )
+
+    report = (call.metadata.get("verification") or {}) if call is not None else {}
+    if (
+        run.status not in {"blocked", "failed"}
+        or run.metadata.get("non_retryable")
+        or (run.metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+        or not is_workbook_write(step.params)
+        or call is None
+        or step.status != "completed"
+        or call.status != "completed"
+        or call.output.get("success") is not True
+        or execution_result_outcome_unknown(call.output, include_execution=True)
+        or call.metadata.get("billing_status") in {"unknown", "pending", "settling"}
+        or report.get("status") != "failed"
+        or report.get("accepted") is not False
+        or report.get("code") != "formula_recalculation_value_mismatch"
+    ):
+        return False
+    try:
+        contract = call.metadata.get("verification_contract") or {}
+        checks = report.get("checks") or []
+        # Employee envelopes may project the same exact file at two levels.
+        # Deduplicate identical descriptors only; conflicting copies still fail.
+        files = list({canonical_hash(item): item for item in _declared_files(call.output)}.values())
+        if (
+            len(files) != 1
+            or (files[0].get("metadata") or {}).get("run_id") != run.run_id
+            or not (contract.get("workbook_template") or {}).get("sha256")
+            or not any(
+                check.get("source") == "run_artifact"
+                and check.get("status") == "passed"
+                and (check.get("evidence") or {}).get("run_id") == run.run_id
+                and (check.get("evidence") or {}).get("artifact_id") == files[0].get("artifact_id")
+                for check in checks
+            )
+            or not _files_have_evidence(call.output, checks)
+            or not _binding_valid(
+                run, step, call, run.metadata.get("runtime_context") or {}, contract
+            )
+            or report.get("contract_sha256") != contract.get("contract_sha256")
+            or report.get("output_sha256") != call.metadata.get("verification_output_sha256")
+            or report.get("evidence_sha256") != canonical_hash(checks)
+            or report.get("report_sha256")
+            != canonical_hash({k: v for k, v in report.items() if k != "report_sha256"})
+        ):
+            return False
+        for check in checks:
+            evidence = check.get("evidence") or {}
+            numeric = evidence.get("formula_recalculation") or {}
+            sections = evidence.get("sections") or {}
+            if (
+                check.get("source") == "workbook_qc"
+                and evidence.get("template_sha256")
+                == (contract.get("workbook_template") or {}).get("sha256")
+                and evidence.get("artifact_sha256") == files[0]["metadata"]["sha256"]
+                and sections.get("conformance") == sections.get("formulas") == "pass"
+                and (
+                    not (step.params.get("input") or {}).get("plan", {}).get("protected_ranges")
+                    or sections.get("protection") == "pass"
+                )
+                and numeric.get("evaluation_completed") is True
+                and numeric.get("source_unchanged") is True
+                and numeric.get("code") == "formula_recalculation_value_mismatch"
+                and numeric.get("formula_error_count") == 0
+                and int(numeric.get("expectation_mismatch_count") or 0) > 0
+            ):
+                return True
+    except (KeyError, TypeError, ValueError, OverflowError):
+        pass
+    return False
 
 
 def trusted_workbook_reader(params: dict) -> bool:

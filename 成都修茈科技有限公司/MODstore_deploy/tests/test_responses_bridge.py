@@ -59,22 +59,30 @@ def _body(*, stream=False, history=None):
 
 
 @pytest.fixture
-def native(billed, monkeypatch, real_router_runtime):
+def native(billed, monkeypatch, real_router_runtime, request):
+    minimax = getattr(request, "param", None) == "minimax"
     route = replace(
         billed["route"],
-        provider="xiaomi",
-        model=MODEL,
-        base_url="https://token-plan-cn.xiaomimimo.com/v1",
+        provider="minimax" if minimax else "xiaomi",
+        model="MiniMax-M2.7" if minimax else MODEL,
+        api_key="minimaxsk-cp-fixture" if minimax else billed["route"].api_key,
+        base_url=(
+            "https://api.minimax.io/v1" if minimax else "https://token-plan-cn.xiaomimimo.com/v1"
+        ),
     )
-    capabilities = model_context_capabilities("xiaomi", MODEL)
+    capabilities = (
+        {"context_window": 32000, "max_input_tokens": 24000, "max_output_tokens": 4000}
+        if minimax
+        else model_context_capabilities(route.provider, route.model)
+    )
     billed["route"] = route
     billed["contract"] = {
-        "runtime": codex_route_contract("xiaomi", MODEL, capabilities),
+        "runtime": codex_route_contract(route.provider, route.model, capabilities),
         "model_capabilities": capabilities,
     }
     state = {
         "requests": [],
-        "model": MODEL,
+        "model": route.model,
         "usage": {"prompt_tokens": 13, "completion_tokens": 3, "total_tokens": 16},
         "status": 200,
         "finish": True,
@@ -100,6 +108,11 @@ def native(billed, monkeypatch, real_router_runtime):
                             "index": 0,
                             "delta": {
                                 "role": "assistant",
+                                **(
+                                    {"reasoning_content": "Inspect the tool evidence."}
+                                    if minimax
+                                    else {}
+                                ),
                                 "tool_calls": [
                                     {
                                         "index": 0,
@@ -131,7 +144,20 @@ def native(billed, monkeypatch, real_router_runtime):
                     ],
                 },
             ]
-            if state["finish"]:
+            if minimax and len(state["requests"]) == 2:
+                frames = [
+                    {
+                        **common,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": "Read 3 orders."},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                    }
+                ]
+            elif state["finish"]:
                 frames.append(
                     {
                         **common,
@@ -150,10 +176,15 @@ def native(billed, monkeypatch, real_router_runtime):
     def respond(request):
         state["requests"].append(request)
         assert request.url.path == "/v1/chat/completions"
-        assert request.headers["api-key"] == "server-only-model-key"
+        if minimax:
+            assert request.url.host == "api.minimax.io"
+            assert request.headers["authorization"] == "Bearer sk-cp-fixture"
+        else:
+            assert request.headers["api-key"] == "server-only-model-key"
         body = json.loads(request.content)
-        assert body["model"] == MODEL
-        assert body["thinking"] == {"type": "disabled"}
+        assert body["model"] == route.model
+        if not minimax:
+            assert body["thinking"] == {"type": "disabled"}
         assert "input" not in body and isinstance(body["messages"], list)
         state["tool"] = body["tools"][0]["function"]["name"]
         if state["status"] != 200:
@@ -204,6 +235,34 @@ def native(billed, monkeypatch, real_router_runtime):
     return state
 
 
+@pytest.mark.parametrize("native", ["minimax"], indirect=True)
+async def test_minimax_subscription_returns_tool_result_and_exact_terminal_usage(native, db):
+    billed = native["billed"]
+    billed["route"] = replace(billed["route"], key_source="user_override")
+    body = {**_body(stream=True), "model": "minimax/MiniMax-M2.7"}
+    first, _ = await _consume(await billed["call"](body=body))
+    call = next(item for item in first["output"] if item["type"] == "function_call")
+    body["input"] += [
+        *first["output"],
+        {"type": "function_call_output", "call_id": call["call_id"], "output": "3 orders"},
+    ]
+    final, _ = await _consume(await billed["call"](body=body, key=KEY + "-followup"))
+    assert final["model"] == "MiniMax-M2.7"
+    assert final["output"][0]["content"][0]["text"] == "Read 3 orders."
+    assert final["xcagi"]["usage"]["input_tokens"] == 13
+    assert final["xcagi"]["billing_status"] == "byok"
+    assert len(native["requests"]) == 2
+    messages = json.loads(native["requests"][1].content)["messages"]
+    assert any(message.get("tool_call_id") == call["call_id"] for message in messages)
+    assert any(
+        message.get("role") == "assistant"
+        and message.get("reasoning_content") == "Inspect the tool evidence."
+        and message.get("tool_calls")
+        for message in messages
+    )
+    assert ledger.lookup(db, 7, KEY + "-followup", 90) == "completed"
+
+
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("byok", [False, True])
 async def test_real_litellm_namespace_tool_round_retains_call_id_and_original_usage(
@@ -228,7 +287,11 @@ async def test_real_litellm_namespace_tool_round_retains_call_id_and_original_us
     followup = [
         *_body()["input"],
         *result["output"],
-        {"type": "function_call_output", "call_id": call["call_id"], "output": "3 orders"},
+        {
+            "type": "function_call_output",
+            "call_id": call["call_id"],
+            "output": "3 orders",
+        },
     ]
     again = await billed["call"](body=_body(stream=stream, history=followup), key=KEY + "-followup")
     second, _ = await _consume(again)

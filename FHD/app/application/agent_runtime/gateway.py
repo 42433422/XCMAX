@@ -55,6 +55,7 @@ _PRIVATE_KEYS = frozenset(
         "runtime_goal_verification",
         "runtime_goal_verification_task",
         "verification_budget",
+        "react_progress",
         "verification_response",
         "active_phase",
         "execution_deadline_at",
@@ -782,8 +783,8 @@ async def run_runtime_task_async(
                 provider_token="placeholder-runtime-grant",  # replaced before transport starts
                 mcp_url=server.url + MCP_PATH,
                 mcp_token="placeholder-runtime-grant",  # replaced before transport starts
-                context_window=route.context_window,
-                auto_compact_token_limit=route.context_window - route.max_output_tokens,
+                context_window=route.effective_context_window,
+                auto_compact_token_limit=route.input_token_budget,
                 codex_bin=settings.codex_bin,
                 turn_timeout_seconds=settings.turn_timeout_seconds,
             )

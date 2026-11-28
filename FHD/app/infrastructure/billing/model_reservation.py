@@ -7,10 +7,22 @@ for reconciliation; it is never silently converted into a free call.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
 from app.infrastructure.billing import model_usage as ledger
+
+
+@dataclass(frozen=True)
+class PlatformModelReceiptScope:
+    """Credential-free fields frozen by the original model request."""
+
+    provider_id: str
+    model: str
+    response_model: str
+    config_revision: str
+    key_source: str
 
 
 class ModelReservationError(RuntimeError):

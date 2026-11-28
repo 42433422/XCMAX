@@ -86,6 +86,69 @@ def test_writer_missing_sheet_reports_original_plan_error_before_dispatch(workbo
     assert state.store.get(state.parent.run_id).metadata["calls"] == {}
 
 
+@pytest.mark.parametrize("workbook_runtime", [(3, "recalled-workbook")], indirect=True)
+@pytest.mark.parametrize("invalid", [False, True])
+def test_recalled_workbook_preflight_uses_frozen_parent_before_child_exists(
+    workbook_runtime, invalid
+):
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_runtime.conversation_attachments import original_conversation_uploads
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+
+    state = workbook_runtime
+    origin = state.repository.get(state.parent.run_id)
+    origin.status = "completed"
+    state.repository.save(origin)
+    [reference] = original_conversation_uploads(origin)
+    parent = AgentRun(origin.user_id, "在原附件副本中新建汇总页", status="running")
+    parent.metadata.update(
+        runtime_type="xiaox",
+        runtime_context={**origin.metadata["runtime_context"], "turn_id": "follow-up"},
+    )
+    contract = build_goal_contract(
+        parent,
+        context_evidence=[{"source": "conversation_uploads", "entries": [reference.descriptor()]}],
+    )
+    parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
+    state.repository.save(parent)
+    grant = state.store.create(parent.run_id)
+    params = copy.deepcopy(state.params)
+    params["input"]["template_path"] = reference.reference
+    params["input"]["plan"] = {
+        "plan_version": 1,
+        "template": {"sheet_names": ["Data", "Summary"] if invalid else ["Data"]},
+        "phases": [{"phase": "create_sheet", "sheet": "Summary"}],
+    }
+    spec = state.bridge.invoke(
+        grant.mcp_token, "capability_describe", {"tool_id": "employee", "action": "execute"}
+    )["capability"]
+    result = state.bridge.invoke(
+        grant.mcp_token,
+        "execute_action",
+        {
+            "tool_id": "employee",
+            "action": "execute",
+            "params": params,
+            "call_id": "recalled-write",
+            "schema_digest": spec["schema_digest"],
+        },
+    )
+    if invalid:
+        assert result["error_code"] == "workbook_plan_invalid", result
+        assert "Summary" in result["message"]
+        assert state.store.get(parent.run_id).metadata["calls"] == {}
+    else:
+        assert result["pending_approval"] is True, result
+        child = state.approve(result)
+        assert child.status == "completed", (
+            child.error,
+            [(call.output, call.metadata.get("verification")) for call in child.tool_calls],
+        )
+        [receipt] = state.store.receipt_snapshot(parent.run_id)
+        assert receipt["receipt"]["verified"] is True
+    assert state.workspace_copy.read_bytes() == state.original
+
+
 def test_invalid_formula_is_rejected_before_workbook_approval(workbook_runtime):
     state = workbook_runtime
     params = copy.deepcopy(state.params)

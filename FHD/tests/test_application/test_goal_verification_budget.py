@@ -88,6 +88,11 @@ def test_budget_too_small_for_execution_and_review_is_rejected(gateway, calls):
     assert "verification_budget" not in store.binding.metadata
 
 
+def test_long_judgment_keeps_original_quarter_earmark(gateway):
+    _, store, _, _, _ = gateway
+    assert reserve(store.run, store.binding.metadata, seconds=540)["seconds"] == 135
+
+
 @pytest.mark.parametrize(
     "amount,expected_calls,ceiling",
     [(64, 1, 1), (96, 1, 2), (100, 1, 2), (128, 1, 3), (256, 2, 3), (384, 3, 3), (512, 3, 3)],

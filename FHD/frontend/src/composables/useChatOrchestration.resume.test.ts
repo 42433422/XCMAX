@@ -126,7 +126,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
     } }],
   })
 
-  async function beginQueuedTurn(transport: 'stream' | 'json') {
+  async function beginQueuedTurn(transport: 'stream' | 'json', backfilledHistory = false) {
     sessionId.value = 'fresh'
     await api.syncSessionMessages({ required: true })
     vi.stubEnv('VITE_CHAT_STREAM', transport === 'stream' ? 'true' : 'false')
@@ -138,6 +138,7 @@ describe('persisted chat turn observation through the real SDK and task workspac
       if (url.pathname === '/api/conversations/fresh' && !url.searchParams.has('turn_id') && turnId) {
         return Response.json({ success: true, id: 'fresh', durable: true, revision: 1, messages: [
           ...conversation('fresh').messages,
+          ...(backfilledHistory ? [{ id: 72, role: 'assistant', content: '已保存的上一轮答复' }] : []),
           { id: 73, role: 'user', content: '请整理本次资料', metadata: { ui: { turnId } } },
           { id: 74, role: 'assistant', content: '等待后台执行', metadata: {
             business_harness: { queued_reply: true },
@@ -188,6 +189,19 @@ describe('persisted chat turn observation through the real SDK and task workspac
     const writes = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(writes).toHaveLength(1)
     expect(String(writes[0][0])).toContain(transport === 'stream' ? '/api/ai/chat/stream' : '/api/ai/unified_chat')
+  })
+
+  it.each(['stream', 'json'] as const)('rebinds %s observation after SQL refresh replaces the queued message', async transport => {
+    const { turnId, publishReceipt } = await beginQueuedTurn(transport, true)
+    await publishReceipt({ success: true, id: 'fresh', durable: true, revision: 1,
+      turn_receipt: { turn_id: turnId, run_id: 'original-run', status: 'completed', message_id: 74 },
+      messages: [{ id: 74, role: 'assistant', content: 'Word 原文已核验并完成概述' }],
+    })
+    const replies = api.messages.value.filter(message => message.role === 'ai' && message.turnId === turnId)
+    expect(replies).toHaveLength(1)
+    expect(replies[0]).toMatchObject({ content: 'Word 原文已核验并完成概述', workflowAction: 'completed' })
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+    expect(resumed).toHaveLength(1)
   })
 
   it('shows the bound persisted run-only reconciliation receipt in the original queued bubble', async () => {
@@ -596,6 +610,20 @@ describe('persisted chat turn observation through the real SDK and task workspac
     await flushPromises()
     expect(reply.workflowAction).toBe('blocked')
     expect(reply.content).toContain('原任务核验未通过')
+  })
+
+  it('reads the bound reply on a terminal stream event while the task feed is still running', async () => {
+    const reply = originalReply()
+    taskStatus = 'running'
+    readReceipt = async () => ({ ...terminalHistory('completed'), messages: [{
+      id: 8, role: 'assistant', content: '收到独立核验后的正式答案。',
+      metadata: { summary: { status: 'completed', turn_id: 'original-turn', success: true } },
+    }] })
+    runStreams[0].emit({
+      event_id: 'terminal', run_id: 'original-run', event_type: 'runtime.xiaox.finished', data: {},
+    }, 'runtime.xiaox.finished', 'terminal')
+    await vi.waitFor(() => expect(reply.content).toContain('收到独立核验后的正式答案'))
+    expect(reply.workflowAction).toBe('completed')
   })
 
   it('reads the original turn receipt when the task finishes and ignores another turn receipt', async () => {

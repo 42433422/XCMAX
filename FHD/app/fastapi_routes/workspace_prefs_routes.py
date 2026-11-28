@@ -159,7 +159,7 @@ def set_enterprise_model(body: ModelUpdate, request: Request):
                 )
         except RuntimeSetupError as exc:
             status = 503 if exc.code == "runtime_platform_unavailable" else 422
-            raise HTTPException(status, exc.public_message) from None
+            raise HTTPException(status, {"code": exc.code, "message": exc.public_message}) from None
         choice = {"provider": body.provider, "model": body.model, "key_source": key_source}
         current, current_owner, editable = _enterprise_scope(request)
         if current.id != actor.id or current_owner != owner or not editable:

@@ -14,6 +14,80 @@ from tests.test_application.test_xiaox_tools import bridge_setup as bridge_setup
 from tests.test_application.test_xiaox_workbook_write import workbook_runtime as workbook_runtime
 
 
+def test_rejected_mcp_preflights_use_original_sql_budget_and_loop_detector(bridge_setup):
+    state = bridge_setup
+    for index in range(8):
+        result = state.bridge.reject_invalid_arguments(
+            state.grant.mcp_token,
+            "execute_action",
+            {"call_id": str(index), "params": {}},
+            [{"path": "$.params", "validator": "required", "missing": ["input"]}],
+        )
+        assert result["status"] == "not_started" and not result["verified"]
+    saved = state.store.get(state.run.run_id)
+    assert saved.metadata["tool_invocation_count"] == 8
+    assert saved.metadata["tool_call_limit"]["reason"] == "tool_loop_detected"
+    assert saved.metadata["calls"] == {}
+    with pytest.raises(XiaoxBindingError, match="重复"):
+        state.store.authenticate(state.grant.model_token, "model")
+
+
+def test_schema_feedback_includes_all_matching_variant_defects_without_values():
+    import json
+
+    from jsonschema import Draft202012Validator
+
+    from app.infrastructure.xiaox.tool_schemas import schema_violations
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "nodes": {
+                "type": "array",
+                "items": {
+                    "oneOf": [
+                        {
+                            "properties": {
+                                "phase": {"const": "format"},
+                                "width": {"type": "integer"},
+                            },
+                            "required": ["width", "height"],
+                        },
+                        {"properties": {"phase": {"const": "write"}}, "required": ["cell"]},
+                    ]
+                },
+            }
+        },
+    }
+    data = {"nodes": [{"phase": "format", "width": "PRIVATE"} for _ in range(20)]}
+    violations = schema_violations(Draft202012Validator(schema).iter_errors(data))
+    assert len(violations) == 16
+    assert {item["validator"] for item in violations} == {"type", "required"}
+    assert all("cell" not in item.get("missing", []) for item in violations)
+    assert "PRIVATE" not in json.dumps(violations)
+
+
+def test_changing_invalid_plans_is_not_progress_and_rejection_survives_sql_reload(bridge_setup):
+    from app.domain.task_lifecycle.react_progress import pending_tool_rejection
+
+    state = bridge_setup
+    for index in range(8):
+        state.bridge.reject_invalid_arguments(
+            state.grant.mcp_token,
+            "execute_action",
+            {"call_id": str(index), "params": {"revision": index}},
+            [{"path": f"$.params.field{index}", "validator": "type"}],
+        )
+    reopened = XiaoxBindingStore(state.store.repository)
+    saved = reopened.get(state.run.run_id)
+    assert saved.metadata["tool_call_limit"]["reason"] == "tool_loop_detected"
+    rejection = pending_tool_rejection(saved.run, saved.metadata, [])
+    assert rejection["diagnostic"]["error_code"] == "invalid_arguments"
+    assert "params" not in rejection and "revision" not in str(rejection)
+    saved.run.metadata["runtime_goal_digest"] = "different-goal"
+    assert not pending_tool_rejection(saved.run, saved.metadata, [])
+
+
 @pytest.mark.parametrize("period", [1, 2, 4])
 def test_repeated_discovery_stops_without_claiming_business_success(
     bridge_setup, monkeypatch, period

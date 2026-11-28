@@ -28,6 +28,196 @@ def _complete_review():
     return review(goal(), goal("再查询second", goal_id="second"))
 
 
+def test_shape_and_source_defects_are_reported_in_the_same_original_repair(verifier):
+    verifier.run.message = "读取附件并概述"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "note.docx",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "note", "sha256": "c" * 64},
+                "preview": {"text": "标题使用加粗", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows = []
+    verifier.output = "尚未完成"
+    corrected = review(goal("读取附件", status="unmet", evidence_ids=[]))
+    corrected["goals"][0]["file_basis"] = "complete"
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][0].update(source="原文中没有的要求")
+    rejected["goals"][0].pop("file_basis")
+    verifier.replies = [response(rejected), response(corrected)]
+    assert verifier.verify()["status"] == "needs_work"
+    repair = json.loads(verifier.requests[1].content)["input"][-1]["content"]
+    assert "file_basis" in repair and "goal_source_mismatch" in repair
+
+
+def test_file_write_without_host_evidence_cannot_become_a_completed_repair_task(verifier):
+    verifier.run.message = "生成副本"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "source.csv",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "source", "sha256": "b" * 64},
+                "preview": {"text": "标题", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows, verifier.output = [], "文件已经完成"
+    corrected = review(goal("生成副本", kind="write", status="unmet", evidence_ids=[]))
+    corrected["goals"][0]["file_basis"] = "independent"
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][0].update(status="satisfied", evidence_ids=["response"])
+    verifier.replies = [response(rejected), response(corrected)]
+    report = verifier.verify()
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert report["review"]["goals"][0]["status"] == "unmet"
+    assert len(verifier.requests) == 2
+
+
+def test_frozen_document_criteria_have_provenance_without_granting_write_authority(verifier):
+    from app.domain.task_lifecycle.goal_review_models import goal_source_catalogue
+
+    verifier.run.message = "按附件要求生成副本"
+    contract = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "requirements.docx",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "requirements", "sha256": "b" * 64},
+                "preview": {"text": "标题使用加粗", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    sources = goal_source_catalogue(contract)
+    document = sources["attachment:" + "b" * 64]
+    assert document["text"] == "标题使用加粗"
+    assert document["allowed_kinds"] == ["constraint"]
+    verifier.run.metadata["runtime_goal_contract"] = contract
+    verifier.rows = []
+    verifier.output = "尚未生成副本"
+    pending = review(
+        goal("生成副本", kind="write", status="unmet", evidence_ids=[]),
+        goal(
+            "标题使用加粗",
+            goal_id="criterion",
+            kind="constraint",
+            status="unmet",
+            evidence_ids=[],
+            source_id="attachment:" + "b" * 64,
+        ),
+    )
+    for item in pending["goals"]:
+        item["file_basis"] = "independent"
+    verifier.replies = [response(pending)]
+    assert verifier.verify()["status"] == "needs_work"
+    pending["goals"][1]["kind"] = "write"
+    verifier.replies = [response(pending)] * 2
+    assert not verifier.verify()["accepted"]
+
+
+def test_attachment_format_repair_reports_missing_contract_field_without_file_values(verifier):
+    verifier.run.message = "读取附件"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "note.csv",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "current-note", "sha256": "c" * 64},
+                "preview": {"text": "PRIVATE-FILE-BODY", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows = []
+    verifier.output = "尚未完成附件读取"
+    corrected = review(goal("读取附件", status="unmet", evidence_ids=[]))
+    corrected["goals"][0]["file_basis"] = "complete"
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][0].pop("file_basis")
+    verifier.replies = [response(rejected), response(corrected)]
+
+    report = verifier.verify()
+
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert len(verifier.requests) == 2
+    body = json.loads(verifier.requests[0].content)
+    assert body["text"]["format"] == {
+        "type": "json_schema",
+        "name": "runtime_goal_review",
+        "schema": _payload(verifier.requests[0])["output_schema"],
+        "strict": False,
+    }
+    assert report["attempts"][0]["validation_errors"][0] == {
+        "path": ["goals", 0],
+        "rule": "required",
+        "missing": ["file_basis"],
+    }
+    repair = json.loads(verifier.requests[1].content)["input"][-1]["content"]
+    assert "file_basis" in repair and "PRIVATE-FILE-BODY" not in repair
+
+
+@pytest.mark.parametrize("missing", ["constraint", "history"])
+def test_completed_file_goal_without_own_citation_is_repaired_before_final_verdict(
+    verifier, missing
+):
+    verifier.run.message = "查看并完整概述"
+    verifier.run.metadata["_xiaox_history"] = [{"role": "user", "content": "查看"}]
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run,
+        attachments=[
+            {
+                "name": "document.docx",
+                "source": "owned_elt_upload",
+                "metadata": {"upload_id": "current-document", "sha256": "c" * 64},
+                "preview": {"text": "ALPHA verified body", "coverage": {"truncated": False}},
+            }
+        ],
+    )
+    verifier.rows = []
+    verifier.output = "Document contains ALPHA verified body."
+    corrected = review(
+        goal("查看", kind="reply", evidence_ids=["response"]),
+        goal(
+            "完整概述" if missing == "constraint" else "查看",
+            goal_id="retained",
+            kind="constraint" if missing == "constraint" else "reply",
+            evidence_ids=["response"],
+            source_id="request" if missing == "constraint" else "history:0:user",
+        ),
+    )
+    for item in corrected["goals"]:
+        item.update(
+            file_basis="complete",
+            file_citations=[{"source_block_id": "s1", "response_block_id": "r1"}],
+        )
+    extra = copy.deepcopy(corrected["goals"][1])
+    extra["goal_id"] = "another-retained"
+    corrected["goals"].append(extra)
+    rejected = copy.deepcopy(corrected)
+    rejected["goals"][1]["file_citations"] = []
+    rejected["goals"][2]["file_citations"] = []
+    verifier.replies = [response(rejected), response(corrected)]
+
+    report = verifier.verify()
+
+    assert report["accepted"] and len(verifier.requests) == 2
+    assert report["attempts"][0]["validation_errors"][0] == {
+        "path": ["goals", 1, "file_citations"],
+        "rule": "minItems",
+    }
+    assert len(report["attempts"][0]["validation_errors"]) == 2
+    repair = json.loads(verifier.requests[1].content)["input"][-1]["content"]
+    assert '["goals", 1, "file_citations"]' in repair
+    assert '["goals", 2, "file_citations"]' in repair
+    assert all(json.loads(request.content)["tools"] == [] for request in verifier.requests)
+
+
 @pytest.mark.parametrize("defect", ["duplicate_id", "unknown_source", "wrong_quote"])
 def test_provenance_repair_only_rechecks_the_same_candidate(verifier, defect):
     corrected = _complete_review()
@@ -305,6 +495,8 @@ def test_attachment_report_repair_retains_wire_block_references(verifier, defect
     repaired_wire["goals"][1]["goal_id"] = "handling"
     repaired_wire["goals"][1]["source_id"] = "request"
     assert Draft202012Validator(payload["output_schema"]).is_valid(repaired_wire)
+    file_basis = payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["file_basis"]
+    assert file_basis["type"] == "string"
     assert report["review"]["goals"][1]["file_citations"] == [
         {
             "evidence_id": "current-note",

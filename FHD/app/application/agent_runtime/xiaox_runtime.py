@@ -66,7 +66,20 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     released_runtime_artifacts,
     withhold_runtime_output,
 )
-from app.domain.task_lifecycle.execution_mode import METADATA_KEY as _EXECUTION_MODE
+from app.domain.task_lifecycle.react_progress import (
+    CONTROL_KEY,
+    STRATEGIES,
+    admit_turn,
+    bind_repair,
+    ensure_control,
+    note_no_progress,
+    output_channel,
+    pending_tool_rejection,
+    receipt_facts,
+    replan_invalid_review,
+    requires_actions,
+    review_signature,
+)
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
 from app.infrastructure.xiaox.receipts import project_child_calls as _project_child_calls
 from app.infrastructure.xiaox.receipts import resume_error as _resume_error
@@ -202,6 +215,9 @@ def _budget_stop_reason(binding: Any) -> str:
             "model_call_budget_exhausted",
             "tool_call_budget_exhausted",
             "tool_loop_detected",
+            "react_repair_budget_exhausted",
+            "react_execution_budget_exhausted",
+            "react_execution_phase_exhausted",
         }:
             return str(reason)
     return ""
@@ -263,6 +279,14 @@ def _compensation_feedback(binding: Any, rows: list[dict[str, Any]]) -> str | No
             "goal_verification_invalid_gap", "原核验缺口来源、证据或执行条件尚不满足补偿要求"
         )
     report = binding.run.metadata["runtime_goal_verification"]
+    if report.get("status") == "unavailable":
+        return json.dumps(
+            {
+                "repair_task": binding.metadata[CONTROL_KEY]["repair"],
+                "constraints": "仅按原用户目标恢复；无效核验不是执行授权，不重放成功或未知写入。",
+            },
+            ensure_ascii=False,
+        )
     assessed = report.get("review") or {}
     goals = assessed.get("goals") or []
     return json.dumps(
@@ -283,212 +307,15 @@ def _compensation_feedback(binding: Any, rows: list[dict[str, Any]]) -> str | No
     )
 
 
-def _allows_verified_write_compensation(binding: Any, rows: list[dict[str, Any]]) -> bool:
-    """A completed original write is progress when a separate unmet goal is explicit."""
-    from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
-
-    if _model_unsettled(binding.metadata) or _has_blocking_receipt(
-        rows, allow_verified_writes=True
-    ):
-        return False
-    try:
-        if _compensation_feedback(binding, rows) is None:
-            return False
-    except XiaoxBindingError:
-        # A new tool receipt invalidates the old proposal opportunity. Review
-        # the new evidence before proposing any further effect.
-        return False
-    review = (binding.run.metadata.get("runtime_goal_verification") or {}).get("review") or {}
-    if review.get("violations") or review.get("uncovered_sources"):
-        return False
-    contract = binding.run.metadata["runtime_goal_contract"]
-    sources = {"request": contract["request"]["text"]}
-    sources.update({row["source_id"]: row["answer"] for row in goal_answers(binding.run)})
-    objective = (contract["scope"].get("constraints") or {}).get("objective")
-    if isinstance(objective, str):
-        sources["objective"] = objective
-    goals = review.get("goals") or []
-    missing = [
-        goal for goal in goals if goal.get("kind") == "write" and goal.get("status") == "unmet"
-    ]
-    writes = [goal for goal in goals if goal.get("kind") == "write"]
-    if not missing or any(
-        not goal.get("source") or goal["source"] not in sources.get(goal.get("source_id"), "")
-        for goal in writes
-    ):
-        return False
-    completed_sources = {
-        (goal["source_id"], goal["source"]) for goal in writes if goal.get("status") == "satisfied"
-    }
-    if any((goal["source_id"], goal["source"]) in completed_sources for goal in missing):
-        return False
-    covered = {
-        identity
-        for goal in goals
-        if goal.get("kind") == "write" and goal.get("status") == "satisfied"
-        for identity in goal.get("evidence_ids") or []
-    }
-    return all(
-        row.get("read_only") is True
-        or _receipt_settled_failure(row)
-        or row.get("child_run_id") in covered
-        for row in rows
-    )
-
-
-def _failed_business_details(rows: list[dict[str, Any]]) -> list[str]:
-    details: list[str] = []
-    for row in rows:
-        receipt = row.get("receipt") or {}
-        message = str(receipt.get("message") or "").strip()
-        if receipt.get("verified") is True or not message:
-            continue
-        if receipt.get("retryable") is True or str(receipt.get("status") or "") in {
-            "failed",
-            "blocked",
-        }:
-            details.append(f"- {row.get('tool_id')}.{row.get('action')}: {message}")
-    return details[:3]
-
-
-def _dispatch_action_proposal(
-    bridge: Any,
-    token: str,
-    run_id: str,
-    output: str,
-    options: dict[str, tuple[str, str]],
-) -> dict[str, Any]:
-    """Resolve the advertised pair, then run ordinary MCP authority and schema checks."""
-    try:
-        payload = json.loads(output)
-    except (TypeError, ValueError):
-        return {}
-    if not isinstance(payload, dict) or not isinstance(payload.get("capability"), str):
-        return {}
-    pair = options.get(payload["capability"])
-    if pair is None:
-        return {
-            "dispatched": False,
-            "status": "not_started",
-            "error_code": "proposal_capability_unavailable",
-        }
-    tool_id, action = pair
-    selected = {"tool_id": tool_id, "action": action}
-    params = payload.get("params")
-    if payload.keys() != {"capability", "params"} or not isinstance(params, dict):
-        return {
-            "dispatched": False,
-            **selected,
-            "status": "not_started",
-            "error_code": "proposal_shape_invalid",
-        }
-    try:
-        described = bridge.invoke(token, "capability_describe", selected)
-        digest = str((described.get("capability") or {}).get("schema_digest") or "")
-        if not digest:
-            return {}
-        call_id = (
-            "host-"
-            + hashlib.sha256(
-                json.dumps(
-                    [run_id, tool_id, action, params],
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    default=str,
-                ).encode()
-            ).hexdigest()[:32]
-        )
-        receipt = bridge.invoke(
-            token,
-            "execute_action",
-            {
-                **selected,
-                "params": params,
-                "schema_digest": digest,
-                "call_id": call_id,
-            },
-        )
-    except RECOVERABLE_ERRORS as exc:
-        return {
-            "dispatched": False,
-            **selected,
-            "error_code": getattr(exc, "code", "action_dispatch_failed"),
-        }
-    return {
-        "dispatched": receipt.get("status") != "not_started",
-        **selected,
-        "call_id": call_id,
-        "status": receipt.get("status"),
-        "error_code": receipt.get("error_code"),
-        **(
-            {"schema_violation": receipt["schema_violation"]}
-            if receipt.get("schema_violation")
-            else {}
-        ),
-        "success": receipt.get("success") is True,
-        "verified": receipt.get("verified") is True,
-    }
-
-
-def _write_proposal_options(bridge: Any, token: str) -> dict[str, tuple[str, str]]:
-    options: dict[str, tuple[str, str]] = {}
-    offset = 0
-    for _ in range(9):
-        try:
-            found = bridge.invoke(
-                token, "capability_search", {"query": "", "limit": 30, "offset": offset}
-            )
-        except RECOVERABLE_ERRORS:
-            break
-        for row in found.get("capabilities") or []:
-            if row["read_only"] is False:
-                tool_id, action = row["tool_id"], row["action"]
-                options[f"{tool_id}.{action}"] = (tool_id, action)
-        next_offset = found.get("next_offset")
-        if type(next_offset) is not int or next_offset <= offset:
-            break
-        offset = next_offset
-    return options
-
-
-def _proposal_contract(
-    bridge: Any,
-    token: str,
-    options: dict[str, tuple[str, str]],
-    denial: dict[str, Any],
-) -> dict[str, Any] | None:
-    if not options:
-        return None
-    schema: dict[str, Any] = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["capability", "params"],
-        "properties": {"capability": {"enum": list(options)}, "params": {"type": "object"}},
-    }
-    selected = f"{denial.get('tool_id')}.{denial.get('action')}"
-    if selected in options and (
-        denial.get("schema_violation") or denial.get("error_code") == "proposal_shape_invalid"
-    ):
-        tool_id, action = options[selected]
-        try:
-            response = bridge.invoke(
-                token, "capability_describe", {"tool_id": tool_id, "action": action}
-            )
-        except RECOVERABLE_ERRORS:
-            return schema
-        params = (response.get("capability") or {}).get("input_schema")
-        if (
-            isinstance(params, dict)
-            and len(json.dumps(params, ensure_ascii=False).encode()) <= 16384
-        ):
-            schema["if"] = {"properties": {"capability": {"const": selected}}}
-            schema["then"] = {"properties": {"params": params}}
-    return schema
-
-
 def _failure_diagnostics(run: AgentRun, result: dict[str, Any]) -> dict[str, str]:
     """Describe the current failure; recovered attempts remain in their own ledger."""
     stage = kind = reason = ""
+    if str(result.get("error_code") or "").startswith("react_"):
+        return {
+            "failure_stage": "recovery",
+            "failure_kind": result["error_code"],
+            "failure_reason": str(result.get("error") or "原任务恢复未完成"),
+        }
     if result.get("exit_status") in {"goal_verification_required", "goal_verification_invalid_gap"}:
         report = run.metadata.get("runtime_goal_verification") or {}
         stage = "goal_verification"
@@ -670,7 +497,100 @@ async def run_xiaox_agent(
             generation=generation,
             review=review,
         )
+
+        def checkpoint_review(run, metadata):
+            state = metadata[CONTROL_KEY]
+            state["last_review_signature"] = review_signature(run, rows, reviewed_output)
+            if review.get("status") == "needs_work":
+                bind_repair(run, metadata, rows)
+                # The signature is computed after the reviewer establishes whether
+                # this is a business repair or a text revision.
+                state["last_review_signature"] = review_signature(run, rows, reviewed_output)
+            elif not _has_blocking_receipt(rows) and replan_invalid_review(run, metadata, rows):
+                state["last_review_signature"] = review_signature(run, rows, reviewed_output)
+                run.metadata[JOB_KEY].update(state="needs_work", terminal_code="")
+
+        mutate(checkpoint_review)
         return review
+
+    async def recover_without_review(output, rows, channel):
+        decision = ""
+
+        def record_stall(run, metadata):
+            nonlocal decision
+            if rejection := pending_tool_rejection(run, metadata, rows):
+                # These reads predate the rejected action; they cannot turn its
+                # recovery attempt into progress or consume a verification slot.
+                metadata[CONTROL_KEY]["facts"] = rejection["facts"]
+            decision = note_no_progress(run, metadata, rows, channel)
+            state = metadata[CONTROL_KEY]
+            if channel != "reply":
+                quarantined = state.setdefault("quarantined_outputs", [])
+                quarantined.append({"channel": channel, "output": output, "trusted": False})
+                del quarantined[:-4]
+                run.add_event(
+                    "runtime.output.quarantined",
+                    "内部协议输出已隔离，未计为业务进展",
+                    {"channel": channel},
+                )
+
+        mutate(record_stall)
+        if decision == "blocked":
+            raise XiaoxBindingError(
+                "react_no_progress_exhausted", "恢复策略已耗尽，未获得新的已核验业务证据"
+            )
+        if decision == "context_repair":
+            # Native SDK compaction, still owned and billed by the same run.
+            if compact := getattr(active, "compact_thread", None):
+                try:
+                    await compact()
+                except BOUNDARY_ERRORS as exc:
+                    failure = type(exc).__name__
+                    mutate(
+                        lambda run, metadata: metadata[CONTROL_KEY].update(
+                            context_repair_error=failure
+                        )
+                    )
+                else:
+                    mutate(
+                        lambda run, metadata: metadata[CONTROL_KEY].update(context_repaired=True)
+                    )
+        if decision == "compatible_route":
+            current = store.get(run_id)
+            routes = current.metadata.get("runtime_config", {}).get("authorized_model_routes") or []
+            if len(routes) < 2:
+                mutate(
+                    lambda run, metadata: metadata[CONTROL_KEY].update(
+                        route_switch_unavailable=True
+                    )
+                )
+                raise XiaoxBindingError(
+                    "react_no_progress_exhausted",
+                    "原授权范围没有兼容备用模型；上下文修复和工具约束后仍无业务进展",
+                )
+            selected = current.run.metadata.get("runtime_effective_model_route", routes[0])
+            if selected not in routes or routes.index(selected) + 1 >= len(routes):
+                raise XiaoxBindingError("react_no_progress_exhausted", "原授权范围没有剩余兼容模型")
+            target = routes[routes.index(selected) + 1]
+            mutate(lambda run, metadata: metadata[CONTROL_KEY].update(route_switch_target=target))
+        current = store.get(run_id)
+        state = current.metadata[CONTROL_KEY]
+        repair = state.get("repair") or {
+            "protocol": "xcagi.react-repair.v1",
+            "goal_digest": current.run.metadata["runtime_goal_digest"],
+            "request": task,
+        }
+        return json.dumps(
+            {
+                "repair_task": repair,
+                "strategy": STRATEGIES[state["strategy"]],
+                "required_channel": "host_tools" if requires_actions(state) else "reply",
+                "rejected_output_channel": channel,
+                "rejected_action": pending_tool_rejection(current.run, current.metadata, rows),
+                "preserve_original_authority": True,
+            },
+            ensure_ascii=False,
+        )
 
     def revoke(reason: str, *, release_coordinator: bool = False) -> None:
         if grant is None:
@@ -753,6 +673,9 @@ async def run_xiaox_agent(
                     "model_call_budget_exhausted": "本轮模型调用次数已达上限，任务未完成。",
                     "tool_call_budget_exhausted": "本轮工具调用次数已达上限，任务未完成。",
                     "tool_loop_detected": "工具调用重复且结果无进展，任务已停止。",
+                    "react_repair_budget_exhausted": "原任务修复模型预算已耗尽。",
+                    "react_execution_budget_exhausted": "原任务执行模型预算已耗尽。",
+                    "react_execution_phase_exhausted": "原任务执行阶段额度已用完，待核对剩余目标。",
                 }[budget_stop]
                 status = "failed"
                 result.update(
@@ -774,6 +697,24 @@ async def run_xiaox_agent(
                     exit_status=status,
                     execution_state=status,
                     runtime_completed=False,
+                )
+            elif str(result.get("error_code") or "").startswith("react_"):
+                status = "blocked"
+                code = result["error_code"]
+                message = str(result.get("error") or "原任务修复尚未完成，已保存执行进度。")
+                result.update(
+                    ok=False,
+                    business_completed=False,
+                    reply_completed=False,
+                    runtime_completed=False,
+                    exit_status=code,
+                    execution_state="blocked",
+                    output=message,
+                    error=message,
+                    retryable=False,
+                    failure_kind=code,
+                    failure_stage="recovery",
+                    failure_reason=message,
                 )
             elif result.get("error_code") == "goal_verification_invalid_gap":
                 status = "blocked"
@@ -805,6 +746,8 @@ async def run_xiaox_agent(
                 if verification.get("state") == "needs_work" and result.get("error_code") in {
                     "goal_verification_budget_exhausted",
                     "goal_verification_invalid_gap",
+                    "react_no_progress_exhausted",
+                    "react_repair_budget_exhausted",
                 }:
                     verification.update(state="blocked", terminal_code=result["error_code"])
                 if verification.get("state") in {"running", "pending", "needs_work"} and float(
@@ -1008,9 +951,12 @@ async def run_xiaox_agent(
                 max_model_calls=int(pinned.get("max_model_calls", 24)),
                 total_seconds=limit,
             )
+            ensure_control(metadata, int(pinned.get("max_model_calls", 24)))
             metadata.update(active_seconds=spent, active_started_at=now, deadline_at=now + timeout)
             metadata["execution_deadline_at"] = now + max(0, timeout - reserve["seconds"])
             metadata["active_phase"] = "execution"
+            if not verification_only and not metadata.get("thread_id"):
+                metadata["dispatch_phase"] = "preparing"
 
         mutate(begin_active)
         actual_config = replace(
@@ -1143,6 +1089,7 @@ async def run_xiaox_agent(
 
                         run.status = "running"
                         metadata["runtime_status"] = "running"
+                        metadata["dispatch_phase"] = "started"
                         run.add_event(
                             "runtime.xiaox.started",
                             "Xiaox 执行已开始",
@@ -1180,10 +1127,17 @@ async def run_xiaox_agent(
                         )
 
                         action_schema = await asyncio.to_thread(plan_delivery_schema, binding)
-                    proposal_options: dict[str, tuple[str, str]] = {}
-                    proposal_submitted = False
-                    denied_proposal: dict[str, Any] = {}
-                    for attempt in range(3):
+                    control = store.get(run_id).metadata[CONTROL_KEY]
+                    for attempt in range(control["limits"]["repair"] + 1):
+                        try:
+                            mutate(lambda run, metadata: admit_turn(metadata))
+                        except ValueError as exc:
+                            raise XiaoxBindingError(
+                                str(exc)
+                                if str(exc).startswith("react_")
+                                else "react_repair_budget_exhausted",
+                                "原任务恢复已停止，原预算及阻断原因保留",
+                            ) from exc
                         texts.clear()
                         result.pop("goal_response", None)
                         runtime_status = "running"
@@ -1198,6 +1152,9 @@ async def run_xiaox_agent(
                         iterator = stream.__aiter__()
                         pending = asyncio.ensure_future(anext(iterator))
                         turn_id = ""
+                        stalled_turn = False
+                        phase_handoff = False
+                        next_control_check = 0.0
                         try:
                             # The outer asyncio.timeout(remaining) keeps the original task deadline.
                             # Each 0.5s poll rechecks revocation without renewing that deadline.
@@ -1206,7 +1163,72 @@ async def run_xiaox_agent(
                                 done, _ = await asyncio.wait(
                                     {pending}, timeout=_CONTROL_POLL_SECONDS
                                 )
-                                store.authenticate(grant.model_token, "model")
+                                # Deltas have no side effects. Checking the SQL control
+                                # ledger for every token can starve the SDK terminal event.
+                                if done and time.monotonic() < next_control_check:
+                                    try:
+                                        buffered_event = pending.result()
+                                    except StopAsyncIteration:
+                                        break
+                                    if (
+                                        buffered_event.get("thread_id") == thread_id
+                                        and str(buffered_event.get("turn_id") or "") == turn_id
+                                        and turn_id
+                                    ):
+                                        delta_method = buffered_event.get("method")
+                                        if delta_method == "item/agentMessage/delta" or str(
+                                            delta_method
+                                        ).startswith("item/reasoning/"):
+                                            pending = asyncio.ensure_future(anext(iterator))
+                                            continue
+                                next_control_check = time.monotonic() + _CONTROL_POLL_SECONDS
+                                observed = store.get(run_id)
+                                # Human stop, lease generation and revoked authority
+                                # take precedence over any automatic recovery decision.
+                                if observed.metadata.get("generation") != generation:
+                                    raise XiaoxBindingError("token_invalid", "原运行授权已被更新")
+                                store._validate_current(observed.run, observed.metadata, generation)
+                                phase_stop = _budget_stop_reason(observed)
+                                if (
+                                    phase_stop == "react_execution_phase_exhausted"
+                                    and not phase_handoff
+                                ):
+                                    await active.interrupt()
+                                    phase_handoff = True
+                                elif phase_stop.startswith("react_") and not phase_handoff:
+                                    raise XiaoxBindingError(
+                                        phase_stop, "原任务的执行或修复模型预算已耗尽，未确认完成"
+                                    )
+                                loop_stop = observed.metadata.get("tool_call_limit") or {}
+                                repeated = loop_stop.get("reason") == "tool_loop_detected"
+                                if repeated and not stalled_turn:
+                                    live_rows = store.receipt_snapshot(run_id)
+                                    if (
+                                        loop_stop.get("repetitions") != 8
+                                        or loop_stop.get("period") not in {1, 2, 3, 4}
+                                        or observed.metadata.get("waiting_input")
+                                        or any(
+                                            _receipt_state(row)
+                                            in (_WAITING | _ACTIVE | {"unknown"})
+                                            for row in live_rows
+                                        )
+                                    ):
+                                        # An old/incomplete stop or unsettled side effect is
+                                        # not authority to reopen execution after an interrupt.
+                                        raise XiaoxBindingError(
+                                            "tool_loop_detected",
+                                            "原调用仍待核对，保留停止原因和回执",
+                                        )
+                                    # Stop the SDK turn before changing strategy. Existing
+                                    # bridge limits keep business dispatch closed meanwhile.
+                                    await active.interrupt()
+                                    stalled_turn = True
+                                store.authenticate(
+                                    grant.mcp_token
+                                    if stalled_turn or phase_handoff
+                                    else grant.model_token,
+                                    "mcp" if stalled_turn or phase_handoff else "model",
+                                )
                                 if not done:
                                     continue
                                 try:
@@ -1227,13 +1249,6 @@ async def run_xiaox_agent(
                                 item = payload.get("item") or {}
                                 if method == "turn/started":
                                     result.update(turn_id=turn_id, rounds=attempt + 1)
-                                if method == "item/agentMessage/delta":
-                                    key = str(
-                                        event.get("item_id") or payload.get("itemId") or "message"
-                                    )
-                                    texts[key] = texts.get(key, "") + str(
-                                        payload.get("delta") or ""
-                                    )
                                 if (
                                     method == "item/completed"
                                     and item.get("type") == "agentMessage"
@@ -1262,6 +1277,26 @@ async def run_xiaox_agent(
                                         # output stay private until a verified receipt exists.
                                         data["tool_id"] = str(item.get("server") or "")[:128]
                                         data["action"] = str(item.get("tool") or "")[:128]
+                                    if (
+                                        method == "item/completed"
+                                        and item.get("type") == "reasoning"
+                                    ):
+                                        # Some compatible routes put raw reasoning into the SDK's
+                                        # summary field. Only an explicit OpenAI summary is public.
+                                        summary = item.get("summary")
+                                        public_summary = (
+                                            " ".join(
+                                                part for part in summary if isinstance(part, str)
+                                            )
+                                            if (
+                                                pinned.get("upstream_vendor") == "openai"
+                                                and isinstance(summary, list)
+                                            )
+                                            else ""
+                                        )
+                                        data["public_summary"] = public_summary.strip()[:600] or (
+                                            "模型已完成这一阶段的分析，正在生成回复或选择工具。"
+                                        )
 
                                     def record(run: AgentRun, metadata: dict[str, Any]) -> None:
                                         metadata["turn_id"] = turn_id
@@ -1301,6 +1336,15 @@ async def run_xiaox_agent(
                                                             if item.get("type") == "mcpToolCall"
                                                             else {}
                                                         ),
+                                                        **(
+                                                            {
+                                                                "public_summary": data[
+                                                                    "public_summary"
+                                                                ]
+                                                            }
+                                                            if "public_summary" in data
+                                                            else {}
+                                                        ),
                                                     }
                                                 }
                                                 if method.startswith("item/")
@@ -1322,46 +1366,65 @@ async def run_xiaox_agent(
                                 await asyncio.gather(pending, return_exceptions=True)
                             if close_iterator := getattr(iterator, "aclose", None):
                                 await close_iterator()
+                        if phase_handoff:
+                            handoff_rows = store.receipt_snapshot(run_id)
+                            if _model_unsettled(store.get(run_id).metadata) or any(
+                                _receipt_state(row) in (_WAITING | _ACTIVE | {"unknown"})
+                                for row in handoff_rows
+                            ):
+                                break
+
+                            def enter_repair(run, metadata):
+                                metadata[CONTROL_KEY]["repairing"] = True
+                                metadata.pop("model_call_limit", None)
+                                run.add_event(
+                                    "runtime.recovery.phase_handoff",
+                                    "执行阶段已交接，修复与核验额度保留",
+                                )
+
+                            mutate(enter_repair)
+                            runtime_status = "completed"
+                            current = store.get(run_id)
+                            if not receipt_facts(handoff_rows) or (
+                                completion_mode != "reply"
+                                and pending_tool_rejection(
+                                    current.run, current.metadata, handoff_rows
+                                )
+                                and not _has_blocking_receipt(handoff_rows)
+                            ):
+                                texts.clear()
+                                goal_feedback = await recover_without_review(
+                                    "", handoff_rows, "rejected_action"
+                                )
+                                continue
+                        if stalled_turn:
+                            stalled_rows = store.receipt_snapshot(run_id)
+                            if any(
+                                _receipt_state(row) in (_WAITING | _ACTIVE | {"unknown"})
+                                for row in stalled_rows
+                            ):
+                                raise XiaoxBindingError(
+                                    "reconciliation_required",
+                                    "空转中断后原调用尚未确定，保留回执等待核对",
+                                )
+                            goal_feedback = await recover_without_review(
+                                "", stalled_rows, "tool_loop"
+                            )
+
+                            def reopen_turn(run, metadata):
+                                if (metadata.get("tool_call_limit") or {}).get(
+                                    "reason"
+                                ) == "tool_loop_detected":
+                                    metadata.pop("tool_call_limit", None)
+                                    metadata["tool_observation_history"] = []
+
+                            mutate(reopen_turn)
+                            runtime_status = "completed"
+                            continue
                         if runtime_status != "completed":
                             break
                         output = "\n\n".join(value for value in texts.values() if value.strip())
                         rows = store.receipt_snapshot(run_id)
-                        if proposal_options and not _has_blocking_receipt(
-                            rows,
-                            allow_verified_writes=_allows_verified_write_compensation(
-                                store.get(run_id),
-                                rows,
-                            ),
-                        ):
-                            proposed = await asyncio.to_thread(
-                                _dispatch_action_proposal,
-                                tool_bridge,
-                                grant.mcp_token,
-                                run_id,
-                                output,
-                                proposal_options,
-                            )
-                            if proposed:
-                                denied_proposal = {}
-                                if proposed.get("dispatched") is True:
-                                    proposal_submitted = True
-                                else:
-                                    # 拒绝也是可修正的反馈：下一轮带上具体错误与真实能力目录。
-                                    denied_proposal = proposed
-
-                                def record_proposal(
-                                    run: AgentRun,
-                                    metadata: dict[str, Any],
-                                    payload: dict[str, Any] = proposed,
-                                ) -> None:
-                                    run.add_event(
-                                        "runtime.action.proposed",
-                                        "宿主按实时 schema 核对结构化动作提案",
-                                        payload,
-                                    )
-
-                                mutate(record_proposal)
-                                rows = store.receipt_snapshot(run_id)
                         binding = store.get(run_id)
                         if (
                             _model_unsettled(binding.metadata)
@@ -1383,63 +1446,62 @@ async def run_xiaox_agent(
                                 texts["validated_plan"] = plan_delivery.output
                             if plan_delivery.unavailable:
                                 result["plan_unavailable"] = plan_delivery.output
+                        channel = output_channel(output) if not structured_plan else "reply"
+                        control = binding.metadata[CONTROL_KEY]
+                        unchanged = control.get("last_review_signature") == review_signature(
+                            binding.run, rows, output
+                        )
+                        if (
+                            channel == "reply"
+                            and unchanged
+                            and (binding.run.metadata.get("runtime_goal_verification") or {}).get(
+                                "status"
+                            )
+                            == "verified"
+                        ):
+                            # A resumed identical candidate keeps its already-bound verdict.
+                            # Changed input/receipts alter the signature and require review.
+                            break
+                        if channel != "reply" or (
+                            control.get("last_review_signature") and unchanged
+                        ):
+                            # New prose, malformed calls and memory candidates do not
+                            # reopen an already-reviewed business evidence revision.
+                            texts.clear()
+                            goal_feedback = await recover_without_review(output, rows, channel)
+                            continue
                         review = await review_candidate(output, rows, plan_delivery=plan_delivery)
                         binding = store.get(run_id)
                         if (
                             review.get("status") != "needs_work"
-                            or attempt == 2
                             or binding.run.metadata[JOB_KEY].get("state") != "needs_work"
                         ):
+                            control = binding.metadata[CONTROL_KEY]
+                            if control.get("invalid_review", {}).get("report_digest") == review.get(
+                                "report_digest"
+                            ) and requires_actions(control):
+                                texts.clear()
+                                goal_feedback = await recover_without_review(
+                                    output, rows, "verification"
+                                )
+                                continue
                             break
                         goal_feedback = _compensation_feedback(binding, rows)
                         if goal_feedback is None:
                             break
+                        control = binding.metadata[CONTROL_KEY]
+                        goal_feedback = json.dumps(
+                            {**json.loads(goal_feedback), "repair_task": control["repair"]},
+                            ensure_ascii=False,
+                        )
+                        # Recovery keeps native SDK calls. It never converts a final
+                        # answer JSON into a host-executed business or memory action.
                         if not structured_plan:
                             action_schema = None
-                        proposal_options = {}
-                        if _write_goal_unmet(review):
-                            failures = _failed_business_details(rows)
-                            if failures:
-                                goal_feedback += (
-                                    "\n\n上次业务动作明确失败，可按错误修正后重试：\n"
-                                    + "\n".join(failures)
-                                )
-                            if (
-                                tool_bridge is not None
-                                and binding.run.metadata.get(_EXECUTION_MODE) != "plan"
-                                and not proposal_submitted
-                                and not _has_blocking_receipt(
-                                    rows,
-                                    allow_verified_writes=_allows_verified_write_compensation(
-                                        binding, rows
-                                    ),
-                                )
-                            ):
-                                proposal_options = await asyncio.to_thread(
-                                    _write_proposal_options,
-                                    tool_bridge,
-                                    grant.mcp_token,
-                                )
-                                action_schema = await asyncio.to_thread(
-                                    _proposal_contract,
-                                    tool_bridge,
-                                    grant.mcp_token,
-                                    proposal_options,
-                                    denied_proposal,
-                                )
-                                if denied_proposal:
-                                    proposal_error = {
-                                        key: denied_proposal[key]
-                                        for key in ("status", "error_code", "schema_violation")
-                                        if denied_proposal.get(key) is not None
-                                    }
-                                    goal_feedback = json.dumps(
-                                        {
-                                            "feedback": goal_feedback,
-                                            "proposal_error": proposal_error,
-                                        },
-                                        ensure_ascii=False,
-                                    )
+                    else:
+                        raise XiaoxBindingError(
+                            "react_repair_budget_exhausted", "原任务修复轮次预算已耗尽，未确认完成"
+                        )
                     if runtime_status != "completed":
                         await stop(runtime_status)
 
@@ -1473,7 +1535,9 @@ async def run_xiaox_agent(
                 "code",
                 "xiaox_timeout" if isinstance(exc, TimeoutError) else "xiaox_runtime_failed",
             ),
-            error="Xiaox 运行未完成，原任务和执行回执已保留",
+            error=str(exc)
+            if isinstance(exc, XiaoxBindingError) and exc.code.startswith("react_")
+            else "Xiaox 运行未完成，原任务和执行回执已保留",
         )
         if isinstance(exc, ImportError):
             logger.error("Xiaox component import failed: %s", exc.name or type(exc).__name__)

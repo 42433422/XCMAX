@@ -448,18 +448,44 @@ class XiaoxBindingStore:
             or result.get("needs_user_input")
             or result.get("status") in {"claimed", "running", "waiting_user", "waiting_approval"}
         )
+        rejected = (
+            result.get("success") is False
+            and result.get("verified") is False
+            and result.get("status") == "not_started"
+            and bool(result.get("error_code"))
+            and not polling
+        )
         signature = canonical_digest(
             [
                 name,
-                {k: v for k, v in arguments.items() if k != "call_id"},
-                _tool_observation(name, result),
+                {k: arguments[k] for k in ("tool_id", "action") if k in arguments}
+                if rejected
+                else {k: v for k, v in arguments.items() if k != "call_id"},
+                {"status": "not_started"} if rejected else _tool_observation(name, result),
             ]
         )
 
         def observe(run: AgentRun, metadata: dict[str, Any]) -> None:
             from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
+            from app.domain.task_lifecycle.react_progress import receipt_facts
 
             answers = canonical_digest(goal_answers(run))
+            if rejected:
+                # No dispatched effect exists. Changing an invalid plan is not
+                # evidence of progress, and must not send a completed read to QC.
+                metadata["tool_rejection"] = {
+                    "goal_digest": run.metadata.get("runtime_goal_digest"),
+                    "answers_digest": answers,
+                    "facts": receipt_facts(list((metadata.get("calls") or {}).values())),
+                    "tool": name,
+                    "action": {k: arguments[k] for k in ("tool_id", "action") if k in arguments},
+                    "arguments_digest": canonical_digest(arguments),
+                    "diagnostic": {
+                        key: result[key]
+                        for key in ("error_code", "message", "field_path", "schema_violations")
+                        if key in result
+                    },
+                }
             history = list(metadata.get("tool_observation_history") or [])
             if metadata.get("tool_observation_answers", answers) != answers:
                 history = []

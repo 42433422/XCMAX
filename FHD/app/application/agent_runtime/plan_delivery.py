@@ -143,12 +143,12 @@ def _plan_arguments(value: dict[str, Any]) -> str:
 def render_action_plan(binding: Any, output: str) -> PlanVerdict:
     """Produce the only displayed steps, using validated identities and parameters."""
     from app.application.agent_runtime.goal_verifier import (
-        _unique_json_object,
         _verify_plan_capabilities,
     )
+    from app.domain.task_lifecycle.goal_review_models import unique_json_object
 
     try:
-        decoded = json.loads(output, object_pairs_hook=_unique_json_object)
+        decoded = json.loads(output, object_pairs_hook=unique_json_object)
         json.dumps(decoded, allow_nan=False)
         plan = PlanDelivery.model_validate(decoded).plan
     except (ValueError, ValidationError):

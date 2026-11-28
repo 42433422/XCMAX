@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -342,6 +343,65 @@ def test_expired_claim_cannot_admit_a_turn_and_fresh_claim_recovers_generation_z
     worker(state, fresh, "new-worker")
     assert state.repository.get(run_id).status == "completed"
     assert state.queue.get(run_id).state == "succeeded" and len(state.calls) == 1
+
+
+@pytest.mark.parametrize("model_dispatched", [False, True])
+def test_worker_loss_only_rearms_proven_pre_dispatch(runtime_entry, monkeypatch, model_dispatched):
+    state = runtime_entry
+    run_id = create(state)
+    first = state.queue.claim("first-worker", lease_seconds=120)
+    original_runtime = gateway.run_xiaox_agent
+
+    class ProcessLost(BaseException):
+        pass
+
+    def add_runtime_budget(kwargs):
+        kwargs["runtime_config"]["max_active_seconds"] = kwargs["config"].turn_timeout_seconds
+
+    async def interrupted(**kwargs):
+        add_runtime_budget(kwargs)
+        store = kwargs["binding_store"]
+        store.create(run_id, runtime_config=kwargs["runtime_config"])
+        store.update(
+            run_id,
+            lambda _run, metadata: metadata.update(
+                dispatch_phase="preparing", active_started_at=time.time() - 1, active_seconds=0
+            ),
+        )
+        if model_dispatched:
+            store.update(
+                run_id,
+                lambda _run, metadata: metadata.update(
+                    model_requests={"original-model": {"state": "reserved"}}
+                ),
+            )
+        raise ProcessLost
+
+    async def resumed(**kwargs):
+        add_runtime_budget(kwargs)
+        return await original_runtime(**kwargs)
+
+    monkeypatch.setattr(gateway, "run_xiaox_agent", interrupted)
+    with pytest.raises(ProcessLost):
+        execute_queued_runtime(state.repository, first, "first-worker")
+    expire(state, run_id)
+    monkeypatch.setattr(gateway, "run_xiaox_agent", resumed)
+    fresh = state.queue.claim("recovery-worker", lease_seconds=120)
+    worker(state, fresh, "recovery-worker")
+    saved = state.repository.get(run_id)
+    if model_dispatched:
+        assert saved.status == "blocked" and state.queue.get(run_id).state == "unknown"
+        assert state.calls == []
+        assert saved.metadata["xiaox_runtime"]["model_requests"] == {
+            "original-model": {"state": "reserved"}
+        }
+        return
+    assert saved.status == "completed", saved.final_output["xiaox_result"].get("error_code")
+    assert state.queue.get(run_id).state == "succeeded" and len(state.calls) == 1
+    assert saved.metadata["xiaox_runtime"]["active_seconds"] >= 1
+    assert any(
+        event.event_type == "runtime.queue.recovered_before_dispatch" for event in saved.events
+    )
 
 
 @pytest.mark.parametrize("queue_result_saved", [False, True])

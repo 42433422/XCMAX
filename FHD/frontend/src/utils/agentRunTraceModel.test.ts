@@ -12,6 +12,15 @@ function ev(event_type: AgentRunEvent['event_type'], overrides: Partial<AgentRun
 }
 
 describe('buildAgentRunTraceFromEvents', () => {
+  it('uses the persisted blocked state after SDK completion without business success', () => {
+    const events = [
+      ev('runtime.xiaox.turn.started', { data: { turn_id: 'turn-1' } }),
+      ev('runtime.xiaox.finished', { data: { status: 'completed', business_success: false } }),
+      ev('run.state_changed', { data: { to_status: 'blocked' } }),
+    ]
+    expect(buildAgentRunTraceFromEvents(events, 'run_test')).toMatchObject({ status: 'blocked', terminal: true })
+  })
+
   it('correlates model failures and retries without closing the enclosing SDK turn', () => {
     const events = [
       ev('runtime.xiaox.turn.started', { event_id: 'turn-start', data: { turn_id: 'turn-1' } }),
@@ -33,6 +42,49 @@ describe('buildAgentRunTraceFromEvents', () => {
     const completed = buildAgentRunTraceFromEvents(events, 'run_test')
     expect(completed.phases.map(phase => phase.status)).toEqual(['success', 'failed', 'success'])
     expect(completed.terminal).toBe(false)
+  })
+
+  it('closes the exact failed verification even when its turn ID differs', () => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('runtime.model.started', { data: { request_id: 'turn-A', model_request_id: 'review-A', purpose: 'verification' } }),
+      ev('runtime.model.started', { data: { request_id: 'turn-A', model_request_id: 'review-B', purpose: 'verification' } }),
+      ev('runtime.model.failure', { data: {
+        request_id: 'turn-A', model_request_id: 'review-A', purpose: 'verification',
+        failure_kind: 'model_schema_rejected', outcome: 'not_started',
+      } }),
+    ], 'run_test')
+    expect(trace.phases).toEqual([
+      expect.objectContaining({ status: 'failed', title: '核验格式被模型拒绝' }),
+      expect.objectContaining({ status: 'running', title: '正在独立核验结果' }),
+    ])
+  })
+
+  it('marks completed capability search without accepting a business tool receipt', () => {
+    const items = [
+      { item_id: 'search', item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'capability_search' },
+      { item_id: 'excel', item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'execute_excel_read' },
+    ]
+    const trace = buildAgentRunTraceFromEvents(items.flatMap(data => [
+      ev('runtime.xiaox.item.started', { data }),
+      ev('runtime.xiaox.item.completed', { data: { ...data, status: 'completed' } }),
+    ]), 'run_test')
+    expect(trace.phases.map(phase => phase.status)).toEqual(['success', 'waiting'])
+  })
+
+  it('shows the timed-out layer and clears it after the original model receipt returns', () => {
+    const identity = { model_request_id: 'review-A', purpose: 'verification' }
+    const events = [
+      ev('runtime.model.started', { data: identity }),
+      ev('runtime.model.failure', { data: { ...identity, outcome: 'unknown', elapsed_ms: 180115 } }),
+    ]
+    expect(buildAgentRunTraceFromEvents(events, 'run_test').phases[0]).toMatchObject({
+      title: '核验请求回执待核对',
+      subtitle: '桌面模型网关未收到终态，已等待 180.1 秒。正在核对原请求回执。',
+    })
+    events.push(ev('runtime.model.completed', { data: identity }))
+    expect(buildAgentRunTraceFromEvents(events, 'run_test').phases[0]).toMatchObject({
+      status: 'success', title: '核验模型已返回', subtitle: '',
+    })
   })
 
   it.each([

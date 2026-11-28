@@ -148,6 +148,7 @@ def billed(db, monkeypatch):
         "headers": dict(COUNTERS),
         "result": _result(),
         "status": 200,
+        "error_body": {"error": {"message": "upstream unavailable"}},
         "terminal": True,
         "duplicate": False,
         "closed": False,
@@ -217,7 +218,7 @@ def billed(db, monkeypatch):
         if state["status"] != 200:
             result = httpx.Response(
                 state["status"],
-                json={"error": {"message": "upstream unavailable"}},
+                json=state["error_body"],
                 headers=state["headers"],
             )
         elif body.get("stream"):
@@ -337,6 +338,69 @@ async def test_uncertain_attempt_never_reexecutes_or_releases_its_hold(billed, d
     billed["wallet"].settle.assert_not_awaited()
     billed["wallet"].release.assert_not_awaited()
     assert db.query(LlmCallLog).count() == 0
+
+
+@pytest.mark.parametrize("invalid_at_gateway", [False, True])
+async def test_schema_rejection_has_no_paid_retry(billed, db, invalid_at_gateway):
+    schema = {"type": "invalid"} if invalid_at_gateway else {"type": "object"}
+    body = {
+        "model": "litellm/account-model",
+        "input": "Review the evidence",
+        "text": {"format": {"type": "json_schema", "name": "review", "schema": schema}},
+    }
+    billed["status"] = 400
+    billed["error_body"] = {
+        "error": {
+            "message": "response_format.json_schema is not a valid moonshot flavored json schema"
+        }
+    }
+    if invalid_at_gateway:
+        with pytest.raises(HTTPException) as error:
+            await billed["call"](body=body)
+        assert error.value.status_code == 422
+        assert error.value.detail["code"] == "CODEX_RESPONSE_SCHEMA_REJECTED"
+        billed["wallet"].preauthorize.assert_not_awaited()
+        assert not billed["requests"]
+        return
+    for _ in range(2):
+        reply = await billed["call"](body=body)
+        assert reply.status_code == 422
+        assert json.loads(reply.body)["detail"]["code"] == "CODEX_RESPONSE_SCHEMA_REJECTED"
+    assert len(billed["requests"]) == 1
+    billed["wallet"].release.assert_awaited_once()
+    billed["wallet"].settle.assert_not_awaited()
+    assert recovery.response_receipt(db, 7, KEY)["rejection"]["billing_status"] == "released"
+    assert db.query(LlmCallLog).count() == 0
+
+
+async def test_schema_rejection_keeps_uncertain_hold_until_matching_wallet_readback(billed, db):
+    body = {
+        "model": "litellm/account-model",
+        "input": "Review evidence",
+        "text": {"format": {"type": "json_schema", "name": "review", "schema": {"type": "object"}}},
+    }
+    billed["status"] = 400
+    billed["error_body"] = {"error": {"code": "invalid_json_schema"}}
+    billed["wallet"].release.side_effect = HTTPException(502, "wallet response lost")
+    with pytest.raises(HTTPException) as error:
+        await billed["call"](body=body)
+    assert error.value.status_code == 409
+    assert recovery.response_receipt(db, 7, KEY) is None
+    receipt = {
+        "hold_no": "wallet-hold-7",
+        "request_id": ledger.attempt_request_id(7, KEY, 1),
+        "provider": "litellm",
+        "model": "account-model",
+        "status": "released",
+    }
+    billed["wallet"].read_hold.return_value = {**receipt, "request_id": "foreign-request"}
+    with pytest.raises(HTTPException) as error:
+        await billed["call"](body=body)
+    assert error.value.status_code == 409
+    billed["wallet"].read_hold.return_value = receipt
+    reply = await billed["call"](body=body)
+    assert reply.status_code == 422 and len(billed["requests"]) == 1
+    billed["wallet"].release.assert_awaited_once()
 
 
 @pytest.mark.parametrize("failure", ["truncated", "duplicate", "wrong-model"])
@@ -505,6 +569,7 @@ async def test_upstream_429_halves_the_limit_and_keeps_the_attempt_unresolved(bi
     with pytest.raises(HTTPException) as error:
         await billed["call"]()
     assert error.value.status_code == 409 and error.value.detail["state"] == "settling"
+    assert error.value.detail["upstream_status"] == 429
     assert concurrency.current_limit(db, CONCURRENCY_KEY) == 2
     assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
     billed["wallet"].release.assert_not_awaited()
@@ -642,3 +707,28 @@ def test_responses_route_requires_the_existing_account_authentication(monkeypatc
     with TestClient(app) as client:
         response = client.post("/v1/responses", json=_payload())
     assert response.status_code == 401
+
+
+async def test_closed_consumer_drains_and_recovers_exact_receipt_without_redispatch(billed, db):
+    response = await billed["call"](body=_payload(stream=True))
+    frames = response.body_iterator
+    await anext(frames)
+    await frames.aclose()
+    saved = recovery.response_receipt(db, 7, KEY)
+    assert saved["response"]["status"] == "completed"
+    assert saved["headers"]["X-XCMax-Upstream-Attempts"] == "1"
+    assert recovery.response_receipt(db, 8, KEY) is None
+    assert len(billed["requests"]) == billed["wallet"].settle.await_count == 1
+    assert db.query(LlmCallLog).count() == 1
+    assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
+
+
+@pytest.mark.parametrize("deadline", ["0", "-1", "nan", "9" * 100])
+async def test_expired_or_invalid_deadline_never_reserves_or_dispatches(billed, db, deadline):
+    request = _request(chat_route_token(billed["route"], 7, runtime_contract=billed["contract"]))
+    request.scope["headers"].append((b"x-xcmax-request-deadline-ms", deadline.encode()))
+    with pytest.raises(HTTPException) as error:
+        await responses.run_billed_responses(request, db, SimpleNamespace(id=7), _payload())
+    assert error.value.status_code in {400, 408}
+    assert db.query(LlmClientRequest).count() == 0 and not billed["requests"]
+    billed["wallet"].preauthorize.assert_not_awaited()
