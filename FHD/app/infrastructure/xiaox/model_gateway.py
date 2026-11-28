@@ -34,6 +34,7 @@ from app.application.agent_runtime.verification_budget import (
     phase_deadline,
     verification_reserve,
 )
+from app.infrastructure.billing.model_reservation import PlatformModelReceiptScope
 from app.infrastructure.llm.retry_policy import retry_after_seconds, retry_delay
 from app.infrastructure.xiaox.policy import ModelRoute
 
@@ -43,22 +44,23 @@ MODEL_PATH = "/api/agent-runtime/xiaox/responses"
 _ZERO_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-def model_request_timeout_seconds() -> float:
+def model_request_timeout_seconds(route: ModelRoute | None = None) -> float:
     """Upstream wait budget for one model request; the turn deadline still clamps it."""
-    raw = os.environ.get("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180").strip()
+    ceiling = route.request_timeout_seconds if route else 180.0
+    raw = os.environ.get("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", str(ceiling)).strip()
     try:
         value = float(raw)
     except ValueError:
         value = 180.0
     if not math.isfinite(value):
         value = 180.0
-    return max(30.0, min(value, 600.0))
+    return max(15.0 if route else 30.0, min(value, ceiling if route else 600.0))
 
 
-def model_phase_timeout_seconds(phase: str) -> float:
+def model_phase_timeout_seconds(phase: str, budget: float | None = None) -> float:
     """Separate transport/header/inference guards under the same request clock."""
     default = {"connect": 15.0, "pool": 15.0, "write": 15.0, "cleanup": 2.0}.get(
-        phase, model_request_timeout_seconds()
+        phase, budget if budget is not None else model_request_timeout_seconds()
     )
     raw = os.environ.get(f"XCAGI_MODEL_{phase.upper()}_TIMEOUT_SEC", str(default))
     try:
@@ -72,14 +74,14 @@ class ModelRequestTimeout(TimeoutError):
     """One model request exhausted its single absolute wait budget."""
 
 
-def model_request_deadline(binding: Any) -> float:
+def model_request_deadline(binding: Any, route: ModelRoute | None = None) -> float:
     """Start the one monotonic clock shared by headers, JSON and SSE settlement.
 
     The upstream phase timeout remains a transport guard, but it must never
     extend the request's absolute budget. Retries, header waits and body reads
     all consume the same clock, so a slow attempt cannot buy a fresh window.
     """
-    return time.monotonic() + min(model_request_timeout_seconds(), _remaining(binding))
+    return time.monotonic() + min(model_request_timeout_seconds(route), _remaining(binding))
 
 
 def request_remaining(deadline: float) -> float:
@@ -393,7 +395,7 @@ def _claim(
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
     from app.infrastructure.llm.model_admission import admit_model_call
 
-    reserve = estimate_llm_cost_units(total_tokens=route.context_window)
+    reserve = estimate_llm_cost_units(total_tokens=route.effective_context_window)
     with store.scope(token, audience="model") as binding:
         _remaining(binding)
         config = binding.metadata.get("runtime_config") or {}
@@ -482,6 +484,16 @@ def _claim(
                 "started_at": time.time(),
                 "trace_id": ensure_run_trace(run, live=False)["trace_id"],
                 "route_identity": route.identity,
+                "receipt_scope": {
+                    name: getattr(route, name)
+                    for name in (
+                        "provider_id",
+                        "model",
+                        "response_model",
+                        "config_revision",
+                        "key_source",
+                    )
+                },
                 **({"observation": observation} if observation else {}),
                 "purpose": "verification" if verification_job else "execution",
                 "execution_phase": "verification"
@@ -539,10 +551,11 @@ def _finish(
     usage: dict[str, int] | None,
     usage_key: str,
     state: str = "completed",
-    market_route: ModelRoute | None = None,
+    market_route: ModelRoute | PlatformModelReceiptScope | None = None,
     platform_receipt: Any = None,
     observation: dict[str, Any] | None = None,
     verification_response: dict[str, Any] | None = None,
+    reconciled_response: dict[str, Any] | None = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
@@ -589,6 +602,19 @@ def _finish(
             item.get("state") in {"reserved", "unknown"}
             for item in metadata["model_requests"].values()
         )
+        if reconciled_response is not None:
+            call.setdefault("reconciled_response", reconciled_response)
+            call.update(
+                observed_model=reconciled_response["model"],
+                model_identity_verified=True,
+                gateway_attempts_verified=True,
+            )
+            if not terminal:
+                run.add_event(
+                    "runtime.model.reconciled",
+                    "已核对原模型终态与计量，未重放调用",
+                    {"request_id": request_id},
+                )
         if (
             verification_response is not None
             and call.get("purpose") == "verification"
@@ -979,7 +1005,7 @@ async def forward_responses(request: Request):
     try:
         # All attempts share one absolute clock. An expired task still closes
         # its observation, without admitting a model call or resetting budget.
-        inference_deadline = deadline = model_request_deadline(binding)
+        inference_deadline = deadline = model_request_deadline(binding, route)
         from app.infrastructure.llm.retry_policy import (
             is_safe_transport_retry,
             model_failure_details,
@@ -1157,7 +1183,7 @@ async def forward_responses(request: Request):
                         user_id=binding.run.user_id,
                         provider_id=route.provider_id,
                         model=route.model,
-                        token_ceiling=route.context_window,
+                        token_ceiling=route.effective_context_window,
                     )
                 )
             # The platform reserves and settles its wallet. _claim still checks
@@ -1171,7 +1197,9 @@ async def forward_responses(request: Request):
                 # it is a transport guard, not a second budget.
                 "timeout": httpx.Timeout(
                     **{
-                        phase: min(model_phase_timeout_seconds(phase), attempt_budget)
+                        phase: min(
+                            model_phase_timeout_seconds(phase, attempt_budget), attempt_budget
+                        )
                         for phase in ("connect", "read", "write", "pool")
                     }
                 ),
@@ -1186,6 +1214,10 @@ async def forward_responses(request: Request):
             client = client_factory(**client_options)
             headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
             headers.update(route.headers(request_id))
+            if route.gateway_kind == "market":
+                headers["X-XCMax-Request-Deadline-Ms"] = str(
+                    int((time.time() + request_remaining(deadline)) * 1000)
+                )
             headers.update(observe("headers") or {})
             outbound = client.build_request(
                 "POST",
@@ -1198,7 +1230,10 @@ async def forward_responses(request: Request):
             request_phase = "response"
             try:
                 with anyio.fail_after(
-                    min(model_phase_timeout_seconds("response"), request_remaining(deadline))
+                    min(
+                        model_phase_timeout_seconds("response", attempt_budget),
+                        request_remaining(deadline),
+                    )
                 ):
                     upstream = await client.send(outbound, stream=True)
             except httpx.HTTPError as exc:
@@ -1234,7 +1269,9 @@ async def forward_responses(request: Request):
                 continue
             request_phase = "inference"
             inference_deadline = min(
-                deadline, time.monotonic() + model_phase_timeout_seconds("inference")
+                deadline,
+                time.monotonic()
+                + model_phase_timeout_seconds("inference", request_remaining(deadline)),
             )
             headers_ms = round((time.monotonic() - attempt_started) * 1000, 1)
             await anyio.to_thread.run_sync(

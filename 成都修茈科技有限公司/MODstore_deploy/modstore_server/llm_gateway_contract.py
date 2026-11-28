@@ -76,6 +76,7 @@ def codex_route_contract(
     """Describe only routes that can be independently qualified by the host."""
     from fastapi import HTTPException
 
+    from modstore_server.llm_billed_chat import _chat_total_deadline_s
     from modstore_server.llm_key_resolver import OAI_COMPAT_OPENAI_STYLE_PROVIDERS
 
     identity = {key: capabilities.get(key) for key in ("upstream_vendor", "response_model")}
@@ -108,6 +109,13 @@ def codex_route_contract(
             for key in ("context_window", "max_output_tokens")
         )
         or capabilities["max_output_tokens"] >= capabilities["context_window"]
+        or (
+            "max_input_tokens" in capabilities
+            and (
+                type(capabilities["max_input_tokens"]) is not int
+                or capabilities["max_input_tokens"] <= 0
+            )
+        )
     ):
         raise HTTPException(
             409,
@@ -125,6 +133,7 @@ def codex_route_contract(
         "failover_policy": "disabled",
         "max_model_calls": 24,
         "max_request_bytes": 4_194_304,
+        "request_timeout_seconds": _chat_total_deadline_s(),
         "qualification": {"state": "requires_local_qualification"},
     }
 
@@ -139,6 +148,7 @@ def codex_catalog_support(
 ) -> dict[str, Any]:
     """Project the save-time guards; chat capability is not executor compatibility."""
     from fastapi import HTTPException
+
     from modstore_server.llm_key_resolver import chat_route_snapshot
     from modstore_server.llm_model_taxonomy import model_context_capabilities
     from modstore_server.llm_responses_transport import validate_responses_route
@@ -168,6 +178,7 @@ def codex_catalog_support(
         "selectable": True,
         "code": "REQUIRES_QUALIFICATION",
         "message": "需通过本机运行验收。",
+        "protocol": "responses" if provider == "litellm" else "chat_completions",
     }
 
 

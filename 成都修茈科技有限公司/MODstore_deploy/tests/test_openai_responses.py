@@ -642,3 +642,28 @@ def test_responses_route_requires_the_existing_account_authentication(monkeypatc
     with TestClient(app) as client:
         response = client.post("/v1/responses", json=_payload())
     assert response.status_code == 401
+
+
+async def test_closed_consumer_drains_and_recovers_exact_receipt_without_redispatch(billed, db):
+    response = await billed["call"](body=_payload(stream=True))
+    frames = response.body_iterator
+    await anext(frames)
+    await frames.aclose()
+    saved = recovery.response_receipt(db, 7, KEY)
+    assert saved["response"]["status"] == "completed"
+    assert saved["headers"]["X-XCMax-Upstream-Attempts"] == "1"
+    assert recovery.response_receipt(db, 8, KEY) is None
+    assert len(billed["requests"]) == billed["wallet"].settle.await_count == 1
+    assert db.query(LlmCallLog).count() == 1
+    assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
+
+
+@pytest.mark.parametrize("deadline", ["0", "-1", "nan", "9" * 100])
+async def test_expired_or_invalid_deadline_never_reserves_or_dispatches(billed, db, deadline):
+    request = _request(chat_route_token(billed["route"], 7, runtime_contract=billed["contract"]))
+    request.scope["headers"].append((b"x-xcmax-request-deadline-ms", deadline.encode()))
+    with pytest.raises(HTTPException) as error:
+        await responses.run_billed_responses(request, db, SimpleNamespace(id=7), _payload())
+    assert error.value.status_code in {400, 408}
+    assert db.query(LlmClientRequest).count() == 0 and not billed["requests"]
+    billed["wallet"].preauthorize.assert_not_awaited()

@@ -146,7 +146,9 @@ async def resolve_default_llm_route(
                     if classify_model(p, candidate) not in {"llm", "vlm"}:
                         continue
                     try:
-                        validate_responses_route(chat_route_snapshot(p, candidate, key, base, key_source, source))
+                        validate_responses_route(
+                            chat_route_snapshot(p, candidate, key, base, key_source, source)
+                        )
                         codex_route_contract(
                             p,
                             candidate,
@@ -1459,7 +1461,12 @@ async def llm_chat_request_state(
         )
         if recovered is not None:
             state = "completed"
-    return {"client_request_id": client_request_id, "state": state}
+    from modstore_server.llm_billing_recovery import response_receipt
+
+    terminal = (
+        response_receipt(db, int(user.id), client_request_id) if state == "completed" else None
+    )
+    return {"client_request_id": client_request_id, "state": state, **(terminal or {})}
 
 
 @_facade().router.post("/image")

@@ -145,6 +145,8 @@ def _deployment(
     model: str,
     api_key: Any,
     base_url: Optional[str],
+    *,
+    responses_bridge: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """把既有 provider 协议映射为 LiteLLM 识别的 model 字符串。"""
 
@@ -158,7 +160,7 @@ def _deployment(
         litellm_model, params = f"anthropic/{model}", {"api_key": str(api_key)}
     elif provider == "google":
         litellm_model, params = f"gemini/{model}", {"api_key": str(api_key)}
-    elif provider == "minimax" and is_minimax_token_plan_key(api_key):
+    elif provider == "minimax" and not responses_bridge and is_minimax_token_plan_key(api_key):
         litellm_model = f"anthropic/{model}"
         params = {
             "api_key": normalize_minimax_api_key(api_key),

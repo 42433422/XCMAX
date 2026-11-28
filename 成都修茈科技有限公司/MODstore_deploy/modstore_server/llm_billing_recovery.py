@@ -170,3 +170,25 @@ async def recover_receipt(
     except InvalidOperation:
         return None
     return complete_receipt(db, row, receipt)
+
+
+def response_receipt(db: Session, user_id: int, key: str) -> dict[str, Any] | None:
+    """Read only this account's durable Responses terminal; never dispatch a model."""
+    row = (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=key, state="completed")
+        .one_or_none()
+    )
+    if row is None:
+        return None
+    saved = json.loads(row.done_json or "{}")
+    if saved.get("operation") != "responses" or saved.get("client_request_id") != key:
+        return None
+    response = (saved.get("wire") or {}).get("response")
+    if not isinstance(response, dict) or response.get("status") not in {
+        "completed",
+        "failed",
+        "incomplete",
+    }:
+        return None
+    return {"response": response, "headers": saved.get("headers") or {}}

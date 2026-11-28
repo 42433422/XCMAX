@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
+import re
+import time
 from collections.abc import Callable
 from typing import Any
 
-from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+from app.application.agent_orchestrator.run_lifecycle import (
+    requires_retry_reconciliation,
+)
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
-from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.run_sql_repository import (
+    SQLAlchemyAgentRunRepository,
+)
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
@@ -38,6 +45,118 @@ from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStor
 from app.infrastructure.xiaox.receipts import project_child_calls, resume_error
 
 logger = logging.getLogger(__name__)
+
+
+def reconcile_model_receipts(store: XiaoxBindingStore, run: AgentRun) -> AgentRun:
+    """Recover accounting only; a late tool proposal never executes from this read."""
+    import httpx
+
+    from app.application.agent_runtime.configuration import _account_connection
+    from app.infrastructure.billing.model_reservation import (
+        ModelReservationError,
+        PlatformModelReceiptScope,
+    )
+    from app.infrastructure.xiaox.model_gateway import (
+        _finish,
+        _validate_model_output,
+        response_usage,
+    )
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    metadata = run.metadata.get("xiaox_runtime") or {}
+    if metadata.get("coordinator_active") or not model_unsettled(metadata):
+        return run
+    for key, call in (metadata.get("model_requests") or {}).items():
+        if (
+            call.get("state") not in {"unknown", "reserved"}
+            or call.get("gateway_kind") != "market"
+            or call.get("reconciliation_after", 0) > time.time()
+            or re.fullmatch(r"[A-Za-z0-9_.:-]{8,128}", key) is None
+        ):
+            continue
+        scope = call.get("receipt_scope")
+        config = metadata.get("runtime_config") or {}
+        if (
+            scope is None
+            and call.get("route_identity") == config.get("route_identity")
+            and call.get("model") == config.get("model")
+        ):
+            scope = {
+                name: config.get(name) for name in PlatformModelReceiptScope.__dataclass_fields__
+            }
+        if not isinstance(scope, dict) or any(
+            not isinstance(scope.get(name), str) or not scope[name]
+            for name in PlatformModelReceiptScope.__dataclass_fields__
+        ):
+            continue  # Legacy requests without exact billing identity stay unknown.
+        expected = PlatformModelReceiptScope(
+            **{name: scope[name] for name in PlatformModelReceiptScope.__dataclass_fields__}
+        )
+        try:
+            connection = _account_connection(run.user_id)
+            if not connection.auth_token:
+                continue
+            store.update(
+                run.run_id,
+                lambda _run, current: current["model_requests"][key].update(
+                    reconciliation_after=time.time() + 30
+                ),
+            )
+            with httpx.Client(
+                timeout=min(connection.timeout, 3.0),
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
+                with client.stream(
+                    "GET",
+                    connection.platform_url.rstrip("/") + "/api/llm/chat/requests/" + key,
+                    headers=connection.headers(),
+                ) as response:
+                    response.raise_for_status()
+                    raw = bytearray()
+                    for chunk in response.iter_bytes():
+                        raw.extend(chunk)
+                        if len(raw) > 16_777_216:
+                            raise ValueError("Original model receipt exceeds its byte limit")
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                continue
+            terminal = payload.get("response")
+            if (
+                payload.get("state") != "completed"
+                or payload.get("client_request_id") != key
+                or not isinstance(terminal, dict)
+            ):
+                continue
+            if terminal.get("model") != expected.response_model or terminal.get("status") not in {
+                "completed",
+                "failed",
+                "incomplete",
+            }:
+                continue
+            headers = httpx.Headers(payload.get("headers") or {})
+            if headers.get_list("x-xcmax-upstream-attempts") != ["1"] or headers.get_list(
+                "x-xcmax-upstream-fallbacks"
+            ) != ["0"]:
+                continue
+            _validate_model_output(terminal)
+            usage = response_usage(terminal)
+            if usage is None:
+                continue
+            _finish(
+                store,
+                run.run_id,
+                key,
+                usage=usage,
+                usage_key=call.get("usage_key") or f"xiaox:{run.run_id}:{key}",
+                state="completed" if terminal["status"] == "completed" else "failed",
+                market_route=expected,
+                platform_receipt=terminal.get("xcagi"),
+                reconciled_response=terminal,
+            )
+        except (ModelReservationError, *RECOVERABLE_ERRORS):
+            logger.warning("原模型请求回执尚未核对；保留未知状态，不重发", exc_info=False)
+    return store.get(run.run_id).run
 
 
 def projection_allowed(run: AgentRun) -> bool:
@@ -186,7 +305,7 @@ def refresh_xiaox_receipts(
         return run
     repository = resolved
     current = repository.get(run.run_id)
-    if current is None or not projection_allowed(current):
+    if current is None:
         return current or run
     execution = queue.get(run.run_id)
     if execution is not None and (
@@ -197,6 +316,9 @@ def refresh_xiaox_receipts(
     ):
         return current
     store = XiaoxBindingStore(repository)
+    current = reconcile_model_receipts(store, current)
+    if not projection_allowed(current):
+        return current
     try:
         store.receipt_snapshot(current.run_id)
         current = store.get(current.run_id).run
@@ -222,7 +344,10 @@ def resume_ready_xiaox_runs(
     """
     from app.application.agent_orchestrator.run_models import utc_now_iso
     from app.db.models.agent import AgentRunRecord
-    from app.infrastructure.xiaox.queued_runtime import enqueue_resume, stage_queued_request
+    from app.infrastructure.xiaox.queued_runtime import (
+        enqueue_resume,
+        stage_queued_request,
+    )
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -264,7 +389,11 @@ def resume_ready_xiaox_runs(
         # Old waiting-input/approval rows must not starve later ready parents.
         if cursor is not None:
             cursor.update(updated_at=updated_at, run_id=candidate_id)
-        if candidate is None or not projection_allowed(candidate):
+        if candidate is None:
+            continue
+        if model_unsettled(candidate.metadata.get("xiaox_runtime") or {}):
+            candidate = refresh_xiaox_receipts(candidate, repository=repository)
+        if not projection_allowed(candidate):
             continue
         try:
             current = refresh_xiaox_receipts(candidate, repository=repository)

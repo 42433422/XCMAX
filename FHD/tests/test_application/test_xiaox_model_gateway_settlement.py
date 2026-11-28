@@ -801,3 +801,102 @@ def test_effective_route_change_during_backoff_cannot_move_another_requests_cont
     )
     assert post(client).status_code == 409
     assert len(calls) == 1
+
+
+def test_market_deadline_uses_signed_budget_and_propagates_parent_ceiling(
+    market_gateway, monkeypatch
+):
+    client, store, calls, response, app, control = market_gateway
+    monkeypatch.delenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", raising=False)
+    route = replace(app.state.xiaox_model_route, request_timeout_seconds=300)
+    app.state.xiaox_model_route = route
+    store.binding.metadata["runtime_config"] = route.runtime_identity()
+    assert model_request_timeout_seconds(route) == 300
+    result = post(client, model="enterprise/local-agent")
+    assert result.status_code == 200, result.text
+    deadline = int(calls[0].headers["x-xcmax-request-deadline-ms"]) / 1000
+    assert time.time() < deadline <= store.binding.metadata["deadline_at"] + 0.1
+    monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "600")
+    assert model_request_timeout_seconds(route) == 300
+    monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "30")
+    assert model_request_timeout_seconds(route) == 30
+
+
+@pytest.mark.parametrize(
+    "defect", [None, "foreign_request", "changed_config", "missing_usage", "unverified_attempts"]
+)
+def test_original_market_receipt_reconciles_once_without_model_or_tool_replay(
+    market_gateway, monkeypatch, defect
+):
+    from app.application.market_llm.protocols import Connection
+    from app.infrastructure.xiaox.receipt_projection import reconcile_model_receipts
+
+    client, store, calls, response, app, control = market_gateway
+    control["status"] = 503
+    assert post(client, model="enterprise/local-agent").status_code == 502
+    key, original = next(iter(store.binding.metadata["model_requests"].items()))
+    store.run.status = "blocked"
+    receipt = {
+        "schema": "xcmax.responses-billing.v1",
+        "provider": "enterprise",
+        "model": "local-agent",
+        "key_source": "platform",
+        "config_revision": "rev-1",
+        "client_request_id": key,
+        "request_id": "original-platform-request",
+        "hold_no": "original-hold",
+        "billed": True,
+        "charge_amount": "0.02",
+        "billing_status": "settled",
+        "usage": response["usage"],
+    }
+    if defect == "foreign_request":
+        receipt["client_request_id"] = "another-request"
+    if defect == "changed_config":
+        receipt["config_revision"] = "different-revision"
+    payload = {**response, "xcagi": receipt}
+    if defect == "missing_usage":
+        payload.pop("usage")
+    headers = {"X-XCMax-Upstream-Attempts": "1", "X-XCMax-Upstream-Fallbacks": "0"}
+    if defect == "unverified_attempts":
+        headers.clear()
+    reads = []
+    real_client = httpx.Client
+
+    def read(request):
+        reads.append(request)
+        assert request.method == "GET" and request.url.path.endswith("/" + key)
+        assert request.headers["authorization"] == "Bearer original-account-session"
+        return httpx.Response(
+            200,
+            json={
+                "state": "completed",
+                "client_request_id": key,
+                "response": payload,
+                "headers": headers,
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.agent_runtime.configuration._account_connection",
+        lambda owner: Connection("https://market.example", "original-account-session", None, 5),
+    )
+    monkeypatch.setattr(
+        httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(read), **kw)
+    )
+    reconcile_model_receipts(store, store.run)
+    reconcile_model_receipts(store, store.run)
+    assert len(reads) == 1 and len(calls) == 1
+    assert store.run.status == "blocked" and not store.run.tool_calls
+    if defect:
+        assert (
+            original["state"] == "unknown"
+            and store.binding.metadata["model_reconciliation_required"]
+        )
+        assert not store.run.llm_calls
+    else:
+        assert original["state"] == "completed"
+        assert not store.binding.metadata["model_reconciliation_required"]
+        assert original["reconciled_response"]["xcagi"]["client_request_id"] == key
+        assert len(store.run.llm_calls) == 1 and store.run.metadata["reserved_cost_units"] == 0
+    assert ledger.get_model_wallet("71")["balance_units"] == 100

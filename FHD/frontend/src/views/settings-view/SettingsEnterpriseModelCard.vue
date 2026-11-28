@@ -11,8 +11,9 @@
         <ElOption v-for="row in models" :key="row.key" :value="row.key" :label="row.label" :disabled="row.disabled" />
       </ElSelect>
       <button class="btn btn-sm btn-primary" type="button" data-testid="enterprise-model-save" :disabled="!canSave" @click="save">{{ saving ? '保存中…' : '保存模型' }}</button>
-      <button v-if="loadError" class="btn btn-sm btn-secondary" type="button" :disabled="busy" @click="load(true)">重新读取</button>
+      <button class="btn btn-sm btn-secondary" type="button" :disabled="busy" @click="load(true)">刷新目录</button>
     </div>
+    <p v-if="selectedModel?.summary" class="muted">{{ selectedModel.summary }}</p>
     <p v-if="loadError || saveError" class="muted" role="alert">{{ saveError || loadError }}</p>
     <p v-else-if="snapshot && !editable" class="muted">{{ deploymentManaged ? '当前模型由部署方管理。' : '仅企业管理员可修改。' }}</p>
     <p v-else-if="!loading && !models.length" class="muted" role="status">暂无可选的执行模型。</p>
@@ -32,7 +33,7 @@ import { resolveApiErrorMessage } from '@/utils/resolveApiError'
 
 type Choice = { provider: string | null; model: string | null }
 type Snapshot = Choice & { owner_id: string; editable: boolean; revision: number }
-type Option = { provider: string; model: string; key: string; label: string; disabled: boolean }
+type Option = { provider: string; model: string; key: string; label: string; disabled: boolean; summary: string }
 const props = defineProps<{ owner: string; activeModel?: string; deploymentManaged?: boolean; checking?: boolean }>()
 const path = '/api/workspace/model'
 const defaultChoice = 'account'
@@ -45,7 +46,11 @@ const saved = computed(() => modelKey(snapshot.value))
 const retired = computed(() => saved.value !== defaultChoice && !models.value.some(row => row.key === saved.value))
 const editable = computed(() => !!snapshot.value?.editable && !props.deploymentManaged)
 const busy = computed(() => loading.value || saving.value || !!props.checking)
+const selectedModel = computed(() => models.value.find(row => row.key === selected.value))
 const canSave = computed(() => editable.value && !busy.value && selected.value !== saved.value)
+
+const asRecord = (value: unknown) => value && typeof value === 'object' ? value as Record<string, unknown> : undefined
+const asLimit = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
 
 function catalogOptions(catalog: MarketLlmCatalogData): Option[] {
   const choices = new Map<string, Option>()
@@ -55,13 +60,21 @@ function catalogOptions(catalog: MarketLlmCatalogData): Option[] {
     for (const model of ids) {
       if (typeof model !== 'string' || !model.trim()) continue
       const detail = models_detailed?.find(row => row.id === model)
-      const raw = detail?.execution
-      const execution = raw && typeof raw === 'object' ? raw as Record<string, unknown> : undefined
+      const execution = asRecord(detail?.execution)
       const disabled = execution?.selectable === false
       const reason = disabled && typeof execution?.message === 'string' ? execution.message : '兼容性待校验'
       const key = modelKey({ provider, model })
       const suffix = execution?.selectable === true ? '' : `（${reason}）`
-      choices.set(key, { key, provider, model, disabled, label: `${label || provider} · ${model}${suffix}` })
+      const limits = asRecord(detail?.model_capabilities)
+      const context = asLimit(limits?.context_window)
+      const output = asLimit(limits?.max_output_tokens)
+      const protocol = execution?.protocol === 'responses' ? 'Responses' :
+        execution?.protocol === 'chat_completions' ? 'Chat Completions → Responses' : undefined
+      const summary = context && output && output < context
+        ? [protocol, `可用输入 ${Math.min(asLimit(limits?.max_input_tokens) ?? context, context - output).toLocaleString()} tokens`,
+            `最大输出 ${output.toLocaleString()} tokens`].filter(Boolean).join(' · ')
+        : protocol || ''
+      choices.set(key, { key, provider, model, disabled, summary, label: `${label || provider} · ${model}${suffix}` })
     }
   }
   return [...choices.values()]
@@ -97,7 +110,7 @@ async function load(refresh = false) {
 }
 
 async function save() {
-  const current = snapshot.value, option = models.value.find(row => row.key === selected.value)
+  const current = snapshot.value, option = selectedModel.value
   if (!canSave.value || !current || current.owner_id !== props.owner || (selected.value !== defaultChoice && (!option || option.disabled))) return
   const signal = startRequest()
   const choice = { provider: option?.provider ?? null, model: option?.model ?? null }

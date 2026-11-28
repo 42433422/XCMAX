@@ -14,7 +14,9 @@ beforeEach(() => {
   vi.resetAllMocks()
   get.mockResolvedValue(settings)
   catalog.mockResolvedValue({ providers: [{ provider: 'p', models_detailed: [
-    { id: 'runtime', runtime_selectable: true, execution: { selectable: true } }, { id: 'vision-only', runtime_selectable: false },
+    { id: 'runtime', runtime_selectable: true, execution: { selectable: true, protocol: 'chat_completions' },
+      model_capabilities: { context_window: 900, max_input_tokens: 500, max_output_tokens: 300 } },
+    { id: 'vision-only', runtime_selectable: false },
   ] }] })
 })
 
@@ -66,6 +68,7 @@ describe('enterprise model settings', () => {
     expect(put).not.toHaveBeenCalled()
     wrapper.getComponent(ElSelect).vm.$emit('update:modelValue', JSON.stringify(['p', 'runtime']))
     await flushPromises()
+    expect(wrapper.text()).toContain('Chat Completions → Responses · 可用输入 500 tokens · 最大输出 300 tokens')
     await flushPromises()
     await wrapper.get('[data-testid="enterprise-model-save"]').trigger('click')
     await flushPromises()

@@ -81,12 +81,20 @@ async def test_projection_does_not_cache_one_credentials_protocol_in_another(
         llm_catalog_merged, "_get_models_for_credentials", AsyncMock(return_value=block)
     )
     blocked = await llm_catalog_merged.get_models_for_credentials(
-        1, "minimax", api_key="sk-cp-private", base_url="https://api.minimax.io"
+        1,
+        "minimax",
+        api_key="sk-cp-private",
+        base_url="https://api.minimax.io/anthropic",
     )
     allowed = await llm_catalog_merged.get_models_for_credentials(
-        2, "minimax", api_key="sk-private", base_url="https://api.minimax.io"
+        2, "minimax", api_key="sk-cp-private", base_url="https://api.minimax.io"
     )
     assert blocked["models_detailed"][0]["execution"]["selectable"] is False
-    assert allowed["models_detailed"][0]["execution"]["selectable"] is True
+    assert allowed["models_detailed"][0]["execution"] == {
+        "selectable": True,
+        "code": "REQUIRES_QUALIFICATION",
+        "message": "需通过本机运行验收。",
+        "protocol": "chat_completions",
+    }
     assert original == block
     assert blocked["runtime_models"] == allowed["runtime_models"] == block["runtime_models"]

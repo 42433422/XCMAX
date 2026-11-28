@@ -327,6 +327,26 @@ def test_incomplete_platform_contract_does_not_start_a_qualification(account, mi
     assert account.attempts == []
 
 
+def test_capacity_refresh_applies_to_new_tasks_and_preserves_original_binding(account):
+    read = configuration.get_account_runtime_settings
+    original = read("41", qualify=False).route
+    limits = account.snapshot["model_capabilities"]
+    limits["max_input_tokens"] = 29000
+    same = read("41", previous=original.runtime_identity(), qualify=False).route
+    assert same.identity == original.identity
+    assert same.input_token_budget == 28000
+
+    limits["max_input_tokens"] = 12000
+    current = read("41", qualify=False).route
+    assert (current.input_token_budget, current.max_output_tokens) == (12000, 4000)
+    assert current.effective_context_window == 16000
+    assert current.identity != original.identity
+    with pytest.raises(configuration.RuntimeSetupError) as exc:
+        read("41", previous=original.runtime_identity(), qualify=False)
+    assert exc.value.code == "runtime_changed"
+    assert not account.attempts
+
+
 def test_resume_pins_original_model_and_rejects_config_change_before_probe(account, monkeypatch):
     original = configuration.get_account_runtime_settings("41")
     previous = original.route.runtime_identity()

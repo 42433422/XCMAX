@@ -179,6 +179,8 @@ class ModelRoute:
     route_token: str = field(default="", repr=False, compare=False)
     config_revision: str = ""
     key_source: str = ""
+    request_timeout_seconds: float = 180.0
+    max_input_tokens: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "base_url", independent_gateway_url(self.base_url))
@@ -231,6 +233,26 @@ class ModelRoute:
             _positive(getattr(self, name), name, maximum)
         if self.max_output_tokens >= self.context_window:
             raise RuntimePolicyError("Output capacity must leave room for model input")
+        if self.max_input_tokens is not None:
+            _positive(self.max_input_tokens, "max_input_tokens", 10_000_000)
+        if (
+            type(self.request_timeout_seconds) not in (int, float)
+            or not 15 <= self.request_timeout_seconds <= 600
+        ):
+            raise RuntimePolicyError("Invalid model request timeout")
+
+    @property
+    def input_token_budget(self) -> int:
+        available = self.context_window - self.max_output_tokens
+        return (
+            min(available, self.max_input_tokens)
+            if self.max_input_tokens is not None
+            else available
+        )
+
+    @property
+    def effective_context_window(self) -> int:
+        return self.input_token_budget + self.max_output_tokens
 
     @property
     def identity(self) -> str:
@@ -250,6 +272,8 @@ class ModelRoute:
                 "gateway_kind",
             )
         }
+        if self.effective_context_window != self.context_window:
+            values["max_input_tokens"] = self.input_token_budget
         values["codex_version"] = CODEX_VERSION
         if self.gateway_kind == "market":
             values.update(config_revision=self.config_revision, key_source=self.key_source)
@@ -330,7 +354,11 @@ class RuntimeSettings:
             identities.add(candidate.route.identity)
             if any(
                 getattr(candidate.route, name) < getattr(self.route, name)
-                for name in ("context_window", "max_output_tokens", "max_request_bytes")
+                for name in (
+                    "input_token_budget",
+                    "max_output_tokens",
+                    "max_request_bytes",
+                )
             ):
                 raise RuntimePolicyError("Fallback capacity cannot shrink the original task")
 

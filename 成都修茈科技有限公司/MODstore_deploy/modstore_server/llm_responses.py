@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from decimal import Decimal
 from typing import Any
 
+import anyio
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai import APIError
@@ -158,6 +160,22 @@ async def run_billed_responses(
     request: Request, db: Session, user: User, payload: Any
 ) -> JSONResponse | StreamingResponse:
     body = _validate_payload(payload)
+    timeout = _chat_total_deadline_s()
+    deadline = asyncio.get_running_loop().time() + timeout
+    requested = request.headers.getlist("x-xcmax-request-deadline-ms")
+    if requested:
+        if (
+            len(requested) != 1
+            or len(requested[0]) > 16
+            or not requested[0].isascii()
+            or not requested[0].isdecimal()
+        ):
+            raise _error("CODEX_REQUEST_INVALID", "模型请求截止时间无效。", status=400)
+        remaining = int(requested[0]) / 1000 - time.time()
+        if remaining <= 0:
+            raise _error("CODEX_REQUEST_EXPIRED", "模型请求截止时间已过期，未执行。", status=408)
+        timeout = min(timeout, remaining)
+        deadline = asyncio.get_running_loop().time() + timeout
     key = request.headers.get("idempotency-key", "")
     if len(request.headers.getlist("idempotency-key")) != 1 or not ledger.KEY_PATTERN.fullmatch(
         key
@@ -212,7 +230,15 @@ async def run_billed_responses(
         raise HTTPException(
             412 if exc.status_code == 409 else exc.status_code, exc.detail
         ) from None
-    if contract.get("runtime") != runtime:
+    signed_runtime = contract.get("runtime")
+    if (
+        not isinstance(signed_runtime, dict)
+        or {
+            **signed_runtime,
+            "request_timeout_seconds": runtime["request_timeout_seconds"],
+        }
+        != runtime
+    ):
         raise _error(
             "CODEX_ROUTE_EXPIRED", "运行时模型配置快照已失效，请重新读取当前配置。", status=412
         )
@@ -233,7 +259,6 @@ async def run_billed_responses(
             status=503,
         )
     wallet.validate_pat(authorization_header(request))
-    timeout = _chat_total_deadline_s()
     model_key = concurrency_key(
         provider,
         model,
@@ -356,8 +381,12 @@ async def run_billed_responses(
                     ledger.finish(db, row, None)
                     raise
                 raise unresolved() from None
-        transport = ResponsesTransport(route, timeout)
-        deadline = asyncio.get_running_loop().time() + timeout
+        # Leave the final part of this same budget for verified usage and wallet I/O.
+        inference_deadline = deadline - min(15.0, timeout / 10)
+        remaining = inference_deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError("Responses admission exhausted the request budget")
+        transport = ResponsesTransport(route, remaining)
         body.update(
             model=model,
             max_output_tokens=maximum,
@@ -367,13 +396,13 @@ async def run_billed_responses(
             truncation="disabled",
             extra_body=gateway_body(provider),
         )
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(remaining):
             await transport.open(body)
         source = transport.source
         headers = transport.headers
         if body.get("stream"):
 
-            async def generate() -> AsyncIterator[str]:
+            async def produce() -> AsyncIterator[str]:
                 events: list[dict[str, Any]] = []
                 terminal = None
                 response_id = None
@@ -381,7 +410,7 @@ async def run_billed_responses(
                 stream_budget = StreamReceiptBudget()
                 try:
                     while True:
-                        remaining = deadline - asyncio.get_running_loop().time()
+                        remaining = inference_deadline - asyncio.get_running_loop().time()
                         if remaining <= 0:
                             raise TimeoutError("Responses deadline expired")
                         try:
@@ -421,7 +450,10 @@ async def run_billed_responses(
                     if terminal is None:
                         raise ValueError("Responses stream ended without terminal usage")
                     await close()
-                    await settle(terminal["response"], headers, events)
+                    async with asyncio.timeout(
+                        max(0.0, deadline - asyncio.get_running_loop().time())
+                    ):
+                        await settle(terminal["response"], headers, events)
                     yield _sse(terminal)
                 except _ERRORS as exc:
                     db.rollback()
@@ -439,6 +471,26 @@ async def run_billed_responses(
                     await close()
                     release_slot()
 
+            async def generate() -> AsyncIterator[str]:
+                producer = produce()
+                try:
+                    while True:
+                        # Starlette cancellation must not discard the paid request's
+                        # terminal receipt. Drain this same iterator, bounded above.
+                        with anyio.CancelScope(shield=True):
+                            frame = await anext(producer)
+                        yield frame
+                except StopAsyncIteration:
+                    pass
+                except (asyncio.CancelledError, GeneratorExit):
+                    with anyio.CancelScope(shield=True):
+                        async for _ in producer:
+                            pass
+                    raise
+                finally:
+                    with anyio.CancelScope(shield=True):
+                        await producer.aclose()
+
             handed_off = True
             return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
         result = redact_key(
@@ -447,7 +499,8 @@ async def run_billed_responses(
         if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > _MAX_RECEIPT_BYTES:
             raise ValueError("Responses result exceeds the receipt limit")
         await close()
-        receipt = await settle(result, headers)
+        async with asyncio.timeout(max(0.0, deadline - asyncio.get_running_loop().time())):
+            receipt = await settle(result, headers)
         return JSONResponse(receipt["wire"]["response"], headers=headers)
     except HTTPException:
         if row.state == "failed":
