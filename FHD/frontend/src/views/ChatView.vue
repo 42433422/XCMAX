@@ -1130,7 +1130,7 @@ function emitSwitchView(view: string) {
 
 .chat-composer :deep(.el-textarea__inner:focus-visible) {
   outline: none;
-  box-shadow: none;
+  box-shadow: inset 0 -1px var(--app-text-muted, #667085);
 }
 
 .composer-attachments {

@@ -101,6 +101,7 @@ dev = [
   "jsonschema>=4.21",
   # 工具精确固定；升级必须同时验证格式和类型检查。
   "mypy==2.4.1",
+  "types-jsonschema>=4.21,<5",
   "openpyxl>=3.1",
   "pypdf>=4.0",
   # Sparse-recall tests exercise the real pinned implementation without the full knowledge extra.

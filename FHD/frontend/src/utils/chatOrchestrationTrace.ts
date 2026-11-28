@@ -44,7 +44,6 @@ export function buildApprovalCardTrace(card: ChatApprovalCard | null | undefined
       status: 'waiting',
       started_event_id: `${card.plan_id || card.run_id || 'approval'}:${nodeId}`,
       title: toolId ? `工具调用 · ${toolId}` : '工具调用',
-      subtitle: action || undefined,
       node_id: nodeId,
       tool_id: toolId,
       action,

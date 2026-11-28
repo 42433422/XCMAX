@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from decimal import Decimal
 from typing import Any
 
@@ -484,7 +484,7 @@ async def run_billed_responses(
         headers = transport.headers
         if body.get("stream"):
 
-            async def produce() -> AsyncIterator[str]:
+            async def produce() -> AsyncGenerator[str, None]:
                 events: list[dict[str, Any]] = []
                 terminal = None
                 response_id = None
@@ -585,8 +585,8 @@ async def run_billed_responses(
         with anyio.CancelScope(shield=True):
             async with asyncio.timeout(max(0.0, deadline - asyncio.get_running_loop().time())):
                 await close()
-                receipt = await settle(result, headers)
-        return JSONResponse(receipt["wire"]["response"], headers=headers)
+                settled = await settle(result, headers)
+        return JSONResponse(settled["wire"]["response"], headers=headers)
     except HTTPException:
         if row.state == "failed":
             raise

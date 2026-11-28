@@ -68,12 +68,10 @@ def stream_runtime_event(event: dict[str, Any]) -> None:
             "action": action,
             "label": "正在通过授权工具处理任务…" if started else "工具已返回，等待业务回执。",
         }
+        tool_result = (status, tool_id, action)
         if not started and status == "failed":
             record.update(phase="finished", success=False, label="工具调用失败")
-        elif not started and status == "completed" and (tool_id, action) == (
-            "xcmax",
-            "capability_search",
-        ):
+        elif not started and tool_result == ("completed", "xcmax", "capability_search"):
             record.update(phase="finished", success=True, label="小C已完成任务能力查找")
         publish_stream_tool_record(record)
 
