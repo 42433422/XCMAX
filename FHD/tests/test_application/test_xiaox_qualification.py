@@ -553,3 +553,54 @@ def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(
     assert all(body["max_output_tokens"] == min(maximum, 2048) for body in calls)
     assert probe.recovery["first_process_id"] != probe.recovery["second_process_id"]
     assert not settings.qualification_file.exists()
+
+
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (401, "runtime_model_auth_failed"),
+        (403, "runtime_model_auth_failed"),
+        (429, "runtime_model_rate_limited"),
+        (503, "runtime_model_gateway_unavailable"),
+        (400, "runtime_model_request_rejected"),
+    ],
+)
+def test_qualification_persists_public_http_reason_without_body_or_replay(
+    tmp_path, monkeypatch, status, code
+):
+    probe = probe_at(tmp_path)
+    monkeypatch.setenv("QUALIFICATION_FIXTURE_KEY", "synthetic-qualification-key")
+    selected = route(api_key_env="QUALIFICATION_FIXTURE_KEY")
+    original = qualification.IndependentModelTransport
+    contacted = []
+
+    class FixtureGuard(original):
+        def __init__(self, selected):
+            super().__init__(selected)
+
+            def upstream(request):
+                contacted.append(request.url.path)
+                return httpx.Response(status, text="private-key-and-upstream-body")
+
+            self._http = httpx.MockTransport(upstream)
+
+    monkeypatch.setattr(qualification, "IndependentModelTransport", FixtureGuard)
+
+    async def invoke():
+        app = qualification._probe_app(selected, probe, "model-token", "mcp-token")
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v1/responses",
+                headers={"Authorization": "Bearer model-token"},
+                json={"stream": True, "model": route().model, "input": "probe", "tools": []},
+            )
+        assert response.status_code == 502
+        assert "private-key" not in response.text
+
+    asyncio.run(invoke())
+    assert probe.error_code == code
+    assert len(contacted) == 1 and probe.snapshot()["calls"] == []
+    assert probe.models[-1]["http_status"] == status
+    assert "private-key" not in json.dumps(probe.models)

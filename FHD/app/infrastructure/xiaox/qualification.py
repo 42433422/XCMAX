@@ -401,9 +401,27 @@ def _probe_app(route: ModelRoute, probe: _Probe, model_token: str, mcp_token: st
         try:
             return await _forward_model(request, route, probe)
         except BOUNDARY_ERRORS as exc:
-            probe.error_code = (
-                exc.code if isinstance(exc, _QualificationError) else "runtime_model_probe_failed"
-            )
+            if isinstance(exc, _QualificationError):
+                probe.error_code = exc.code
+            elif isinstance(exc, httpx.HTTPStatusError):
+                status = exc.response.status_code
+                if probe.models:
+                    probe.models[-1]["http_status"] = status
+                probe.error_code = (
+                    "runtime_model_auth_failed"
+                    if status in {401, 403}
+                    else "runtime_model_rate_limited"
+                    if status == 429
+                    else "runtime_model_gateway_unavailable"
+                    if status >= 500
+                    else "runtime_model_request_rejected"
+                )
+            elif isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+                probe.error_code = "runtime_model_timeout"
+            elif isinstance(exc, httpx.RequestError):
+                probe.error_code = "runtime_model_connection_failed"
+            else:
+                probe.error_code = "runtime_model_probe_failed"
             return JSONResponse(
                 {"error": {"message": "Qualification model request failed"}}, status_code=502
             )

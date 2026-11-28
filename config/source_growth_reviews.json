@@ -963,14 +963,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
-      "base_blob": "c2d4c1a6853b043836f62475b6be5ef535418fae",
-      "head_blob": "264381d9a1b2eeb66d36aa727f1f96ee741b47b6",
-      "before_lines": 1577,
-      "after_lines": 1615,
-      "reason": "精确评审请求：#3526 原运行时容量筛选与主线统一网关、BYOK 禁止静默回落合同合解。仅在已有候选遍历中记录原拒绝理由并继续检查同一授权来源。",
-      "boundary": "仅 resolve_default_llm_route 原函数；不改变显式选择、平台网关权威性、权限、签名、计费或传输验收。",
-      "validation": "原容量合同与本次新增回归已保留；当前候选未执行完整 pytest、Black、源码增长与 CI。",
-      "follow_up": "按最新候选 SHA 与原门禁完成正式验证；此登记不是人工批准。",
+      "base_blob": "264381d9a1b2eeb66d36aa727f1f96ee741b47b6",
+      "head_blob": "bb7ffa6c38ed69ec066329da44389c37f2a1f8c3",
+      "before_lines": 1615,
+      "after_lines": 1617,
+      "reason": "评审请求：自动候选在原容量守卫前复用显式选择已有的 Responses 协议守卫，避免目录可聊但不可执行的候选抢占默认路线；只增加原函数两行，不是人工批准。",
+      "boundary": "保留账号凭据来源、权限、签名、计费和运行验收；目录投影与保存均复用现有守卫，不引入平行路由、静默模型切换或供应商调用。",
+      "validation": "原平台目录、容量合同、连接生命周期与 Responses 回归已通过；本机企业模型与运行验收95项、前端7项及严格构建通过；平台部署与新HEAD正式CI仍分别取证。",
+      "follow_up": "请@42433422按精确base/head blob复核现有候选遍历；本登记仅请求审查，不代表人工批准。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {

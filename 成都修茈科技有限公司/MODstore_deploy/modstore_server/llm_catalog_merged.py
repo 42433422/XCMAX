@@ -417,6 +417,39 @@ async def get_models_for_credentials(
     base_url,
     force_refresh: bool = False,
     discover_operations: bool = False,
+) -> dict:
+    from modstore_server.llm_gateway_contract import codex_catalog_support
+
+    block = await _get_models_for_credentials(
+        user_id,
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        force_refresh=force_refresh,
+        discover_operations=discover_operations,
+    )
+    # Copy cached rows: credential-scoped compatibility must never mutate shared
+    # chat catalog state or advertise qualification that has not actually run.
+    return {
+        **block,
+        "models_detailed": [
+            {
+                **row,
+                "execution": codex_catalog_support(provider, row, api_key, base_url),
+            }
+            for row in block.get("models_detailed") or []
+        ],
+    }
+
+
+async def _get_models_for_credentials(
+    user_id: int,
+    provider: str,
+    *,
+    api_key,
+    base_url,
+    force_refresh: bool = False,
+    discover_operations: bool = False,
 ) -> _facade().Dict[str, _facade().Any]:
     """Fetch a catalog after the caller has released its credential connection."""
     from modstore_server.platform_model_config import configured_model

@@ -134,6 +134,43 @@ def gateway_body(provider: str) -> dict[str, Any]:
     return {"num_retries": 0, "disable_fallbacks": True} if provider == "litellm" else {}
 
 
+def codex_catalog_support(
+    provider: str, row: Mapping[str, Any], api_key: str | None, base_url: str | None
+) -> dict[str, Any]:
+    """Project the save-time guards; chat capability is not executor compatibility."""
+    from fastapi import HTTPException
+    from modstore_server.llm_key_resolver import chat_route_snapshot
+    from modstore_server.llm_model_taxonomy import model_context_capabilities
+    from modstore_server.llm_responses_transport import validate_responses_route
+
+    if row.get("runtime_selectable") is not True:
+        return {
+            "selectable": False,
+            "code": "MODEL_NOT_CHAT",
+            "message": "此模型不用于对话任务。",
+        }
+    try:
+        route = chat_route_snapshot(
+            provider, str(row["id"]), api_key, base_url, "catalog", "catalog"
+        )
+        validate_responses_route(route)
+        codex_route_contract(
+            provider, route.model, model_context_capabilities(provider, route.model, row)
+        )
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        return {
+            "selectable": False,
+            "code": detail.get("code", "CODEX_ROUTE_UNAVAILABLE"),
+            "message": detail.get("message", "当前账号尚未配置可用的执行器路线。"),
+        }
+    return {
+        "selectable": True,
+        "code": "REQUIRES_QUALIFICATION",
+        "message": "需通过本机运行验收。",
+    }
+
+
 def gateway_single_attempt(headers: Mapping[str, object]) -> bool:
     """Require both native proxy counters to prove no hidden paid attempts.
 

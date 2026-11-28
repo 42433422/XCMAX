@@ -8,7 +8,7 @@
       <ElSelect v-model="selected" aria-label="选择企业模型" filterable :loading="loading" :disabled="busy || !editable">
         <ElOption :value="defaultChoice" label="跟随账号默认模型" />
         <ElOption v-if="retired" :value="saved" :label="snapshot?.model || ''" disabled />
-        <ElOption v-for="row in models" :key="row.key" :value="row.key" :label="row.label" />
+        <ElOption v-for="row in models" :key="row.key" :value="row.key" :label="row.label" :disabled="row.disabled" />
       </ElSelect>
       <button class="btn btn-sm btn-primary" type="button" data-testid="enterprise-model-save" :disabled="!canSave" @click="save">{{ saving ? '保存中…' : '保存模型' }}</button>
       <button v-if="loadError" class="btn btn-sm btn-secondary" type="button" :disabled="busy" @click="load(true)">重新读取</button>
@@ -28,10 +28,11 @@ import { fetchMarketLlmCatalog, type MarketLlmCatalogData } from '@/api/marketAc
 import { notifyPlatformModelChanged } from '@/api/platformModel'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { resolveApiErrorMessage } from '@/utils/resolveApiError'
 
 type Choice = { provider: string | null; model: string | null }
 type Snapshot = Choice & { owner_id: string; editable: boolean; revision: number }
-type Option = { provider: string; model: string; key: string; label: string }
+type Option = { provider: string; model: string; key: string; label: string; disabled: boolean }
 const props = defineProps<{ owner: string; activeModel?: string; deploymentManaged?: boolean; checking?: boolean }>()
 const path = '/api/workspace/model'
 const defaultChoice = 'account'
@@ -53,8 +54,14 @@ function catalogOptions(catalog: MarketLlmCatalogData): Option[] {
     const ids = runtime_models ?? models_detailed?.filter(row => row.runtime_selectable === true).map(row => row.id) ?? []
     for (const model of ids) {
       if (typeof model !== 'string' || !model.trim()) continue
+      const detail = models_detailed?.find(row => row.id === model)
+      const raw = detail?.execution
+      const execution = raw && typeof raw === 'object' ? raw as Record<string, unknown> : undefined
+      const disabled = execution?.selectable === false
+      const reason = disabled && typeof execution?.message === 'string' ? execution.message : '兼容性待校验'
       const key = modelKey({ provider, model })
-      choices.set(key, { key, provider, model, label: `${label || provider} · ${model}` })
+      const suffix = execution?.selectable === true ? '' : `（${reason}）`
+      choices.set(key, { key, provider, model, disabled, label: `${label || provider} · ${model}${suffix}` })
     }
   }
   return [...choices.values()]
@@ -91,7 +98,7 @@ async function load(refresh = false) {
 
 async function save() {
   const current = snapshot.value, option = models.value.find(row => row.key === selected.value)
-  if (!canSave.value || !current || current.owner_id !== props.owner || (selected.value !== defaultChoice && !option)) return
+  if (!canSave.value || !current || current.owner_id !== props.owner || (selected.value !== defaultChoice && (!option || option.disabled))) return
   const signal = startRequest()
   const choice = { provider: option?.provider ?? null, model: option?.model ?? null }
   saving.value = true
@@ -128,7 +135,14 @@ async function save() {
       const reload = request?.signal
       await refresh
       if (!reload?.aborted) saveError.value = '配置已更新，请重新选择。'
-    } else saveError.value = status === 422 ? '所选模型未通过执行器路由校验。' : '保存未确认，请检查所选模型或重新读取。'
+    } else if (status === 422 || status === 503) {
+      const data: unknown = (error as { data?: unknown })?.data
+      const root = data && typeof data === 'object' ? data as Record<string, unknown> : undefined
+      const detail = root?.detail
+      const payload = detail && typeof detail === 'object' ? detail as Record<string, unknown> : root
+      const message = typeof detail === 'string' ? detail : typeof payload?.message === 'string' ? payload.message : undefined
+      saveError.value = resolveApiErrorMessage((key: string) => key, { message }, '无法确认模型接入条件，请重新读取或联系管理员。')
+    } else saveError.value = '保存未确认，请检查所选模型或重新读取。'
   } finally {
     if (!signal.aborted) saving.value = false
   }

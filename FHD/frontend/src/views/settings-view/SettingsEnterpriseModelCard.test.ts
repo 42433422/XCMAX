@@ -14,11 +14,49 @@ beforeEach(() => {
   vi.resetAllMocks()
   get.mockResolvedValue(settings)
   catalog.mockResolvedValue({ providers: [{ provider: 'p', models_detailed: [
-    { id: 'runtime', runtime_selectable: true }, { id: 'vision-only', runtime_selectable: false },
+    { id: 'runtime', runtime_selectable: true, execution: { selectable: true } }, { id: 'vision-only', runtime_selectable: false },
   ] }] })
 })
 
 describe('enterprise model settings', () => {
+  it('disables models rejected by the authoritative executor guards without hiding chat models', async () => {
+    catalog.mockResolvedValue({ providers: [{ provider: 'p', runtime_models: ['runtime', 'blocked', 'legacy'], models_detailed: [
+      { id: 'runtime', execution: { selectable: true } },
+      { id: 'blocked', execution: { selectable: false, message: '当前密钥协议不支持执行器。' } },
+      { id: 'legacy' },
+    ] }] })
+    const wrapper = mount(SettingsEnterpriseModelCard, { props: { owner: 'tenant:2' } })
+    await flushPromises()
+    const options = wrapper.findAllComponents(ElOption)
+    expect(options[2].props('disabled')).toBe(true)
+    expect(options[2].props('label')).toContain('当前密钥协议不支持执行器')
+    expect(options[3].props('label')).toContain('兼容性待校验')
+    wrapper.getComponent(ElSelect).vm.$emit('update:modelValue', JSON.stringify(['p', 'blocked']))
+    await flushPromises()
+    await wrapper.get('[data-testid="enterprise-model-save"]').trigger('click')
+    expect(put).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each([
+    [422, { detail: { code: 'runtime_configuration_required', message: '当前模型缺少有效的上下文容量和最大输出量。' } }],
+    [422, { detail: '当前模型地址或密钥协议不支持独立运行。' }],
+    [503, { message: '平台模型配置暂时无法读取，请检查网络后重试。' }],
+  ])('shows the public save failure without claiming a configuration change (%s)', async (status, data) => {
+    put.mockRejectedValue({ status, data })
+    const wrapper = mount(SettingsEnterpriseModelCard, { props: { owner: 'tenant:2', activeModel: 'original' } })
+    await flushPromises()
+    wrapper.getComponent(ElSelect).vm.$emit('update:modelValue', JSON.stringify(['p', 'runtime']))
+    await flushPromises()
+    await wrapper.get('[data-testid="enterprise-model-save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toMatch(/容量|协议|网络/)
+    expect(wrapper.text()).toContain('original')
+    expect(changed).not.toHaveBeenCalled()
+    expect(put).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
   it('presents real runtime choices and sends a scoped, explicit save', async () => {
     put.mockResolvedValue({ ...settings, provider: 'p', model: 'runtime', revision: 4 })
     const wrapper = mount(SettingsEnterpriseModelCard, { props: { owner: 'tenant:2', activeModel: 'active' } })
@@ -27,6 +65,7 @@ describe('enterprise model settings', () => {
     expect(wrapper.findAllComponents(ElOption).map(row => row.props('label'))).toEqual(['跟随账号默认模型', 'p · runtime'])
     expect(put).not.toHaveBeenCalled()
     wrapper.getComponent(ElSelect).vm.$emit('update:modelValue', JSON.stringify(['p', 'runtime']))
+    await flushPromises()
     await flushPromises()
     await wrapper.get('[data-testid="enterprise-model-save"]').trigger('click')
     await flushPromises()
@@ -42,6 +81,7 @@ describe('enterprise model settings', () => {
     const wrapper = mount(SettingsEnterpriseModelCard, { props: { owner: 'tenant:2' } })
     await flushPromises()
     wrapper.getComponent(ElSelect).vm.$emit('update:modelValue', JSON.stringify(['p', 'runtime']))
+    await flushPromises()
     await flushPromises()
     await wrapper.get('[data-testid="enterprise-model-save"]').trigger('click')
     await flushPromises()

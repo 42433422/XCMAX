@@ -133,6 +133,7 @@ async def resolve_default_llm_route(
                 ]
             if runtime == "codex":
                 from modstore_server.llm_gateway_contract import codex_route_contract
+                from modstore_server.llm_responses_transport import validate_responses_route
 
                 rows = {
                     str(row["id"]): row
@@ -145,6 +146,7 @@ async def resolve_default_llm_route(
                     if classify_model(p, candidate) not in {"llm", "vlm"}:
                         continue
                     try:
+                        validate_responses_route(chat_route_snapshot(p, candidate, key, base, key_source, source))
                         codex_route_contract(
                             p,
                             candidate,
