@@ -20,6 +20,7 @@
 
 import type { AgentRunEvent, ExecutionObservation } from '@/api/agentRuns'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
+import { runtimeToolResultStatus } from '@/utils/toolLabels'
 import { asString, asNonNegativeNumber, asRecord } from '@/utils/typeGuards'
 
 export type TracePhaseKind = 'planner' | 'tool' | 'run'
@@ -338,22 +339,39 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       const identity = asString(model ? data.model_request_id || data.request_id : data.turn_id)
       const phase = runtimePlanners.get(`${model ? 'runtime.model.started' : 'runtime.xiaox.turn.started'}:${identity}`)
       if (identity && phase && (phase.status === 'running'
+        || (phase.status === 'failed' && model && data.purpose === 'verification')
         || (phase.status === 'failed' && type === 'runtime.model.failure'))) {
         phase.status = model ? type === 'runtime.model.completed' ? 'success' : 'failed'
           : data.status === 'completed' ? 'success' : data.status === 'failed' ? 'failed'
             : ['interrupted', 'cancelled'].includes(asString(data.status)) ? 'cancelled' : 'waiting'
         phase.title = phase.status === 'success' ? '模型响应已完成' : phase.status === 'failed' ? '模型请求未完成'
           : phase.status === 'cancelled' ? '执行轮次已取消' : '执行轮次状态待核对'
+        if (type === 'runtime.model.failure' && data.outcome === 'unknown') {
+          const elapsed = typeof data.elapsed_ms === 'number' && Number.isFinite(data.elapsed_ms)
+            ? `，已等待 ${(data.elapsed_ms / 1000).toFixed(1)} 秒` : ''
+          phase.subtitle = `桌面模型网关未收到终态${elapsed}。正在核对原请求回执。`
+        } else if (phase.status === 'success' && model) {
+          phase.subtitle = ''
+        }
         if (data.purpose === 'verification') {
           phase.title = phase.status === 'success' ? '核验模型已返回'
             : data.failure_kind === 'model_schema_rejected' ? '核验格式被模型拒绝'
               : data.failure_kind === 'model_response_incomplete' ? '核验输出未完成'
                 : data.outcome === 'unknown' ? '核验请求回执待核对' : '核验模型请求未完成'
         }
+        if (data.failure_kind === 'upstream_rate_limited') {
+          phase.title = data.purpose === 'verification' ? '独立核验遭到上游限流' : '上游模型限流'
+          phase.subtitle = '上游返回 HTTP 429，原请求计量待核对。'
+        }
       }
       continue
     }
     if (type === 'runtime.xiaox.item.started' || type === 'runtime.xiaox.item.completed') {
+      if (type.endsWith('.completed') && data.item_type === 'reasoning') {
+        const turn = runtimePlanners.get(`runtime.xiaox.turn.started:${asString(data.turn_id)}`)
+        if (turn && asString(data.public_summary)) turn.subtitle = asString(data.public_summary)
+        continue
+      }
       if (asString(data.item_type) !== 'mcpToolCall') continue
       const nodeId = asString(data.item_id)
       if (type.endsWith('.started')) {
@@ -365,8 +383,12 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       } else {
         const phase = findToolPhase(nodeId)
         if (phase) {
-          phase.status = data.status === 'failed' ? 'failed' : 'waiting'
-          phase.title = phase.status === 'failed' ? '工具调用失败' : '工具调用已结束，待回执核对'
+          phase.status = runtimeToolResultStatus(phase.tool_id, phase.action, data.status)
+          if (phase.status === 'failed') {
+            phase.error = toolFailureReason(data, ev.message) || '工具调用失败，未收到可核对的结果。'
+          } else if (phase.status === 'waiting' && data.status === 'completed') {
+            phase.subtitle = '工具已返回，等待业务回执。'
+          }
         }
       }
       continue
@@ -467,6 +489,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       if (target) {
         Object.assign(target, observation)
         target.status = failed ? 'failed' : 'success'
+        if (target.subtitle === '工具已返回，等待业务回执。') target.subtitle = undefined
         target.duration_ms = pickNumber(data, 'duration_ms')
         if (failed) {
           target.error = toolFailureReason(data, ev.message)

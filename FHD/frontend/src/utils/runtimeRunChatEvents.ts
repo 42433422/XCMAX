@@ -1,7 +1,7 @@
 import type { AgentRunEvent } from '@/api/agentRuns'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import { asRecord, asString } from '@/utils/typeGuards'
-import { toolActivityLabel } from '@/utils/toolLabels'
+import { runtimeToolResultStatus, toolActivityLabel } from '@/utils/toolLabels'
 
 /** Project durable SDK observations into the existing chat event vocabulary. */
 export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
@@ -16,6 +16,8 @@ export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
   if (type === 'runtime.model.failure' || type === 'runtime.model.failed')
     return [{ type: 'thinking', delta: data.failure_kind === 'model_schema_rejected'
       ? '所选模型拒绝了核验格式，核验已停止。'
+      : data.failure_kind === 'upstream_rate_limited'
+        ? '上游模型限流（HTTP 429），原请求计量待核对。'
       : data.failure_kind === 'model_response_incomplete' && data.purpose === 'verification'
         ? '核验输出未完整结束，原回执已保留。'
         : data.outcome === 'unknown' ? '模型请求回执待核对。' : '模型请求未完成。' }]
@@ -36,12 +38,19 @@ export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
   if (type === 'runtime.xiaox.turn.completed')
     return [{ type: 'thinking', delta: '执行轮次已结束，正在读取原任务回执…' }]
   if (type !== 'runtime.xiaox.item.started' && type !== 'runtime.xiaox.item.completed') return []
+  if (type.endsWith('.completed') && data.item_type === 'reasoning' && asString(data.public_summary))
+    return [{ type: 'thinking', delta: asString(data.public_summary) }]
   if (asString(data.item_type) !== 'mcpToolCall') return []
   const started = type.endsWith('.started')
+  const toolId = asString(data.tool_id)
+  const action = asString(data.action)
+  const status = started ? 'running' : runtimeToolResultStatus(toolId, action, data.status)
+  const finished = status === 'success' || status === 'failed'
   return [{
-    type: 'tool_call', phase: started ? 'started' : 'progress',
-    node_id: asString(data.item_id), tool_id: asString(data.tool_id), action: asString(data.action),
-    label: toolActivityLabel(asString(data.tool_id), asString(data.action), started ? 'running' : 'waiting')
-      || (started ? '正在调用授权工具…' : '工具调用结束，正在核对回执…'),
+    type: 'tool_call', phase: started ? 'started' : finished ? 'finished' : 'progress',
+    ...(finished ? { success: status === 'success' } : {}),
+    node_id: asString(data.item_id), tool_id: toolId, action,
+    label: toolActivityLabel(toolId, action, status)
+      || (started ? '正在调用授权工具…' : status === 'failed' ? '工具调用失败' : '工具调用结束，正在核对回执…'),
   }]
 }

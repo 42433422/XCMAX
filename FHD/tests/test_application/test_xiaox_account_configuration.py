@@ -93,6 +93,20 @@ def account(monkeypatch, tmp_path):
     return state
 
 
+@pytest.mark.parametrize("signed, expected", [(None, 300), (120, 120)])
+def test_market_timeout_remains_bounded_by_the_advertised_route(
+    account, monkeypatch, signed, expected
+):
+    from app.infrastructure.xiaox.model_gateway import model_request_timeout_seconds
+
+    monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "300")
+    if signed is not None:
+        account.snapshot["runtime"]["request_timeout_seconds"] = signed
+    settings = configuration.get_account_runtime_settings("test-owner", qualify=False)
+    assert settings.route is not None
+    assert model_request_timeout_seconds(settings.route) == expected
+
+
 @pytest.mark.parametrize("key_source", ["platform", "user_override"])
 def test_account_route_needs_no_manual_config_and_reuses_exact_qualification(
     account, tmp_path, key_source

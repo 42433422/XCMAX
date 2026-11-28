@@ -44,6 +44,7 @@ _INSTRUCTIONS = (
 def stream_runtime_event(event: dict[str, Any]) -> None:
     from app.infrastructure.chat_stream_lifetime import (
         publish_stream_model_activity,
+        publish_stream_note,
         publish_stream_tool_record,
     )
 
@@ -52,18 +53,29 @@ def stream_runtime_event(event: dict[str, Any]) -> None:
     item = payload.get("item") or {}
     if method == "turn/started":
         publish_stream_model_activity()
+    elif method == "item/completed" and item.get("type") == "reasoning":
+        if summary := item.get("public_summary"):
+            publish_stream_note(summary)
     elif method in {"item/started", "item/completed"} and item.get("type") == "mcpToolCall":
-        publish_stream_tool_record(
-            {
-                "phase": "progress",
-                "node_id": str(item.get("id") or event.get("item_id") or ""),
-                "tool_id": str(item.get("server") or ""),
-                "action": str(item.get("tool") or ""),
-                "label": "正在通过授权工具处理任务…"
-                if method == "item/started"
-                else "工具调用结束，正在核对回执…",
-            }
-        )
+        started = method == "item/started"
+        tool_id = str(item.get("server") or "")
+        action = str(item.get("tool") or "")
+        status = item.get("status")
+        record = {
+            "phase": "progress",
+            "node_id": str(item.get("id") or event.get("item_id") or ""),
+            "tool_id": tool_id,
+            "action": action,
+            "label": "正在通过授权工具处理任务…" if started else "工具已返回，等待业务回执。",
+        }
+        if not started and status == "failed":
+            record.update(phase="finished", success=False, label="工具调用失败")
+        elif not started and status == "completed" and (tool_id, action) == (
+            "xcmax",
+            "capability_search",
+        ):
+            record.update(phase="finished", success=True, label="小C已完成任务能力查找")
+        publish_stream_tool_record(record)
 
 
 def runtime_chat_files(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -114,10 +126,22 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
     )
     if qualification_blocked:
         text = "当前模型未通过运行验收，请在模型服务中查看。"
+    if result.get("ok") is False and result.get("error_code") == "runtime_budget_exhausted":
+        text = "本轮运行时限已耗尽，任务未完成。已收到的回执已保留。"
     if result.get("pending_approval"):
         text = "任务已进入审批，请通过审批入口处理；原任务及参数已保留。"
     if result.get("reconciliation_required"):
-        text = "本次执行结果尚需核对，原任务和回执已保留，请勿重复提交业务操作。"
+        reason = {
+            "runtime_budget_exhausted": "本轮运行时限已耗尽",
+            "goal_verification_transport_error": "独立核验未收到模型网关的终态回执",
+        }.get(str(result.get("error_code") or ""))
+        if (
+            result.get("failure_stage") == "model"
+            and result.get("failure_kind") == "model_usage_unknown"
+        ):
+            model_reason = "最后一次模型请求的结果和计量尚未核对"
+            reason = f"{reason}，{model_reason}" if reason else model_reason
+        text = f"{reason or '本次执行结果尚需核对'}。原任务和回执已保留，请勿重复提交业务操作。"
     # The parent cannot approve a child action. Reuse only the original frozen
     # child's card; never manufacture an approval from the model's narrative.
     cards = [

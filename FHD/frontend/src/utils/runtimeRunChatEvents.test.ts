@@ -7,6 +7,14 @@ function event(event_type: string, data: Record<string, unknown> = {}): AgentRun
 }
 
 describe('durable runtime events in chat', () => {
+  it('forwards only the public summary carried by a completed reasoning step', () => {
+    const data = { item_type: 'reasoning', summary: 'raw-internal', public_summary: '已分析任务。' }
+    expect(runtimeRunChatEvents(event('runtime.xiaox.item.started', data))).toEqual([])
+    expect(runtimeRunChatEvents(event('runtime.xiaox.item.completed', data))).toEqual([
+      { type: 'thinking', delta: '已分析任务。' },
+    ])
+  })
+
   it('uses the same Chinese Excel label for live SDK tool events', () => {
     expect(runtimeRunChatEvents(event('runtime.xiaox.item.started', {
       item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'execute_excel_read',
@@ -14,6 +22,14 @@ describe('durable runtime events in chat', () => {
     expect(runtimeRunChatEvents(event('runtime.xiaox.item.completed', {
       item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'execute_excel_read',
     }))).toMatchObject([{ label: '小C正在核对Excel 文档读取结果' }])
+  })
+
+  it('reports explicit SDK failures and waits for a business receipt on success', () => {
+    const data = { item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'execute_excel_read' }
+    expect(runtimeRunChatEvents(event('runtime.xiaox.item.completed', { ...data, status: 'failed' })))
+      .toMatchObject([{ phase: 'finished', success: false, label: '小C未能完成Excel 文档读取' }])
+    expect(runtimeRunChatEvents(event('runtime.xiaox.item.completed', { ...data, status: 'completed' })))
+      .toMatchObject([{ phase: 'progress' }])
   })
 
   it.each(['runtime.progress.stalled', 'runtime.output.quarantined', 'runtime.recovery.strategy_changed'])(

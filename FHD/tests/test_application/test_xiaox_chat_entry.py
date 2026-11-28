@@ -241,6 +241,25 @@ def test_reconciliation_preserves_receipt_without_a_continuation(result_state):
     assert result["success"] is False
 
 
+def test_chat_keeps_confirmed_budget_failure_visible_while_model_receipt_is_unknown():
+    result = chat.runtime_chat_payload(
+        {
+            "run_id": "original",
+            "execution_state": "unknown",
+            "error_code": "runtime_budget_exhausted",
+            "failure_stage": "model",
+            "failure_kind": "model_usage_unknown",
+            "reconciliation_required": True,
+            "error": "private error details",
+        }
+    )
+    assert result["response"] == (
+        "本轮运行时限已耗尽，最后一次模型请求的结果和计量尚未核对。"
+        "原任务和回执已保留，请勿重复提交业务操作。"
+    )
+    assert result["requires_reconciliation"] is True
+
+
 def test_incomplete_retryable_goal_keeps_chat_on_original_task():
     result = chat.runtime_chat_payload(
         {

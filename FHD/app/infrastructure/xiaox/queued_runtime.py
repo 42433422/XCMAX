@@ -552,6 +552,72 @@ class _ClaimedRuntimeRepository(SQLAlchemyAgentRunRepository):
             yield db
 
 
+def _recover_before_first_dispatch(
+    store: XiaoxBindingStore, run: AgentRun, worker_key: str
+) -> bool:
+    """Re-arm the same request only from a fenced, durable pre-dispatch checkpoint."""
+    from app.application.agent_runtime.verification_budget import JOB_KEY
+
+    def rearm(parent: AgentRun, binding: dict[str, Any]) -> None:
+        pending = parent.metadata.get("_xiaox_queued_request") or {}
+        requests = parent.metadata.get("runtime_requests") or {}
+        previous = requests.get(worker_key) or {}
+        if (
+            parent.status != "queued"
+            or pending.get("state") != "queued"
+            or pending.get("generation") != 0
+            or binding.get("generation") != 1
+            or binding.get("dispatch_phase") != "preparing"
+            or binding.get("thread_id")
+            or binding.get("model_requests")
+            or binding.get("model_reconciliation_required")
+            or binding.get("calls")
+            or parent.tool_calls
+            or parent.metadata.get(JOB_KEY)
+            or previous.get("state") != "admitted"
+            or not isinstance(previous.get("digest"), str)
+            or previous.get("turn_id") != pending.get("worker_turn_id")
+            or (requests.get(pending.get("request_key")) or {}).get("state") != "queued"
+        ):
+            raise XiaoxBindingError("reconciliation_required", "缺少原请求未开始执行的检查点")
+        store._validate_authority(parent, binding)
+        store._validate_control(parent)
+        started = float(binding.get("active_started_at") or 0)
+        spent = float(binding.get("active_seconds") or 0) + max(0.0, time.time() - started)
+        limit = float((binding.get("runtime_config") or {}).get("max_active_seconds") or 0)
+        if (
+            not math.isfinite(started)
+            or started <= 0
+            or not math.isfinite(spent)
+            or not math.isfinite(limit)
+            or spent >= limit
+        ):
+            raise XiaoxBindingError("runtime_budget_exhausted", "原任务运行时限已耗尽")
+        binding.update(
+            active_seconds=spent,
+            coordinator_active=False,
+            revoked=True,
+            token_hashes={},
+            dispatch_phase="rearmed",
+        )
+        binding.pop("active_started_at", None)
+        pending["generation"] = binding["generation"]
+        parent.add_event(
+            "runtime.queue.recovered_before_dispatch",
+            "原执行者在模型和工具调用前退出，已恢复同一个请求",
+            {"worker_turn_id": previous["turn_id"], "request_digest": previous["digest"]},
+        )
+        del requests[worker_key]
+
+    if (run.metadata.get("xiaox_runtime") or {}).get("dispatch_phase") != "preparing":
+        return False
+    try:
+        store.update(run.run_id, rearm)
+    except XiaoxBindingError:
+        return False
+    return True
+
+
 def _execute_queued_runtime(
     repository: SQLAlchemyAgentRunRepository, execution: AgentTaskExecution, owner: str
 ) -> dict[str, Any]:
@@ -572,6 +638,15 @@ def _execute_queued_runtime(
         return copy.deepcopy(original["result"])
     worker_key = canonical_digest({"turn_id": pending["worker_turn_id"], "owner": run.user_id})
     previous = (run.metadata.get("runtime_requests") or {}).get(worker_key)
+    if (
+        previous is not None
+        and execution.recovery_count
+        and _recover_before_first_dispatch(store, run, worker_key)
+    ):
+        binding = store.get(run.run_id)
+        run, metadata = binding.run, binding.metadata
+        pending = run.metadata["_xiaox_queued_request"]
+        previous = None
     result: dict[str, Any]
     if previous is not None:
         stored_result = previous.get("result")

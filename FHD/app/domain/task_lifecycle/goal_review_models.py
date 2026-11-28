@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable, Sequence
 from itertools import islice
 from typing import Any, Literal
@@ -292,3 +293,85 @@ def verbatim_blocks(text: str) -> list[str]:
             if bounded := block[offset : offset + 4000].strip():
                 blocks.append(bounded)
     return blocks
+
+
+def file_citation_catalogue(
+    file_evidence: dict[str, dict[str, Any]],
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, tuple[str, str]],
+]:
+    documents = {}
+    sources: dict[str, tuple[str, str]] = {}
+    for identity, source in file_evidence.items():
+        blocks = {}
+        for block in verbatim_blocks(source["text"]):
+            block_id = f"s{len(sources) + 1}"
+            sources[block_id] = (identity, block)
+            blocks[block_id] = block
+        documents[identity] = {key: value for key, value in source.items() if key != "text"}
+        documents[identity]["blocks"] = blocks
+    return documents, sources
+
+
+def resolve_file_citations(
+    review: dict[str, Any],
+    sources: dict[str, tuple[str, str]],
+    responses: dict[str, str],
+) -> None:
+    for goal in review["goals"]:
+        if "file_citations" in goal:
+            for cite in goal["file_citations"]:
+                identity, source = sources[cite.pop("source_block_id")]
+                cite.update(
+                    evidence_id=identity,
+                    source_excerpt=source,
+                    response_excerpt=responses[cite.pop("response_block_id")],
+                )
+
+
+_REFERENCE_PREFIX = re.compile(r"^\[原文消息 #[^\]]*\]\n?")
+_LANGUAGE_MENTION = re.compile(
+    r"英文|英语|中文|汉语|简体|繁体|日文|日语|韩文|韩语|德文|德语|法文|法语|"
+    r"西班牙文|西班牙语|俄文|俄语|葡萄牙语|English|Chinese|Japanese|Korean|German|"
+    r"French|Spanish|Russian|Portuguese",
+    re.IGNORECASE,
+)
+_REVISION_CUE = re.compile(
+    r"(?:再|更)(?:正式|简洁|详细|礼貌|专业|口语|生动)"
+    r"|(?:润色|重写|改写|缩写|扩写|调整|修改|补充|完善)"
+    r"(?:一下|一遍)?(?:这封|该|上述|上一版|这个)?(?:邮件|正文|文案|回复|回答|内容|方案|措辞|语气|格式)",
+)
+
+
+def _dominant_script(text: str) -> str:
+    cjk = len(re.findall(r"[\u3400-\u9fff]", text))
+    latin = len(re.findall(r"[A-Za-z]", text))
+    if cjk >= 8 and cjk * 4 >= latin:
+        return "zh"
+    if latin >= 40 and latin * 4 >= cjk:
+        return "en"
+    return ""
+
+
+def _established_language(request: dict[str, Any]) -> str:
+    if _LANGUAGE_MENTION.search(str(request.get("text") or "")):
+        return ""
+    for row in reversed(request.get("history") or []):
+        if isinstance(row, dict) and row.get("role") == "assistant":
+            content = _REFERENCE_PREFIX.sub("", str(row.get("content") or ""))
+            if script := _dominant_script(content):
+                return script
+    return ""
+
+
+def language_continuity_feedback(request: dict[str, Any], response: str) -> str:
+    """Reject a revised deliverable that silently switches its established language."""
+    if not _REVISION_CUE.search(str(request.get("text") or "")):
+        return ""
+    expected = _established_language(request)
+    actual = _dominant_script(response)
+    if not expected or not actual or expected == actual:
+        return ""
+    name = "英文" if expected == "en" else "中文"
+    return f"上一版成稿使用{name}，本轮未要求更换成稿语言；请沿用{name}重写完整成稿。"

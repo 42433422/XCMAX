@@ -66,6 +66,12 @@ export function toolActivityLabel(toolId: string, action: string, status: string
   return `小C正在核对${subject}结果`
 }
 
+export function runtimeToolResultStatus(toolId: string, action: string, status: unknown) {
+  if (status === 'failed') return 'failed'
+  if (status === 'completed' && toolId === 'xcmax' && action === 'capability_search') return 'success'
+  return 'waiting'
+}
+
 export function toolDisplayName(toolId: string): string {
   const raw = String(toolId || '').trim()
   if (raw === 'xcmax') return '小C助手'

@@ -9,7 +9,6 @@ from __future__ import annotations
 import copy
 import json
 import math
-import re
 import time
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -52,53 +51,6 @@ from app.domain.task_lifecycle.agent_runtime_results import (
 
 if TYPE_CHECKING:
     from app.application.agent_runtime.plan_delivery import PlanVerdict
-
-
-_REFERENCE_PREFIX = re.compile(r"^\[原文消息 #[^\]]*\]\n?")
-_LANGUAGE_MENTION = re.compile(
-    r"英文|英语|中文|汉语|简体|繁体|日文|日语|韩文|韩语|德文|德语|法文|法语|"
-    r"西班牙文|西班牙语|俄文|俄语|葡萄牙语|English|Chinese|Japanese|Korean|German|"
-    r"French|Spanish|Russian|Portuguese",
-    re.IGNORECASE,
-)
-_REVISION_CUE = re.compile(
-    r"(?:再|更)(?:正式|简洁|详细|礼貌|专业|口语|生动)"
-    r"|(?:润色|重写|改写|缩写|扩写|调整|修改|补充|完善)"
-    r"(?:一下|一遍)?(?:这封|该|上述|上一版|这个)?(?:邮件|正文|文案|回复|回答|内容|方案|措辞|语气|格式)",
-)
-
-
-def _dominant_script(text: str) -> str:
-    cjk = len(re.findall(r"[\u3400-\u9fff]", text))
-    latin = len(re.findall(r"[A-Za-z]", text))
-    if cjk >= 8 and cjk * 4 >= latin:
-        return "zh"
-    if latin >= 40 and latin * 4 >= cjk:
-        return "en"
-    return ""
-
-
-def _established_language(request: dict[str, Any]) -> str:
-    if _LANGUAGE_MENTION.search(str(request.get("text") or "")):
-        return ""
-    for row in reversed(request.get("history") or []):
-        if isinstance(row, dict) and row.get("role") == "assistant":
-            content = _REFERENCE_PREFIX.sub("", str(row.get("content") or ""))
-            if script := _dominant_script(content):
-                return script
-    return ""
-
-
-def language_continuity_feedback(request: dict[str, Any], response: str) -> str:
-    """Reject a revised deliverable that silently switches its established language."""
-    if not _REVISION_CUE.search(str(request.get("text") or "")):
-        return ""
-    expected = _established_language(request)
-    actual = _dominant_script(response)
-    if not expected or not actual or expected == actual:
-        return ""
-    name = "英文" if expected == "en" else "中文"
-    return f"上一版成稿使用{name}，本轮未要求更换成稿语言；请沿用{name}重写完整成稿。"
 
 
 def _finish_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -167,41 +119,6 @@ def _review_evidence_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return view
-
-
-def _file_citation_catalogue(
-    file_evidence: dict[str, dict[str, Any]],
-) -> tuple[
-    dict[str, dict[str, Any]],
-    dict[str, tuple[str, str]],
-]:
-    documents = {}
-    sources: dict[str, tuple[str, str]] = {}
-    for identity, source in file_evidence.items():
-        blocks = {}
-        for block in review_protocol.verbatim_blocks(source["text"]):
-            block_id = f"s{len(sources) + 1}"
-            sources[block_id] = (identity, block)
-            blocks[block_id] = block
-        documents[identity] = {key: value for key, value in source.items() if key != "text"}
-        documents[identity]["blocks"] = blocks
-    return documents, sources
-
-
-def _resolve_file_citations(
-    review: dict[str, Any],
-    sources: dict[str, tuple[str, str]],
-    responses: dict[str, str],
-) -> None:
-    for goal in review["goals"]:
-        if "file_citations" in goal:
-            for cite in goal["file_citations"]:
-                identity, source = sources[cite.pop("source_block_id")]
-                cite.update(
-                    evidence_id=identity,
-                    source_excerpt=source,
-                    response_excerpt=responses[cite.pop("response_block_id")],
-                )
 
 
 def _verify_plan_capabilities(
@@ -505,7 +422,7 @@ def verify_runtime_goal(
         action_catalog = {}
         for spec in XiaoxToolBridge.visible_actions(binding, []):
             action_catalog.setdefault(spec.tool_id, []).append(spec.action)
-    documents, source_blocks = _file_citation_catalogue(file_evidence or {})
+    documents, source_blocks = review_protocol.file_citation_catalogue(file_evidence or {})
     response_blocks = (
         {
             f"r{index}": block
@@ -676,13 +593,23 @@ def verify_runtime_goal(
                     )
                     raw = response.model_dump()
             except APIError as exc:
-                from app.infrastructure.llm.retry_policy import MODEL_SCHEMA_REJECTED
+                from app.infrastructure.llm.retry_policy import (
+                    MODEL_SCHEMA_REJECTED,
+                    MODEL_UPSTREAM_RATE_LIMITED,
+                )
 
                 if getattr(exc, "code", None) == MODEL_SCHEMA_REJECTED:
                     diagnostic["state"] = "schema_rejected"
                     report.update(
                         error_code="goal_verification_schema_rejected",
                         feedback="所选模型拒绝了附件核验格式，原操作回执已保留。",
+                    )
+                    return _finish_report(report)
+                if getattr(exc, "code", None) == MODEL_UPSTREAM_RATE_LIMITED:
+                    diagnostic["state"] = "upstream_rate_limited"
+                    report.update(
+                        error_code="goal_verification_transport_error",
+                        feedback="独立核验遭到上游模型限流（HTTP 429），原请求计量待核对。",
                     )
                     return _finish_report(report)
                 # The gateway owns unknown billing/transport outcomes. Never
@@ -804,7 +731,7 @@ def verify_runtime_goal(
                             ),
                         ]
                         raise ValueError("Invalid goal review schema")
-                    _resolve_file_citations(decoded, source_blocks, response_blocks)
+                    review_protocol.resolve_file_citations(decoded, source_blocks, response_blocks)
                 review, errors = validate_goal_review(
                     decoded, contract, snapshot, output, file_evidence=file_evidence
                 )
@@ -877,7 +804,7 @@ def verify_runtime_goal(
                 if any(goal["kind"] in {"read", "write"} for goal in review["goals"])
                 else "reply"
             )
-            continuity = language_continuity_feedback(contract["request"], output)
+            continuity = review_protocol.language_continuity_feedback(contract["request"], output)
             if continuity:
                 # The host rule is authoritative for a hard language constraint;
                 # drop the reviewer's contrary language claims from the retry input.

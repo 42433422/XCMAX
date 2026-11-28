@@ -612,6 +612,20 @@ describe('persisted chat turn observation through the real SDK and task workspac
     expect(reply.content).toContain('原任务核验未通过')
   })
 
+  it('reads the bound reply on a terminal stream event while the task feed is still running', async () => {
+    const reply = originalReply()
+    taskStatus = 'running'
+    readReceipt = async () => ({ ...terminalHistory('completed'), messages: [{
+      id: 8, role: 'assistant', content: '收到独立核验后的正式答案。',
+      metadata: { summary: { status: 'completed', turn_id: 'original-turn', success: true } },
+    }] })
+    runStreams[0].emit({
+      event_id: 'terminal', run_id: 'original-run', event_type: 'runtime.xiaox.finished', data: {},
+    }, 'runtime.xiaox.finished', 'terminal')
+    await vi.waitFor(() => expect(reply.content).toContain('收到独立核验后的正式答案'))
+    expect(reply.workflowAction).toBe('completed')
+  })
+
   it('reads the original turn receipt when the task finishes and ignores another turn receipt', async () => {
     const reply = originalReply()
     readReceipt = async () => ({

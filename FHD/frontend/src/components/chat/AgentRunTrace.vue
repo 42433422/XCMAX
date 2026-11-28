@@ -195,7 +195,7 @@ function phaseIconClass(phase: TracePhase): string {
 function statusIconClass(status: string): string {
   if (status === 'success') return 'fa-check-circle'
   if (status === 'failed') return 'fa-times-circle'
-  if (status === 'waiting') return 'fa-pause-circle'
+  if (status === 'waiting') return 'fa-clock-o'
   if (status === 'paused') return 'fa-pause-circle'
   if (status === 'cancelled') return 'fa-ban'
   if (status === 'blocked') return 'fa-ban'
@@ -203,13 +203,16 @@ function statusIconClass(status: string): string {
 }
 
 function phaseDisplayTitle(phase: TracePhase): string {
-  if (isTool(phase)) return toolActivityLabel(phase.tool_id, phase.action, phase.waiting_approval ? 'approval' : phase.status) || toolDisplayName(phase.tool_id)
-  if (isPlanner(phase)) return phase.status === 'success' ? '执行计划已生成' : phase.title || '正在生成执行计划'
+  if (isTool(phase)) return phase.subtitle || toolActivityLabel(phase.tool_id, phase.action, phase.waiting_approval ? 'approval' : phase.status) || toolDisplayName(phase.tool_id)
+  if (isPlanner(phase)) return phase.title || (phase.status === 'success' ? '执行计划已生成' : '正在生成执行计划')
   return phase.status === 'success' ? '任务执行完成' : phase.title || '任务结束'
 }
 
 function phaseDisplaySubtitle(phase: TracePhase): string {
-  if (isTool(phase)) return toolActivityLabel(phase.tool_id, phase.action, phase.waiting_approval ? 'approval' : phase.status) ? '' : actionDisplayName(phase.action)
+  if (isTool(phase)) {
+    const label = toolActivityLabel(phase.tool_id, phase.action, phase.waiting_approval ? 'approval' : phase.status)
+    return phase.subtitle || label ? '' : actionDisplayName(phase.action)
+  }
   if (isPlanner(phase) && phase.step_count) return `${phase.step_count} 个计划步骤`
   return phase.subtitle || ''
 }

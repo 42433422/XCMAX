@@ -955,6 +955,8 @@ async def run_xiaox_agent(
             metadata.update(active_seconds=spent, active_started_at=now, deadline_at=now + timeout)
             metadata["execution_deadline_at"] = now + max(0, timeout - reserve["seconds"])
             metadata["active_phase"] = "execution"
+            if not verification_only and not metadata.get("thread_id"):
+                metadata["dispatch_phase"] = "preparing"
 
         mutate(begin_active)
         actual_config = replace(
@@ -1087,6 +1089,7 @@ async def run_xiaox_agent(
 
                         run.status = "running"
                         metadata["runtime_status"] = "running"
+                        metadata["dispatch_phase"] = "started"
                         run.add_event(
                             "runtime.xiaox.started",
                             "Xiaox 执行已开始",
@@ -1151,6 +1154,7 @@ async def run_xiaox_agent(
                         turn_id = ""
                         stalled_turn = False
                         phase_handoff = False
+                        next_control_check = 0.0
                         try:
                             # The outer asyncio.timeout(remaining) keeps the original task deadline.
                             # Each 0.5s poll rechecks revocation without renewing that deadline.
@@ -1159,6 +1163,25 @@ async def run_xiaox_agent(
                                 done, _ = await asyncio.wait(
                                     {pending}, timeout=_CONTROL_POLL_SECONDS
                                 )
+                                # Deltas have no side effects. Checking the SQL control
+                                # ledger for every token can starve the SDK terminal event.
+                                if done and time.monotonic() < next_control_check:
+                                    try:
+                                        buffered_event = pending.result()
+                                    except StopAsyncIteration:
+                                        break
+                                    if (
+                                        buffered_event.get("thread_id") == thread_id
+                                        and str(buffered_event.get("turn_id") or "") == turn_id
+                                        and turn_id
+                                    ):
+                                        delta_method = buffered_event.get("method")
+                                        if delta_method == "item/agentMessage/delta" or str(
+                                            delta_method
+                                        ).startswith("item/reasoning/"):
+                                            pending = asyncio.ensure_future(anext(iterator))
+                                            continue
+                                next_control_check = time.monotonic() + _CONTROL_POLL_SECONDS
                                 observed = store.get(run_id)
                                 # Human stop, lease generation and revoked authority
                                 # take precedence over any automatic recovery decision.
@@ -1226,13 +1249,6 @@ async def run_xiaox_agent(
                                 item = payload.get("item") or {}
                                 if method == "turn/started":
                                     result.update(turn_id=turn_id, rounds=attempt + 1)
-                                if method == "item/agentMessage/delta":
-                                    key = str(
-                                        event.get("item_id") or payload.get("itemId") or "message"
-                                    )
-                                    texts[key] = texts.get(key, "") + str(
-                                        payload.get("delta") or ""
-                                    )
                                 if (
                                     method == "item/completed"
                                     and item.get("type") == "agentMessage"
@@ -1261,6 +1277,26 @@ async def run_xiaox_agent(
                                         # output stay private until a verified receipt exists.
                                         data["tool_id"] = str(item.get("server") or "")[:128]
                                         data["action"] = str(item.get("tool") or "")[:128]
+                                    if (
+                                        method == "item/completed"
+                                        and item.get("type") == "reasoning"
+                                    ):
+                                        # Some compatible routes put raw reasoning into the SDK's
+                                        # summary field. Only an explicit OpenAI summary is public.
+                                        summary = item.get("summary")
+                                        public_summary = (
+                                            " ".join(
+                                                part for part in summary if isinstance(part, str)
+                                            )
+                                            if (
+                                                pinned.get("upstream_vendor") == "openai"
+                                                and isinstance(summary, list)
+                                            )
+                                            else ""
+                                        )
+                                        data["public_summary"] = public_summary.strip()[:600] or (
+                                            "模型已完成这一阶段的分析，正在生成回复或选择工具。"
+                                        )
 
                                     def record(run: AgentRun, metadata: dict[str, Any]) -> None:
                                         metadata["turn_id"] = turn_id
@@ -1298,6 +1334,15 @@ async def run_xiaox_agent(
                                                                 "tool": data["action"],
                                                             }
                                                             if item.get("type") == "mcpToolCall"
+                                                            else {}
+                                                        ),
+                                                        **(
+                                                            {
+                                                                "public_summary": data[
+                                                                    "public_summary"
+                                                                ]
+                                                            }
+                                                            if "public_summary" in data
                                                             else {}
                                                         ),
                                                     }

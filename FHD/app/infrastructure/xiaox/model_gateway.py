@@ -1023,7 +1023,9 @@ async def forward_responses(request: Request):
         inference_deadline = deadline = model_request_deadline(binding, route)
         from app.infrastructure.llm.retry_policy import (
             MODEL_SCHEMA_REJECTED,
+            MODEL_UPSTREAM_RATE_LIMITED,
             is_safe_transport_retry,
+            market_rate_limited_unsettled,
             model_failure_details,
         )
 
@@ -1033,6 +1035,7 @@ async def forward_responses(request: Request):
             output_started: bool = False,
             upstream_error: str = "",
             schema_rejected: bool = False,
+            upstream_rate_limited: bool = False,
             settled: bool = False,
             stream_phase: str | None = None,
             stream_frame: int | None = None,
@@ -1070,6 +1073,11 @@ async def forward_responses(request: Request):
                     failure_kind="model_schema_rejected",
                     failure_reason="所选模型拒绝了结构化输出格式。",
                     outcome="not_started",
+                )
+            if upstream_rate_limited:
+                details.update(
+                    failure_kind="upstream_rate_limited",
+                    failure_reason="上游模型限流（HTTP 429），原请求计量仍待核对。",
                 )
             if settled:
                 details["outcome"] = "settled"
@@ -1367,8 +1375,14 @@ async def forward_responses(request: Request):
                     )
                 except (ValueError, UnicodeDecodeError):
                     pass
+            upstream_rate_limited = (
+                route.gateway_kind == "market" and market_rate_limited_unsettled(upstream)
+            )
             await record_failure(
-                slot_failure, upstream_error=upstream_error, schema_rejected=schema_rejected
+                slot_failure,
+                upstream_error=upstream_error,
+                schema_rejected=schema_rejected,
+                upstream_rate_limited=upstream_rate_limited,
             )
             # Explicit rejection has no generated completion. A 5xx/408 can
             # hide a started model request and remains unresolved, without replay.
@@ -1409,9 +1423,12 @@ async def forward_responses(request: Request):
                     "error": {
                         "message": "所选模型拒绝了结构化输出格式。"
                         if schema_rejected
+                        else "上游模型限流，原请求计量待核对。"
+                        if upstream_rate_limited
                         else "Qualified model gateway request failed",
                         "type": "upstream_error",
                         **({"code": MODEL_SCHEMA_REJECTED} if schema_rejected else {}),
+                        **({"code": MODEL_UPSTREAM_RATE_LIMITED} if upstream_rate_limited else {}),
                     }
                 },
                 status_code=upstream.status_code if definite else 502,

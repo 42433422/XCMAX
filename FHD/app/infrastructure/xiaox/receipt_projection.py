@@ -179,6 +179,7 @@ def reconcile_model_receipts(store: XiaoxBindingStore, run: AgentRun) -> AgentRu
                 market_route=expected,
                 platform_receipt=terminal.get("xcagi"),
                 reconciled_response=terminal,
+                verification_response=terminal if call.get("purpose") == "verification" else None,
             )
         except reconciliation_errors:
             logger.warning("原模型请求回执尚未核对；保留未知状态，不重发", exc_info=False)

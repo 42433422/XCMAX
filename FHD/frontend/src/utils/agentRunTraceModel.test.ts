@@ -59,6 +59,34 @@ describe('buildAgentRunTraceFromEvents', () => {
     ])
   })
 
+  it('marks completed capability search without accepting a business tool receipt', () => {
+    const items = [
+      { item_id: 'search', item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'capability_search' },
+      { item_id: 'excel', item_type: 'mcpToolCall', tool_id: 'xcmax', action: 'execute_excel_read' },
+    ]
+    const trace = buildAgentRunTraceFromEvents(items.flatMap(data => [
+      ev('runtime.xiaox.item.started', { data }),
+      ev('runtime.xiaox.item.completed', { data: { ...data, status: 'completed' } }),
+    ]), 'run_test')
+    expect(trace.phases.map(phase => phase.status)).toEqual(['success', 'waiting'])
+  })
+
+  it('shows the timed-out layer and clears it after the original model receipt returns', () => {
+    const identity = { model_request_id: 'review-A', purpose: 'verification' }
+    const events = [
+      ev('runtime.model.started', { data: identity }),
+      ev('runtime.model.failure', { data: { ...identity, outcome: 'unknown', elapsed_ms: 180115 } }),
+    ]
+    expect(buildAgentRunTraceFromEvents(events, 'run_test').phases[0]).toMatchObject({
+      title: '核验请求回执待核对',
+      subtitle: '桌面模型网关未收到终态，已等待 180.1 秒。正在核对原请求回执。',
+    })
+    events.push(ev('runtime.model.completed', { data: identity }))
+    expect(buildAgentRunTraceFromEvents(events, 'run_test').phases[0]).toMatchObject({
+      status: 'success', title: '核验模型已返回', subtitle: '',
+    })
+  })
+
   it.each([
     ['failed', 'failed'], ['completed', 'success'], ['interrupted', 'cancelled'],
     ['cancelled', 'cancelled'], [undefined, 'waiting'], ['', 'waiting'], ['future_status', 'waiting'],

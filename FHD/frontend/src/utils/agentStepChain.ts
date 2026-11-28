@@ -62,7 +62,7 @@ const STATE_ICONS: Record<AgentStepState, string> = {
   running: 'fa-circle-o-notch fa-spin',
   success: 'fa-check-circle',
   failed: 'fa-times-circle',
-  waiting: 'fa-pause-circle',
+  waiting: 'fa-clock-o',
   blocked: 'fa-ban',
   unknown: 'fa-question-circle',
   deferred: 'fa-clock-o',

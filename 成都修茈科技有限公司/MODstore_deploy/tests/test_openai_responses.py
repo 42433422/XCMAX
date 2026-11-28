@@ -569,6 +569,7 @@ async def test_upstream_429_halves_the_limit_and_keeps_the_attempt_unresolved(bi
     with pytest.raises(HTTPException) as error:
         await billed["call"]()
     assert error.value.status_code == 409 and error.value.detail["state"] == "settling"
+    assert error.value.detail["upstream_status"] == 429
     assert concurrency.current_limit(db, CONCURRENCY_KEY) == 2
     assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
     billed["wallet"].release.assert_not_awaited()

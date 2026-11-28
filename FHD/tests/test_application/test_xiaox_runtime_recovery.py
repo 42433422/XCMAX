@@ -728,6 +728,7 @@ def test_deployment_upgrade_preserves_original_waiting_request_and_thread(
             "compaction": {"thread_id": "synthetic-probe-only", "turn_id": "compacted"},
             "first_process_id": 1,
             "second_process_id": 2,
+            "attachment_review_schema": True,
         }
 
     monkeypatch.setattr(qualification, "_run_probe", synthetic_probe)

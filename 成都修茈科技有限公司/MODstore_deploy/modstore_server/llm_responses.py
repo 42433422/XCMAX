@@ -350,13 +350,14 @@ async def run_billed_responses(
         if transport is not None:
             await transport.close()
 
-    def unresolved() -> HTTPException:
+    def unresolved(*, upstream_rate_limited: bool = False) -> HTTPException:
         return _error(
             "CODEX_REQUEST_UNRESOLVED",
             "上游调用或结算状态待核对；原请求不会自动重跑。",
             state="settling",
             request_id=request_id,
             hold_no=hold.hold_no if hold.enabled or byok else "",
+            **({"upstream_status": 429} if upstream_rate_limited else {}),
         )
 
     async def settle(
@@ -579,9 +580,12 @@ async def run_billed_responses(
         )
         if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > _MAX_RECEIPT_BYTES:
             raise ValueError("Responses result exceeds the receipt limit")
-        await close()
-        async with asyncio.timeout(max(0.0, deadline - asyncio.get_running_loop().time())):
-            receipt = await settle(result, headers)
+        # A disconnected caller can still reconcile a response already received.
+        # Use the same cancellation shield as streaming, within the original deadline.
+        with anyio.CancelScope(shield=True):
+            async with asyncio.timeout(max(0.0, deadline - asyncio.get_running_loop().time())):
+                await close()
+                receipt = await settle(result, headers)
         return JSONResponse(receipt["wire"]["response"], headers=headers)
     except HTTPException:
         if row.state == "failed":
@@ -592,7 +596,9 @@ async def run_billed_responses(
         db.rollback()
         if is_throttled(exc):
             concurrency.report_throttled(db, model_key, retry_after_seconds(exc))
-        raise unresolved() from None
+        raise unresolved(
+            upstream_rate_limited=isinstance(exc, APIStatusError) and exc.status_code == 429
+        ) from None
     finally:
         if not handed_off:
             await close()

@@ -171,6 +171,14 @@ def _model_route(prepared: PreparedChatRoute) -> ModelRoute:
             "runtime_configuration_required",
             "当前模型缺少 Xiaox 运行信息，请在模型设置中核对上游模型、容量和 Responses 支持。",
         )
+    if "request_timeout_seconds" in runtime:
+        request_timeout_seconds = runtime["request_timeout_seconds"]
+    else:
+        # Legacy snapshots do not advertise a ceiling. Use the existing host
+        # request budget until the platform publishes its signed limit.
+        from app.infrastructure.xiaox.model_gateway import model_request_timeout_seconds
+
+        request_timeout_seconds = model_request_timeout_seconds()
     try:
         return ModelRoute(
             base_url=prepared.connection.platform_url.rstrip("/") + "/v1",
@@ -183,7 +191,7 @@ def _model_route(prepared: PreparedChatRoute) -> ModelRoute:
             max_input_tokens=capacities.get("max_input_tokens"),
             max_model_calls=runtime["max_model_calls"],
             max_request_bytes=runtime["max_request_bytes"],
-            request_timeout_seconds=runtime.get("request_timeout_seconds", 180.0),
+            request_timeout_seconds=request_timeout_seconds,
             gateway_kind="market",
             credential=prepared.connection.auth_token,
             route_token=snapshot["route_token"],

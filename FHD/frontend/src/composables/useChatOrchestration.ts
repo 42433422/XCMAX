@@ -308,13 +308,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   let observedTurn: { turn: ActiveChatTurn; controller: AbortController; message: ChatMessage; checkingReceipt: boolean;
     sessionId: string; revision?: number; isCurrent: () => boolean; retryAt: number; failures: number;
-    stream?: AuthenticatedEventStream; reconnectTimer?: number; lastEventId?: string;
+    stream?: AuthenticatedEventStream; reconnectTimer?: number; receiptTimer?: number; lastEventId?: string;
     events: AgentRunEvent[]; seenEvents: Set<string> } | undefined
 
   function stopTurnObservation() {
     observedTurn?.controller.abort()
     observedTurn?.stream?.close()
     if (observedTurn?.reconnectTimer !== undefined) window.clearTimeout(observedTurn.reconnectTimer)
+    if (observedTurn?.receiptTimer !== undefined) window.clearTimeout(observedTurn.receiptTimer)
     observedTurn = undefined
   }
 
@@ -358,7 +359,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const observation = { turn, controller, message, checkingReceipt: false, sessionId: scope.sessionId,
       revision: options.revision, isCurrent: () => scope.isCurrent() && options.isCurrent?.() !== false, retryAt: 0, failures: 0,
       events: [] as AgentRunEvent[], seenEvents: new Set<string>(), stream: undefined as AuthenticatedEventStream | undefined,
-      reconnectTimer: undefined as number | undefined, lastEventId: undefined as string | undefined }
+      reconnectTimer: undefined as number | undefined, receiptTimer: undefined as number | undefined,
+      lastEventId: undefined as string | undefined }
     observedTurn = observation
     const isCurrent = () => observedTurn === observation && observation.isCurrent() && messages.value.includes(message)
     const connectRunEvents = () => {
@@ -397,6 +399,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             message.toolProgressLabel = projected.delta
             delete message.waitingHint
           }
+        }
+        if (event.event_type === 'runtime.xiaox.finished') {
+          scheduleObservedReceipt(observation, 0)
         }
         if (['runtime.xiaox.finished', 'run.state_changed', 'runtime.model.failure'].includes(event.event_type))
           void agentTaskRuntime.refreshTasks().catch(() => undefined)
@@ -483,7 +488,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     flushMessagesCache()
   }
 
-  watch([taskList, () => agentTaskRuntime.taskSyncState.value.checking], async ([tasks, checking]) => {
+  watch([taskList, () => agentTaskRuntime.taskSyncState.value.checking], ([tasks, checking]) => {
     const observation = observedTurn
     if (!observation) return
     if (!observation.isCurrent() || !messages.value.includes(observation.message)) return stopTurnObservation()
@@ -504,7 +509,28 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       chatSessionActivity.forSession(observation.sessionId).setStatus(['waiting_approval', 'paused'].includes(status) ? 'waiting' : 'review')
       if (status !== 'blocked') return
     }
-    if (Date.now() < observation.retryAt) return
+    void fetchObservedReceipt(observation)
+  }, { flush: 'post' })
+
+  function scheduleObservedReceipt(observation: NonNullable<typeof observedTurn>, delay: number) {
+    if (observedTurn !== observation || !observation.isCurrent() || observation.receiptTimer !== undefined) return
+    observation.receiptTimer = window.setTimeout(() => {
+      observation.receiptTimer = undefined
+      void fetchObservedReceipt(observation, true)
+    }, delay)
+  }
+
+  async function fetchObservedReceipt(observation: NonNullable<typeof observedTurn>, retryOnTerminal = false) {
+    if (observedTurn !== observation || !observation.isCurrent()
+      || !messages.value.includes(observation.message) || observation.checkingReceipt) {
+      if (retryOnTerminal && observation.checkingReceipt) scheduleObservedReceipt(observation, 1000)
+      return
+    }
+    const retryDelay = observation.retryAt - Date.now()
+    if (retryDelay > 0) {
+      if (retryOnTerminal) scheduleObservedReceipt(observation, retryDelay)
+      return
+    }
     observation.checkingReceipt = true
     try {
       // getConversation has a finite transport timeout; only one read is in flight.
@@ -550,12 +576,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       observation.checkingReceipt = false
     }
     if (observedTurn !== observation || !observation.isCurrent()) return
-    observation.retryAt = Date.now() + Math.min(2000 * 2 ** Math.min(observation.failures++, 4), 30_000)
+    const backoff = Math.min(2000 * 2 ** Math.min(observation.failures++, 4), 30_000)
+    observation.retryAt = Date.now() + backoff
+    if (retryOnTerminal && observation.failures < 6) scheduleObservedReceipt(observation, backoff)
     applyPlainTextToMessageIndex(messages.value.indexOf(observation.message),
       '原任务交付回执正在同步。业务结果请在原任务中核对，无需重复提交。', { workflowAction: 'unknown' })
     delete observation.message.toolProgressLabel
     chatSessionActivity.forSession(observation.sessionId).setStatus('review')
-  }, { flush: 'post' })
+  }
   watch([sessionId, chatIdentity], stopTurnObservation, { flush: 'sync' })
   onDeactivated(stopTurnObservation)
   onBeforeUnmount(stopTurnObservation)

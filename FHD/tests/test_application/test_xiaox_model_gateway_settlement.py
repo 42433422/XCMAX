@@ -345,6 +345,30 @@ def test_market_409_records_bounded_upstream_error_for_reconciliation(market_gat
     assert len(calls) == 1
 
 
+def test_market_429_cause_is_visible_without_releasing_or_replaying_original(market_gateway):
+    client, store, calls, _, _, control = market_gateway
+    control.update(
+        status=409,
+        body={
+            "detail": {
+                "code": "CODEX_REQUEST_UNRESOLVED",
+                "state": "settling",
+                "upstream_status": 429,
+            }
+        },
+    )
+    response = post(client, model="enterprise/local-agent")
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "CODEX_UPSTREAM_RATE_LIMITED_UNSETTLED"
+    assert len(calls) == 1
+    call = next(iter(store.binding.metadata["model_requests"].values()))
+    assert call["state"] == "unknown" and call["diagnostic"]["outcome"] == "unknown"
+    assert call["diagnostic"]["failure_kind"] == "upstream_rate_limited"
+    assert not call["diagnostic"]["retryable"]
+    assert post(client, model="enterprise/local-agent").status_code == 409
+    assert len(calls) == 1
+
+
 def test_market_schema_rejection_is_terminal_and_closes_the_model_event(market_gateway):
     client, store, _, _, _, control = market_gateway
     control.update(status=422, body={"detail": {"code": "CODEX_RESPONSE_SCHEMA_REJECTED"}})
@@ -857,6 +881,11 @@ def test_original_market_receipt_reconciles_once_without_model_or_tool_replay(
     assert post(client, model="enterprise/local-agent").status_code == 502
     key, original = next(iter(store.binding.metadata["model_requests"].items()))
     store.run.status = "blocked"
+    original.update(
+        purpose="verification",
+        verification_job_id="original-review",
+        verification_input_digest="original-evidence",
+    )
     receipt = {
         "schema": "xcmax.responses-billing.v1",
         "provider": "enterprise",
@@ -915,9 +944,13 @@ def test_original_market_receipt_reconciles_once_without_model_or_tool_replay(
             and store.binding.metadata["model_reconciliation_required"]
         )
         assert not store.run.llm_calls
+        assert "verification_response" not in original
     else:
         assert original["state"] == "completed"
         assert not store.binding.metadata["model_reconciliation_required"]
         assert original["reconciled_response"]["xcagi"]["client_request_id"] == key
+        assert original["verification_response"] == payload
+        assert original["verification_job_id"] == "original-review"
+        assert original["verification_input_digest"] == "original-evidence"
         assert len(store.run.llm_calls) == 1 and store.run.metadata["reserved_cost_units"] == 0
     assert ledger.get_model_wallet("71")["balance_units"] == 100

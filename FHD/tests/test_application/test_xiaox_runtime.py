@@ -169,6 +169,26 @@ def test_reply_delivers_final_answer_without_commentary(setup_runtime):
     assert result["session_messages"][-1]["content"] == result["output"]
 
 
+def test_sdk_delta_burst_drains_to_terminal_without_publishing_private_reasoning(setup_runtime):
+    invoke, _ = setup_runtime
+    store = Store()
+    events = completed("最终答案")
+    events[1:1] = [
+        *[event("item/reasoning/textDelta", {"delta": "private-reasoning"}) for _ in range(3900)],
+        event("item/completed", {"item": {"type": "reasoning", "summary": ["private-reasoning"]}}),
+        *[event("item/agentMessage/delta", {"delta": "草稿"}) for _ in range(2800)],
+    ]
+    public = []
+    result = asyncio.run(
+        invoke(store, Transport(store, events), completion_mode="reply", on_event=public.append)
+    )
+    assert result["ok"] and result["output"] == "最终答案"
+    assert "已完成这一阶段的分析" in repr(public)
+    assert "private-reasoning" not in repr(public)
+    assert "草稿" not in repr(public)
+    assert public[-1]["method"] == "turn/completed"
+
+
 def test_email_revision_delivers_only_the_reviewed_english_draft(setup_runtime):
     invoke, _ = setup_runtime
     store = Store()
