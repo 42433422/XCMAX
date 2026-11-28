@@ -56,12 +56,16 @@ def reconcile_model_receipts(store: XiaoxBindingStore, run: AgentRun) -> AgentRu
         ModelReservationError,
         PlatformModelReceiptScope,
     )
+    from app.infrastructure.llm.retry_policy import MODEL_SCHEMA_REJECTED
     from app.infrastructure.xiaox.model_gateway import (
+        _ZERO_USAGE,
         _finish,
         _validate_model_output,
         response_usage,
     )
     from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    reconciliation_errors = RECOVERABLE_ERRORS + (ModelReservationError,)
 
     metadata = run.metadata.get("xiaox_runtime") or {}
     if metadata.get("coordinator_active") or not model_unsettled(metadata):
@@ -121,12 +125,34 @@ def reconcile_model_receipts(store: XiaoxBindingStore, run: AgentRun) -> AgentRu
             payload = json.loads(raw)
             if not isinstance(payload, dict):
                 continue
+            if payload.get("state") != "completed" or payload.get("client_request_id") != key:
+                continue
+            rejection = payload.get("rejection")
+            if isinstance(rejection, dict):
+                if rejection == {
+                    "code": MODEL_SCHEMA_REJECTED,
+                    "provider": expected.provider_id,
+                    "model": expected.model.removeprefix(expected.provider_id + "/"),
+                    "response_model": expected.response_model,
+                    "key_source": expected.key_source,
+                    "config_revision": expected.config_revision,
+                    "billing_status": "byok"
+                    if expected.key_source == "user_override"
+                    else "released",
+                }:
+                    _finish(
+                        store,
+                        run.run_id,
+                        key,
+                        usage=_ZERO_USAGE,
+                        usage_key=call.get("usage_key") or f"xiaox:{run.run_id}:{key}",
+                        state="failed",
+                        market_route=expected,
+                        reconciled_rejection=rejection,
+                    )
+                continue
             terminal = payload.get("response")
-            if (
-                payload.get("state") != "completed"
-                or payload.get("client_request_id") != key
-                or not isinstance(terminal, dict)
-            ):
+            if not isinstance(terminal, dict):
                 continue
             if terminal.get("model") != expected.response_model or terminal.get("status") not in {
                 "completed",
@@ -154,7 +180,7 @@ def reconcile_model_receipts(store: XiaoxBindingStore, run: AgentRun) -> AgentRu
                 platform_receipt=terminal.get("xcagi"),
                 reconciled_response=terminal,
             )
-        except (ModelReservationError, *RECOVERABLE_ERRORS):
+        except reconciliation_errors:
             logger.warning("原模型请求回执尚未核对；保留未知状态，不重发", exc_info=False)
     return store.get(run.run_id).run
 

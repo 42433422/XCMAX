@@ -44,6 +44,21 @@ describe('buildAgentRunTraceFromEvents', () => {
     expect(completed.terminal).toBe(false)
   })
 
+  it('closes the exact failed verification even when its turn ID differs', () => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('runtime.model.started', { data: { request_id: 'turn-A', model_request_id: 'review-A', purpose: 'verification' } }),
+      ev('runtime.model.started', { data: { request_id: 'turn-A', model_request_id: 'review-B', purpose: 'verification' } }),
+      ev('runtime.model.failure', { data: {
+        request_id: 'turn-A', model_request_id: 'review-A', purpose: 'verification',
+        failure_kind: 'model_schema_rejected', outcome: 'not_started',
+      } }),
+    ], 'run_test')
+    expect(trace.phases).toEqual([
+      expect.objectContaining({ status: 'failed', title: '核验格式被模型拒绝' }),
+      expect.objectContaining({ status: 'running', title: '正在独立核验结果' }),
+    ])
+  })
+
   it.each([
     ['failed', 'failed'], ['completed', 'success'], ['interrupted', 'cancelled'],
     ['cancelled', 'cancelled'], [undefined, 'waiting'], ['', 'waiting'], ['future_status', 'waiting'],

@@ -66,6 +66,7 @@ _QUALIFICATION_ERRORS = {
     "runtime_model_connection_failed": "无法连接模型网关，请检查模型服务地址与网络。",
     "runtime_probe_turn_failed": "固定执行器未完成工具调用或原任务恢复检查。",
     "runtime_probe_receipt_missing": "无法核验隔离测试的实际操作回执。",
+    "runtime_attachment_review_schema_failed": "当前模型未通过附件独立核验格式检查。",
 }
 
 

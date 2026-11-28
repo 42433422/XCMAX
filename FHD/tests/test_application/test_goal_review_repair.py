@@ -495,6 +495,8 @@ def test_attachment_report_repair_retains_wire_block_references(verifier, defect
     repaired_wire["goals"][1]["goal_id"] = "handling"
     repaired_wire["goals"][1]["source_id"] = "request"
     assert Draft202012Validator(payload["output_schema"]).is_valid(repaired_wire)
+    file_basis = payload["output_schema"]["$defs"]["GoalAssessment"]["properties"]["file_basis"]
+    assert file_basis["type"] == "string"
     assert report["review"]["goals"][1]["file_citations"] == [
         {
             "evidence_id": "current-note",

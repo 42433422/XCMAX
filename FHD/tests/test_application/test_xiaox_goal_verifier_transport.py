@@ -143,12 +143,15 @@ def test_transport_unknown_does_not_trigger_automatic_model_retry(verifier):
 
 
 @pytest.mark.parametrize(("capacity", "expected"), [(6000, 6000), (16000, 8192)])
-def test_mimo_review_reserves_reasoning_output_within_qualified_capacity(
-    verifier, capacity, expected
+@pytest.mark.parametrize(
+    ("vendor", "model"), [("xiaomi", "mimo-v2.6-pro"), ("moonshot", "litellm/kimi")]
+)
+def test_review_reserves_reasoning_output_within_qualified_capacity(
+    verifier, capacity, expected, vendor, model
 ):
-    verifier.config.model = "mimo-v2.6-pro"
+    verifier.config.model = model
     verifier.config.auto_compact_token_limit = verifier.config.context_window - capacity
-    verifier.run.metadata["xiaox_runtime"]["runtime_config"] = {"upstream_vendor": "xiaomi"}
+    verifier.run.metadata["xiaox_runtime"]["runtime_config"] = {"upstream_vendor": vendor}
     verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
     assert verifier.verify()["accepted"]
     assert [json.loads(req.content)["max_output_tokens"] for req in verifier.requests] == [expected]
@@ -201,3 +204,11 @@ def test_expired_original_deadline_does_not_start_new_verifier_budget(verifier):
     report = verifier.verify()
     assert report["error_code"] == "goal_verification_budget_exhausted"
     assert not verifier.requests
+
+
+def test_verifier_waits_for_gateway_receipt_within_original_deadline(verifier):
+    verifier.config.turn_timeout_seconds = 180
+    verifier.run.metadata["xiaox_runtime"]["deadline_at"] = time.time() + 135
+    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+    assert verifier.verify()["accepted"]
+    assert 120 < verifier.requests[0].extensions["timeout"]["read"] <= 135

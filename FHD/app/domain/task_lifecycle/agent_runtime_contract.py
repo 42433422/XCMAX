@@ -252,8 +252,7 @@ def review_schema(
     plan_content = schema["properties"]["plan_content"]
     if contract["scope"].get("plan_delivery_version") == 1:
         plan_content.pop("default")
-        plan_content.pop("anyOf")
-        plan_content["enum"] = ["steps", "narrative"]
+        plan_content.update(plan_content.pop("anyOf")[0])
         schema["required"].append("plan_content")
     else:
         schema["properties"].pop("plan_content")
@@ -285,9 +284,9 @@ def review_schema(
     else:
         schema["properties"]["feedback_disposition"].pop("default")
         schema["required"].append("feedback_disposition")
-        properties["file_basis"].pop("anyOf")
-        properties["file_basis"].pop("default")
-        properties["file_basis"]["enum"] = ["independent", "passages", "complete"]
+        file_basis = properties["file_basis"]
+        file_basis.pop("default")
+        file_basis.update(file_basis.pop("anyOf")[0])
         assessment["allOf"].append(
             {
                 "if": {"properties": {"kind": {"enum": ["read", "reply"]}}},

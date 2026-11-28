@@ -321,12 +321,13 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     }
 
     if (type === 'runtime.model.started' || type === 'runtime.xiaox.turn.started') {
-      const identity = asString(type === 'runtime.model.started' ? data.request_id : data.turn_id)
+      const model = type === 'runtime.model.started'
+      const identity = asString(model ? data.model_request_id || data.request_id : data.turn_id)
       const key = `${type}:${identity}`
       if (!identity || runtimePlanners.has(key)) continue
       const phase: TracePlannerPhase = { ...observation, kind: 'planner', status: 'running',
         started_event_id: asString(ev.event_id), started_at: asString(ev.created_at),
-        title: '模型正在分析任务' }
+        title: data.purpose === 'verification' ? '正在独立核验结果' : '模型正在分析任务' }
       phases.push(phase)
       runtimePlanners.set(key, phase)
       continue
@@ -334,14 +335,21 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     if (type === 'runtime.model.completed' || type === 'runtime.model.failed'
       || type === 'runtime.model.failure' || type === 'runtime.xiaox.turn.completed') {
       const model = type.startsWith('runtime.model.')
-      const identity = asString(model ? data.request_id : data.turn_id)
+      const identity = asString(model ? data.model_request_id || data.request_id : data.turn_id)
       const phase = runtimePlanners.get(`${model ? 'runtime.model.started' : 'runtime.xiaox.turn.started'}:${identity}`)
-      if (identity && phase?.status === 'running') {
+      if (identity && phase && (phase.status === 'running'
+        || (phase.status === 'failed' && type === 'runtime.model.failure'))) {
         phase.status = model ? type === 'runtime.model.completed' ? 'success' : 'failed'
           : data.status === 'completed' ? 'success' : data.status === 'failed' ? 'failed'
             : ['interrupted', 'cancelled'].includes(asString(data.status)) ? 'cancelled' : 'waiting'
         phase.title = phase.status === 'success' ? '模型响应已完成' : phase.status === 'failed' ? '模型请求未完成'
           : phase.status === 'cancelled' ? '执行轮次已取消' : '执行轮次状态待核对'
+        if (data.purpose === 'verification') {
+          phase.title = phase.status === 'success' ? '核验模型已返回'
+            : data.failure_kind === 'model_schema_rejected' ? '核验格式被模型拒绝'
+              : data.failure_kind === 'model_response_incomplete' ? '核验输出未完成'
+                : data.outcome === 'unknown' ? '核验请求回执待核对' : '核验模型请求未完成'
+        }
       }
       continue
     }
@@ -613,6 +621,12 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
 
   // 终态后若仍有未关闭的 planner 占位（仅 run.created、无 started），收成成功/失败
   if (terminal) {
+    for (const [key, phase] of runtimePlanners) {
+      if (key.startsWith('runtime.model.started:') && phase.status === 'running') {
+        phase.status = 'blocked'
+        phase.title = '模型请求未收到终态'
+      }
+    }
     for (const p of phases) {
       if (p.kind === 'planner' && p.status === 'running') {
         p.status = status

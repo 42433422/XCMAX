@@ -486,7 +486,7 @@ def _tool_target(tools, name):
     raise AssertionError("Pinned CLI did not expose the isolated qualification MCP tool")
 
 
-@pytest.mark.parametrize("maximum, budget", [(1024, 8), (4000, 24), (4000, 6)])
+@pytest.mark.parametrize("maximum, budget", [(1024, 9), (4000, 24), (4000, 6)])
 def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(
     tmp_path, maximum, budget
 ):
@@ -502,6 +502,38 @@ def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(
         body = await request.json()
         calls.append(body)
         index = len(calls)
+        if not body.get("stream"):
+            schema = body["text"]["format"]["schema"]
+            assert schema["$defs"]["GoalAssessment"]["properties"]["file_basis"]["type"] == "string"
+            item = message(index)
+            item["content"][0]["text"] = json.dumps(
+                {
+                    "goals": [
+                        {
+                            "goal_id": "worksheet",
+                            "source_id": "request",
+                            "source": "Report the worksheet name in the fixture.",
+                            "kind": "reply",
+                            "status": "satisfied",
+                            "evidence_ids": ["response"],
+                            "reason": "Workbook evidence matches the reply.",
+                            "file_basis": "passages",
+                            "file_citations": [
+                                {"source_block_id": "s1", "response_block_id": "r1"}
+                            ],
+                        }
+                    ],
+                    "violations": [],
+                    "uncovered_sources": [],
+                    "feedback": "",
+                    "feedback_disposition": "none",
+                }
+            )
+            terminal = json.loads(_events(index, item, body["model"])[-1].decode()[6:])
+            return qualification.JSONResponse(
+                terminal["response"],
+                headers={"x-litellm-attempted-retries": "0", "x-litellm-attempted-fallbacks": "0"},
+            )
         if index in {1, 2, 5, 6, 7}:
             name = "execute_action" if index in (1, 6) else "task_evidence"
             item = {
@@ -549,7 +581,7 @@ def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(
         ("execute_action", "resumed", 2, 1),
         ("task_evidence", "resumed", 2, 1),
     ]
-    assert len(calls) == 8
+    assert len(calls) == 9
     assert all(body["max_output_tokens"] == min(maximum, 2048) for body in calls)
     assert probe.recovery["first_process_id"] != probe.recovery["second_process_id"]
     assert not settings.qualification_file.exists()

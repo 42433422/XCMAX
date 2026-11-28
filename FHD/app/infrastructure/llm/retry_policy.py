@@ -16,6 +16,7 @@ from app.infrastructure.chat_stream_lifetime import StreamStopped
 
 _SAFE_TRANSPORT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 _BACKOFF = wait_exponential(multiplier=0.25, max=5.0) + wait_random(0.0, 0.25)
+MODEL_SCHEMA_REJECTED = "CODEX_RESPONSE_SCHEMA_REJECTED"
 
 
 def retry_after_seconds(value: str | None, *, now: float | None = None) -> float | None:

@@ -7,12 +7,18 @@ import { toolActivityLabel } from '@/utils/toolLabels'
 export function runtimeRunChatEvents(event: AgentRunEvent): PlannerSseEvent[] {
   const data = asRecord(event.data)
   const type = asString(event.event_type)
+  if (type === 'runtime.model.started' && data.purpose === 'verification')
+    return [{ type: 'thinking', delta: '正在独立核验结果…' }]
   if (type === 'runtime.model.started' || type === 'runtime.xiaox.turn.started')
     return [{ type: 'model_activity' }]
   if (type === 'runtime.model.completed')
     return [{ type: 'thinking', delta: '模型响应已完成，正在核对执行结果…' }]
   if (type === 'runtime.model.failure' || type === 'runtime.model.failed')
-    return [{ type: 'thinking', delta: '模型请求未完成，正在核对原请求状态…' }]
+    return [{ type: 'thinking', delta: data.failure_kind === 'model_schema_rejected'
+      ? '所选模型拒绝了核验格式，核验已停止。'
+      : data.failure_kind === 'model_response_incomplete' && data.purpose === 'verification'
+        ? '核验输出未完整结束，原回执已保留。'
+        : data.outcome === 'unknown' ? '模型请求回执待核对。' : '模型请求未完成。' }]
   if (type === 'runtime.progress.stalled')
     return [{ type: 'thinking', delta: '尚无新的业务执行证据，正在调整执行策略…' }]
   if (type === 'runtime.output.quarantined')

@@ -345,6 +345,27 @@ def test_market_409_records_bounded_upstream_error_for_reconciliation(market_gat
     assert len(calls) == 1
 
 
+def test_market_schema_rejection_is_terminal_and_closes_the_model_event(market_gateway):
+    client, store, _, _, _, control = market_gateway
+    control.update(status=422, body={"detail": {"code": "CODEX_RESPONSE_SCHEMA_REJECTED"}})
+    response = post(client, model="enterprise/local-agent")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "CODEX_RESPONSE_SCHEMA_REJECTED"
+    request_id, call = next(iter(store.binding.metadata["model_requests"].items()))
+    assert call["state"] == "failed" and call["diagnostic"]["outcome"] == "not_started"
+    assert not store.binding.metadata["model_reconciliation_required"]
+    events = [
+        (event.event_type, event.data.get("model_request_id"))
+        for event in store.run.events
+        if event.event_type.startswith("runtime.model.")
+    ]
+    assert events == [
+        ("runtime.model.started", request_id),
+        ("runtime.model.failure", request_id),
+        ("runtime.model.failed", request_id),
+    ]
+
+
 def test_model_request_deadline_is_one_clock_for_headers_retries_and_reads(monkeypatch):
     monkeypatch.setenv("XCAGI_MODEL_REQUEST_TIMEOUT_SEC", "180")
     now = [1_000.0]

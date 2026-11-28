@@ -14,6 +14,16 @@ JOB_HEADER = "x-xcagi-verification-job"
 VERIFIER_VERSION = 2
 
 
+def review_output_floor(vendor: str, model: str) -> int:
+    """Reserve room for reasoning when the selected route meters it as output."""
+    return (
+        8192
+        if vendor.strip().casefold() in {"moonshot", "kimi"}
+        or (vendor.strip().casefold() == "xiaomi" and model.casefold().startswith("mimo-"))
+        else 2048
+    )
+
+
 def initialize_verification_budget(
     run: Any,
     metadata: dict[str, Any],
@@ -69,7 +79,7 @@ def initialize_verification_budget(
         "max_model_calls": call_limit,
         "per_call_cost_units": per_call,
         "cost_units": calls * per_call,
-        "seconds": min(90.0, float(total_seconds) / 4),
+        "seconds": float(total_seconds) / 4,
     }
     metadata["verification_budget"] = budget
     return dict(budget)

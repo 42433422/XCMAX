@@ -515,7 +515,7 @@ def _claim(
             }
             run.add_event(
                 "runtime.model.started",
-                data={"request_id": request_id, "purpose": calls[request_id]["purpose"]},
+                data={"model_request_id": request_id, "purpose": calls[request_id]["purpose"]},
             )
             # The SDK thread keeps its original logical model. Persist the
             # actual route so its later opaque history never goes back to the
@@ -556,6 +556,7 @@ def _finish(
     observation: dict[str, Any] | None = None,
     verification_response: dict[str, Any] | None = None,
     reconciled_response: dict[str, Any] | None = None,
+    reconciled_rejection: dict[str, Any] | None = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
@@ -613,8 +614,17 @@ def _finish(
                 run.add_event(
                     "runtime.model.reconciled",
                     "已核对原模型终态与计量，未重放调用",
-                    {"request_id": request_id},
+                    {"model_request_id": request_id},
                 )
+        if reconciled_rejection is not None:
+            call.setdefault("reconciled_rejection", reconciled_rejection)
+            call["diagnostic"] = {
+                **(call.get("diagnostic") or {}),
+                "failure_kind": "model_schema_rejected",
+                "failure_reason": "所选模型拒绝了结构化输出格式。",
+                "outcome": "not_started",
+                "retryable": False,
+            }
         if (
             verification_response is not None
             and call.get("purpose") == "verification"
@@ -638,9 +648,14 @@ def _finish(
         if terminal:
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
+        diagnostic = call.get("diagnostic") or {}
         run.add_event(
             "runtime.model.completed" if state == "completed" else "runtime.model.failed",
-            data={"request_id": request_id, "purpose": call.get("purpose")},
+            data={
+                "model_request_id": request_id,
+                "purpose": call.get("purpose"),
+                **{k: diagnostic[k] for k in ("failure_kind", "outcome") if k in diagnostic},
+            },
         )
         if state == "completed":
             for key in ("runtime_failure_kind", "runtime_failure_reason", "runtime_failure_stage"):
@@ -1007,6 +1022,7 @@ async def forward_responses(request: Request):
         # its observation, without admitting a model call or resetting budget.
         inference_deadline = deadline = model_request_deadline(binding, route)
         from app.infrastructure.llm.retry_policy import (
+            MODEL_SCHEMA_REJECTED,
             is_safe_transport_retry,
             model_failure_details,
         )
@@ -1016,6 +1032,8 @@ async def forward_responses(request: Request):
             *,
             output_started: bool = False,
             upstream_error: str = "",
+            schema_rejected: bool = False,
+            settled: bool = False,
             stream_phase: str | None = None,
             stream_frame: int | None = None,
         ) -> None:
@@ -1047,6 +1065,14 @@ async def forward_responses(request: Request):
                 details["upstream_error"] = upstream_error[:500]
             if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429:
                 details.update(outcome="not_started", retryable=True)
+            if schema_rejected:
+                details.update(
+                    failure_kind="model_schema_rejected",
+                    failure_reason="所选模型拒绝了结构化输出格式。",
+                    outcome="not_started",
+                )
+            if settled:
+                details["outcome"] = "settled"
             if isinstance(error, ModelGatewayContractError):
                 details.update(failure_kind=error.code, failure_reason=str(error), retryable=False)
             if isinstance(error, _ModelSettlementStorageError):
@@ -1072,7 +1098,15 @@ async def forward_responses(request: Request):
                 run.metadata["runtime_failure_kind"] = details["failure_kind"]
                 run.metadata["runtime_failure_reason"] = details["failure_reason"]
                 run.metadata["runtime_failure_stage"] = "model"
-                run.add_event("runtime.model.failure", details["failure_reason"], details)
+                run.add_event(
+                    "runtime.model.failure",
+                    details["failure_reason"],
+                    {
+                        **details,
+                        "model_request_id": request_id,
+                        "purpose": (call or {}).get("purpose"),
+                    },
+                )
 
             await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
 
@@ -1323,7 +1357,19 @@ async def forward_responses(request: Request):
                 raise
             except (httpx.HTTPError, UnicodeDecodeError, OSError):
                 upstream_error = ""
-            await record_failure(slot_failure, upstream_error=upstream_error)
+            schema_rejected = False
+            if route.gateway_kind == "market" and upstream.status_code == 422:
+                try:
+                    envelope = upstream.json()
+                    detail = envelope.get("detail") if isinstance(envelope, dict) else None
+                    schema_rejected = (
+                        isinstance(detail, dict) and detail.get("code") == MODEL_SCHEMA_REJECTED
+                    )
+                except (ValueError, UnicodeDecodeError):
+                    pass
+            await record_failure(
+                slot_failure, upstream_error=upstream_error, schema_rejected=schema_rejected
+            )
             # Explicit rejection has no generated completion. A 5xx/408 can
             # hide a started model request and remains unresolved, without replay.
             definite = (
@@ -1361,8 +1407,11 @@ async def forward_responses(request: Request):
             return JSONResponse(
                 {
                     "error": {
-                        "message": "Qualified model gateway request failed",
+                        "message": "所选模型拒绝了结构化输出格式。"
+                        if schema_rejected
+                        else "Qualified model gateway request failed",
                         "type": "upstream_error",
+                        **({"code": MODEL_SCHEMA_REJECTED} if schema_rejected else {}),
                     }
                 },
                 status_code=upstream.status_code if definite else 502,
@@ -1405,7 +1454,7 @@ async def forward_responses(request: Request):
                 error = ModelGatewayContractError(
                     f"model_response_{status}", f"Gateway response ended as {status}"
                 )
-                await record_failure(error)
+                await record_failure(error, settled=True)
                 if any(item.get("type") == "function_call" for item in response.get("output", [])):
                     raise error
             return JSONResponse(response)
@@ -1482,7 +1531,9 @@ async def forward_responses(request: Request):
                                     f"model_response_{status}",
                                     f"Gateway response ended as {status}",
                                 )
-                                await record_failure(error, output_started=output_visible)
+                                await record_failure(
+                                    error, output_started=output_visible, settled=True
+                                )
                                 if any(
                                     item.get("type") == "function_call"
                                     for item in response.get("output", [])

@@ -70,6 +70,9 @@ def complete_receipt(
     if locked.state != "settling":
         raise RuntimeError("billable request not settling")
     receipt = dict(receipt)
+    if receipt["operation"] == "responses" and receipt.get("rejection"):
+        ledger.finish(db, locked, receipt)
+        return receipt
     usage = receipt["usage"]
     if receipt["operation"] == "chat":
         receipt["conversation_id"] = save_chat(
@@ -156,13 +159,16 @@ async def recover_receipt(
         )
     else:
         hold = await wallet.read_hold(authorization, receipt["hold_no"])
-    if hold is None or hold.get("status") != "settled":
+    rejected = receipt["operation"] == "responses" and bool(receipt.get("rejection"))
+    if hold is None or hold.get("status") != ("released" if rejected else "settled"):
         return None
     if any(
         hold.get(field) != receipt.get(field)
         for field in ("hold_no", "request_id", "provider", "model")
     ):
         return None
+    if rejected:
+        return complete_receipt(db, row, receipt)
     try:
         settled = Decimal(str(hold.get("settled_amount")))
         if not settled.is_finite() or settled != Decimal(str(receipt["charge_amount"])):
@@ -184,6 +190,16 @@ def response_receipt(db: Session, user_id: int, key: str) -> dict[str, Any] | No
     saved = json.loads(row.done_json or "{}")
     if saved.get("operation") != "responses" or saved.get("client_request_id") != key:
         return None
+    if isinstance(rejection := saved.get("rejection"), dict):
+        return {
+            "rejection": {
+                **rejection,
+                **{
+                    key: saved[key]
+                    for key in ("provider", "model", "key_source", "config_revision")
+                },
+            }
+        }
     response = (saved.get("wire") or {}).get("response")
     if not isinstance(response, dict) or response.get("status") not in {
         "completed",

@@ -34,6 +34,7 @@ QUALIFICATION_CHECKS = (
     # A completed first step must be read back before the dependent second step
     # is executed in the resumed process, then independently verified again.
     "multi_step_restart_continuation",
+    "attachment_review_schema",
 )
 
 
@@ -406,7 +407,7 @@ class RuntimeSettings:
         _verify_evidence(receipt, self.qualification_file)
         if QUALIFICATION_CHECKS[-1] not in receipt["checks"]:
             raise QualificationUpgradeRequired(
-                "Exact route requires multi-step runtime qualification"
+                "Exact route requires the current runtime qualification checks"
             )
         if receipt["checks"][QUALIFICATION_CHECKS[-1]] != "PASS":
             raise RuntimePolicyError("Exact route has not passed independent runtime qualification")

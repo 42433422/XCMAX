@@ -422,6 +422,10 @@ def classify_runtime_result(
         return "failed"
     if not coverage["completed"]:
         feedback = str((report or {}).get("feedback") or "原始目标仍需逐项核对。")
+        failure_output = {
+            "goal_verification_schema_rejected": "所选模型未接受核验格式，核验已停止。原任务和操作回执已保留。",
+            "goal_verification_output_incomplete": "核验输出未完整结束。原任务和操作回执已保留。",
+        }.get(str(report.get("error_code")))
         result.update(
             exit_status="goal_verification_required",
             execution_state="blocked",
@@ -429,11 +433,13 @@ def classify_runtime_result(
             output=(
                 unavailable_plan
                 if unavailable_plan and report.get("error_code") == "plan_delivery_unavailable"
-                else "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
+                else failure_output
+                or "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
             ),
             goal_response=reviewed_output,
             verification_feedback=feedback,
-            retryable=isinstance(report, dict)
+            retryable=not failure_output
+            and isinstance(report, dict)
             and report.get("status") in {"needs_work", "unavailable"},
         )
         return "blocked"

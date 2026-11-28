@@ -16,6 +16,7 @@ from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any, cast
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
 from pydantic import ValidationError
 
 from app.application.agent_runtime.goal_verification_task import (
@@ -467,9 +468,8 @@ def verify_runtime_goal(
                 return _finish_report(invalid)
             return copy.deepcopy(previous)
     route = binding.metadata.get("runtime_config") or {}
-    mimo_reasoning = str(
-        route.get("upstream_vendor") or ""
-    ).strip().casefold() == "xiaomi" and config.model.casefold().startswith("mimo-")
+    from app.application.agent_runtime.verification_budget import review_output_floor
+
     started = time.monotonic()
     verification_job = active_verification_job_id(binding.run, binding.metadata)
     if binding.metadata.get("verification_budget") and not verification_job:
@@ -479,16 +479,14 @@ def verify_runtime_goal(
         )
         return _finish_report(report)
     persisted_deadline = phase_deadline(binding.run, binding.metadata)
-    seconds = min(float(config.turn_timeout_seconds), persisted_deadline - time.time(), 90.0)
-    # Verification can outlast a normal tool RPC; the original task still bounds it.
-    request_limit = seconds
+    # The loopback gateway applies the signed route ceiling and settles the receipt.
+    # Let it return that outcome within the original task deadline.
+    seconds = min(float(config.turn_timeout_seconds), persisted_deadline - time.time())
     capacity = int(config.context_window) - int(config.auto_compact_token_limit or 0)
     if (
         not math.isfinite(persisted_deadline)
         or not math.isfinite(seconds)
         or seconds <= 0
-        or not math.isfinite(request_limit)
-        or request_limit <= 0
         or capacity <= 0
     ):
         report.update(
@@ -526,6 +524,14 @@ def verify_runtime_goal(
         source_block_ids=tuple(source_blocks),
         response_block_ids=tuple(response_blocks),
     )
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError:
+        report.update(
+            error_code="goal_verification_schema_rejected",
+            feedback="核验格式无效，任务已停止在独立核验阶段。",
+        )
+        return _finish_report(report)
     # Source policy belongs to deterministic host validation, not format retry.
     # Keep the full policy in the advertised schema; validate wire citations here.
     wire_schema = copy.deepcopy(schema)
@@ -571,8 +577,7 @@ def verify_runtime_goal(
     # Reserve output within the qualified route limit; bill every attempt.
     payload_size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
     output_estimate = max(
-        # MiMo bills internal reasoning against the same output allowance.
-        8192 if mimo_reasoning else 2048,
+        review_output_floor(str(route.get("upstream_vendor") or ""), config.model),
         1024 + len(contract["request"]["text"]) + 384 * len(snapshot["evidence"]),
         min(32768, math.ceil(payload_size / 8)),
     )
@@ -646,7 +651,7 @@ def verify_runtime_goal(
                                 api_key=config.provider_token,
                                 base_url=config.provider_url,
                                 max_retries=0,
-                                timeout=min(request_limit, seconds),
+                                timeout=seconds,
                                 http_client=DefaultHttpxClient(
                                     trust_env=False, follow_redirects=False
                                 ),
@@ -666,11 +671,20 @@ def verify_runtime_goal(
                         tools=[],
                         store=False,
                         max_output_tokens=output_budget,
-                        timeout=min(request_limit, remaining),
+                        timeout=remaining,
                         extra_headers={JOB_HEADER: verification_job} if verification_job else None,
                     )
                     raw = response.model_dump()
             except APIError as exc:
+                from app.infrastructure.llm.retry_policy import MODEL_SCHEMA_REJECTED
+
+                if getattr(exc, "code", None) == MODEL_SCHEMA_REJECTED:
+                    diagnostic["state"] = "schema_rejected"
+                    report.update(
+                        error_code="goal_verification_schema_rejected",
+                        feedback="所选模型拒绝了附件核验格式，原操作回执已保留。",
+                    )
+                    return _finish_report(report)
                 # The gateway owns unknown billing/transport outcomes. Never
                 # turn a lost response into another speculative request.
                 diagnostic["state"] = (
@@ -710,6 +724,18 @@ def verify_runtime_goal(
                     feedback="目标核验已达时限，原任务未确认完成。",
                 )
                 break
+            if raw.get("status") == "incomplete":
+                diagnostic["state"] = "incomplete"
+                format_failure = False
+                report.update(
+                    error_code=(
+                        "goal_verification_budget_exhausted"
+                        if output_budget == capacity
+                        else "goal_verification_output_incomplete"
+                    ),
+                    feedback="核验输出未完整结束，原任务及全部待核对目标已保留。",
+                )
+                break
             items = raw.get("output")
             if not isinstance(items, list) or any(
                 not isinstance(item, dict)
@@ -737,14 +763,10 @@ def verify_runtime_goal(
                 )
                 break
             if raw.get("status") != "completed":
-                diagnostic["state"] = "incomplete"
+                diagnostic["state"] = "invalid_output"
                 format_failure = False
                 report.update(
-                    error_code=(
-                        "goal_verification_budget_exhausted"
-                        if raw.get("status") == "incomplete" and output_budget == capacity
-                        else "goal_verification_format_invalid"
-                    ),
+                    error_code="goal_verification_format_invalid",
                     feedback="核验输出未完整结束，原任务及全部待核对目标已保留。",
                 )
                 break
