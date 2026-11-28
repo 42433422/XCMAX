@@ -160,7 +160,7 @@
     "FHD/app/application/agent_runtime/gateway.py": {
       "base_file": "FHD/app/application/agent_runtime/gateway.py",
       "base_blob": "033f137c8d5c47da6eb66251a64d29a95e26d86b",
-      "head_blob": "71baa53170808f7f762b5f22cc95d6bea41c6142",
+      "head_blob": "afc9837afd78b47e52465f4c6a25c040ff4833a2",
       "before_lines": 862,
       "after_lines": 863,
       "reason": "本次#3682集成评审请求，按用户追加授权的01至11全部工作组范围；原任务准入封存授权模型路由，并在同一事务追加初始状态审计。 本登记不是人工架构批准。 本次仅将原SQL中的ReAct恢复控制与隔离输出排除于公开结果投影；不是人工批准。",
@@ -602,16 +602,16 @@
       "review_owner": "@42433422"
     },
     "FHD/app/infrastructure/xiaox/model_gateway.py": {
+      "reason": "Request review of the shared per-request deadline, exact request correlation and confirmed protocol rejection settlement.",
+      "boundary": "Use the same route, held budget, idempotency key and SQL ledger. Restore only receipts that prove the original identity.",
+      "validation": "Real socket timeout fixtures and verified release, uncertain release, stream and terminal-event regressions.",
+      "follow_up": "Confirm exact-head gateway and desktop results before deployment.",
+      "review_owner": "@42433422",
       "base_file": "FHD/app/infrastructure/xiaox/model_gateway.py",
       "base_blob": "53898f8fb5bba15e6bbf6ee3a644b7ac0d07da7a",
-      "head_blob": "aa8ae0e8781a5d18ad84260652c2b092ad75e2fd",
+      "head_blob": "b700aed938e656e9f5c5ad3ad135d5558f88e113",
       "before_lines": 1513,
-      "after_lines": 1589,
-      "reason": "卷二原场景整链审计：附件只提供验收条件；统一报告形状/来源/回执准入；已知业务契约立即约束原生工具，无效核验在原用户来源和原预算内重规划，不采纳附件或报告新指令。本登记不是人工批准。",
-      "boundary": "同一Responses HTTP请求的授权、发送、流式消费、结算及清理必须共享deadline和资源所有权，继续复用现有网关/准入/账本。没有新执行器、状态机或隐藏代理换模。 集成冲突以当前main与来源提交共同祖先三方核对，用户已追加授权纳入01/06，合并共享状态投影和原预算内独立核验。 修复控制只保存在原 xiaox_runtime 绑定；不授予新权限，不重放未知副作用，备用路由仅限原授权集合。",
-      "validation": "原故障反例、权限/未知/待审批保护、原SQL重载和篡改恢复契约反例；完整后端mypy 2303源文件及结构门禁通过。实际桌面模型/工具交付和当前HEAD的CI另行取证，不以模拟测试宣称全卷通过。",
-      "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
-      "review_owner": "@42433422"
+      "after_lines": 1677
     },
     "FHD/frontend/src/components/TopQuickNav.vue": {
       "base_file": "FHD/frontend/src/components/TopQuickNav.vue",
@@ -964,9 +964,9 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
       "base_blob": "264381d9a1b2eeb66d36aa727f1f96ee741b47b6",
-      "head_blob": "bb7ffa6c38ed69ec066329da44389c37f2a1f8c3",
+      "head_blob": "a282fd0db4c2ce58da74e939950021b136ad2a4b",
       "before_lines": 1615,
-      "after_lines": 1617,
+      "after_lines": 1624,
       "reason": "评审请求：自动候选在原容量守卫前复用显式选择已有的 Responses 协议守卫，避免目录可聊但不可执行的候选抢占默认路线；只增加原函数两行，不是人工批准。",
       "boundary": "保留账号凭据来源、权限、签名、计费和运行验收；目录投影与保存均复用现有守卫，不引入平行路由、静默模型切换或供应商调用。",
       "validation": "原平台目录、容量合同、连接生命周期与 Responses 回归已通过；本机企业模型与运行验收95项、前端7项及严格构建通过；平台部署与新HEAD正式CI仍分别取证。",
@@ -987,10 +987,10 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py",
-      "base_blob": "fb339b6ab84c2a7926458200f1b5ffe361f57e6f",
-      "head_blob": "3e08a06d3327a7ebcd83653ea48767268389cdf0",
-      "before_lines": 895,
-      "after_lines": 933,
+      "base_blob": "3e08a06d3327a7ebcd83653ea48767268389cdf0",
+      "head_blob": "5ddae89f8b852cf515e6a98105761d6ffda1985b",
+      "before_lines": 933,
+      "after_lines": 935,
       "reason": "在已有LiteLLM Router凭据、回执、重试与身份适配内补共享流预算：SDK原始回执先限额再预读保留，规范化工具参数先限额再拼接；有界遍历异常链保留真实StreamLimitError。此记录是增长评审请求，不是批准。",
       "boundary": "复用固定LiteLLM/OpenAI SDK与HTTPX，注入SDK客户端使用原传输字节限制，不另建解析器或模型执行入口。其他供应商自有SDK只验证规范化事件预算；超限保持未知、不可重试，不切换供应商。",
       "validation": "真实SDK/HTTPX/LiteLLM流与Responses九模块227项通过且进程exit0，覆盖无结束SSE、心跳、压缩响应、工具累积、事件计数与终态后追加；原Router四个反例在旧源码上失败。计费相关完整168项亦通过。",
@@ -1154,16 +1154,16 @@
       "review_owner": "@42433422"
     },
     "FHD/app/domain/task_lifecycle/agent_runtime_contract.py": {
+      "reason": "Request review of preserving the typed Pydantic branch when specializing allowed attachment and plan citation tokens.",
+      "boundary": "Preserve model-facing shape and existing source and plan validation.",
+      "validation": "Draft 2020 schema checks and constrained attachment/plan citations exercised in verifier tests.",
+      "follow_up": "Confirm strict provider compatibility in the existing qualification.",
+      "review_owner": "@42433422",
       "base_file": "FHD/app/domain/task_lifecycle/agent_runtime_contract.py",
       "base_blob": "ecc059c78b43f741788bd82e1a2eea7b9fa30de2",
-      "head_blob": "0d152689266afb1b75bce7287b5f6b748ba32fd8",
+      "head_blob": "62f43e08680f25e92330aba3aa35a0329ddc042e",
       "before_lines": 900,
-      "after_lines": 921,
-      "reason": "卷二原场景整链审计：附件只提供验收条件；统一报告形状/来源/回执准入；已知业务契约立即约束原生工具，无效核验在原用户来源和原预算内重规划，不采纳附件或报告新指令。本登记不是人工批准。",
-      "boundary": "固定原权限、业务回执与最终完整性检查；只将已有文件证据约束前移至原Schema及有限格式修复。协议纯函数归入已有goal_review_models供核验与方案交付共用，不新建Runtime或状态源。",
-      "validation": "原故障反例、权限/未知/待审批保护、原SQL重载和篡改恢复契约反例；完整后端mypy 2303源文件及结构门禁通过。实际桌面模型/工具交付和当前HEAD的CI另行取证，不以模拟测试宣称全卷通过。",
-      "follow_up": "请原负责人按本记录精确base/head blob复核职责、授权和恢复边界；最终必需CI按新提交确认，沿原模块收敛，不以本登记替代批准。",
-      "review_owner": "@42433422"
+      "after_lines": 920
     },
     "FHD/app/infrastructure/xiaox/tools.py": {
       "base_file": "FHD/app/infrastructure/xiaox/tools.py",
@@ -1178,16 +1178,16 @@
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_runtime/goal_verifier.py": {
-      "reason": "执行阶段交接错误地用已有读取回执触发失败写入的独立核验；原 SQL 保存拒绝诊断，未执行的改参不再视为进展，沿原有界策略恢复，核验通过原 SDK 提交 JSON Schema。不是人工批准。",
-      "boundary": "复用原 Xiaox/Codex SDK、SQL CAS 与 jsonschema，无平行 Runtime/状态表；拒绝诊断不授予动作权限，审批、未知效果、已核验写入、人工停止与总预算仍生效。",
-      "follow_up": "请@42433422按精确blob审查目标证据、响应重放和报告持久化边界；新HEAD正式CI、真实模型和原卷数值验收分别取证，本登记不代表人工批准。",
+      "reason": "Request review of typed attachment schema validation and waiting on the existing gateway up to the original run deadline.",
+      "boundary": "Use the current independent verifier, its evidence rules, bounded format repair and frozen run budget.",
+      "validation": "Attachment schema, actual model qualification, truncation and original-deadline regression coverage.",
+      "follow_up": "Verify the final desktop receipt on the current route and review the existing verifier size.",
       "review_owner": "@42433422",
       "base_file": "FHD/app/application/agent_runtime/goal_verifier.py",
       "base_blob": "17e6327f3732f050cfe7e490b2b402cb0b388e18",
-      "head_blob": "d94030007a6258aabf524128ac3f389dd0536036",
+      "head_blob": "39d2f84df907149cf0a1b29d062f3684ab0f7dc1",
       "before_lines": 913,
-      "after_lines": 906,
-      "validation": "相邻组合251项通过，其中两项真实工具子进程在允许本机进程的环境单独复验；全 app mypy 2303源文件通过。原桌面真实模型闭环待当前提交验收，不能将模拟测试作为交付。"
+      "after_lines": 928
     },
     "FHD/app/infrastructure/xiaox/binding.py": {
       "reason": "执行阶段交接错误地用已有读取回执触发失败写入的独立核验；原 SQL 保存拒绝诊断，未执行的改参不再视为进展，沿原有界策略恢复，核验通过原 SDK 提交 JSON Schema。不是人工批准。",
